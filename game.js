@@ -1,0 +1,1742 @@
+import * as THREE from 'three';
+import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js';
+import { FIGHTERS, ELEMS } from './data.js';
+
+// 状態異常：持続秒数・継続ダメージ(毎秒)
+const ST_INFO = {
+  burn: { dur: 4, dot: 22 }, freeze: { dur: 1.2 }, para: { dur: 3 }, slow: { dur: 3.5 }, petrify: { dur: 1.5 },
+  blind: { dur: 4 }, curse: { dur: 5 }, silence: { dur: 3.5 }, poison: { dur: 6, dot: 14 }, bleed: { dur: 3, dot: 32 }
+};
+const ST_ELEM = Object.fromEntries(ELEMS.map((e, i) => [e.st, i]));
+
+export const ARENA_R = 13;
+
+const GEO = {
+  pillar: new THREE.CylinderGeometry(1, 1, 1, 20, 1, true).translate(0, 0.5, 0),
+  ring: new THREE.RingGeometry(0.82, 1, 48).rotateX(-Math.PI / 2),
+  disc: new THREE.CircleGeometry(1, 32).rotateX(-Math.PI / 2),
+  sphere: new THREE.SphereGeometry(1, 16, 12),
+  cone: new THREE.ConeGeometry(0.2, 2.6, 8).rotateX(Math.PI),
+  blade: new THREE.BoxGeometry(0.1, 0.1, 3),
+  oct: new THREE.OctahedronGeometry(1)
+};
+
+function glow(color, opacity = 0.85) {
+  const m = new THREE.MeshBasicMaterial({
+    color, transparent: true, opacity, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide
+  });
+  m.userData.base = opacity;
+  return m;
+}
+
+// ---- 形ある技エフェクト用ジオメトリ（共有・破棄しない） ----
+const SG = {
+  shaft: new THREE.CylinderGeometry(0.04, 0.04, 1.6, 6).rotateX(Math.PI / 2),
+  tip: new THREE.ConeGeometry(0.13, 0.5, 6).rotateX(Math.PI / 2),
+  fin: new THREE.PlaneGeometry(0.22, 0.32),
+  blade: new THREE.BoxGeometry(0.05, 0.32, 2.2),
+  guard: new THREE.BoxGeometry(0.8, 0.12, 0.12),
+  hilt: new THREE.CylinderGeometry(0.06, 0.06, 0.5, 6).rotateX(Math.PI / 2),
+  axeHead: new THREE.CylinderGeometry(0.55, 0.55, 0.06, 18, 1, false, 0, Math.PI),
+  gear: new THREE.TorusGeometry(0.45, 0.12, 4, 10),
+  rock: new THREE.DodecahedronGeometry(1, 0),
+  torus: new THREE.TorusGeometry(1, 0.05, 6, 36),
+  tetra: new THREE.TetrahedronGeometry(1),
+  slash: new THREE.PlaneGeometry(1.8, 0.55),
+  spike: new THREE.ConeGeometry(0.32, 1.7, 5).translate(0, 0.85, 0),
+  rune: new THREE.RingGeometry(0.62, 1, 6, 1).rotateX(-Math.PI / 2),
+  rune2: new THREE.RingGeometry(0.9, 1, 48, 1).rotateX(-Math.PI / 2),
+  crescent: new THREE.TorusGeometry(0.85, 0.08, 4, 22, Math.PI).rotateX(Math.PI / 2),
+  unitZ: new THREE.CylinderGeometry(1, 1, 1, 6).rotateX(Math.PI / 2)
+};
+// 技ごとの形を作る基本形（技の shape 番号で組み合わせが変わる）
+const PRIMS = [
+  GEO.sphere, GEO.oct, SG.tetra, new THREE.IcosahedronGeometry(1, 0), SG.rock,
+  new THREE.BoxGeometry(1.2, 1.2, 1.2), new THREE.ConeGeometry(0.7, 1.6, 6), new THREE.TorusKnotGeometry(0.6, 0.18, 48, 6),
+  new THREE.TorusGeometry(0.7, 0.22, 6, 18), new THREE.CylinderGeometry(1, 1, 0.3, 5)
+];
+const RUNES = [];
+for (let s = 3; s <= 9; s++) RUNES.push(new THREE.RingGeometry(0.62, 1, s, 1).rotateX(-Math.PI / 2));
+const runeOf = (spec) => RUNES[(spec?.shape ?? 3) % 7];
+const primOf = (spec) => {
+  const v = spec?.shape ?? 0;
+  return PRIMS[(v % 10 + Math.floor(v / 10)) % 10];
+};
+// ---- 技エフェクト素材：10属性 × 10種（0芯 1閃光 2光条 3煙 4衝撃輪 5魔法陣 6斬撃 7粒子 8爆発 9尾） ----
+const FX_NAMES = ['fire', 'ice', 'thunder', 'wind', 'earth', 'light', 'dark', 'water', 'poison', 'blood'];
+const texLoader = new THREE.TextureLoader();
+const FX_TEX = {};
+function fxTex(elem, slot) {
+  const key = (elem % 10) * 10 + slot;
+  if (!FX_TEX[key]) {
+    const t = texLoader.load(`assets/fx-${FX_NAMES[elem % 10]}-${slot}.webp`);
+    t.colorSpace = THREE.SRGBColorSpace;
+    FX_TEX[key] = t;
+  }
+  return FX_TEX[key];
+}
+// 起動時に全100枚を先読み
+for (let e = 0; e < 10; e++) for (let s = 0; s < 10; s++) fxTex(e, s);
+const elOf = (spec, fallback = 5) => (spec && spec.elem != null ? spec.elem : fallback);
+const PLANE = new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2);
+function fxSprite(elem, slot, size, opacity = 1) {
+  const m = new THREE.SpriteMaterial({ map: fxTex(elem, slot), transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, opacity });
+  m.userData.base = opacity;
+  m.rotation = Math.random() * Math.PI * 2;
+  const s = new THREE.Sprite(m);
+  s.scale.setScalar(size);
+  return s;
+}
+function fxFlat(elem, slot, size, opacity = 1) {
+  const m = new THREE.MeshBasicMaterial({ map: fxTex(elem, slot), transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, opacity, side: THREE.DoubleSide });
+  m.userData.base = opacity;
+  const p = new THREE.Mesh(PLANE, m);
+  p.scale.setScalar(size);
+  return p;
+}
+// 白ではなく、その色を明るくした芯色
+// ---- 立体エフェクト用の共有ジオメトリ（属性ごとの3D形状） ----
+const G3 = {
+  flame: new THREE.ConeGeometry(0.35, 1.2, 7, 1, true).translate(0, 0.6, 0),
+  crystal: new THREE.OctahedronGeometry(0.3, 0).scale(0.6, 2.2, 0.6),
+  bolt: new THREE.BoxGeometry(0.07, 0.07, 1),
+  helix: new THREE.TorusGeometry(1, 0.05, 6, 40, Math.PI * 1.6),
+  rock: new THREE.DodecahedronGeometry(0.28, 0),
+  beam: new THREE.CylinderGeometry(0.5, 0.5, 1, 20, 1, true).translate(0, 0.5, 0),
+  star: new THREE.OctahedronGeometry(0.22, 0),
+  knot: new THREE.TorusKnotGeometry(0.5, 0.07, 64, 6, 2, 3),
+  wave: new THREE.TorusGeometry(1, 0.12, 8, 48),
+  drop: new THREE.SphereGeometry(0.14, 10, 8),
+  bubble: new THREE.IcosahedronGeometry(0.2, 1),
+  crescent: new THREE.TorusGeometry(0.9, 0.06, 4, 28, Math.PI * 0.9),
+  core: new THREE.IcosahedronGeometry(0.5, 1)
+};
+let fx3dLive = 0;
+function lite(color, k = 0.4) {
+  return new THREE.Color(color).lerp(new THREE.Color(0xffffff), k).getHex();
+}
+// 技固有の飾り：芯の基本形＋周回する衛星＋輪
+function decorate(g, spec, s = 1) {
+  const v = spec.shape ?? 0;
+  const ei = Math.floor(v / 10);
+  const d = new THREE.Group();
+  const geo = primOf(spec);
+  const core = new THREE.Mesh(geo, glow(spec.color, 0.8));
+  core.scale.setScalar(0.32 * s);
+  d.add(core);
+  const sats = ei % 4;
+  for (let i = 0; i < sats; i++) {
+    const m = new THREE.Mesh(geo, glow(lite(spec.color), 0.85));
+    const a = (i / sats) * Math.PI * 2;
+    m.position.set(Math.cos(a) * 0.6 * s, Math.sin(a) * 0.6 * s, 0);
+    m.scale.setScalar(0.12 * s);
+    d.add(m);
+  }
+  const rings = ei % 3;
+  for (let i = 0; i < rings; i++) {
+    const r = new THREE.Mesh(SG.torus, glow(spec.color, 0.7));
+    r.scale.setScalar((0.5 + i * 0.22) * s);
+    r.rotation.set(i * 1.1 + v * 0.3, v * 0.7, 0);
+    d.add(r);
+  }
+  d.userData.decor = true;
+  g.add(d);
+  return d;
+}
+
+function fade(obj, k) {
+  obj.traverse((o) => {
+    if (o.material) {
+      if (!o.material.transparent) {
+        o.material.transparent = true;
+        o.material.needsUpdate = true;
+      }
+      o.material.opacity = (o.material.userData.base ?? 1) * k;
+    }
+  });
+}
+function kill(parent, obj) {
+  parent.remove(obj);
+  obj.traverse((o) => o.material?.dispose());
+}
+
+function makeShape(kind, color, s = 1) {
+  const g = new THREE.Group();
+  const add = (geo, mat, x = 0, y = 0, z = 0, sx = 1, sy = sx, sz = sx) => {
+    const m = new THREE.Mesh(geo, mat);
+    m.position.set(x, y, z);
+    m.scale.set(sx, sy, sz);
+    g.add(m);
+    return m;
+  };
+  const c = () => glow(color, 0.95);
+  const w = () => glow(lite(color), 0.9);
+  switch (kind) {
+    case 'laser':
+      add(SG.unitZ, glow(lite(color, 0.3), 0.95), 0, 0, 0, 0.05, 0.05, 1.2);
+      add(SG.unitZ, glow(color, 0.6), 0, 0, 0, 0.13, 0.13, 1.4);
+      break;
+    case 'spark': {
+      add(PRIMS[3], w(), 0, 0, 0, 0.3);
+      add(GEO.sphere, glow(color, 0.45), 0, 0, 0, 0.6);
+      for (let i = 0; i < 6; i++) {
+        const a = (i / 6) * Math.PI * 2;
+        const b = add(SG.unitZ, c(), Math.cos(a) * 0.45, Math.sin(a) * 0.45, 0, 0.03, 0.03, 0.6);
+        b.lookAt(Math.cos(a) * 2, Math.sin(a) * 2, (i % 2) - 0.5);
+      }
+      g.userData.spin = 'z';
+      break;
+    }
+    case 'arrow':
+    case 'spear': {
+      const k = kind === 'spear' ? 1.7 : 1;
+      add(SG.shaft, c(), 0, 0, 0, k);
+      add(SG.tip, w(), 0, 0, 0.95 * k, k * 1.3);
+      add(SG.fin, c(), 0, 0, -0.7 * k, k).rotation.y = Math.PI / 2;
+      add(SG.fin, c(), 0, 0, -0.7 * k, k).rotation.set(0, Math.PI / 2, Math.PI / 2);
+      add(GEO.sphere, glow(color, 0.35), 0, 0, 0.9 * k, 0.3 * k);
+      break;
+    }
+    case 'kunai':
+      add(GEO.oct, w(), 0, 0, 0.1, 0.12, 0.05, 0.55);
+      add(SG.torus, c(), 0, 0, -0.45, 0.12);
+      add(GEO.sphere, glow(color, 0.3), 0, 0, 0, 0.3);
+      g.userData.spin = 'z';
+      break;
+    case 'axe':
+      add(SG.shaft, c(), 0, 0, 0, 0.7);
+      add(SG.axeHead, w(), 0, 0, 0.45).rotation.z = Math.PI / 2;
+      add(SG.gear, c(), 0, 0, 0, 1).rotation.y = Math.PI / 2;
+      g.userData.spin = 'x';
+      break;
+    case 'ice':
+      add(GEO.oct, c(), 0, 0, 0.1, 0.25, 0.25, 0.75);
+      add(GEO.oct, w(), 0.22, 0.12, -0.2, 0.12, 0.12, 0.45);
+      add(GEO.oct, c(), -0.2, -0.1, -0.15, 0.12, 0.12, 0.4);
+      g.userData.spin = 'z';
+      break;
+    case 'bomb': {
+      const body = add(GEO.sphere, new THREE.MeshStandardMaterial({ color: 0x2a2a34, roughness: 0.4, metalness: 0.5 }), 0, 0, 0, 0.4);
+      body.material.userData.base = 1;
+      add(GEO.sphere, w(), 0, 0.45, 0, 0.12);
+      add(GEO.sphere, glow(color, 0.5), 0, 0.45, 0, 0.22);
+      g.userData.spin = 'x';
+      break;
+    }
+    case 'flame':
+      add(GEO.sphere, w(), 0, 0, 0, 0.25);
+      add(GEO.sphere, c(), 0, 0, 0, 0.45, 0.45, 0.6);
+      add(SG.tip, glow(color, 0.6), 0, 0, -0.55, 2.2, 2.2, -2.4);
+      break;
+    case 'feather':
+      add(GEO.oct, w(), 0, 0, 0, 0.18, 0.05, 0.7);
+      add(SG.torus, c(), 0, 0, 0, 0.45);
+      add(GEO.sphere, glow(color, 0.4), 0, 0, 0, 0.35);
+      g.userData.spin = 'z';
+      break;
+    case 'crescent':
+      add(SG.crescent, w(), 0, 0, 0, 1);
+      add(SG.crescent, c(), 0, 0, -0.12, 1.15, 1, 1.15);
+      break;
+    case 'sword':
+      add(SG.blade, w(), 0, 0, 0.7);
+      add(SG.blade, c(), 0, 0, 0.7, 2.2, 1.6, 1.05);
+      add(SG.guard, c(), 0, 0, -0.45);
+      add(SG.hilt, c(), 0, 0, -0.75);
+      break;
+    case 'meteor': {
+      const rock = add(SG.rock, new THREE.MeshStandardMaterial({ color: 0x3a2a24, emissive: color, emissiveIntensity: 0.7, roughness: 0.8 }), 0, 0, 0, 0.7);
+      rock.material.userData.base = 1;
+      add(GEO.sphere, glow(color, 0.45), 0, 0, 0, 0.95);
+      add(SG.tip, glow(color, 0.7), 0, 0, -1.2, 5, 5, -5);
+      g.userData.spin = 'x';
+      break;
+    }
+    default:
+      add(GEO.sphere, w(), 0, 0, 0, 0.28);
+      add(GEO.sphere, glow(color, 0.5), 0, 0, 0, 0.55);
+      add(SG.torus, c(), 0, 0, 0, 0.65);
+      g.userData.spin = 'y';
+  }
+  g.scale.multiplyScalar(s);
+  return g;
+}
+
+function lerpAngle(a, b, t) {
+  let d = ((b - a + Math.PI) % (Math.PI * 2)) - Math.PI;
+  if (d < -Math.PI) {
+    d += Math.PI * 2;
+  }
+  return a + d * t;
+}
+
+export class Fighter {
+  constructor(battle, key, o) {
+    this.battle = battle;
+    this.key = key;
+    this.def = FIGHTERS[key];
+    this.team = o.team;
+    this.cpu = o.cpu ? { level: o.cpu, t: 0, strafe: 0, wantGuard: false } : null;
+    this.remoteAuth = !!o.remote;
+    this.netId = o.netId || null;
+    this.isPlayer = !!o.player;
+    this.name = o.name || this.def.name;
+    this.scale = o.scale || 1;
+    this.tint = o.tint ?? this.def.tint ?? null;
+    const u = o.upg || {};
+    this.atkMul = (1 + 0.06 * (u.atk || 0)) * (this.def.power || 1);
+    this.defMul = (1 - 0.05 * (u.def || 0)) * (this.def.armor || 1);
+    this.fluxRate = 7 * (1 + 0.12 * (u.flux || 0)) * (this.def.fluxMul || 1);
+    this.og = this.def.overGain * (1 + 0.1 * (u.over || 0));
+    this.maxHp = Math.round(this.def.hp * (o.hpMul || 1) * (1 + 0.08 * (u.hp || 0)));
+    this.hp = this.maxHp;
+    this.flux = 50;
+    this.over = 0;
+    this.pos = new THREE.Vector3(o.pos[0], 0, o.pos[1]);
+    this.netTarget = this.pos.clone();
+    this.netMoving = false;
+    this.vel = new THREE.Vector3();
+    this.y = 0;
+    this.vy = 0;
+    this.facing = o.facing || 0;
+    this.action = null;
+    this.combo = 0;
+    this.comboWindow = 0;
+    this.stun = 0;
+    this.status = {};
+    this.dotAcc = 0;
+    this.stFx = 0;
+    this.guard = false;
+    this.inv = 0;
+    this.dead = false;
+    this.radius = 0.45 * this.scale * (this.def.height / 1.8);
+    this.root = new THREE.Group();
+    this.visual = new THREE.Group();
+    this.root.add(this.visual);
+    this.buildModel(battle.assets[key]);
+    battle.scene.add(this.root);
+  }
+
+  buildModel(gltf) {
+    const h = this.def.height * this.scale;
+    if (gltf) {
+      const m = SkeletonUtils.clone(gltf.scene);
+      m.updateMatrixWorld(true);
+      const box = new THREE.Box3().setFromObject(m);
+      const size = box.getSize(new THREE.Vector3());
+      const s = h / Math.max(size.y, 0.001);
+      m.scale.setScalar(s);
+      m.position.y = -box.min.y * s;
+      const tint = this.tint != null ? new THREE.Color(this.tint) : null;
+      m.traverse((c) => {
+        if (c.isMesh) {
+          c.castShadow = true;
+          if (tint && c.material) {
+            c.material = c.material.clone();
+            c.material.color?.lerp(tint, 0.6);
+          }
+        }
+      });
+      this.visual.add(m);
+      this.mixer = new THREE.AnimationMixer(m);
+      this.clips = {};
+      for (const clip of gltf.animations) {
+        const n = clip.name.toLowerCase();
+        for (const k of ['idle', 'walk', 'run', 'jump']) {
+          if (n.includes(k) && !this.clips[k]) {
+            this.clips[k] = clip;
+          }
+        }
+      }
+    } else {
+      const mesh = new THREE.Mesh(
+        new THREE.CapsuleGeometry(0.35 * this.scale, h - 0.7 * this.scale, 6, 12),
+        new THREE.MeshStandardMaterial({ color: this.tint ?? this.def.color })
+      );
+      mesh.position.y = h / 2;
+      mesh.castShadow = true;
+      this.visual.add(mesh);
+    }
+    const teamColor = this.team === 0 ? 0x7fd3ff : 0xff7a5a;
+    this.ringMesh = new THREE.Mesh(GEO.ring, glow(teamColor, 0.7));
+    this.ringMesh.scale.setScalar(0.8 * this.scale);
+    this.ringMesh.position.y = 0.04;
+    this.root.add(this.ringMesh);
+    this.guardMesh = new THREE.Mesh(GEO.sphere, glow(0x9fd8ff, 0.25));
+    this.guardMesh.scale.setScalar(h * 0.62);
+    this.guardMesh.position.y = h * 0.5;
+    this.guardMesh.visible = false;
+    this.root.add(this.guardMesh);
+  }
+
+  anim(name) {
+    if (!this.mixer || this.curAnim === name) {
+      return;
+    }
+    const clip = this.clips[name] || (name === 'run' ? this.clips.walk : null) || this.clips.idle;
+    this.curAnim = name;
+    if (!clip) {
+      return;
+    }
+    const a = this.mixer.clipAction(clip);
+    if (a === this.curAction) {
+      return;
+    }
+    a.reset().fadeIn(0.15).play();
+    if (this.curAction) {
+      this.curAction.fadeOut(0.15);
+    }
+    this.curAction = a;
+  }
+
+  forward() {
+    return new THREE.Vector3(Math.sin(this.facing), 0, Math.cos(this.facing));
+  }
+
+  faceNearest(maxD) {
+    const t = this.battle.nearestEnemy(this);
+    if (t && t.pos.distanceTo(this.pos) < maxD) {
+      this.facing = Math.atan2(t.pos.x - this.pos.x, t.pos.z - this.pos.z);
+    }
+  }
+
+  update(dt, inp) {
+    if (this.mixer) {
+      this.mixer.update(dt);
+    }
+    this.inv = Math.max(0, this.inv - dt);
+    this.comboWindow = Math.max(0, this.comboWindow - dt);
+    if (this.dead) {
+      this.visual.rotation.x = THREE.MathUtils.damp(this.visual.rotation.x, -Math.PI / 2, 6, dt);
+      this.guardMesh.visible = false;
+      this.sync();
+      return;
+    }
+    if (this.remoteAuth) {
+      this.pos.lerp(this.netTarget, 1 - Math.exp(-12 * dt));
+      this.facing = lerpAngle(this.facing, this.netFacing ?? this.facing, 1 - Math.exp(-12 * dt));
+      this.anim(this.netMoving ? 'run' : 'idle');
+      this.sync();
+      return;
+    }
+    this.tickStatus(dt);
+    if (this.dead) {
+      this.sync();
+      return;
+    }
+    const st = this.status;
+    this.flux = Math.min(100, this.flux + (st.para ? 0 : this.fluxRate) * dt);
+    this.guard = false;
+    let moving = false;
+    if (this.stun > 0) {
+      this.stun -= dt;
+    } else if (this.action) {
+      this.tickAction(dt);
+    } else if (inp.guard && this.y <= 0) {
+      this.guard = true;
+    } else {
+      const len = Math.hypot(inp.mx, inp.mz);
+      if (len > 0.12) {
+        const sp = this.def.speed * Math.min(1, len) * (st.slow ? 0.55 : st.para ? 0.65 : 1);
+        this.vel.x = (inp.mx / len) * sp;
+        this.vel.z = (inp.mz / len) * sp;
+        this.facing = Math.atan2(inp.mx, inp.mz);
+        moving = true;
+      }
+      if (inp.jump && this.y <= 0) {
+        this.vy = 7.5;
+      }
+      const mv = len > 0.12;
+      if (inp.attack) {
+        this.startLight();
+      } else if (inp.skill) {
+        this.startSkill(mv ? 1 : 0);
+      } else if (inp.skill2) {
+        this.startSkill(mv ? 3 : 2);
+      } else if (inp.skillIdx != null) {
+        this.startSkill(inp.skillIdx);
+      } else if (inp.over) {
+        this.startOver();
+      }
+    }
+    this.pos.addScaledVector(this.vel, dt);
+    if (!moving && !(this.action && this.action.keepVel)) {
+      this.vel.multiplyScalar(Math.exp(-9 * dt));
+    }
+    this.vy -= 22 * dt;
+    this.y = Math.max(0, this.y + this.vy * dt);
+    if (this.y === 0) {
+      this.vy = Math.max(0, this.vy);
+    }
+    const r = Math.hypot(this.pos.x, this.pos.z);
+    if (r > ARENA_R) {
+      this.pos.multiplyScalar(ARENA_R / r);
+    }
+    this.moving = moving;
+    this.anim(this.y > 0.05 ? 'jump' : moving ? 'run' : 'idle');
+    this.sync();
+  }
+
+  sync() {
+    this.root.position.set(this.pos.x, this.y, this.pos.z);
+    this.root.rotation.y = this.facing;
+    this.guardMesh.visible = this.guard;
+    if (!this.mixer || !this.clips.idle) {
+      const bob = (this.moving || this.netMoving) && !this.dead;
+      this.visual.children[0].position.y = (this.baseY ??= this.visual.children[0].position.y) + (bob ? Math.abs(Math.sin(performance.now() / 70)) * 0.12 : 0);
+    }
+    const flashOn = this.hitFlash > 0;
+    this.visual.position.x = flashOn ? (Math.random() - 0.5) * 0.12 : 0;
+    this.hitFlash = Math.max(0, (this.hitFlash || 0) - 1 / 60);
+  }
+
+  // 状態異常の付与（この端末で操作している戦士のみ）
+  applyStatus(key) {
+    const info = ST_INFO[key];
+    if (!info || this.dead || this.remoteAuth) {
+      return;
+    }
+    this.status[key] = Math.max(this.status[key] || 0, info.dur);
+    if (key === 'freeze' || key === 'petrify') {
+      this.stun = Math.max(this.stun, info.dur);
+      this.action = null;
+    }
+    const e = ELEMS[ST_ELEM[key]];
+    this.battle.ui.popup(this.pos, e.sn, '#' + e.c.toString(16).padStart(6, '0'));
+  }
+
+  tickStatus(dt) {
+    let dot = 0;
+    for (const k in this.status) {
+      this.status[k] -= dt;
+      if (this.status[k] <= 0) {
+        delete this.status[k];
+        continue;
+      }
+      dot += ST_INFO[k].dot || 0;
+    }
+    if (dot > 0) {
+      this.dotAcc += dt;
+      if (this.dotAcc >= 0.5) {
+        const dmg = Math.round(dot * this.dotAcc);
+        this.dotAcc = 0;
+        this.hp = Math.max(0, this.hp - dmg);
+        this.battle.ui.popup(this.pos, dmg, '#c890ff');
+        if (this.hp <= 0) {
+          this.dead = true;
+        }
+      }
+    }
+    const keys = Object.keys(this.status);
+    this.stFx -= dt;
+    if (keys.length && this.stFx <= 0) {
+      this.stFx = 0.25;
+      const k = keys[Math.floor(Math.random() * keys.length)];
+      const p = this.pos.clone().setY(0.4 + Math.random() * 1.4 + this.y);
+      p.x += (Math.random() - 0.5) * 0.6;
+      p.z += (Math.random() - 0.5) * 0.6;
+      this.battle.fxPop(p, ST_ELEM[k], Math.random() < 0.5 ? 7 : 3, 0.7, 0.5, { rise: 1.2, grow: 1.4, op: 0.8 });
+    }
+  }
+
+  startLight() {
+    this.combo = this.comboWindow > 0 ? (this.combo + 1) % 3 : 0;
+    this.faceNearest(4);
+    this.action = { type: 'light', t: 0, dur: this.combo === 2 ? 0.42 : 0.32, hitAt: 0.13, hit: false, step: this.combo };
+    this.vel.copy(this.forward().multiplyScalar(3));
+  }
+
+  startSkill(i) {
+    const spec = this.def.skills[i];
+    if (!spec || this.flux < spec.cost) {
+      return;
+    }
+    if (this.status.silence) {
+      if (!this.silenceMsg || performance.now() - this.silenceMsg > 800) {
+        this.silenceMsg = performance.now();
+        this.battle.ui.popup(this.pos, '封技中', '#6aa0ff');
+      }
+      return;
+    }
+    this.flux -= spec.cost;
+    this.faceNearest(14);
+    this.battle.cast(this, 's' + i);
+  }
+
+  startOver() {
+    if (this.over < 100) {
+      return;
+    }
+    this.over = 0;
+    this.faceNearest(14);
+    this.battle.cast(this, 'over');
+  }
+
+  tickAction(dt) {
+    const a = this.action;
+    a.t += dt;
+    const k = a.t / a.dur;
+    if (a.type === 'light') {
+      const L = this.def.light;
+      this.visual.rotation.y = L.spin ? Math.min(1, k * 1.3) * Math.PI * 2 * (a.step % 2 ? -1 : 1) : Math.sin(k * Math.PI) * 0.9 * (a.step % 2 ? -1 : 1);
+      if (!a.hit && a.t >= a.hitAt) {
+        a.hit = true;
+        const big = a.step === 2;
+        if (L.shots) {
+          this.battle.laserVolley(this, L, big ? L.shots + 2 : L.shots);
+        } else {
+          this.battle.swingFx(this);
+          this.battle.meleeHit(this, L.range, L.dmg * (big ? 1.6 : 1), big ? 0.5 : 0.25, big ? 8 : 2.5, null, null, !!L.spin);
+        }
+      }
+    } else if (a.type === 'dash') {
+      this.battle.meleeHit(this, 1.8, a.spec.dmg, 0.55, 9, a.hitSet, a.spec);
+      a.trail = (a.trail || 0) - dt;
+      if (a.trail <= 0) {
+        a.trail = 0.035;
+        this.battle.afterimage(this, a.spec.color);
+      }
+    } else if (a.type === 'cast') {
+      this.visual.position.y = Math.sin(k * Math.PI) * 0.3;
+    }
+    if (a.t >= a.dur) {
+      this.visual.rotation.y = 0;
+      this.visual.position.y = 0;
+      if (a.type === 'light') {
+        this.comboWindow = 0.4;
+      }
+      this.action = null;
+    }
+  }
+
+  receive(dmg, stun, kx, kz) {
+    if (this.dead) {
+      return 0;
+    }
+    if (this.guard) {
+      const f = this.forward();
+      const dirLen = Math.hypot(kx, kz) || 1;
+      if (-(f.x * kx + f.z * kz) / dirLen > 0.2) {
+        dmg *= 0.2;
+        stun *= 0.25;
+        kx *= 0.3;
+        kz *= 0.3;
+        this.battle.spark(this.pos.clone().setY(1.1), 0x9fd8ff, 0.9);
+      }
+    }
+    dmg = Math.round(dmg * this.defMul * (this.status.curse ? 1.3 : 1));
+    this.hp = Math.max(0, this.hp - dmg);
+    this.stun = Math.max(this.stun, stun);
+    if (stun > 0.2) {
+      this.action = null;
+      this.visual.rotation.y = 0;
+    }
+    this.vel.set(kx, 0, kz);
+    this.inv = 0.04;
+    this.hitFlash = 0.15;
+    this.over = Math.min(100, this.over + dmg * 0.06 * this.og);
+    if (this.hp <= 0) {
+      this.dead = true;
+    }
+    return dmg;
+  }
+}
+
+export class Battle {
+  constructor(scene, camera, opts) {
+    fx3dLive = 0;
+    this.scene = scene;
+    this.camera = camera;
+    this.assets = opts.assets;
+    this.ui = opts.ui;
+    this.net = opts.net || null;
+    this.fighters = [];
+    this.effects = [];
+    this.fx = new THREE.Group();
+    scene.add(this.fx);
+    this.slowmo = 0;
+    this.shake = 0;
+    this.ended = false;
+    this.camCenter = new THREE.Vector3();
+  }
+
+  add(key, o) {
+    const f = new Fighter(this, key, o);
+    this.fighters.push(f);
+    return f;
+  }
+
+  enemiesOf(f) {
+    return this.fighters.filter((e) => e.team !== f.team && !e.dead);
+  }
+
+  nearestEnemy(f) {
+    let best = null;
+    let bd = Infinity;
+    for (const e of this.enemiesOf(f)) {
+      const d = e.pos.distanceToSquared(f.pos);
+      if (d < bd) {
+        bd = d;
+        best = e;
+      }
+    }
+    return best;
+  }
+
+  meleeHit(f, range, dmg, stun, kb, hitSet, spec, omni) {
+    const fw = f.forward();
+    for (const e of this.enemiesOf(f)) {
+      if (hitSet && hitSet.has(e)) {
+        continue;
+      }
+      const dx = e.pos.x - f.pos.x;
+      const dz = e.pos.z - f.pos.z;
+      const d = Math.hypot(dx, dz);
+      if (d < range + e.radius && (omni || d < 0.9 || (dx * fw.x + dz * fw.z) / d > 0.25)) {
+        hitSet?.add(e);
+        this.applyHit(f, e, dmg, stun, kb, f.pos, spec);
+      }
+    }
+  }
+
+  strikeAt(owner, x, z, radius, dmg, stun, kb, spec) {
+    if (dmg <= 0) {
+      return;
+    }
+    const p = new THREE.Vector3(x, 0, z);
+    for (const e of this.enemiesOf(owner)) {
+      if (e.pos.distanceTo(p) < radius + e.radius) {
+        this.applyHit(owner, e, dmg, stun, kb, p, spec);
+      }
+    }
+  }
+
+  // 属性技は確率で状態異常（奥義は高確率）
+  rollStatus(att, spec) {
+    if (!spec || spec.elem == null || spec.kind === 'heal') {
+      return null;
+    }
+    const chance = spec === att.def.over ? 0.4 : 0.25;
+    return Math.random() < chance ? ELEMS[spec.elem].st : null;
+  }
+
+  applyHit(att, tgt, dmg, stun, kb, from, spec) {
+    if (att.remoteAuth || tgt.dead) {
+      return;
+    }
+    const dir = tgt.pos.clone().sub(from).setY(0);
+    if (dir.lengthSq() < 1e-4) {
+      dir.copy(att.forward());
+    }
+    dir.normalize().multiplyScalar(kb);
+    dmg *= att.atkMul * (att.status.blind ? 0.6 : 1);
+    att.over = Math.min(100, att.over + dmg * 0.12 * att.og);
+    this.spark(tgt.pos.clone().setY(1.1), spec ? spec.color : att.def.light.color ?? att.def.color, 0.7);
+    this.fxPop(tgt.pos.clone().setY(1.1), elOf(spec, elOf(att.def.skills[0])), 1, 1.4, 0.22, { grow: 1.8, spin: 6 });
+    this.ui.sfx('hit');
+    const st = this.rollStatus(att, spec);
+    if (tgt.remoteAuth) {
+      this.net?.hit({ to: tgt.netId, dmg: Math.round(dmg), stun, kx: dir.x, kz: dir.z, st });
+      this.ui.popup(tgt.pos, Math.round(dmg), '#ffe9a8');
+      if (st) this.ui.popup(tgt.pos, ELEMS[ST_ELEM[st]].sn, '#' + ELEMS[ST_ELEM[st]].c.toString(16).padStart(6, '0'));
+      return;
+    }
+    if (tgt.inv > 0) {
+      return;
+    }
+    const real = tgt.receive(dmg, stun, dir.x, dir.z);
+    if (st && real > 0) {
+      tgt.applyStatus(st);
+    }
+    this.ui.popup(tgt.pos, real, tgt.isPlayer ? '#ff8f7a' : '#ffe9a8');
+    if (tgt.isPlayer || dmg > 100) {
+      this.shake = Math.max(this.shake, Math.min(0.5, dmg / 300));
+    }
+  }
+
+  receiveNetHit(e) {
+    const t = this.fighters.find((f) => f.netId === e.to && !f.remoteAuth);
+    if (t) {
+      const real = t.receive(e.dmg, e.stun, e.kx, e.kz);
+      this.ui.popup(t.pos, real, '#ff8f7a');
+      if (e.st) t.applyStatus(e.st);
+      this.ui.sfx('hit');
+      this.shake = Math.max(this.shake, 0.25);
+    }
+  }
+
+  cast(f, slot, net) {
+    const spec = slot === 'over' ? f.def.over : f.def.skills[+slot[1]] || f.def.skills[0];
+    let tx;
+    let tz;
+    if (net) {
+      tx = net.tx;
+      tz = net.tz;
+      f.facing = net.ry;
+    } else {
+      const t = this.nearestEnemy(f);
+      const fw = f.forward();
+      tx = t ? t.pos.x : f.pos.x + fw.x * 5;
+      tz = t ? t.pos.z : f.pos.z + fw.z * 5;
+      if (this.net && f.netId) {
+        this.net.cast({ id: f.netId, slot, tx, tz, ry: f.facing });
+      }
+    }
+    if (slot === 'over') {
+      this.ui.banner(f, spec.name);
+      this.slowmo = 0.6;
+      this.ui.sfx('burst');
+      this.ui.sfx('skill', spec);
+    } else {
+      this.ui.sfx('skill', spec);
+      this.ui.callout(f, spec.name);
+    }
+    if (!f.remoteAuth) {
+      f.action = spec.kind === 'dash'
+        ? { type: 'dash', t: 0, dur: spec.dur, keepVel: true, hitSet: new Set(), spec }
+        : { type: 'cast', t: 0, dur: 0.45 };
+      if (spec.kind === 'dash') {
+        f.vel.copy(f.forward().multiplyScalar(spec.speed));
+      } else {
+        f.vel.set(0, 0, 0);
+      }
+    }
+    this.castFx(f, spec.color, spec);
+    if (spec.kind === 'projectile') {
+      for (let i = 0; i < spec.count; i++) {
+        const ang = f.facing + (i - (spec.count - 1) / 2) * spec.spreadAng;
+        if (spec.chain) {
+          let w = -i * spec.chain;
+          this.addEffect((dt) => {
+            w += dt;
+            if (w >= 0) {
+              this.projectile(f, spec, f.facing);
+              return false;
+            }
+            return true;
+          });
+        } else {
+          this.projectile(f, spec, ang);
+        }
+      }
+    } else if (spec.kind === 'implode') {
+      this.implode(f, spec, tx, tz);
+    } else if (spec.kind === 'shockwave') {
+      this.shockwave(f, spec, 0.15);
+      if (spec.double) {
+        this.shockwave(f, spec, 0.6);
+      }
+    } else if (spec.kind === 'rain' || spec.kind === 'judgment') {
+      this.rain(f, spec, tx, tz);
+    } else if (spec.kind === 'heal') {
+      const ring = new THREE.Mesh(GEO.disc, glow(spec.color, 0.35));
+      ring.position.set(f.pos.x, 0.05, f.pos.z);
+      ring.scale.setScalar(spec.radius);
+      this.fx.add(ring);
+      let t = 0;
+      this.addEffect((dt) => {
+        t += dt;
+        ring.material.opacity = Math.max(0, 0.35 - t * 0.5);
+        if (t > 0.7) {
+          this.fx.remove(ring);
+          return false;
+        }
+        return true;
+      });
+      for (const a of this.fighters) {
+        if (a.team === f.team && !a.dead && !a.remoteAuth && a.pos.distanceTo(f.pos) < spec.radius) {
+          const h = Math.round(Math.min(a.maxHp - a.hp, spec.heal));
+          a.hp += h;
+          this.ui.popup(a.pos, '+' + h, '#9dffb0');
+          this.spark(a.pos.clone().setY(1.2), spec.color, 1);
+        }
+      }
+    }
+  }
+
+  addEffect(fn) {
+    this.effects.push(fn);
+  }
+
+  // 属性ごとの立体エフェクト（炎の柱・氷晶・雷撃・旋風・岩塊・光柱・闇の結び目・波紋・毒泡・血の刃）
+  fx3d(pos, elem, power = 1, color = 0xffffff) {
+    if (fx3dLive > 40) return; // 同時発生数を制限して重くならないように
+    fx3dLive++;
+    const e = ((elem ?? 5) % 10 + 10) % 10;
+    const g = new THREE.Group();
+    g.position.copy(pos);
+    this.fx.add(g);
+    const lc = lite(color, 0.35);
+    const parts = [];
+    const add = (geo, col, op, p) => {
+      const m = new THREE.Mesh(geo, glow(col, op));
+      Object.assign(m.userData, { v: new THREE.Vector3(), spin: new THREE.Vector3(), s0: 1, s1: 1, grav: 0 }, p);
+      if (p.pos) m.position.copy(p.pos);
+      if (p.rot) m.rotation.copy(p.rot);
+      m.scale.setScalar(m.userData.s0);
+      g.add(m);
+      parts.push(m);
+      return m;
+    };
+    const R = () => Math.random() - 0.5;
+    const P = power;
+    const n = Math.round(6 + P * 4);
+    if (e === 0) {
+      for (let i = 0; i < n; i++) {
+        const a = (i / n) * Math.PI * 2;
+        add(G3.flame, i % 2 ? color : 0xffd040, 0.85, { pos: new THREE.Vector3(Math.cos(a) * 0.5 * P, 0, Math.sin(a) * 0.5 * P), v: new THREE.Vector3(Math.cos(a) * 2, 3 + Math.random() * 3, Math.sin(a) * 2).multiplyScalar(P), spin: new THREE.Vector3(0, 8, 0), s0: 0.4 * P, s1: 1.4 * P });
+      }
+      for (let i = 0; i < n; i++) add(G3.drop, 0xffa020, 1, { v: new THREE.Vector3(R() * 8, 4 + Math.random() * 6, R() * 8).multiplyScalar(P), grav: 10, s0: 0.8, s1: 0.1 });
+    } else if (e === 1) {
+      for (let i = 0; i < n + 2; i++) {
+        const a = Math.random() * Math.PI * 2;
+        add(G3.crystal, i % 3 ? color : 0xffffff, 0.9, { rot: new THREE.Euler(Math.cos(a) * 0.9, 0, Math.sin(a) * 0.9), v: new THREE.Vector3(Math.cos(a) * 1.5, 0.5, Math.sin(a) * 1.5).multiplyScalar(P), s0: 0.2 * P, s1: 1.5 * P });
+      }
+    } else if (e === 2) {
+      for (let b = 0; b < 3; b++) {
+        let x = 0, y = 4 * P, z = 0;
+        const ox = R() * 1.5, oz = R() * 1.5;
+        for (let i = 0; i < 7; i++) {
+          const nx = ox * (i / 6) + R() * 0.8, ny = y - (4 * P) / 7, nz = oz * (i / 6) + R() * 0.8;
+          const seg = add(G3.bolt, i % 2 ? color : 0xffffff, 1, { pos: new THREE.Vector3((x + nx) / 2, (y + ny) / 2, (z + nz) / 2), s0: 1, s1: 1 });
+          seg.scale.set(1.6, 1.6, Math.hypot(nx - x, ny - y, nz - z));
+          seg.userData.fixed = true;
+          seg.lookAt(nx, ny, nz); // 親グループは未更新（単位行列）なのでローカル座標で向ける
+          x = nx; y = ny; z = nz;
+        }
+      }
+      for (let i = 0; i < n; i++) add(G3.star, 0xffffa0, 1, { v: new THREE.Vector3(R() * 10, Math.random() * 6, R() * 10), spin: new THREE.Vector3(9, 9, 0), s0: 0.6, s1: 0.1 });
+    } else if (e === 3) {
+      for (let i = 0; i < 4; i++) add(G3.helix, i % 2 ? color : lc, 0.8, { pos: new THREE.Vector3(0, 0.3 + i * 0.6, 0), rot: new THREE.Euler(Math.PI / 2, 0, i), v: new THREE.Vector3(0, 2.5, 0), spin: new THREE.Vector3(0, 0, 12 - i * 2), s0: 0.5 * P, s1: (1.6 + i * 0.3) * P });
+    } else if (e === 4) {
+      for (let i = 0; i < n + 2; i++) {
+        const m = add(G3.rock, i % 2 ? 0x8a6a40 : color, 1, { v: new THREE.Vector3(R() * 7, 5 + Math.random() * 5, R() * 7).multiplyScalar(P), grav: 18, spin: new THREE.Vector3(R() * 12, R() * 12, 0), s0: (0.6 + Math.random() * 0.8) * P, s1: 0.5 * P });
+        m.material.blending = THREE.NormalBlending;
+      }
+      add(G3.wave, color, 0.8, { rot: new THREE.Euler(Math.PI / 2, 0, 0), s0: 0.3, s1: 2.8 * P });
+    } else if (e === 5) {
+      add(G3.beam, color, 0.55, { pos: new THREE.Vector3(0, -pos.y, 0), s0: 0.2, s1: 1 }).userData.beam = 7 * P;
+      add(G3.beam, 0xffffff, 0.7, { pos: new THREE.Vector3(0, -pos.y, 0), s0: 0.1, s1: 0.4 }).userData.beam = 8 * P;
+      for (let i = 0; i < n; i++) add(G3.star, i % 2 ? color : 0xffffff, 1, { v: new THREE.Vector3(R() * 6, 2 + Math.random() * 5, R() * 6).multiplyScalar(P), spin: new THREE.Vector3(6, 8, 0), s0: 1, s1: 0.2 });
+    } else if (e === 6) {
+      const c = add(G3.core, 0x200030, 0.95, { s0: 0.3 * P, s1: 2 * P });
+      c.material.blending = THREE.NormalBlending;
+      for (let i = 0; i < 3; i++) add(G3.knot, color, 0.85, { rot: new THREE.Euler(i, i * 2, 0), spin: new THREE.Vector3(3 + i, 5, 2), s0: 0.6 * P, s1: 2.2 * P });
+    } else if (e === 7) {
+      for (let i = 0; i < 3; i++) add(G3.wave, i % 2 ? lc : color, 0.8, { pos: new THREE.Vector3(0, 0.2 - pos.y + i * 0.15, 0), rot: new THREE.Euler(Math.PI / 2, 0, 0), s0: 0.2, s1: (2 + i) * P });
+      for (let i = 0; i < n + 4; i++) add(G3.drop, i % 2 ? color : 0xffffff, 0.9, { v: new THREE.Vector3(R() * 6, 4 + Math.random() * 6, R() * 6).multiplyScalar(P), grav: 16, s0: 1.2, s1: 0.4 });
+    } else if (e === 8) {
+      for (let i = 0; i < n + 4; i++) add(G3.bubble, i % 3 ? color : 0xd080ff, 0.6, { pos: new THREE.Vector3(R() * 2 * P, R(), R() * 2 * P), v: new THREE.Vector3(R() * 1.5, 1.5 + Math.random() * 3, R() * 1.5), s0: 0.4, s1: (1.5 + Math.random() * 1.5) * P });
+    } else {
+      for (let i = 0; i < 5; i++) add(G3.crescent, i % 2 ? color : 0xff6060, 0.95, { rot: new THREE.Euler(R() * 2, Math.random() * 6, R() * 2), spin: new THREE.Vector3(0, 0, 16), s0: 0.4 * P, s1: 2 * P });
+      for (let i = 0; i < n; i++) add(G3.drop, 0xa00010, 1, { v: new THREE.Vector3(R() * 8, 3 + Math.random() * 5, R() * 8).multiplyScalar(P), grav: 18, s0: 1, s1: 0.5 });
+    }
+    const life = 0.55 + P * 0.25;
+    let t = 0;
+    this.addEffect((dt) => {
+      t += dt;
+      const k = Math.min(1, t / life);
+      for (const m of parts) {
+        const u = m.userData;
+        if (u.beam) {
+          m.scale.set(u.s0 + (u.s1 - u.s0) * k, u.beam * Math.min(1, k * 4), u.s0 + (u.s1 - u.s0) * k);
+        } else if (!u.fixed) {
+          u.v.y -= u.grav * dt;
+          m.position.addScaledVector(u.v, dt);
+          m.rotation.x += u.spin.x * dt;
+          m.rotation.y += u.spin.y * dt;
+          m.rotation.z += u.spin.z * dt;
+          m.scale.setScalar(Math.max(0.01, u.s0 + (u.s1 - u.s0) * Math.sin(k * Math.PI * 0.5)));
+        }
+      }
+      fade(g, e === 2 ? (Math.random() < 0.3 ? 0.3 : 1) * (1 - k) : 1 - k * k);
+      if (k >= 1) {
+        kill(this.fx, g);
+        fx3dLive--;
+        return false;
+      }
+      return true;
+    });
+  }
+
+  // 素材エフェクトを1枚出して、拡大・回転・上昇・フェードさせる
+  fxPop(pos, elem, slot, size, life, o = {}) {
+    const obj = o.flat ? fxFlat(elem, slot, size, o.op ?? 1) : fxSprite(elem, slot, size, o.op ?? 1);
+    obj.position.copy(pos);
+    if (o.flat) obj.rotation.y = o.rot ?? Math.random() * Math.PI * 2;
+    this.fx.add(obj);
+    const grow = o.grow ?? 1.6;
+    const spin = o.spin ?? 0;
+    const rise = o.rise ?? 0;
+    const delay = o.delay ?? 0;
+    obj.visible = delay <= 0;
+    let t = -delay;
+    this.addEffect((dt) => {
+      t += dt;
+      if (t < 0) return true;
+      obj.visible = true;
+      const k = t / life;
+      obj.scale.setScalar(size * (1 + (grow - 1) * Math.min(1, k * 1.4)));
+      if (o.flat) obj.rotation.y += spin * dt;
+      else obj.material.rotation += spin * dt;
+      obj.position.y += rise * dt;
+      const fin = o.hold ? Math.max(0, 1 - Math.max(0, k - 0.6) / 0.4) : Math.max(0, 1 - k * k);
+      obj.material.opacity = (obj.material.userData.base ?? 1) * Math.min(1, t * 20) * fin;
+      if (k >= 1) {
+        kill(this.fx, obj);
+        return false;
+      }
+      return true;
+    });
+    return obj;
+  }
+
+  // 闇の重力球：周囲を引き寄せてから圧壊・爆発
+  implode(f, spec, x, z) {
+    const g = new THREE.Group();
+    const orb = new THREE.Mesh(GEO.sphere, glow(spec.color, 0.55));
+    const core = new THREE.Mesh(GEO.sphere, glow(0x100018, 0.9));
+    core.material.blending = THREE.NormalBlending;
+    const ring = new THREE.Mesh(runeOf(spec), glow(spec.color, 0.9));
+    const ring2 = new THREE.Mesh(SG.rune2, glow(lite(spec.color), 0.6));
+    g.add(orb, core, ring, ring2);
+    g.position.set(x, 0.1, z);
+    this.fx.add(g);
+    this.fxPop(new THREE.Vector3(x, 0.12, z), spec.elem ?? 6, 5, spec.radius * 2.4, 1.25, { flat: true, spin: -3, grow: 0.4, hold: true });
+    this.fxPop(new THREE.Vector3(x, 1.2, z), spec.elem ?? 6, 0, 2, 0.95, { grow: 2.4, spin: 5, hold: true });
+    let t = 0;
+    let boom = false;
+    const R = spec.radius;
+    this.addEffect((dt) => {
+      t += dt;
+      if (t < 0.9) {
+        const k = t / 0.9;
+        ring.scale.setScalar(R * (1 - k) + 0.3);
+        ring2.scale.setScalar(R * (1 - k * 0.8));
+        ring.rotation.y += dt * 6;
+        ring2.rotation.y -= dt * 3;
+        orb.scale.setScalar(0.6 + k * 1.6);
+        orb.position.y = 1.2;
+        core.scale.setScalar(0.3 + k * 0.6);
+        core.position.y = 1.2;
+        for (const e of this.enemiesOf(f)) {
+          const dx = x - e.pos.x;
+          const dz = z - e.pos.z;
+          const d = Math.hypot(dx, dz);
+          if (d < R + 1 && d > 0.3 && !e.remoteAuth) {
+            e.pos.x += (dx / d) * dt * 5;
+            e.pos.z += (dz / d) * dt * 5;
+          }
+        }
+        if (Math.random() < 0.6) {
+          const a = Math.random() * Math.PI * 2;
+          this.puff(new THREE.Vector3(x + Math.cos(a) * R * (1 - k), 0.5 + Math.random() * 2, z + Math.sin(a) * R * (1 - k)), spec.color, 0.3);
+        }
+        return true;
+      }
+      if (!boom) {
+        boom = true;
+        this.strikeAt(f, x, z, R * 0.6, spec.dmg, 0.8, 11, spec);
+        this.burst(new THREE.Vector3(x, 1, z), spec.color, 2.5, spec);
+        this.shake = Math.max(this.shake, 0.7);
+        this.ui.flash();
+        this.ui.sfx('burst');
+      }
+      const k = (t - 0.9) / 0.35;
+      orb.scale.setScalar(2.2 + k * R * 1.4);
+      core.scale.setScalar(Math.max(0.01, 0.9 * (1 - k * 2)));
+      fade(g, Math.max(0, 1 - k));
+      if (k >= 1) {
+        kill(this.fx, g);
+        return false;
+      }
+      return true;
+    });
+  }
+
+  // 赤い光線弾の連射（通常攻撃）
+  laserVolley(f, L, n) {
+    const spec = { visual: 'laser', color: L.color, dmg: L.dmg, speed: 30, radius: 0.35, stun: 0.12, kb: 1.5, trail: 0.06, noBurst: true };
+    for (let i = 0; i < n; i++) {
+      let w = -i * 0.07;
+      this.addEffect((dt) => {
+        w += dt;
+        if (w >= 0) {
+          f.faceNearest?.(14);
+          this.projectile(f, spec, f.facing + (Math.random() - 0.5) * 0.08);
+          this.ui.sfx('laser');
+          return false;
+        }
+        return true;
+      });
+    }
+  }
+
+  castFx(f, color, spec) {
+    // 足元に回転する紋章陣（技ごとに角数が違う）+ 立ち昇る光輪
+    const g = new THREE.Group();
+    const r1 = new THREE.Mesh(runeOf(spec), glow(color, 0.9));
+    const r2 = new THREE.Mesh(SG.rune2, glow(lite(color), 0.6));
+    r2.scale.setScalar(1.3);
+    const el = elOf(spec);
+    const isOver = spec && spec === f.def.over;
+    const base = new THREE.Vector3(f.pos.x, 0.08, f.pos.z);
+    this.fxPop(base, el, 5, isOver ? 6 : 3.2, isOver ? 1.2 : 0.7, { flat: true, spin: 2.5, grow: 1.15, hold: true });
+    this.fxPop(base.clone().setY(1.2), el, 1, isOver ? 5 : 2.6, 0.35, { spin: 4, grow: 1.5 });
+    this.fx3d(base.clone().setY(0.4), el, isOver ? 1.8 : 0.8, color);
+    if (isOver) {
+      for (let i = 0; i < 4; i++) this.fxPop(base.clone().setY(0.5 + i * 0.9), el, 9, 2.4, 0.9, { rise: 2.5, spin: 3, delay: i * 0.08, op: 0.8 });
+    }
+    const halo = new THREE.Mesh(SG.torus, glow(color, 0.8));
+    halo.rotation.x = Math.PI / 2;
+    g.add(r1, r2, halo);
+    g.position.set(f.pos.x, 0.06, f.pos.z);
+    this.fx.add(g);
+    let t = 0;
+    this.addEffect((dt) => {
+      t += dt;
+      g.scale.setScalar(0.6 + Math.min(1, t * 5) * 1.2);
+      r1.rotation.y += dt * 4;
+      r2.rotation.y -= dt * 2;
+      halo.position.y = t * 5;
+      halo.scale.setScalar(0.8 - t * 0.6);
+      fade(g, Math.max(0, 1 - t / 0.35));
+      if (t > 0.35) {
+        kill(this.fx, g);
+        return false;
+      }
+      return true;
+    });
+  }
+
+  afterimage(f, color) {
+    const m = new THREE.Mesh(SG.slash, glow(color, 0.6));
+    m.position.set(f.pos.x, 1 + f.y, f.pos.z);
+    m.rotation.y = f.facing - Math.PI / 2;
+    this.fx.add(m);
+    let t = 0;
+    this.addEffect((dt) => {
+      t += dt;
+      m.scale.y = 1 + t * 3;
+      fade(m, Math.max(0, 1 - t / 0.3));
+      if (t > 0.3) {
+        kill(this.fx, m);
+        return false;
+      }
+      return true;
+    });
+  }
+
+  puff(pos, color, size) {
+    const m = new THREE.Mesh(GEO.sphere, glow(color, 0.5));
+    m.position.copy(pos);
+    m.scale.setScalar(size);
+    this.fx.add(m);
+    let t = 0;
+    this.addEffect((dt) => {
+      t += dt;
+      m.scale.setScalar(size * (1 - t * 3));
+      if (t > 0.3) {
+        kill(this.fx, m);
+        return false;
+      }
+      return true;
+    });
+  }
+
+  burst(pos, color, size, spec) {
+    this.spark(pos, color, size);
+    if (spec && spec.elem != null) {
+      const el = spec.elem;
+      this.fxPop(pos.clone(), el, 8, size * 2.4, 0.45, { grow: 1.6 });
+      this.fxPop(pos.clone(), el, 1, size * 2.2, 0.25, { grow: 2, spin: 5 });
+      this.fxPop(pos.clone(), el, 7, size * 2.6, 0.6, { grow: 2.2, op: 0.9 });
+      this.fxPop(pos.clone().setY(pos.y + 0.3), el, 3, size * 2, 0.8, { rise: 1.6, grow: 1.8, op: 0.55 });
+      this.fxPop(new THREE.Vector3(pos.x, 0.1, pos.z), el, 4, size * 1.2, 0.45, { flat: true, grow: 2.6 });
+      this.fx3d(pos.clone(), el, Math.min(2.2, 0.5 + size * 0.45), color);
+    }
+    const n = 7;
+    const geo = spec ? primOf(spec) : SG.tetra;
+    const lc = lite(color);
+    for (let i = 0; i < n; i++) {
+      const m = new THREE.Mesh(geo, glow(i % 2 ? lc : color, 0.95));
+      m.scale.setScalar(0.12 * size);
+      m.position.copy(pos);
+      const v = new THREE.Vector3((Math.random() - 0.5) * 8, 3 + Math.random() * 5, (Math.random() - 0.5) * 8).multiplyScalar(size * 0.7);
+      this.fx.add(m);
+      let t = 0;
+      this.addEffect((dt) => {
+        t += dt;
+        v.y -= 18 * dt;
+        m.position.addScaledVector(v, dt);
+        m.rotation.x += dt * 12;
+        m.rotation.z += dt * 9;
+        fade(m, Math.max(0, 1 - t / 0.5));
+        if (t > 0.5) {
+          kill(this.fx, m);
+          return false;
+        }
+        return true;
+      });
+    }
+  }
+
+  swingFx(f) {
+    const L = f.def.light;
+    const arc = new THREE.Mesh(new THREE.TorusGeometry(L.range * (L.spin ? 0.95 : 0.7), L.spin ? 0.09 : 0.05, 4, L.spin ? 40 : 16, Math.PI * (L.spin ? 2 : 0.8)), glow(L.color ?? f.def.color, 0.9));
+    arc.rotation.set(Math.PI / 2, 0, -f.facing - Math.PI * 0.9 + Math.PI / 2);
+    if (L.spin) {
+      // 回転斬り：足元に水平の刃風を重ねる
+      for (let i = 0; i < 3; i++) this.spark(f.pos.clone().setY(1 + i * 0.2), L.color, 0.6 + i * 0.3);
+    }
+    arc.position.set(f.pos.x, 1.1 + f.y, f.pos.z);
+    this.fx.add(arc);
+    const el = L.shots ? 9 : elOf(f.def.skills[0]);
+    const fw = f.forward();
+    if (L.spin) {
+      this.fxPop(new THREE.Vector3(f.pos.x, 1 + f.y, f.pos.z), el, 4, L.range * 1.4, 0.3, { flat: true, grow: 1.6, spin: 14 });
+    } else {
+      this.fxPop(new THREE.Vector3(f.pos.x + fw.x * L.range * 0.6, 1.1 + f.y, f.pos.z + fw.z * L.range * 0.6), el, 6, L.range * 1.5, 0.22, { flat: true, rot: f.facing + Math.PI / 2, grow: 1.25 });
+    }
+    let t = 0;
+    this.addEffect((dt) => {
+      t += dt;
+      arc.material.opacity = Math.max(0, 0.9 - t * 5);
+      if (t > 0.2) {
+        arc.geometry.dispose();
+        this.fx.remove(arc);
+        return false;
+      }
+      return true;
+    });
+  }
+
+  spark(pos, color, size) {
+    const m = new THREE.Mesh(GEO.oct, glow(color, 0.95));
+    m.position.copy(pos);
+    this.fx.add(m);
+    let t = 0;
+    this.addEffect((dt) => {
+      t += dt;
+      m.scale.setScalar(size * (0.3 + t * 4));
+      m.rotation.y += dt * 8;
+      m.material.opacity = Math.max(0, 0.95 - t * 5);
+      if (t > 0.2) {
+        this.fx.remove(m);
+        return false;
+      }
+      return true;
+    });
+  }
+
+  projectile(f, spec, ang) {
+    const m = makeShape(spec.visual || 'orb', spec.color, Math.max(0.8, spec.radius * 1.7));
+    const deco = spec.shape != null ? decorate(m, spec, 1) : null;
+    const inner = new THREE.Group();
+    const spin = m.userData.spin;
+    inner.add(m);
+    const el = elOf(spec, 9);
+    const core = fxSprite(el, spec.visual === 'laser' ? 2 : 0, Math.max(1.2, spec.radius * 3.2), 0.95);
+    inner.add(core);
+    const p = f.pos.clone().setY(1.1);
+    const v = new THREE.Vector3(Math.sin(ang), 0, Math.cos(ang)).multiplyScalar(spec.speed);
+    inner.position.copy(p);
+    inner.rotation.y = ang;
+    this.fx.add(inner);
+    let t = 0;
+    let trail = 0;
+    const done = () => {
+      kill(this.fx, inner);
+      return false;
+    };
+    this.addEffect((dt) => {
+      t += dt;
+      p.addScaledVector(v, dt);
+      inner.position.copy(p);
+      if (spin === 'x') m.rotation.x += dt * 22;
+      if (spin === 'y') m.rotation.y += dt * 8;
+      if (spin === 'z') m.rotation.z += dt * 14;
+      if (deco) {
+        deco.rotation.z += dt * 7;
+        deco.rotation.x += dt * 3;
+      }
+      trail -= dt;
+      if (trail <= 0) {
+        trail = spec.trail ?? 0.04;
+        this.puff(p.clone(), spec.color, 0.22 * Math.max(1, spec.radius * 1.5));
+        this.fxPop(p.clone(), el, Math.random() < 0.5 ? 9 : 3, Math.max(0.8, spec.radius * 2.2), 0.3, { grow: 1.5, op: 0.6 });
+      }
+      if (spec.visual !== 'laser') core.material.rotation += dt * 6;
+      for (const e of this.enemiesOf(f)) {
+        if (Math.hypot(e.pos.x - p.x, e.pos.z - p.z) < spec.radius + e.radius) {
+          this.applyHit(f, e, spec.dmg, spec.stun ?? 0.4, spec.kb ?? 5, f.pos, spec);
+          if (spec.noBurst) this.spark(p.clone(), spec.color, 0.5);
+          else this.burst(p.clone(), spec.color, 1.2, spec);
+          return done();
+        }
+      }
+      if (t > 1.3) {
+        return done();
+      }
+      return true;
+    });
+  }
+
+  shockwave(f, spec, delay, cx, cz) {
+    const ox = cx ?? f.pos.x;
+    const oz = cz ?? f.pos.z;
+    const ring = new THREE.Group();
+    const flat = new THREE.Mesh(GEO.ring, glow(spec.color, 0.9));
+    const wall = new THREE.Mesh(GEO.pillar, glow(spec.color, 0.35));
+    wall.scale.set(1, 0.9, 1);
+    const rune = new THREE.Mesh(runeOf(spec), glow(lite(spec.color), 0.6));
+    rune.scale.setScalar(0.8);
+    ring.add(flat, wall, rune);
+    ring.position.set(ox, 0.08, oz);
+    ring.visible = false;
+    this.fx.add(ring);
+    if (spec.elem != null) {
+      const el = spec.elem;
+      this.fxPop(new THREE.Vector3(ox, 0.12, oz), el, 4, 1, 0.5, { flat: true, grow: spec.radius * 2.3, delay, spin: 1.5 });
+      this.fxPop(new THREE.Vector3(ox, 0.1, oz), el, 5, spec.radius * 1.6, 0.6, { flat: true, grow: 1.2, delay, spin: -2, hold: true, op: 0.8 });
+      this.fx3d(new THREE.Vector3(ox, 0.3, oz), el, Math.min(2.2, spec.radius / 3), spec.color);
+      for (let i = 0; i < 6; i++) {
+        const a = (i / 6) * Math.PI * 2;
+        this.fxPop(new THREE.Vector3(ox + Math.cos(a) * spec.radius * 0.6, 0.6, oz + Math.sin(a) * spec.radius * 0.6), el, i % 2 ? 3 : 8, 1.8, 0.55, { rise: 1.5, grow: 1.8, delay: delay + 0.05, op: 0.7 });
+      }
+    }
+    // 地面から突き出す結晶の棘
+    const spikes = new THREE.Group();
+    const n = Math.round(spec.radius * 3);
+    const v = spec.shape ?? 0;
+    const spikeGeo = v % 2 ? SG.spike : primOf(spec);
+    const lc = lite(spec.color);
+    for (let i = 0; i < n; i++) {
+      const a = (i / n) * Math.PI * 2 + Math.random() * 0.3;
+      const rr = spec.radius * (0.45 + Math.random() * 0.45);
+      const s = new THREE.Mesh(spikeGeo, glow(i % 3 ? spec.color : lc, 0.85));
+      const prim = spikeGeo !== SG.spike;
+      s.position.set(Math.cos(a) * rr, prim ? 0.5 : 0, Math.sin(a) * rr);
+      s.rotation.set((Math.random() - 0.5) * 0.6, Math.random() * 3, (Math.random() - 0.5) * 0.6);
+      s.userData.h = prim ? 0.35 + Math.random() * 0.4 : 0.6 + Math.random() * 0.9;
+      s.scale.set(prim ? 0.35 : 1, 0.01, prim ? 0.35 : 1);
+      spikes.add(s);
+    }
+    spikes.position.set(ox, 0, oz);
+    spikes.visible = false;
+    this.fx.add(spikes);
+    const hit = new Set();
+    let t = -delay;
+    this.addEffect((dt) => {
+      t += dt;
+      if (t < 0) {
+        return true;
+      }
+      ring.visible = true;
+      spikes.visible = true;
+      const r = Math.min(1, t / 0.45) * spec.radius;
+      ring.scale.setScalar(Math.max(0.1, r));
+      fade(ring, Math.max(0, 1 - t / 0.5));
+      fade(spikes, Math.max(0, 1 - t / 0.5));
+      const up = t < 0.12 ? t / 0.12 : Math.max(0, 1 - (t - 0.12) / 0.3);
+      for (const s of spikes.children) {
+        s.scale.y = Math.max(0.01, up * s.userData.h);
+      }
+      if (t < 0.05) {
+        this.shake = Math.max(this.shake, 0.3);
+      }
+      for (const e of this.enemiesOf(f)) {
+        const d = Math.hypot(e.pos.x - ox, e.pos.z - oz);
+        if (spec.dmg > 0 && !hit.has(e) && d < r + e.radius && e.y < 0.8) {
+          hit.add(e);
+          this.applyHit(f, e, spec.dmg, 0.6, 9, new THREE.Vector3(ox, 0, oz), spec);
+        }
+      }
+      if (t > 0.5) {
+        kill(this.fx, ring);
+        kill(this.fx, spikes);
+        return false;
+      }
+      return true;
+    });
+  }
+
+  rain(f, spec, tx, tz) {
+    for (let i = 0; i < spec.count; i++) {
+      const a = Math.random() * Math.PI * 2;
+      const r = i === 0 ? 0 : Math.sqrt(Math.random()) * spec.spread;
+      this.strike(f, spec, tx + Math.cos(a) * r, tz + Math.sin(a) * r, spec.delay + i * spec.interval, spec.radius, spec.dmg);
+    }
+    if (spec.kind === 'judgment') {
+      const finalDelay = spec.delay + spec.count * spec.interval + 0.5;
+      const fv = spec.finalVisual || 'verdict';
+      this.strike(f, { ...spec, visual: fv, final: true }, tx, tz, finalDelay, spec.finalRadius, spec.finalDmg, spec);
+      if (fv === 'bigsword') {
+        // 大剣の着弾と同時に雷の柱を周囲へ
+        for (let i = 0; i < 6; i++) {
+          const a = (i / 6) * Math.PI * 2;
+          this.strike(f, { ...spec, visual: 'bolt' }, tx + Math.cos(a) * spec.finalRadius * 0.7, tz + Math.sin(a) * spec.finalRadius * 0.7, finalDelay + 0.05 + i * 0.04, 1.2, 0, spec);
+        }
+      }
+    }
+  }
+
+  strike(f, spec, x, z, delay, radius, dmg, hitSpec) {
+    hitSpec = hitSpec || spec;
+    // 予兆の紋章陣（技ごとに角数の違う環 + 外周）
+    const mark = new THREE.Group();
+    mark.add(new THREE.Mesh(runeOf(spec), glow(spec.color, 0.7)), new THREE.Mesh(SG.rune2, glow(lite(spec.color), 0.4)));
+    mark.position.set(x, 0.07, z);
+    mark.scale.setScalar(radius);
+    this.fx.add(mark);
+    const vis = spec.visual;
+    const sel = elOf(spec);
+    // 予兆の魔法陣（素材）
+    this.fxPop(new THREE.Vector3(x, 0.09, z), sel, 5, radius * 2.3, delay + 0.3, { flat: true, spin: 2, grow: 1.05, hold: true, op: 0.9 });
+    const big = !!spec.final;
+    let body = null;
+    const fall = vis === 'spear' ? 0.2 : vis === 'meteor' ? 0.4 : vis === 'sword' ? 0.22 : vis === 'blade' ? 0.1 : vis === 'nova' ? 0.75 : vis === 'bigsword' ? 0.4 : 0;
+    const startPos = vis === 'bigsword'
+      ? new THREE.Vector3(x, 20, z + 0.01)
+      : vis === 'nova'
+        ? new THREE.Vector3(x - 9, 22, z - 5)
+        : new THREE.Vector3(x - (vis === 'meteor' ? 4 : 0.6), vis === 'blade' ? 3 : 13, z - (vis === 'meteor' ? 2 : 0.3));
+    let t = -delay;
+    let struck = false;
+    this.addEffect((dt) => {
+      t += dt;
+      mark.rotation.y += dt * 2.5;
+      if (t < 0) {
+        fade(mark, 0.5 + 0.5 * Math.abs(Math.sin(t * 12)));
+      }
+      if (t >= -fall && !body) {
+        if (vis === 'spear' || vis === 'sword' || vis === 'meteor' || vis === 'blade' || vis === 'nova' || vis === 'bigsword') {
+          const sc = vis === 'nova' ? radius * 0.9 : vis === 'bigsword' ? radius * 1.5 : vis === 'meteor' ? radius * 0.8 : vis === 'sword' ? 1.4 + radius * 0.3 : vis === 'blade' ? 1.1 : 1.3;
+          body = makeShape(vis === 'blade' || vis === 'bigsword' ? 'sword' : vis === 'nova' ? 'meteor' : vis, spec.color, sc);
+          if (vis !== 'bigsword' && vis !== 'nova') decorate(body, spec, 0.8);
+          body.position.copy(startPos);
+          body.lookAt(x, 0, z);
+        } else if (vis === 'bolt') {
+          // 稲妻：ジグザグの幹＋枝
+          body = new THREE.Group();
+          const lc = lite(spec.color, 0.55);
+          const seg = (a, b, w) => {
+            const len = a.distanceTo(b);
+            const o = new THREE.Mesh(SG.unitZ, glow(spec.color, 0.75));
+            o.position.copy(a).lerp(b, 0.5);
+            o.scale.set(w, w, len);
+            o.lookAt(b);
+            const c = new THREE.Mesh(SG.unitZ, glow(lc, 0.95));
+            c.position.copy(o.position);
+            c.scale.set(w * 0.35, w * 0.35, len);
+            c.quaternion.copy(o.quaternion);
+            body.add(o, c);
+          };
+          let prev = new THREE.Vector3(0, 15, 0);
+          for (let i = 1; i <= 9; i++) {
+            const y = 15 - (i / 9) * 15;
+            const p = i === 9 ? new THREE.Vector3(0, 0, 0) : new THREE.Vector3((Math.random() - 0.5) * 1.6, y, (Math.random() - 0.5) * 1.6);
+            seg(prev, p, big ? 0.35 : 0.2);
+            if (i % 3 === 1) {
+              const br = p.clone().add(new THREE.Vector3((Math.random() - 0.5) * 3, -1.5 - Math.random(), (Math.random() - 0.5) * 3));
+              seg(p, br, 0.09);
+            }
+            prev = p;
+          }
+          const flash = new THREE.Mesh(GEO.sphere, glow(spec.color, 0.6));
+          flash.scale.set(radius * 0.8, 0.4, radius * 0.8);
+          body.add(flash);
+          body.position.set(x, 0, z);
+          body.visible = false;
+        } else if (vis === 'tornado') {
+          // 竜巻：上ほど広がる回転する輪
+          body = new THREE.Group();
+          for (let i = 0; i < 8; i++) {
+            const r = new THREE.Mesh(SG.torus, glow(i % 2 ? lite(spec.color) : spec.color, 0.8));
+            r.rotation.x = Math.PI / 2 + (Math.random() - 0.5) * 0.3;
+            r.position.y = i * 0.75;
+            r.scale.setScalar(radius * (0.3 + i * 0.16));
+            body.add(r);
+          }
+          for (let i = 0; i < 6; i++) {
+            const b = new THREE.Mesh(SG.slash, glow(spec.color, 0.7));
+            const a = (i / 6) * Math.PI * 2;
+            b.position.set(Math.cos(a) * radius * 0.7, 1 + i * 0.7, Math.sin(a) * radius * 0.7);
+            b.rotation.y = -a;
+            body.add(b);
+          }
+          body.position.set(x, 0, z);
+          body.visible = false;
+        } else if (vis === 'crystal') {
+          body = new THREE.Group();
+          for (let i = 0; i < 5; i++) {
+            const s = new THREE.Mesh(SG.spike, glow(i % 2 ? lite(spec.color) : spec.color, 0.9));
+            const a = (i / 5) * Math.PI * 2;
+            s.position.set(Math.cos(a) * radius * 0.35, 0, Math.sin(a) * radius * 0.35);
+            s.rotation.set(Math.sin(a) * 0.4, 0, -Math.cos(a) * 0.4);
+            s.scale.set(1, 0.01, 1);
+            body.add(s);
+          }
+          body.position.set(x, 0, z);
+        } else {
+          // 光柱：本体 + 芯 + 上下の光輪
+          body = new THREE.Group();
+          const rr = radius * (big ? 1 : 0.6);
+          const shell = new THREE.Mesh(GEO.pillar, glow(spec.color, 0.6));
+          shell.scale.set(rr, big ? 34 : 18, rr);
+          const core = new THREE.Mesh(GEO.pillar, glow(lite(spec.color, 0.5), 0.9));
+          core.scale.set(rr * 0.35, big ? 34 : 18, rr * 0.35);
+          body.add(shell, core);
+          decorate(body, spec, rr * 1.2).position.y = 1.4;
+          for (let i = 0; i < (big ? 4 : 2); i++) {
+            const halo = new THREE.Mesh(SG.torus, glow(spec.color, 0.9));
+            halo.rotation.x = Math.PI / 2;
+            halo.scale.setScalar(rr * 1.3);
+            halo.position.y = 1 + i * (big ? 4 : 3);
+            halo.userData.halo = i;
+            body.add(halo);
+          }
+          if (big) {
+            const orb = new THREE.Mesh(GEO.sphere, glow(spec.color, 0.5));
+            orb.userData.orb = true;
+            body.add(orb);
+          }
+          body.position.set(x, 0, z);
+          body.visible = false;
+        }
+        this.fx.add(body);
+      }
+      if (body && fall > 0 && t < 0) {
+        const k = 1 + t / fall;
+        body.position.lerpVectors(startPos, new THREE.Vector3(x, vis === 'meteor' ? 0.6 : 0.4, z), k);
+        if (body.userData.spin === 'x') body.children[0].rotation.x += dt * 10;
+        if (Math.random() < 0.5) this.puff(body.position.clone(), spec.color, 0.25);
+      }
+      if (t >= 0 && !struck) {
+        struck = true;
+        if (body) body.visible = true;
+        this.strikeAt(f, x, z, radius, dmg, big ? 1 : vis === 'nova' ? 0.8 : 0.35, big || vis === 'nova' ? 12 : 3, hitSpec);
+        this.shake = Math.max(this.shake, big || vis === 'nova' ? 0.9 : vis === 'meteor' ? 0.35 : vis === 'bolt' ? 0.25 : 0.15);
+        if (big || vis === 'nova') {
+          this.ui.flash();
+          this.ui.sfx('burst');
+        }
+        if (vis === 'bolt') {
+          this.ui.sfx('zap');
+          this.fxPop(new THREE.Vector3(x, 4, z), 2, 2, big ? 10 : 7, 0.3, { grow: 1.1 });
+        }
+        if (vis === 'tornado') {
+          for (let i = 0; i < 4; i++) this.fxPop(new THREE.Vector3(x, 0.8 + i * 1.3, z), 3, i % 2 ? 9 : 4, radius * (1.4 + i * 0.4), 0.8, { spin: 10, rise: 1, grow: 1.3, op: 0.85 });
+        }
+        if (big || vis === 'nova') {
+          // 奥義の着弾：巨大な爆発と閃光を重ねる
+          this.fxPop(new THREE.Vector3(x, 1.5, z), sel, 8, radius * 3.2, 0.8, { grow: 1.5 });
+          this.fxPop(new THREE.Vector3(x, 2, z), sel, 1, radius * 3.5, 0.5, { grow: 1.8, spin: 3 });
+          this.fxPop(new THREE.Vector3(x, 0.15, z), sel, 4, radius, 0.7, { flat: true, grow: 3.2, spin: 1 });
+          for (let i = 0; i < 8; i++) {
+            const a = (i / 8) * Math.PI * 2;
+            this.fxPop(new THREE.Vector3(x + Math.cos(a) * radius * 0.8, 1, z + Math.sin(a) * radius * 0.8), sel, i % 2 ? 3 : 7, radius * 1.1, 0.9, { rise: 2.5, grow: 1.7, delay: i * 0.03, op: 0.75 });
+          }
+        }
+        this.burst(new THREE.Vector3(x, 0.6, z), spec.color, Math.min(vis === 'nova' ? 3.5 : 2.5, radius * 0.8), spec);
+        if (vis === 'nova') this.shockwave(f, { ...hitSpec, dmg: 0, radius: radius * 1.6 }, 0, x, z);
+      }
+      if (t >= 0) {
+        const life = big ? 0.7 : vis === 'tornado' ? 0.75 : vis === 'nova' ? 0.5 : vis === 'sword' || vis === 'spear' ? 0.3 : 0.25;
+        if (vis === 'tornado' && body) {
+          body.rotation.y += dt * 14;
+          if (Math.random() < 0.4) this.puff(new THREE.Vector3(x + (Math.random() - 0.5) * radius, Math.random() * 5, z + (Math.random() - 0.5) * radius), spec.color, 0.3);
+        }
+        if (vis === 'bolt' && body) body.visible = Math.random() > 0.25;
+        const k = t / life;
+        fade(mark, Math.max(0, 1 - k));
+        if (body) {
+          fade(body, Math.max(0, 1 - k));
+          for (const c of body.children) {
+            if (c.userData.halo != null) {
+              c.position.y += dt * (6 + c.userData.halo * 3);
+              c.scale.multiplyScalar(1 + dt * 1.5);
+            }
+            if (c.userData.orb) {
+              c.scale.setScalar(radius * (0.3 + k * 1.1));
+            }
+          }
+          if (vis === 'crystal') {
+            const up = Math.min(1, k * 5);
+            for (const s of body.children) s.scale.y = up * 1.2;
+          }
+          if (vis === 'verdict') {
+            body.children[0].scale.x = body.children[0].scale.z = radius * (1 + k * 0.6);
+          }
+        }
+        if (k >= 1) {
+          kill(this.fx, mark);
+          if (body) {
+            kill(this.fx, body);
+          }
+          return false;
+        }
+      }
+      return true;
+    });
+  }
+
+  aiInput(f, dt) {
+    const st = f.cpu;
+    const inp = { mx: 0, mz: 0 };
+    const tgt = this.nearestEnemy(f);
+    if (!tgt) {
+      return inp;
+    }
+    const dx = tgt.pos.x - f.pos.x;
+    const dz = tgt.pos.z - f.pos.z;
+    const d = Math.hypot(dx, dz) || 0.01;
+    st.t -= dt;
+    if (st.t <= 0) {
+      st.t = 0.25 + Math.random() * 0.45;
+      st.strafe = (Math.random() - 0.5) * 1.4;
+      st.wantGuard = d < 3.5 && Math.random() < st.level * 0.55;
+    }
+    const kind = f.def.skills[0].kind;
+    const pref = kind === 'projectile' || kind === 'heal' ? 6 : 1.7;
+    let mx = 0;
+    let mz = 0;
+    if (d > pref) {
+      mx = dx / d;
+      mz = dz / d;
+    } else if (d < pref - 2.5) {
+      mx = -dx / d;
+      mz = -dz / d;
+    }
+    mx += (-dz / d) * st.strafe * 0.6;
+    mz += (dx / d) * st.strafe * 0.6;
+    inp.mx = mx;
+    inp.mz = mz;
+    inp.guard = st.wantGuard && !!tgt.action;
+    if (d < (f.def.light.shots ? 9 : f.def.light.range + 0.5) && Math.random() < dt * 5 * st.level) {
+      inp.attack = true;
+    }
+    const si = Math.floor(Math.random() * 4);
+    const sp = f.def.skills[si];
+    const k2 = sp.kind;
+    const ok = k2 === 'heal' ? f.hp < f.maxHp * 0.55 : d < (k2 === 'dash' ? 7 : k2 === 'shockwave' ? sp.radius : 12);
+    if (ok && f.flux >= sp.cost && Math.random() < dt * 1.2 * st.level) {
+      inp.skillIdx = si;
+    }
+    if (f.over >= 100 && Math.random() < dt * 1.5) {
+      inp.over = true;
+    }
+    return inp;
+  }
+
+  update(rawDt, playerInput) {
+    this.slowmo -= rawDt;
+    const dt = rawDt * (this.slowmo > 0 ? 0.4 : 1);
+    const idle = { mx: 0, mz: 0 };
+    for (const f of this.fighters) {
+      let inp = idle;
+      if (!this.ended) {
+        if (f.isPlayer) {
+          inp = playerInput;
+        } else if (f.cpu && !f.remoteAuth) {
+          inp = this.aiInput(f, dt);
+        }
+      }
+      f.update(dt, inp);
+    }
+    for (let i = 0; i < this.fighters.length; i++) {
+      for (let j = i + 1; j < this.fighters.length; j++) {
+        const a = this.fighters[i];
+        const b = this.fighters[j];
+        if (a.dead || b.dead) {
+          continue;
+        }
+        const dx = b.pos.x - a.pos.x;
+        const dz = b.pos.z - a.pos.z;
+        const d = Math.hypot(dx, dz);
+        const min = a.radius + b.radius;
+        if (d < min && d > 1e-4) {
+          const push = (min - d) / 2;
+          if (!a.remoteAuth) {
+            a.pos.x -= (dx / d) * push;
+            a.pos.z -= (dz / d) * push;
+          }
+          if (!b.remoteAuth) {
+            b.pos.x += (dx / d) * push;
+            b.pos.z += (dz / d) * push;
+          }
+        }
+      }
+    }
+    // 技の跡を素早く消す：例外で止まった演出や取り残しも強制回収
+    this.effects = this.effects.filter((fn) => {
+      try {
+        return fn(dt);
+      } catch (e) {
+        return false;
+      }
+    });
+    this.fxClock = (this.fxClock || 0) + rawDt;
+    for (let i = this.fx.children.length - 1; i >= 0; i--) {
+      const o = this.fx.children[i];
+      if (o.userData.born == null) {
+        o.userData.born = this.fxClock;
+      } else if (this.fxClock - o.userData.born > 6) {
+        kill(this.fx, o);
+      }
+    }
+    if (this.effects.length === 0 && this.fx.children.length) {
+      for (let i = this.fx.children.length - 1; i >= 0; i--) kill(this.fx, this.fx.children[i]);
+    }
+    this.updateCamera(rawDt);
+    if (!this.ended) {
+      const alive = [0, 1].map((t) => this.fighters.some((f) => f.team === t && !f.dead));
+      if (!alive[0] || !alive[1]) {
+        this.ended = true;
+        this.ui.end(alive[0] ? 0 : 1);
+      }
+    }
+  }
+
+  updateCamera(dt) {
+    const c = new THREE.Vector3();
+    let w = 0;
+    for (const f of this.fighters) {
+      if (f.dead) {
+        continue;
+      }
+      const k = f.isPlayer ? 2 : 1;
+      c.addScaledVector(f.pos, k);
+      w += k;
+    }
+    if (w > 0) {
+      c.multiplyScalar(1 / w);
+    }
+    let spread = 0;
+    for (const f of this.fighters) {
+      if (!f.dead) {
+        spread = Math.max(spread, f.pos.distanceTo(c));
+      }
+    }
+    this.camCenter.lerp(c, 1 - Math.exp(-5 * dt));
+    const portrait = this.camera.aspect < 1 ? 1.7 : 1;
+    const dist = (8 + spread * 0.9) * portrait;
+    const target = this.camCenter.clone().add(new THREE.Vector3(0, dist * 0.62 + 1, dist));
+    this.camera.position.lerp(target, 1 - Math.exp(-4 * dt));
+    this.shake = Math.max(0, this.shake - dt * 1.8);
+    const s = this.shake * 0.35;
+    this.camera.position.x += (Math.random() - 0.5) * s;
+    this.camera.position.y += (Math.random() - 0.5) * s;
+    this.camera.lookAt(this.camCenter.x, 1, this.camCenter.z);
+  }
+
+  dispose() {
+    for (const f of this.fighters) {
+      this.scene.remove(f.root);
+      f.mixer?.stopAllAction();
+    }
+    this.scene.remove(this.fx);
+    this.fighters = [];
+    this.effects = [];
+  }
+}

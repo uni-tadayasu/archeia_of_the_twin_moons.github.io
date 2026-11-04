@@ -1,0 +1,450 @@
+<!DOCTYPE html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1" />
+    <title>双月のアルケイア — ブラウザで遊べる3Dアリーナファンタジーアクション</title>
+    <meta name="description" content="双つの月の下で戦う、ブラウザ3Dアリーナファンタジーアクション。100人の戦士、全100章の物語、4人パーティー、25体のボス、属性と状態異常、オンライン対戦・協力、武器鍛錬。PC・スマホ・ゲームパッド対応、インストール不要で無料プレイ。" />
+    <meta name="keywords" content="ブラウザゲーム,3Dアクション,アリーナ,ファンタジー,RPG,無料ゲーム,オンライン対戦,スマホゲーム" />
+    <meta name="theme-color" content="#1b1d3a" />
+    <meta name="robots" content="index,follow,max-image-preview:large" />
+    <meta name="application-name" content="双月のアルケイア" />
+    <meta name="apple-mobile-web-app-title" content="アルケイア" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="双月のアルケイア" />
+    <meta property="og:locale" content="ja_JP" />
+    <meta property="og:title" content="双月のアルケイア — ブラウザ3Dアリーナファンタジーアクション" />
+    <meta property="og:description" content="100人の戦士と全100章の物語。インストール不要、PC・スマホで無料プレイ。" />
+    <meta property="og:image" content="assets/app-icon.webp" />
+    <meta name="twitter:card" content="summary" />
+    <meta name="twitter:title" content="双月のアルケイア" />
+    <meta name="twitter:image" content="assets/app-icon.webp" />
+    <link rel="icon" type="image/webp" href="assets/app-icon.webp" />
+    <link rel="apple-touch-icon" href="assets/app-icon.webp" />
+    <meta name="referrer" content="strict-origin-when-cross-origin" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://esm.sh https://storage.googleapis.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob: https:; media-src 'self' blob: https:; connect-src 'self' data: blob: https: wss:; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'none'; upgrade-insecure-requests" />
+    <script type="application/ld+json">
+      {"@context":"https://schema.org","@type":"VideoGame","name":"双月のアルケイア","alternateName":"Arkeia of Twin Moons","description":"100人の戦士と全100章の物語を楽しめる、ブラウザ3Dアリーナファンタジーアクション。","image":"assets/app-icon.webp","genre":["Action","Fighting","Fantasy","RPG"],"gamePlatform":["Web browser","PC","Mobile"],"playMode":["SinglePlayer","MultiPlayer","CoOp"],"applicationCategory":"Game","operatingSystem":"Any","inLanguage":"ja","isAccessibleForFree":true,"offers":{"@type":"Offer","price":"0","priceCurrency":"JPY"}}
+    </script>
+    <link rel="modulepreload" href="./main.js" />
+    <link rel="modulepreload" href="./game.js" />
+    <link rel="modulepreload" href="./data.js" />
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Shippori+Mincho:wght@500;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="./rosebud-game-defaults.css" />
+    <script src="./rosebud-game-defaults.js" defer></script>
+    <script type="importmap">
+      {
+        "imports": {
+          "three": "https://esm.sh/three@0.184.0",
+          "three/": "https://esm.sh/three@0.184.0/",
+          "@instantdb/core": "https://esm.sh/@instantdb/core@0.22.155"
+        }
+      }
+    </script>
+    <style>
+      :root { --ink:#1b1d3a; --paper:#f4ead2; --brass:#c9a65a; --ember:#ffb347; --frost:#8fd8ff; --pad:clamp(8px,2vw,16px); }
+      *, *::before, *::after { box-sizing:border-box; }
+      html, body, #game-container { width:100%; height:100%; margin:0; padding:0; background:#1b1d3a; overflow:hidden; }
+      body { touch-action:none; font-family:'Shippori Mincho','Hiragino Mincho ProN','Yu Mincho',serif; color:var(--paper); -webkit-user-select:none; user-select:none; }
+      canvas { display:block; }
+      #ui { position:fixed; inset:0; pointer-events:none; }
+      #ui button, #ui input, .screen.on, #touch.active * , #pause { pointer-events:auto; }
+      button { font-family:inherit; cursor:pointer; }
+      input { -webkit-user-select:text; user-select:text; }
+      .screen { position:absolute; inset:0; display:none; flex-direction:column; align-items:center; overflow-x:hidden; overflow-y:auto; padding:max(var(--pad),env(safe-area-inset-top)) max(var(--pad),env(safe-area-inset-right)) max(var(--pad),env(safe-area-inset-bottom)) max(var(--pad),env(safe-area-inset-left)); background:linear-gradient(180deg, rgba(14,14,32,.55), rgba(14,14,32,.82)); }
+      .screen.on { display:flex; }
+      .inner { margin:auto; width:min(860px,100%); display:flex; flex-direction:column; align-items:center; gap:clamp(6px,1.6vh,14px); }
+      .topbar { width:100%; display:flex; justify-content:space-between; align-items:center; gap:8px; }
+      .back { background:rgba(27,29,58,.85); color:var(--paper); border:1px solid var(--brass); padding:6px 14px; font-size:clamp(12px,1.8vw,15px); letter-spacing:.1em; flex-shrink:0; }
+      .back::before { content:'‹ '; color:var(--ember); }
+      .back:hover { background:rgba(60,52,90,.9); }
+      .crumb { font-size:clamp(11px,1.6vw,13px); color:#b9b3c9; letter-spacing:.2em; text-align:right; }
+      #scr-press { background:radial-gradient(ellipse at 50% 45%, rgba(14,14,32,.15), rgba(14,14,32,.85)); justify-content:center; cursor:pointer; }
+      .press-hint { margin-top:4vh; font-size:clamp(13px,2.2vw,18px); letter-spacing:.4em; animation:blink 1.6s infinite; }
+      @keyframes blink { 50% { opacity:.25; } }
+      h1 { margin:0; font-size:clamp(30px,7vmin,72px); letter-spacing:.18em; font-weight:800; text-shadow:0 2px 0 #000, 0 0 28px rgba(255,179,71,.35); text-align:center; line-height:1.2; }
+      h1 span { display:block; font-size:clamp(9px,1.5vmin,14px); letter-spacing:.5em; color:var(--brass); font-weight:500; margin-top:.6em; }
+      .tagline { font-size:clamp(12px,1.8vmin,15px); color:#d7cfe6; text-align:center; margin:0; }
+      .menu { display:grid; gap:clamp(6px,1.2vh,10px); width:min(460px,100%); }
+      .menu button, .btn { background:linear-gradient(90deg, rgba(27,29,58,.94), rgba(27,29,58,.6)); color:var(--paper); border:0; border-left:3px solid var(--brass); padding:clamp(7px,1.4vh,12px) 16px; text-align:left; font-size:clamp(14px,2.1vmin,18px); transition:transform .15s, border-color .15s; }
+      .menu button:hover, .btn:hover, .menu button:focus-visible { transform:translateX(5px); border-color:var(--ember); }
+      .menu small { display:block; font-size:.7em; color:#b9b3c9; margin-top:2px; }
+      .btn:disabled { opacity:.4; cursor:default; transform:none; }
+      .foot { font-size:clamp(10px,1.5vmin,12px); color:#b9b3c9; text-align:center; line-height:1.7; margin:0; }
+      .label { font-size:clamp(17px,3vmin,26px); letter-spacing:.3em; border-bottom:1px solid var(--brass); padding-bottom:4px; text-align:center; }
+      .shards { color:var(--ember); font-size:clamp(12px,1.8vmin,15px); letter-spacing:.1em; }
+      #select-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(clamp(120px,22vw,190px),1fr)); gap:8px; width:100%; }
+      .card { background:rgba(244,234,210,.95); color:var(--ink); border:0; border-top:5px solid var(--c); padding:10px; text-align:left; display:flex; flex-direction:column; gap:3px; min-width:0; }
+      .card em { font-style:normal; font-size:clamp(10px,1.4vmin,12px); color:#6a5a3a; }
+      .card b { font-size:clamp(17px,2.6vmin,22px); letter-spacing:.08em; }
+      .card small { white-space:pre-line; font-size:clamp(9px,1.3vmin,11px); line-height:1.5; color:#3a3450; }
+      .card img.face { width:100%; aspect-ratio:1; object-fit:contain; background:radial-gradient(circle, color-mix(in srgb, var(--c) 45%, #fff), #2a2440); border-radius:4px; }
+      .sthumb { width:100%; aspect-ratio:16/9; background-size:cover; background-position:center; border-radius:4px; position:relative; overflow:hidden; display:grid; place-items:center; color:#fff; font-size:28px; background-color:#2a2440; }
+      .sthumb i { position:absolute; left:15%; right:15%; top:42%; bottom:-8%; transform:perspective(200px) rotateX(55deg); }
+      .ftabs { display:flex; gap:6px; margin:6px 0; }
+      .ftabs button.on { outline:2px solid var(--ember); }
+      #party-bar { width:100%; display:flex; flex-direction:column; align-items:center; gap:6px; }
+      #party-bar[hidden] { display:none; }
+      #party-slots { display:grid; grid-template-columns:repeat(4,1fr); gap:6px; width:min(640px,100%); }
+      #party-slots button { background:rgba(27,29,58,.85); color:var(--paper); border:1px solid #4a4570; padding:6px; min-height:40px; font-size:clamp(11px,1.8vmin,14px); }
+      #party-slots button.main { border-color:var(--ember); background:rgba(80,60,40,.9); }
+      .card.picked { outline:3px solid var(--ember); }
+      .card.locked { filter:grayscale(1) brightness(.55); cursor:not-allowed; }
+      .card:not(.locked):hover, .card:focus-visible { transform:translateY(-3px); outline:2px solid var(--ember); }
+      #scr-story { justify-content:flex-end; background:linear-gradient(transparent 35%, rgba(10,10,24,.9)); }
+      #story-chapter { font-size:clamp(18px,4vmin,32px); letter-spacing:.35em; text-align:center; margin:auto 0 2vh; }
+      #story-box { width:min(780px,100%); background:rgba(244,234,210,.97); color:var(--ink); padding:14px 18px 24px; cursor:pointer; position:relative; box-shadow:6px 6px 0 rgba(0,0,0,.4); border-left:6px double #a88f5a; }
+      #story-who { font-weight:800; letter-spacing:.2em; border-bottom:1px solid #a88f5a; display:inline-block; margin-bottom:6px; font-size:clamp(13px,2vmin,16px); }
+      #story-line { font-size:clamp(14px,2.2vmin,19px); line-height:1.8; margin:0; }
+      #story-box::after { content:'▾'; position:absolute; right:14px; bottom:4px; animation:bob 1s infinite; }
+      @keyframes bob { 50% { transform:translateY(3px); } }
+      .field { display:flex; flex-direction:column; gap:4px; width:min(380px,100%); font-size:13px; }
+      .field input { font:inherit; font-size:16px; padding:8px 10px; background:var(--paper); color:var(--ink); border:0; width:100%; }
+      #lobby-status, #op-msg { font-size:13px; color:#d7cfe6; min-height:1.5em; text-align:center; }
+      .forge { display:grid; grid-template-columns:minmax(110px,180px) 1fr; gap:10px; width:100%; }
+      #forge-list { display:flex; flex-direction:column; gap:4px; max-height:52vh; overflow:auto; }
+      .chip { background:rgba(27,29,58,.85); color:var(--paper); border:1px solid #4a4570; padding:6px 8px; text-align:left; font-size:clamp(12px,1.8vmin,15px); }
+      .chip.on { border-color:var(--ember); background:rgba(80,60,40,.9); }
+      .fpanel { background:rgba(244,234,210,.95); color:var(--ink); padding:10px 12px; display:flex; flex-direction:column; gap:6px; min-width:0; }
+      .frow { display:grid; grid-template-columns:1fr auto; gap:2px 8px; align-items:center; border-bottom:1px dashed #b8a578; padding-bottom:5px; }
+      .frow span { font-weight:800; font-size:clamp(13px,2vmin,16px); }
+      .frow i { font-style:normal; color:#b0782a; letter-spacing:.1em; font-size:clamp(11px,1.8vmin,14px); }
+      .frow small { font-size:11px; color:#5a5070; }
+      .mini { padding:5px 10px; font-size:13px; border-left-width:3px; }
+      #hud { position:absolute; inset:0; }
+      .hud-side { position:absolute; top:max(8px,env(safe-area-inset-top)); display:flex; flex-direction:column; gap:4px; width:min(280px,38vw); }
+      #hud-left { left:max(8px,env(safe-area-inset-left)); } #hud-right { right:max(8px,env(safe-area-inset-right)); align-items:flex-end; }
+      .plate { width:100%; }
+      .plate b { font-size:clamp(10px,1.6vmin,13px); letter-spacing:.08em; text-shadow:0 1px 2px #000; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; display:block; }
+      .plate i { display:block; height:8px; background:rgba(0,0,0,.55); border:1px solid var(--brass); margin-top:1px; transform:skewX(-20deg); }
+      .plate u { display:block; height:100%; background:linear-gradient(90deg,#e45a3a,var(--ember)); transition:width .2s; width:100%; }
+      #hud-left .plate u { background:linear-gradient(90deg,#4f9bd9,var(--frost)); }
+      #hud-right .plate { text-align:right; }
+      .plate.down { opacity:.35; }
+      #gauges { position:absolute; left:50%; top:calc(max(8px,env(safe-area-inset-top)) + 44px); transform:translateX(-50%); display:flex; gap:8px; font-size:11px; width:min(300px,22vw); flex-direction:column; }
+      #gauges i { display:block; height:6px; background:rgba(0,0,0,.6); border:1px solid #6c6788; }
+      #flux u { display:block; height:100%; background:var(--frost); }
+      #over u { display:block; height:100%; background:var(--ember); }
+      #over.full i { border-color:var(--ember); animation:pulse .6s infinite alternate; }
+      @keyframes pulse { to { box-shadow:0 0 14px #fff1a0; } }
+      #btn-pause { position:absolute; left:50%; top:max(8px,env(safe-area-inset-top)); transform:translateX(-50%); background:rgba(27,29,58,.85); color:var(--paper); border:1px solid var(--brass); padding:5px 12px; font-size:13px; letter-spacing:.1em; }
+      #pops { position:absolute; inset:0; overflow:hidden; }
+      .pop { position:absolute; transform:translate(-50%,-50%); font-weight:800; font-size:clamp(13px,2.4vmin,22px); text-shadow:0 2px 0 #000; animation:rise .8s ease-out forwards; white-space:nowrap; }
+      @keyframes rise { to { transform:translate(-50%,-160%); opacity:0; } }
+      #banner { position:absolute; top:30%; left:0; right:0; text-align:center; opacity:0; padding:0 10px; }
+      #banner i { display:block; font-style:normal; letter-spacing:.5em; font-size:clamp(11px,1.8vmin,14px); color:var(--brass); }
+      #banner b { font-size:clamp(20px,5vmin,46px); letter-spacing:.1em; text-shadow:0 0 20px #fff1a0, 0 2px 0 #000; }
+      #banner.go { animation:ban 1.6s ease-out; }
+      @keyframes ban { 0% { opacity:0; transform:scaleX(1.6); } 15% { opacity:1; transform:none; } 80% { opacity:1; } 100% { opacity:0; } }
+      #flash { position:absolute; inset:0; background:#fffbe6; opacity:0; }
+      #flash.go { animation:fl .7s ease-out; }
+      @keyframes fl { 0% { opacity:.9; } 100% { opacity:0; } }
+      #pause { position:absolute; inset:0; background:rgba(10,10,24,.78); display:flex; flex-direction:column; align-items:center; justify-content:center; gap:10px; padding:16px; }
+      #pause[hidden] { display:none; }
+      #touch { position:absolute; inset:0; display:none; }
+      #touch.active:not([hidden]) { display:block; }
+      #joy { position:absolute; left:max(3vw,env(safe-area-inset-left)); bottom:max(4vh,env(safe-area-inset-bottom)); width:clamp(100px,28vmin,140px); aspect-ratio:1; border-radius:50%; border:2px solid rgba(244,234,210,.4); background:rgba(27,29,58,.35); }
+      #knob { position:absolute; left:50%; top:50%; width:40%; height:40%; margin:-20% 0 0 -20%; border-radius:50%; background:rgba(244,234,210,.7); }
+      #tbtns { position:absolute; right:max(3vw,env(safe-area-inset-right)); bottom:max(4vh,env(safe-area-inset-bottom)); display:grid; grid-template-columns:repeat(3, var(--tb)); gap:6px; --tb:clamp(44px,13vmin,62px); }
+      #tbtns button { width:var(--tb); height:var(--tb); border-radius:50%; border:2px solid var(--brass); background:rgba(27,29,58,.72); color:var(--paper); font-size:clamp(13px,3.6vmin,17px); font-weight:800; padding:0; }
+      #tbtns [data-act=over] { border-color:var(--ember); }
+      #tbtns [data-act=attack] { border-color:#fff; }
+      #ui button:focus-visible { outline:2px solid var(--ember); outline-offset:2px; }
+      #loading { font-size:12px; color:#b9b3c9; }
+      @media (max-height:520px) and (orientation:landscape) {
+        .menu.wide { grid-template-columns:1fr 1fr; width:min(720px,100%); }
+        .menu.wide small { display:none; }
+        #gauges { width:18vw; }
+        #forge-list { max-height:60vh; }
+      }
+      @media (max-width:560px) {
+        .forge { grid-template-columns:1fr; }
+        #forge-list { flex-direction:row; flex-wrap:wrap; max-height:none; }
+        #gauges { width:30vw; }
+      }
+    </style>
+  
+<style>
+    #rosebud-exported-splash {
+        position: fixed;
+        inset: 0;
+        z-index: 2147483647;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: #000;
+        opacity: 1;
+        transition: opacity 500ms ease-in-out;
+    }
+
+    #rosebud-exported-splash.is-hiding {
+        opacity: 0;
+    }
+
+    #rosebud-exported-splash .rosebud-exported-splash__content {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 20px;
+        text-align: center;
+        color: #fff;
+        font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    }
+
+    #rosebud-exported-splash .rosebud-exported-splash__logo {
+        width: 100px;
+        height: 100px;
+        animation: rosebud-exported-splash-breathe 2.4s ease-in-out infinite;
+    }
+
+    #rosebud-exported-splash .rosebud-exported-splash__text {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+        font-size: 16px;
+        line-height: 1.25;
+        letter-spacing: 0.06em;
+    }
+
+    #rosebud-exported-splash .rosebud-exported-splash__text strong {
+        font-weight: 700;
+    }
+
+    #rosebud-exported-splash .rosebud-exported-splash__text span:last-child {
+        opacity: 0.88;
+    }
+
+    @keyframes rosebud-exported-splash-breathe {
+        0%,
+        100% {
+            transform: scale(1);
+        }
+        50% {
+            transform: scale(1.05);
+        }
+    }
+</style></head>
+  <body>
+<div id="rosebud-exported-splash" aria-live="polite">
+    <div class="rosebud-exported-splash__content">
+        <img
+            class="rosebud-exported-splash__logo"
+            src="__rosebud/rosebud-icon.png"
+            alt="Rosebud Logo"
+            width="100"
+            height="100"
+        />
+        <div class="rosebud-exported-splash__text" aria-label="Rosebud.AI Make Games">
+            <strong>Rosebud.AI</strong>
+            <span>Make Games</span>
+        </div>
+    </div>
+</div>
+    <div id="game-container"></div>
+    <noscript>『双月のアルケイア』はJavaScriptを有効にすると遊べる、ブラウザ向け3Dアリーナファンタジーアクションです。</noscript>
+    <main id="ui">
+      <section id="scr-press" class="screen on" aria-label="はじまり">
+        <div class="inner">
+          <h1>双月のアルケイア<span>ARKEIA · A RONDO UNDER TWIN MOONS</span></h1>
+          <p class="tagline">光は一つ、空は二つ。どちらを灯すか、剣で決めよう。</p>
+          <p class="press-hint" id="press-hint">— なにかキーを押して、扉をひらく —</p>
+          <span id="loading">戦士たちを呼び寄せています…</span>
+        </div>
+      </section>
+
+      <section id="scr-title" class="screen" aria-label="旅の分かれ道">
+        <div class="inner">
+          <div class="topbar"><button class="back" data-to="press">扉の前へ</button><span class="shards" id="title-shards"></span></div>
+          <h1 style="font-size:clamp(24px,5vmin,48px)">双月のアルケイア</h1>
+          <nav class="menu wide">
+            <button data-go="story">灯脈の旅路<small id="story-sub">全八章の物語。灯をめぐる出会いと剣戟</small></button>
+            <button data-go="cpu">ひとりで手合わせ<small>好きな相手を選んで一対一</small></button>
+            <button data-go="duo">背中をあずける<small>CPUの相棒と組んで二対二</small></button>
+            <button data-go="online-vs">遠い誰かと剣を交える<small>合言葉でつながるオンライン対戦</small></button>
+            <button data-go="online-coop">遠い誰かと肩を並べる<small>オンライン協力 — 裁定者討伐</small></button>
+            <button id="btn-forge">鍛錬の工房<small>灯晶を注いで戦士を鍛える</small></button>
+            <button id="btn-invade" hidden>乱入の窓<small>運営専用 — 誰かの物語に裁定者として割り込む</small></button>
+            <button id="btn-shop">灯晶商店<small>特別な戦士を迎える</small></button>
+            <button id="btn-options">旅支度<small>音・CPUの強さ・ゲームパッド・運営の鍵</small></button>
+          </nav>
+          <p class="foot">WASD 移動／J 斬る／K 技A／U 技B／L 奥義／Shift 構え／Space 跳ぶ／Esc 戻る・休む<br>移動しながら技を出すと、別の技に変わります。</p>
+        </div>
+      </section>
+
+      <section id="scr-options" class="screen" aria-label="旅支度">
+        <div class="inner">
+          <div class="topbar"><button class="back" data-to="title">分かれ道へ</button><span class="crumb">旅支度</span></div>
+          <div class="label">旅支度</div>
+          <div class="menu">
+            <button class="btn" id="opt-mute">音：鳴らす</button>
+            <button class="btn" id="opt-diff">CPUの強さ：ノーマル</button>
+            <p class="foot" id="pad-status" style="text-align:left">ゲームパッド：まだ見つかっていません（ボタンを押すと気づきます）</p>
+            <p class="foot" style="text-align:left">パッド　スティック/十字：移動　A(×)：斬る　X(□)：技A　RB(R1)：技B　Y(△)：奥義　B(○)：跳ぶ　LB/LT/RT：構え　START：休む<br>メニュー　十字で選ぶ／A(×)で決める／B(○)で戻る</p>
+            <form id="op-form" class="field" style="width:100%">
+              <span id="op-state">運営の鍵 — 封じられた裁定者を解き放つ</span>
+              <input id="op-key" type="password" maxlength="128" autocomplete="off" aria-label="運営キー" placeholder="鍵の言葉">
+              <button type="submit" class="btn">鍵を差し込む</button>
+              <span id="op-msg"></span>
+            </form>
+            <div id="chief-panel" class="field" style="width:100%" hidden>
+              <span>運営長の間 — 1回だけ使える運営キーを発行して、信頼できる人に渡します</span>
+              <button type="button" class="btn" id="chief-issue">運営キーを発行する</button>
+              <input id="chief-code" readonly aria-label="発行された運営キー" placeholder="ここに表示されます">
+            </div>
+            <div class="field" style="width:100%">
+              <span>端末間の同期 — 同じ同期コードで、別の端末に進み具合を引き継げます</span>
+              <button type="button" class="btn" id="sync-push">この端末の記録を預ける（同期コード発行・更新）</button>
+              <input id="sync-code" maxlength="32" autocomplete="off" aria-label="同期コード" placeholder="同期コード（例：ABCD-EFGH-JKLM）">
+              <button type="button" class="btn" id="sync-pull">同期コードで記録を受け取る</button>
+              <span id="sync-msg" class="foot"></span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section id="scr-forge" class="screen" aria-label="鍛錬の工房">
+        <div class="inner">
+          <div class="topbar"><button class="back" data-to="title">分かれ道へ</button><span class="shards" id="forge-shards"></span></div>
+          <div class="label">鍛錬の工房</div>
+          <div class="forge">
+            <div id="forge-list"></div>
+            <div class="fpanel"><b id="forge-name"></b><div id="forge-rows"></div></div>
+          </div>
+          <p class="foot">灯晶は戦いに勝つと手に入ります。一人につき五つの道、それぞれ五段まで。</p>
+        </div>
+      </section>
+
+      <section id="scr-shop" class="screen" aria-label="灯晶商店">
+        <div class="inner">
+          <div class="topbar"><button class="back" data-to="title">分かれ道へ</button><span class="crumb">灯晶商店</span></div>
+          <div class="label">灯晶商店</div>
+          <div id="shop-list" class="menu"></div>
+          <p class="foot" id="shop-msg"></p>
+        </div>
+      </section>
+
+      <section id="scr-invade" class="screen" aria-label="乱入の窓">
+        <div class="inner">
+          <div class="topbar"><button class="back" data-to="title">窓を閉じる</button><span class="crumb">乱入の窓</span></div>
+          <div class="label">いま物語を歩む者たち</div>
+          <button class="btn" id="invade-who">乱入する姿：セラフェル</button>
+          <p class="foot" id="invade-status">世界の灯を探しています…</p>
+          <div class="menu" id="invade-list"></div>
+        </div>
+      </section>
+
+      <section id="scr-select" class="screen" aria-label="戦士選び">
+        <div class="inner">
+          <div class="topbar"><button class="back" id="select-back">ひとつ戻る</button><span class="crumb" id="select-crumb"></span></div>
+          <div class="label" id="select-label"></div>
+          <div id="party-bar" hidden>
+            <div id="party-slots"></div>
+            <p class="foot">最大4人。選んだ戦士をもう一度押すと外れます。上の枠を押すと、その戦士を自分で操作します（★）。残りの仲間は自動で戦います。</p>
+            <button class="btn" id="party-go">この顔ぶれで旅立つ</button>
+          </div>
+          <div id="select-grid"></div>
+        </div>
+      </section>
+
+      <section id="scr-lobby" class="screen" aria-label="待ち合わせ">
+        <div class="inner">
+          <div class="topbar"><button class="back" data-to="title">待つのをやめる</button><span class="crumb">待ち合わせ</span></div>
+          <div class="label" id="lobby-mode"></div>
+          <label class="field">呼び名<input id="lobby-name" maxlength="12" autocomplete="off" placeholder="旅人"></label>
+          <label class="field">合言葉（英数字）<input id="lobby-room" maxlength="12" autocomplete="off"></label>
+          <div class="menu"><button class="btn" id="btn-join">焚き火のそばへ</button></div>
+          <p id="lobby-status"></p>
+        </div>
+      </section>
+
+      <section id="scr-story" class="screen" aria-label="物語">
+        <div class="inner" style="margin:0;height:100%;justify-content:flex-end">
+          <div class="topbar"><button class="back" id="story-back">本を閉じる</button><button class="back" id="story-skip" style="border-color:#6c6788">語りを飛ばす</button></div>
+          <div id="story-chapter"></div>
+          <div id="story-box" role="button" tabindex="0"><span id="story-who"></span><p id="story-line"></p></div>
+        </div>
+      </section>
+
+      <section id="scr-result" class="screen" aria-label="決着">
+        <div class="inner">
+          <div class="topbar"><button class="back" data-to="title">分かれ道へ</button><span class="crumb">決着</span></div>
+          <div class="label" id="res-title"></div>
+          <p id="res-text" style="text-align:center;line-height:1.8;margin:0"></p>
+          <p class="shards" id="res-reward"></p>
+          <div class="menu">
+            <button class="btn" id="btn-retry">もう一度</button>
+            <button class="btn" id="btn-next" hidden>先へ進む</button>
+          </div>
+        </div>
+      </section>
+
+      <div id="hud" hidden>
+        <div id="hud-left" class="hud-side"></div>
+        <div id="hud-right" class="hud-side"></div>
+        <button id="btn-pause" aria-label="休む">‖ 休む</button>
+        <div id="gauges"><div id="flux">灯力<i><u></u></i></div><div id="over">奥義<i><u></u></i></div></div>
+      </div>
+      <div id="pops"></div>
+      <div id="flash"></div>
+      <div id="banner"><i></i><b></b></div>
+      <div id="touch" hidden>
+        <div id="joy"><div id="knob"></div></div>
+        <div id="tbtns">
+          <button data-act="guard">構</button><button data-act="skill">技A</button><button data-act="skill2">技B</button>
+          <button data-act="jump">跳</button><button data-act="over">奥</button><button data-act="attack">斬</button>
+        </div>
+      </div>
+      <div id="pause" hidden>
+        <div class="label">ひと息</div>
+        <p class="foot" id="pause-note"></p>
+        <div class="menu">
+          <button class="btn" id="btn-resume">戦いに戻る</button>
+          <button class="btn back" id="btn-quit">退いて分かれ道へ</button>
+        </div>
+      </div>
+    </main>
+    <script type="module" src="main.js"></script>
+    <script src="https://storage.googleapis.com/rosebud_staticfiles/ChatManager.js"></script>
+    <script src="https://storage.googleapis.com/rosebud_staticfiles/ProgressLogger.js"></script>
+    <script src="https://storage.googleapis.com/rosebud_staticfiles/OGP.js"></script>
+  
+<script>
+    (() => {
+        const splashRoot = document.getElementById('rosebud-exported-splash');
+        if (!splashRoot) return;
+
+        let isReady = false;
+        let isMinimumVisibleTimeElapsed = false;
+        let isHidden = false;
+
+        const maybeHideSplash = () => {
+            if (isHidden || !isReady || !isMinimumVisibleTimeElapsed) return;
+
+            isHidden = true;
+            splashRoot.classList.add('is-hiding');
+            window.setTimeout(() => splashRoot.remove(), 500);
+        };
+
+        const markReady = () => {
+            isReady = true;
+            maybeHideSplash();
+        };
+
+        window.setTimeout(() => {
+            isMinimumVisibleTimeElapsed = true;
+            maybeHideSplash();
+        }, 1000);
+
+        if (document.readyState === 'complete') {
+            markReady();
+        } else {
+            window.addEventListener('load', markReady, { once: true });
+        }
+
+        
+    })();
+</script></body>
+</html>
