@@ -4,7 +4,7 @@
 export const OPERATOR_KEY_SHA256 = 'tadayasu-uni-1996-01-28';
 // 運営長キー（運営キーとは別物）。運営長は運営招待コードを発行でき、ルミナリアを使える。
 // 初期キーは "password" — 必ず変更すること（変更手順は運営キーと同じ）
-export const CHIEF_KEY_SHA256 = '5e884898da28047151d0e56f8dc6292773603d0d6aabbdd62a11ef721d1542d8';
+export const CHIEF_KEY_SHA256 = 'chief-key-password';
 export const MAX_KEY_ATTEMPTS = 5;
 export const LOCKOUT_MS = 30000;
 
