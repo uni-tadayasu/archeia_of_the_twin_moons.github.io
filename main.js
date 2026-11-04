@@ -1171,16 +1171,20 @@ function runStoryChapter() {
         }
       });
     }
-    // 通常の章は敵がランダムに1〜4体、ボス章は決められた敵
+    // 通常の章は敵がランダムに1〜6体（先の章ほど多く出やすい）、ボス章は決められた敵
     let foes = ch.enemies;
     if (!ch.boss) {
       const lvl = ch.enemies[0]?.hpMul || 1;
-      const n = 1 + Math.floor(Math.random() * 4);
+      const prog = Math.min(1, state.chapter / Math.max(1, STORY.length - 1));
+      const w = [1, 2, 3, 4, 5, 6].map((k) => Math.pow(k, 4 * prog));
+      let roll = Math.random() * w.reduce((a, b) => a + b, 0);
+      let n = 1;
+      while (n < 6 && (roll -= w[n - 1]) > 0) n++;
       foes = Array.from({ length: n }, () => ({ k: ENEMY_ROSTER[Math.floor(Math.random() * ENEMY_ROSTER.length)], hpMul: lvl }));
     }
     const baseCpu = Math.min(0.95, 0.55 + state.chapter * 0.006);
     foes.forEach((e, i) => {
-      b.add(e.k, { team: 1, cpu: foeCpu(baseCpu), pos: [4 + (i % 2) * 2.5, -4 + i * 2.6], facing: Math.PI, tint: e.tint, name: e.name, hpMul: foeHp(e.hpMul) * (ch.boss ? 1 + 0.35 * (party.length - 1) : 1), scale: e.scale });
+      b.add(e.k, { team: 1, cpu: foeCpu(baseCpu), pos: [3 + (i % 3) * 2.4, -4 + Math.floor(i / 3) * 3], facing: Math.PI, tint: e.tint, name: e.name, hpMul: foeHp(e.hpMul) * (ch.boss ? 1 + 0.35 * (party.length - 1) : 1), scale: e.scale });
     });
     beginBattle(!!ch.boss);
   });
@@ -1489,6 +1493,7 @@ function syncWorldRemotes(peers) {
       }
       continue;
     }
+    if (p.fk && p.fk === f.def.form2) f.checkTransform(true); // 乱入者の変身を反映
     f.netTarget.set(p.x, 0, p.z);
     f.netFacing = p.ry;
     f.netMoving = p.mv;
@@ -1507,7 +1512,7 @@ function onInvaded(e) {
   state.paused = false;
   $('#pause').hidden = true;
   const p = state.worldPeers?.[e.from];
-  const ik = p?.fk === 'chief' ? 'chief' : 'seraphel';
+  const ik = ['chief', 'sovereign', 'sovereign2'].includes(p?.fk) ? p.fk : 'seraphel';
   b.add(ik, { team: 1, remote: true, netId: e.from, pos: p ? [p.x, p.z] : [0, -9], facing: Math.PI, name: `乱入者・${e.name}` });
   b.net = w;
   buildHud();
@@ -1539,7 +1544,8 @@ function renderInvadeList() {
 
 $('#invade-who').addEventListener('click', () => {
   sfx('ui');
-  state.invadeKey = state.invadeKey === 'chief' || !chiefUnlocked() ? 'seraphel' : 'chief';
+  const order = chiefUnlocked() ? ['seraphel', 'chief', 'sovereign'] : ['seraphel'];
+  state.invadeKey = order[(order.indexOf(state.invadeKey) + 1) % order.length];
   $('#invade-who').textContent = `乱入する姿：${FIGHTERS[state.invadeKey].name}`;
 });
 $('#btn-invade').addEventListener('click', async () => {
@@ -1563,7 +1569,7 @@ async function startInvade(p) {
   w.invade({ to: p.id, from: w.myId, name: '運営' });
   setStage(stageById(STORY[p.ch]?.stage));
   const b = makeBattle(w);
-  const ik = state.invadeKey === 'chief' && chiefUnlocked() ? 'chief' : 'seraphel';
+  const ik = (state.invadeKey === 'chief' || state.invadeKey === 'sovereign') && chiefUnlocked() ? state.invadeKey : 'seraphel';
   b.add(ik, { team: 0, player: true, netId: w.myId, pos: [0, -9], name: FIGHTERS[ik].name + '（運営）', upg: upgFor(ik) });
   b.add(FIGHTERS[p.fk] ? p.fk : 'rowen', { team: 1, remote: true, netId: p.id, pos: [p.x, p.z], name: p.name });
   beginBattle(true);

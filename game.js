@@ -647,8 +647,9 @@ export class Fighter {
   }
 
   // 体力が半分を切ったら第二形態へ変身（form2 を持つ戦士のみ・1回だけ）
-  checkTransform() {
-    if (this.transformed || !this.def.form2 || this.remoteAuth || this.hp > this.maxHp * 0.5) return false;
+  checkTransform(force = false) {
+    if (this.transformed || !this.def.form2) return false;
+    if (!force && (this.remoteAuth || this.hp > this.maxHp * 0.5)) return false;
     const nk = this.def.form2;
     if (!FIGHTERS[nk]) return false;
     this.transformed = true;
