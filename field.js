@@ -20,6 +20,21 @@ const TOWN = { x: 0, z: 10, r: 15 };
 const DUN = { x0: -40, z0: -176, cols: 8, rows: 6, cell: 10 };
 const SYL = ['アル', 'ベル', 'セラ', 'ミナ', 'ロウ', 'カナ', 'ティ', 'ノル', 'エス', 'リム', 'ヴァ', 'ソラ', 'クオ', 'ハル', 'ネイ', 'ユラ'];
 
+// ---- 地面や壁のテクスチャ（一度だけ読み込んで共有） ----
+const TL = new THREE.TextureLoader();
+const TEX = {};
+function baseTex(name) {
+  if (!TEX[name]) {
+    const t = TL.load(`assets/${name}.webp`);
+    t.colorSpace = THREE.SRGBColorSpace;
+    t.wrapS = t.wrapT = THREE.RepeatWrapping;
+    t.anisotropy = 4;
+    TEX[name] = t;
+  }
+  return TEX[name];
+}
+const FLOWER_COLS = [0xff5a8a, 0xffd23a, 0xffffff, 0xb070ff, 0x5ab0ff, 0xff8a3a, 0xff3a5a, 0xf0a0ff];
+
 // ---- モデル（GLB）を指定の高さで置く小さな役者 ----
 function makeActor(gltf, height, color, tint, own) {
   const root = new THREE.Group();
@@ -109,19 +124,46 @@ export class Field {
   mat(m) { this.own.push(m); return m; }
   std(color, extra = {}) { return this.mat(new THREE.MeshStandardMaterial({ color, roughness: 0.85, ...extra })); }
   addBox(x, z, w, d) { this.boxes.push({ x0: x - w / 2, x1: x + w / 2, z0: z - d / 2, z1: z + d / 2 }); }
+  tex(name, rx, ry) {
+    const t = baseTex(name).clone();
+    t.repeat.set(rx, ry);
+    this.own.push(t);
+    return t;
+  }
 
   buildGround() {
     const st = this.st;
     const w = BOUNDS.maxX - BOUNDS.minX + 40, d = BOUNDS.maxZ - BOUNDS.minZ + 40;
-    const tex = this.o.floorTex.clone();
-    tex.needsUpdate = true;
-    tex.repeat.set(w / 8, d / 8);
-    this.own.push(tex);
-    const g = new THREE.Mesh(this.geo(new THREE.PlaneGeometry(w, d)), this.std(new THREE.Color(st.floor).lerp(new THREE.Color(0x4a7a3a), 0.35), { map: tex }));
+    const g = new THREE.Mesh(this.geo(new THREE.PlaneGeometry(w, d)), this.std(new THREE.Color(0xffffff).lerp(new THREE.Color(st.floor), 0.12), { map: this.tex('tex-grass', w / 7, d / 7), roughness: 0.95 }));
     g.rotation.x = -Math.PI / 2;
     g.position.set(0, 0, (BOUNDS.maxZ + BOUNDS.minZ) / 2);
     g.receiveShadow = true;
     this.group.add(g);
+    // 空と大地の照り返しで色を鮮やかに
+    this.group.add(new THREE.HemisphereLight(0xcfe8ff, 0x5a8a3a, 1.1));
+    this.lights = [];
+    this.anims = [];
+  }
+  pointLight(color, intensity, dist, x, y, z, flicker) {
+    const l = new THREE.PointLight(color, intensity, dist, 1.6);
+    l.position.set(x, y, z);
+    l.userData.base = intensity;
+    l.userData.flicker = flicker;
+    this.group.add(l);
+    this.lights.push(l);
+    return l;
+  }
+  // 色ちがいの球を一括配置（花・果物・ベリーなど）
+  dots(list, radius, colors, emissive = 0) {
+    const geo = this.geo(new THREE.IcosahedronGeometry(radius, 0));
+    const im = new THREE.InstancedMesh(geo, this.std(0xffffff, { roughness: 0.6, emissive: 0xffffff, emissiveIntensity: emissive }), list.length);
+    const m = new THREE.Matrix4(), q = new THREE.Quaternion(), s = new THREE.Vector3(), p = new THREE.Vector3(), c = new THREE.Color();
+    list.forEach(([x, y, z, k = 1], i) => {
+      im.setMatrixAt(i, m.compose(p.set(x, y, z), q, s.setScalar(k)));
+      im.setColorAt(i, c.set(colors[i % colors.length]));
+    });
+    this.group.add(im);
+    return im;
   }
 
   buildRoad() {
@@ -131,13 +173,21 @@ export class Field {
     for (let i = 1; i <= 10; i++) pts.push([(r() - 0.5) * 50 * (i < 10 ? 1 : 0.3), -6 - i * 15.6]);
     pts.push([ex, -168], [ex, -177]);
     this.road = pts;
-    const mat = this.std(new THREE.Color(this.st.floor).lerp(new THREE.Color(0xc8b48a), 0.55));
+    const mat = this.std(0xffffff, { map: this.tex('tex-dirt-road', 1, 1) });
     const geo = this.geo(new THREE.PlaneGeometry(1, 1));
     const disc = this.geo(new THREE.CircleGeometry(2.6, 16));
+    const edgeStones = [];
     for (let i = 0; i < pts.length - 1; i++) {
       const [ax, az] = pts[i], [bx, bz] = pts[i + 1];
       const len = Math.hypot(bx - ax, bz - az);
-      const m = new THREE.Mesh(geo, mat);
+      const segMat = this.std(0xffffff, { map: this.tex('tex-dirt-road', 1, len / 5.2) });
+      const m = new THREE.Mesh(geo, segMat);
+      // 道の縁石
+      const nx = (bz - az) / (len || 1), nz = -(bx - ax) / (len || 1);
+      for (let t = 0; t < len; t += 2.2) {
+        const px = ax + ((bx - ax) * t) / len, pz = az + ((bz - az) * t) / len;
+        for (const sd of [-1, 1]) if (r() < 0.55) edgeStones.push([px + nx * 2.8 * sd, 0.08, pz + nz * 2.8 * sd, 0.18 + r() * 0.2]);
+      }
       m.scale.set(5.2, len, 1);
       m.rotation.set(-Math.PI / 2, 0, Math.atan2(bx - ax, bz - az));
       m.position.set((ax + bx) / 2, 0.02, (az + bz) / 2);
@@ -148,6 +198,7 @@ export class Field {
       j.position.set(bx, 0.021, bz);
       this.group.add(j);
     }
+    this.dots(edgeStones, 1, [0x9a9488, 0xb8b0a0, 0x7a7468, 0xa89880]);
   }
   roadDist(x, z) {
     let best = 1e9;
@@ -164,7 +215,7 @@ export class Field {
   // ---- 町：広場・噴水・家々・街灯・門 ----
   buildTown() {
     const r = this.r, st = this.st;
-    const plaza = new THREE.Mesh(this.geo(new THREE.CircleGeometry(TOWN.r, 40)), this.std(0xb8ad98));
+    const plaza = new THREE.Mesh(this.geo(new THREE.CircleGeometry(TOWN.r, 40)), this.std(0xffffff, { map: this.tex('tex-cobble', 5, 5) }));
     plaza.rotation.x = -Math.PI / 2;
     plaza.position.set(TOWN.x, 0.03, TOWN.z);
     plaza.receiveShadow = true;
@@ -185,17 +236,30 @@ export class Field {
     this.group.add(basin, col, water, gem);
     this.circles.push({ x: TOWN.x, z: TOWN.z, r: 2.6 });
     // 家々（向きは90°単位）
-    const roofCols = [0xa04030, 0x3a5a90, 0x507040, 0x806030, 0x6a3a70, 0x904a20];
-    const wallCols = [0xe8dcc0, 0xd8c8a8, 0xc8b898, 0xf0e8d8];
+    const roofCols = [0xffffff, 0x9ab8ff, 0xb0e090, 0xffe0a0, 0xe0a8ff, 0xffb890];
+    const wallCols = [0xffffff, 0xfff0e0, 0xf0f8ff, 0xfff8d0, 0xffe8f0];
+    const flowerBox = [];
     const spots = [[-22, 0], [-22, 16], [22, 0], [22, 16], [-12, 30], [12, 30], [-26, -10], [26, -10], [-30, 26], [30, 26]];
     this.houses = [];
     for (const [hx, hz] of spots) {
       const w = 6 + r() * 2.5, d = 5 + r() * 2, h = 3.2 + r() * 1.6;
       const face = Math.abs(hx) > Math.abs(hz - TOWN.z) ? (hx > 0 ? -Math.PI / 2 : Math.PI / 2) : (hz > TOWN.z ? Math.PI : 0);
       const g = new THREE.Group();
-      const body = new THREE.Mesh(this.geo(new THREE.BoxGeometry(w, h, d)), this.std(wallCols[Math.floor(r() * wallCols.length)]));
+      const body = new THREE.Mesh(this.geo(new THREE.BoxGeometry(w, h, d)), this.std(wallCols[Math.floor(r() * wallCols.length)], { map: this.tex('tex-house-wall', w / 4, h / 4) }));
       body.position.y = h / 2;
-      const roof = new THREE.Mesh(this.geo(new THREE.ConeGeometry(Math.max(w, d) * 0.78, 2.6, 4)), this.std(roofCols[Math.floor(r() * roofCols.length)]));
+      const roof = new THREE.Mesh(this.geo(new THREE.ConeGeometry(Math.max(w, d) * 0.78, 2.6, 4)), this.std(roofCols[Math.floor(r() * roofCols.length)], { map: this.tex('tex-roof', 4, 2) }));
+      // 窓辺の花箱
+      for (const sx of [-w / 3, w / 3]) {
+        const lx = sx, lz = d / 2 + 0.25;
+        for (let k = 0; k < 4; k++) {
+          const ox = lx - 0.4 + k * 0.27;
+          const cs = Math.cos(face), sn = Math.sin(face);
+          flowerBox.push([hx + ox * cs + lz * sn, h * 0.6 - 0.45, hz - ox * sn + lz * cs, 0.16]);
+        }
+      }
+      const base = new THREE.Mesh(this.geo(new THREE.BoxGeometry(w + 0.3, 0.5, d + 0.3)), this.std(0x8a8478));
+      base.position.y = 0.25;
+      g.add(base);
       roof.rotation.y = Math.PI / 4;
       roof.scale.set(w / Math.max(w, d), 1, d / Math.max(w, d));
       roof.position.y = h + 1.3;
@@ -222,6 +286,8 @@ export class Field {
       this.addBox(hx, hz, rot ? d : w, rot ? w : d);
       this.houses.push({ x: hx, z: hz, w: rot ? d : w, d: rot ? w : d });
     }
+    this.dots(flowerBox, 1, FLOWER_COLS, 0.15);
+    this.buildTownDecor();
     // 街灯
     const postGeo = this.geo(new THREE.CylinderGeometry(0.08, 0.1, 3, 6));
     const postMat = this.std(0x2a2a30, { metalness: 0.6 });
@@ -236,6 +302,7 @@ export class Field {
       const l = new THREE.Mesh(lampGeo, lampMat);
       l.position.set(x, 3.1, z);
       this.group.add(p, l);
+      if (i % 2 === 0) this.pointLight(0xffc070, 6, 12, x, 3, z, 0.08);
       this.circles.push({ x, z, r: 0.3 });
     }
     // 北の門（町の出口）
@@ -269,6 +336,87 @@ export class Field {
       rl.rotation.y = -a + Math.PI / 2;
       this.group.add(p, rl);
     }
+  }
+
+  // ---- 町の彩り：花壇・露店・旗・桜・噴水のしぶき ----
+  buildTownDecor() {
+    const r = this.r, st = this.st;
+    // 噴水まわりの花壇
+    const beds = [];
+    for (let i = 0; i < 160; i++) {
+      const a = r() * Math.PI * 2, rr = 4 + r() * 1.6;
+      beds.push([TOWN.x + Math.cos(a) * rr, 0.18 + r() * 0.12, TOWN.z + Math.sin(a) * rr, 0.12 + r() * 0.08]);
+    }
+    this.dots(beds, 1, FLOWER_COLS, 0.2);
+    const bedRim = new THREE.Mesh(this.geo(new THREE.RingGeometry(3.8, 5.8, 40)), this.std(0x5a3a22));
+    bedRim.rotation.x = -Math.PI / 2;
+    bedRim.position.set(TOWN.x, 0.05, TOWN.z);
+    this.group.add(bedRim);
+    // 噴水のしぶき（上がって落ちる水滴）
+    const N = 140;
+    const sp = new Float32Array(N * 3);
+    this.spray = { pts: null, seed: Array.from({ length: N }, () => [r() * Math.PI * 2, r(), 0.6 + r() * 0.8]) };
+    const sg = this.geo(new THREE.BufferGeometry());
+    sg.setAttribute('position', new THREE.BufferAttribute(sp, 3));
+    this.spray.pts = new THREE.Points(sg, this.mat(new THREE.PointsMaterial({ color: 0xbfe8ff, size: 0.16, transparent: true, opacity: 0.85, blending: THREE.AdditiveBlending, depthWrite: false })));
+    this.spray.pts.frustumCulled = false;
+    this.group.add(this.spray.pts);
+    // 露店（縞の日よけ・木箱・果物）
+    const awnA = [0xe03040, 0x2a70e0, 0x20a060, 0xe0a020];
+    const wood = this.std(0x7a5230);
+    const fruits = [];
+    [[-11, -2], [11, -2], [-12, 21], [12, 21]].forEach(([x, z], i) => {
+      const g = new THREE.Group();
+      const counter = new THREE.Mesh(this.geo(new THREE.BoxGeometry(3, 1, 1.4)), wood);
+      counter.position.y = 0.5;
+      g.add(counter);
+      for (const [px, pz] of [[-1.4, -0.6], [1.4, -0.6], [-1.4, 0.6], [1.4, 0.6]]) {
+        const post = new THREE.Mesh(this.geo(new THREE.CylinderGeometry(0.06, 0.06, 2.6, 6)), wood);
+        post.position.set(px, 1.3, pz);
+        g.add(post);
+      }
+      for (let k = 0; k < 6; k++) {
+        const stripe = new THREE.Mesh(this.geo(new THREE.BoxGeometry(0.55, 0.06, 2)), this.std(k % 2 ? 0xfff6e0 : awnA[i]));
+        stripe.position.set(-1.375 + k * 0.55, 2.7, 0);
+        stripe.rotation.x = 0.18;
+        stripe.castShadow = true;
+        g.add(stripe);
+      }
+      g.position.set(x, 0, z);
+      g.rotation.y = Math.atan2(TOWN.x - x, TOWN.z - z);
+      this.group.add(g);
+      for (let k = 0; k < 14; k++) fruits.push([x + (r() - 0.5) * 2.4, 1.1, z + (r() - 0.5) * 0.8, 0.13]);
+      this.addBox(x, z, 3.2, 3.2);
+    });
+    this.dots(fruits, 1, [0xff3030, 0xffa020, 0xffe040, 0x80d040, 0xa040e0]);
+    // 旗（風になびく）
+    const flagGeo = this.geo(new THREE.PlaneGeometry(1.4, 0.9));
+    const flagCols = [st.crystal, 0xe03050, 0xffd040, 0x3a80ff];
+    this.flags = [];
+    [[-3.5, -8], [3.5, -8], [-15, 10], [15, 10], [-9, 26], [9, 26]].forEach(([x, z], i) => {
+      const pole = new THREE.Mesh(this.geo(new THREE.CylinderGeometry(0.06, 0.06, 6, 6)), this.std(0xd0b060, { metalness: 0.7, roughness: 0.3 }));
+      pole.position.set(x, 3, z + (i < 2 ? 0 : 0));
+      const f = new THREE.Mesh(flagGeo, this.std(flagCols[i % flagCols.length], { side: THREE.DoubleSide, emissive: flagCols[i % flagCols.length], emissiveIntensity: 0.15 }));
+      f.position.set(x + 0.72, 5.4, z);
+      f.castShadow = true;
+      this.group.add(pole, f);
+      this.flags.push(f);
+      if (i >= 2) this.circles.push({ x, z, r: 0.2 });
+    });
+    // 町の花木（桜・紅葉）
+    const trunkGeo = this.geo(new THREE.CylinderGeometry(0.18, 0.28, 2.2, 6));
+    const crownGeo = this.geo(new THREE.IcosahedronGeometry(1.5, 1));
+    const trunkMat = this.std(0x5a3a26);
+    [[-17, -6, 0xffb0d0], [17, -6, 0xffb0d0], [-6, 32, 0xff9a40], [6, 32, 0xffc0e0], [-30, 8, 0xffb0d0], [30, 8, 0xffd060]].forEach(([x, z, c]) => {
+      const t = new THREE.Mesh(trunkGeo, trunkMat);
+      t.position.set(x, 1.1, z);
+      const cr = new THREE.Mesh(crownGeo, this.std(c, { emissive: c, emissiveIntensity: 0.08 }));
+      cr.position.set(x, 3, z);
+      cr.scale.set(1.2, 1, 1.2);
+      t.castShadow = cr.castShadow = true;
+      this.group.add(t, cr);
+      this.circles.push({ x, z, r: 0.4 });
+    });
   }
 
   // ---- ダンジョン：外壁と迷路、最奥に祭壇 ----
@@ -317,7 +465,7 @@ export class Field {
     }
     this.goal = { x: x0 + far[0] * cell + cell / 2, z: z0 - far[1] * cell - cell / 2 };
     // 床
-    const floor = new THREE.Mesh(this.geo(new THREE.PlaneGeometry(cols * cell, rows * cell)), this.std(new THREE.Color(this.st.pillar).multiplyScalar(0.55)));
+    const floor = new THREE.Mesh(this.geo(new THREE.PlaneGeometry(cols * cell, rows * cell)), this.std(0xffffff, { map: this.tex('tex-dungeon-floor', (cols * cell) / 6, (rows * cell) / 6), roughness: 0.6, metalness: 0.15 }));
     floor.rotation.x = -Math.PI / 2;
     floor.position.set(x0 + (cols * cell) / 2, 0.04, z0 - (rows * cell) / 2);
     floor.receiveShadow = true;
@@ -326,7 +474,7 @@ export class Field {
     const walls = [];
     for (let rr = 0; rr <= rows; rr++) for (let c = 0; c < cols; c++) if (H[rr][c]) walls.push([x0 + c * cell + cell / 2, z0 - rr * cell, cell + 0.8, 0.8, rr === 0 || rr === rows]);
     for (let rr = 0; rr < rows; rr++) for (let c = 0; c <= cols; c++) if (V[rr][c]) walls.push([x0 + c * cell, z0 - rr * cell - cell / 2, 0.8, cell + 0.8, c === 0 || c === cols]);
-    const wm = new THREE.InstancedMesh(this.geo(new THREE.BoxGeometry(1, 1, 1)), this.std(this.st.pillar), walls.length);
+    const wm = new THREE.InstancedMesh(this.geo(new THREE.BoxGeometry(1, 1, 1)), this.std(new THREE.Color(0xffffff).lerp(new THREE.Color(this.st.pillar), 0.2), { map: this.tex('tex-dungeon-wall', 3, 1), emissive: 0x4ad8ff, emissiveMap: this.tex('tex-dungeon-wall', 3, 1), emissiveIntensity: 0.18 }), walls.length);
     const mtx = new THREE.Matrix4(), q4 = new THREE.Quaternion(), sc = new THREE.Vector3(), ps = new THREE.Vector3();
     walls.forEach(([x, z, w, d, outer], i) => {
       const h = outer ? 4 : 2.4;
@@ -354,14 +502,44 @@ export class Field {
     const arch = new THREE.Mesh(this.geo(new THREE.BoxGeometry(12.6, 1.4, 1.8)), pil);
     arch.position.set(ex, 7.3, z0);
     this.group.add(arch);
+    this.pointLight(0xff9a40, 10, 16, ex - 5.5, 7, z0 + 1, 0.25);
+    this.pointLight(0xff9a40, 10, 16, ex + 5.5, 7, z0 + 1, 0.25);
     // 迷路内の松明
-    for (let i = 0; i < 10; i++) {
+    for (let i = 0; i < 16; i++) {
       const w = walls[Math.floor(r() * walls.length)];
       const f = new THREE.Mesh(flameGeo, flame);
       f.position.set(w[0], (w[4] ? 4 : 2.4) + 0.4, w[1]);
       this.flames.push(f);
       this.group.add(f);
+      if (i < 3) this.pointLight(0xff8a30, 8, 14, w[0], 3.4, w[1], 0.3);
     }
+    // 交点の柱と、頂に光る結晶
+    const crys = this.st.crystal;
+    const pts = [];
+    for (let rr = 0; rr <= rows; rr++) for (let c = 0; c <= cols; c++) pts.push([x0 + c * cell, z0 - rr * cell]);
+    const colM = new THREE.InstancedMesh(this.geo(new THREE.CylinderGeometry(0.75, 0.9, 1, 8)), this.std(0xffffff, { map: this.tex('tex-dungeon-wall', 2, 1) }), pts.length);
+    const capM = new THREE.InstancedMesh(this.geo(new THREE.OctahedronGeometry(0.45).scale(1, 1.8, 1)), this.mat(new THREE.MeshStandardMaterial({ color: crys, emissive: crys, emissiveIntensity: 1.6, roughness: 0.15 })), pts.length);
+    pts.forEach(([x, z], i) => {
+      const outer = Math.abs(z - z0) < 0.1 || Math.abs(z - (z0 - rows * cell)) < 0.1 || Math.abs(x - x0) < 0.1 || Math.abs(x - (x0 + cols * cell)) < 0.1;
+      const h = (outer ? 4 : 2.4) + 0.6;
+      colM.setMatrixAt(i, mtx.compose(ps.set(x, h / 2, z), q4, sc.set(1, h, 1)));
+      capM.setMatrixAt(i, mtx.compose(ps.set(x, h + 0.7, z), q4, sc.set(1, 1, 1)));
+    });
+    colM.castShadow = true;
+    this.group.add(colM, capM);
+    // 床に浮かぶ魔法陣
+    const runeGeo = this.geo(new THREE.RingGeometry(1.6, 2, 6));
+    const runeMat = this.mat(new THREE.MeshBasicMaterial({ color: crys, transparent: true, opacity: 0.55, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide }));
+    for (let i = 0; i < 10; i++) {
+      const c = Math.floor(r() * cols), rr = Math.floor(r() * rows);
+      const m = new THREE.Mesh(runeGeo, runeMat);
+      m.rotation.x = -Math.PI / 2;
+      m.position.set(x0 + c * cell + cell / 2 - 2.5, 0.06, z0 - rr * cell - cell / 2 - 2.5);
+      this.group.add(m);
+      (this.runes ||= []).push(m);
+    }
+    // 漂う光の粒
+    this.motes = this.particles(260, crys, 0.22, () => [x0 + r() * cols * cell, 0.5 + r() * 4, z0 - r() * rows * cell]);
     // 祭壇：光の柱で遠くからも見える
     const G = this.goal;
     const alt = new THREE.Mesh(this.geo(new THREE.CylinderGeometry(3, 3.4, 0.5, 8)), this.std(0xe0d8c8));
@@ -375,6 +553,24 @@ export class Field {
     this.goalRune = rune;
     this.goalPillar = pillar;
     this.group.add(alt, rune, pillar);
+    this.pointLight(crys, 14, 18, G.x, 3, G.z, 0.15);
+  }
+
+  // 漂う光の粒（蛍・魔力の粒）
+  particles(n, color, size, place) {
+    const pos = new Float32Array(n * 3);
+    const base = [];
+    for (let i = 0; i < n; i++) {
+      const [x, y, z] = place();
+      base.push([x, y, z, Math.random() * 6]);
+      pos.set([x, y, z], i * 3);
+    }
+    const g = this.geo(new THREE.BufferGeometry());
+    g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    const pts = new THREE.Points(g, this.mat(new THREE.PointsMaterial({ color, size, transparent: true, opacity: 0.9, blending: THREE.AdditiveBlending, depthWrite: false })));
+    pts.frustumCulled = false;
+    this.group.add(pts);
+    return { pts, base };
   }
 
   // ---- 野：木・岩・草・水晶・廃墟の柱・宝箱 ----
@@ -394,14 +590,111 @@ export class Field {
     }
     const leaf = new THREE.Color(0x2f6a3a).lerp(new THREE.Color(st.crystal), 0.18);
     const trunkM = new THREE.InstancedMesh(this.geo(new THREE.CylinderGeometry(0.22, 0.32, 1.8, 6)), this.std(0x5a3e28), trees.length);
-    const leafA = new THREE.InstancedMesh(this.geo(new THREE.ConeGeometry(1.6, 2.8, 7)), this.std(leaf), trees.length);
-    const leafB = new THREE.InstancedMesh(this.geo(new THREE.ConeGeometry(1.1, 2.2, 7)), this.std(leaf.clone().multiplyScalar(1.25)), trees.length);
+    const leafA = new THREE.InstancedMesh(this.geo(new THREE.ConeGeometry(1.6, 2.8, 7)), this.std(new THREE.Color(0xffffff).lerp(leaf, 0.25)), trees.length);
+    const leafB = new THREE.InstancedMesh(this.geo(new THREE.ConeGeometry(1.1, 2.2, 7)), this.std(new THREE.Color(0xffffff).lerp(leaf, 0.2)), trees.length);
     const m = new THREE.Matrix4(), q = new THREE.Quaternion(), s = new THREE.Vector3(), p = new THREE.Vector3();
+    const tc = new THREE.Color();
     trees.forEach(([x, z, k], i) => {
       trunkM.setMatrixAt(i, m.compose(p.set(x, 0.9 * k, z), q, s.set(k, k, k)));
       leafA.setMatrixAt(i, m.compose(p.set(x, 2.8 * k, z), q, s.set(k, k, k)));
       leafB.setMatrixAt(i, m.compose(p.set(x, 4.1 * k, z), q, s.set(k, k, k)));
+      tc.setHSL(0.25 + r() * 0.12, 0.45 + r() * 0.3, 0.55 + r() * 0.25);
+      leafA.setColorAt(i, tc);
+      leafB.setColorAt(i, tc.offsetHSL(0.02, 0, 0.08));
       this.circles.push({ x, z, r: 0.55 * k });
+    });
+    // 広葉樹（緑・桜・紅葉・黄金）
+    const rounds = [];
+    for (let i = 0; i < 1500 && rounds.length < 150; i++) {
+      const [x, z] = rnd();
+      if (free(x, z, 5)) rounds.push([x, z, 0.8 + r() * 0.8]);
+    }
+    const crownCols = [0x4ab040, 0x6ac848, 0x3a9a50, 0xffa8cc, 0xff8a30, 0xffc838, 0xe04a3a, 0x58c070];
+    const rTrunk = new THREE.InstancedMesh(this.geo(new THREE.CylinderGeometry(0.2, 0.34, 2.4, 6)), this.std(0x6a4630), rounds.length);
+    const rCrown = new THREE.InstancedMesh(this.geo(new THREE.IcosahedronGeometry(1.7, 1)), this.std(0xffffff, { roughness: 0.8 }), rounds.length);
+    const rCrown2 = new THREE.InstancedMesh(this.geo(new THREE.IcosahedronGeometry(1.1, 1)), this.std(0xffffff, { roughness: 0.8 }), rounds.length);
+    rounds.forEach(([x, z, k], i) => {
+      rTrunk.setMatrixAt(i, m.compose(p.set(x, 1.2 * k, z), q, s.set(k, k, k)));
+      rCrown.setMatrixAt(i, m.compose(p.set(x, 3.3 * k, z), q, s.set(k * 1.15, k * 0.95, k * 1.15)));
+      rCrown2.setMatrixAt(i, m.compose(p.set(x + 0.8 * k, 4.2 * k, z + 0.3 * k), q, s.set(k, k, k)));
+      tc.set(crownCols[Math.floor(r() * crownCols.length)]).offsetHSL(0, 0, (r() - 0.5) * 0.1);
+      rCrown.setColorAt(i, tc);
+      rCrown2.setColorAt(i, tc.offsetHSL(0, 0, 0.07));
+      this.circles.push({ x, z, r: 0.5 * k });
+    });
+    for (const im of [rTrunk, rCrown, rCrown2]) {
+      im.castShadow = true;
+      this.group.add(im);
+    }
+    this.treePts = trees.concat(rounds);
+    // 野の花（道ばたに多め）
+    const flowers = [];
+    for (let i = 0; i < 9000 && flowers.length < 2200; i++) {
+      const [x, z] = rnd();
+      if (inTown(x, z) || inDun(x, z)) continue;
+      const rd = this.roadDist(x, z);
+      if (rd < 3.2 || (rd > 14 && r() < 0.6)) continue;
+      // 小さな群れにする
+      for (let k = 0; k < 4; k++) flowers.push([x + (r() - 0.5) * 1.4, 0.15 + r() * 0.15, z + (r() - 0.5) * 1.4, 0.09 + r() * 0.07]);
+    }
+    this.dots(flowers, 1, FLOWER_COLS, 0.25);
+    // 茂みと実
+    const bushes = [], berries = [];
+    for (let i = 0; i < 1200 && bushes.length < 160; i++) {
+      const [x, z] = rnd();
+      if (!free(x, z, 3.5)) continue;
+      const k = 0.6 + r() * 0.7;
+      bushes.push([x, k * 0.5, z, k]);
+      for (let j = 0; j < 3; j++) berries.push([x + (r() - 0.5) * k, k * 0.6 + r() * k * 0.4, z + (r() - 0.5) * k, 0.1]);
+    }
+    this.dots(bushes, 0.9, [0x3a8a3a, 0x4aa040, 0x2f7a44, 0x5ab84a]).castShadow = true;
+    this.dots(berries, 1, [0xff3050, 0x6a50ff, 0xffd040], 0.3);
+    // 光るきのこ
+    const shrooms = [];
+    for (let i = 0; i < 400 && shrooms.length < 70; i++) {
+      const [x, z] = rnd();
+      if (free(x, z, 3)) shrooms.push([x, 0.2, z, 0.18 + r() * 0.15]);
+    }
+    this.dots(shrooms, 1, [0x40f0ff, 0xff60e0, 0x80ff80], 1.2);
+    // 池（睡蓮つき）
+    const waterMat = this.mat(new THREE.MeshStandardMaterial({ color: 0x3aa8ff, emissive: 0x1050a0, emissiveIntensity: 0.45, roughness: 0.05, metalness: 0.3, transparent: true, opacity: 0.88 }));
+    this.ponds = [];
+    const pads = [];
+    for (let i = 0, made = 0; i < 300 && made < 4; i++) {
+      const [x, z] = rnd();
+      const pr = 3 + r() * 3;
+      if (!free(x, z, pr + 4) || Math.abs(x) > 52) continue;
+      made++;
+      const w = new THREE.Mesh(this.geo(new THREE.CircleGeometry(pr, 32)), waterMat);
+      w.rotation.x = -Math.PI / 2;
+      w.position.set(x, 0.07, z);
+      w.receiveShadow = true;
+      this.group.add(w);
+      this.ponds.push(w);
+      const rim = [];
+      for (let a = 0; a < Math.PI * 2; a += 0.35) rim.push([x + Math.cos(a) * (pr + 0.2), 0.12, z + Math.sin(a) * (pr + 0.2), 0.35 + r() * 0.25]);
+      this.dots(rim, 1, [0x9a9488, 0xb8b0a0, 0x80786c]);
+      for (let k = 0; k < 7; k++) {
+        const a = r() * 6.28, d = r() * pr * 0.75;
+        pads.push([x + Math.cos(a) * d, 0.1, z + Math.sin(a) * d]);
+      }
+      this.circles.push({ x, z, r: pr });
+    }
+    const padM = new THREE.InstancedMesh(this.geo(new THREE.CircleGeometry(0.45, 10)), this.std(0x3aa040, { side: THREE.DoubleSide }), Math.max(1, pads.length));
+    const bloom = [];
+    const qx = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), -Math.PI / 2);
+    padM.count = pads.length;
+    pads.forEach(([x, y, z], i) => {
+      padM.setMatrixAt(i, m.compose(p.set(x, y, z), qx, s.set(1, 1, 1)));
+      if (i % 2) bloom.push([x + 0.1, 0.2, z, 0.14]);
+    });
+    this.group.add(padM);
+    if (bloom.length) this.dots(bloom, 1, [0xffb0d8, 0xffffff], 0.4);
+    // 蛍
+    this.fireflies = this.particles(320, 0xd8ff70, 0.2, () => {
+      let x, z;
+      do [x, z] = rnd(); while (inDun(x, z));
+      return [x, 0.6 + r() * 2.5, z];
     });
     for (const im of [trunkM, leafA, leafB]) {
       im.castShadow = true;
@@ -425,10 +718,12 @@ export class Field {
     this.group.add(rockM);
     // 草むら
     q.identity();
-    const grass = new THREE.InstancedMesh(this.geo(new THREE.ConeGeometry(0.18, 0.6, 4)), this.std(leaf.clone().multiplyScalar(1.5)), 600);
-    for (let i = 0; i < 600; i++) {
+    const NG = 2600;
+    const grass = new THREE.InstancedMesh(this.geo(new THREE.ConeGeometry(0.16, 0.7, 4)), this.std(0xffffff), NG);
+    for (let i = 0; i < NG; i++) {
       const [x, z] = rnd();
       grass.setMatrixAt(i, m.compose(p.set(x, 0.3, z), q, s.set(1, 0.6 + r(), 1)));
+      grass.setColorAt(i, tc.setHSL(0.22 + r() * 0.1, 0.6, 0.35 + r() * 0.2));
     }
     this.group.add(grass);
     // 水晶と廃墟の柱
@@ -872,6 +1167,32 @@ export class Field {
     // 演出
     for (const s of this.spinners) s.rotation.y += dt;
     for (const f of this.flames) f.scale.set(1, 0.8 + Math.random() * 0.5, 1);
+    for (const l of this.lights) l.intensity = l.userData.base * (1 - l.userData.flicker + Math.random() * l.userData.flicker * 2);
+    for (let i = 0; i < this.flags.length; i++) {
+      const f = this.flags[i];
+      f.rotation.y = Math.sin(this.t * 2.4 + i) * 0.35;
+      f.rotation.z = Math.sin(this.t * 3.1 + i * 2) * 0.06;
+    }
+    // 噴水のしぶき
+    const sa = this.spray.pts.geometry.attributes.position;
+    this.spray.seed.forEach(([a, ph, v], i) => {
+      const k = (this.t * 0.7 * v + ph) % 1;
+      const rr = 0.2 + k * 1.9;
+      sa.setXYZ(i, TOWN.x + Math.cos(a) * rr, 2.8 + k * 1.6 - k * k * 3.8, TOWN.z + Math.sin(a) * rr);
+    });
+    sa.needsUpdate = true;
+    for (const m of this.runes) m.rotation.z += dt * 0.6;
+    // 蛍と魔力の粒
+    for (const pt of [this.fireflies, this.motes]) {
+      const at = pt.pts.geometry.attributes.position;
+      const tt = this.t;
+      pt.base.forEach(([x, y, z, ph], i) => {
+        at.setXYZ(i, x + Math.sin(tt * 0.6 + ph) * 1.2, y + Math.sin(tt * 1.3 + ph * 2) * 0.5, z + Math.cos(tt * 0.5 + ph) * 1.2);
+      });
+      at.needsUpdate = true;
+      pt.pts.material.opacity = 0.55 + Math.sin(this.t * 3) * 0.35;
+    }
+    for (const w of this.ponds) w.material.emissiveIntensity = 0.4 + Math.sin(this.t * 1.5) * 0.12;
     this.goalRune.rotation.z += dt;
     this.goalPillar.material.opacity = 0.22 + Math.sin(this.t * 2) * 0.08;
     this.boss.facing = Math.atan2(p.pos.x - this.boss.pos.x, p.pos.z - this.boss.pos.z);
