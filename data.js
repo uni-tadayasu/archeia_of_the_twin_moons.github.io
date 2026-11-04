@@ -220,8 +220,33 @@ FIGHTERS.crimson = {
   ],
   over: { name: '冥空紅蓮斬', kind: 'judgment', visual: 'pillar', count: 8, spread: 4, radius: 2, dmg: 60, delay: 0.6, interval: 0.1, finalDmg: 260, finalRadius: 6, elem: 0, color: 0xff3010, vivid: true }
 };
+// 運営長専用：冥紫の魔后ヴェスペラ（第一形態）→ 体力半分で第二形態「緋髪の深淵后」へ戦闘中に変身
+FIGHTERS.sovereign = {
+  name: 'ヴェスペラ', title: '冥紫の魔后（運営長・第一形態）', model: 'assets/models/void-sovereign-f1.glb', face: 'assets/face-sovereign.webp',
+  color: 0x9a40ff, height: 1.8, hp: 1600, speed: 6.4, overGain: 1.6, locked: true, special: 'chief', form2: 'sovereign2',
+  light: { dmg: 30, range: 2.6, shots: 6, color: 0xb050ff },
+  skills: [
+    { name: '冥鎖刃《ノクス・チェイン》', cost: 20, kind: 'projectile', dmg: 150, speed: 22, radius: 1.1, elem: 6, color: 0xa040ff, vivid: true },
+    { name: '紫影閃舞', cost: 20, kind: 'dash', dmg: 170, speed: 24, dur: 0.32, elem: 6, color: 0xc060ff, vivid: true },
+    { name: '冥雷葬列', cost: 24, kind: 'rain', visual: 'bolt', count: 9, spread: 3.2, radius: 2.1, dmg: 80, delay: 0.25, interval: 0.07, elem: 2, color: 0xd070ff, vivid: true },
+    { name: '虚空の檻', cost: 26, kind: 'implode', dmg: 220, radius: 7.5, elem: 6, color: 0x8020ff, vivid: true }
+  ],
+  over: { name: '終夜・冥紫天蓋', kind: 'judgment', visual: 'pillar', finalVisual: 'bigsword', count: 18, spread: 7, radius: 2.6, dmg: 100, delay: 0.7, interval: 0.06, finalDmg: 460, finalRadius: 9.5, elem: 6, color: 0xa040ff, vivid: true }
+};
+FIGHTERS.sovereign2 = {
+  name: 'ヴェスペラ', title: '緋髪の深淵后（運営長・第二形態）', model: 'assets/models/void-sovereign-f2.glb', face: 'assets/face-sovereign2.webp',
+  color: 0xff3050, height: 2.15, hp: 2400, speed: 6.8, overGain: 2, locked: true, special: 'chief', hidden: true,
+  light: { dmg: 34, range: 2.8, shots: 8, color: 0xff3060 },
+  skills: [
+    { name: '緋天冠刃《クラウン・レイ》', cost: 18, kind: 'projectile', dmg: 190, speed: 26, radius: 1.3, elem: 9, color: 0xff2040, vivid: true },
+    { name: '深淵環《アビス・ヘイロー》', cost: 22, kind: 'shockwave', dmg: 240, radius: 9, elem: 6, color: 0xc040ff, vivid: true },
+    { name: '血紅流星雨', cost: 24, kind: 'rain', visual: 'nova', count: 6, spread: 3.5, radius: 3.2, dmg: 150, delay: 0.5, interval: 0.12, elem: 0, color: 0xff3020, vivid: true },
+    { name: '冥后の抱擁', cost: 26, kind: 'implode', dmg: 280, radius: 8.5, elem: 9, color: 0xff2060, vivid: true }
+  ],
+  over: { name: '深淵開闢・緋紫の終焉', kind: 'judgment', visual: 'pillar', finalVisual: 'bigsword', count: 24, spread: 8, radius: 2.8, dmg: 120, delay: 0.7, interval: 0.05, finalDmg: 650, finalRadius: 11, elem: 9, color: 0xff2050, vivid: true }
+};
 // 通常プレイヤーがパーティーに入れられない特別枠
-export const SPECIAL_KEYS = ['seraphel', 'chief', 'crimson'];
+export const SPECIAL_KEYS = ['seraphel', 'chief', 'crimson', 'sovereign'];
 
 // ---------- 決定的な乱数（毎回同じ内容を生成する） ----------
 function rng(seed) {
@@ -775,7 +800,7 @@ export const STORY = [];
 
 // ---- 最強格：宇邇宮とセラフェルを全戦士（ボス含む）の頂点に据える ----
 {
-  const others = Object.entries(FIGHTERS).filter(([k]) => k !== 'uninomiya' && k !== 'seraphel' && k !== 'chief').map(([, f]) => f);
+  const others = Object.entries(FIGHTERS).filter(([k]) => k !== 'uninomiya' && k !== 'seraphel' && k !== 'chief' && k !== 'sovereign' && k !== 'sovereign2').map(([, f]) => f);
   const top = (fn) => Math.max(...others.map((f) => fn(f) || 0));
   const maxHp = top((f) => f.hp), maxSpd = top((f) => f.speed), maxOg = top((f) => f.overGain);
   const maxLight = top((f) => f.light?.dmg * (f.light?.shots || 1));
@@ -800,4 +825,12 @@ export const STORY = [];
   c.power = s.power * 1.6;
   c.armor = s.armor * 0.6;
   c.fluxMul = 2;
+  // ヴェスペラはルミナリアのさらに上（第二形態はもう一段上）
+  const v1 = FIGHTERS.sovereign, v2 = FIGHTERS.sovereign2;
+  v1.hp = Math.round(c.hp * 1.25); v1.speed = +(c.speed * 1.05).toFixed(2); v1.overGain = +(c.overGain * 1.15).toFixed(2);
+  v1.light.dmg = Math.ceil((c.light.dmg * c.light.shots * 1.3) / v1.light.shots);
+  v1.power = c.power * 1.3; v1.armor = c.armor * 0.8; v1.fluxMul = 2.4;
+  v2.hp = Math.round(c.hp * 1.6); v2.speed = +(c.speed * 1.12).toFixed(2); v2.overGain = +(c.overGain * 1.4).toFixed(2);
+  v2.light.dmg = Math.ceil((c.light.dmg * c.light.shots * 1.7) / v2.light.shots);
+  v2.power = c.power * 1.7; v2.armor = c.armor * 0.6; v2.fluxMul = 3;
 }

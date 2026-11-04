@@ -142,6 +142,14 @@ export class ProcMusic {
     const shift = pick([2, 3, 4, -1]);
     song.melody = [...motif, ...motif.map((n, i) => (n && i >= 24 ? { d: n.d + shift, len: n.len } : n))];
     song.hook = song.melody.map((n) => (n ? { d: n.d + 2, len: n.len } : null));
+    // 対旋律：メロディの隙間を埋める応答フレーズ（3度下でハモる部分＋独立した動き）
+    song.counter = song.melody.map((n, i) => (n ? (r() < 0.6 ? { d: n.d - 2, len: n.len } : null) : (i % 4 === 2 && r() < 0.5 ? { d: Math.floor(r() * 5), len: 2 } : null)));
+    // 弦のスタッカート刻み・鐘の装飾・ティンパニ／太鼓
+    song.ostinato = Array.from({ length: 16 }, (_, i) => [0, 4, 2, 4, 0, 7, 4, 2][i % 8] + (r() < 0.15 ? 2 : 0));
+    song.bell = Array.from({ length: 16 }, (_, i) => (i % 4 === 0 || r() < 0.18 ? [0, 2, 4, 7, 9, 11][Math.floor(r() * 6)] : null));
+    song.taiko = Array.from({ length: 16 }, (_, i) => i === 0 || i === 6 || i === 10 || (i === 14 && r() < 0.6));
+    song.choir = r() < 0.75;
+    song.keyUp = pick([1, 2, 2, 3]);
     return song;
   }
 
@@ -149,7 +157,7 @@ export class ProcMusic {
     const s = song.scale;
     const n = s.length;
     const o = Math.floor(degree / n);
-    return song.root + 12 * (octave + o) + s[((degree % n) + n) % n];
+    return song.root + (this.keyShift || 0) + 12 * (octave + o) + s[((degree % n) + n) % n];
   }
 
   play(track) {
@@ -188,17 +196,48 @@ export class ProcMusic {
     }
   }
 
-  // 16小節×4 の構成：導入 → 展開 → サビ → 間奏
+  // 8小節×5 の構成：導入 → 展開 → サビ → 静かな間奏（ブレイク）→ 転調した大サビ
   playStep(step, t) {
     const s = this.song;
     const i = step % 16;
     const barAll = Math.floor(step / 16);
-    const section = Math.floor(barAll / 8) % 4; // 0導入 1展開 2サビ 3間奏
+    const sec5 = Math.floor(barAll / 8) % 5; // 0導入 1展開 2サビ 3ブレイク 4大サビ
+    const grand = sec5 === 4;
+    const section = grand ? 2 : sec5; // 既存パートは大サビをサビとして鳴らす
+    this.keyShift = grand ? s.keyUp : 0;
     const bar = barAll % 4;
     const prog = section === 2 ? s.prog2 : s.prog;
     const chord = prog[bar];
     const full = section === 1 || section === 2;
     const fill = barAll % 8 === 7 && i >= 12;
+    // ---- 追加の厚み ----
+    // 聖歌隊パッド（ブレイクと大サビで）
+    if (s.choir && i === 0 && (section === 3 || grand || (section === 2 && bar % 2 === 0))) {
+      for (const k of [0, 4, 7]) this.choir(mtof(this.noteOf(s, chord + k, 1)), t, this.spb * 16, grand ? 0.05 : 0.04);
+    }
+    // 弦のスタッカート刻み（展開・サビ）
+    if (full && (section === 2 || i % 2 === 0)) {
+      this.staccato(mtof(this.noteOf(s, chord + s.ostinato[i], 0)), t, this.spb * 0.6, grand ? 0.045 : 0.035);
+    }
+    // 鐘・グロッケンの装飾（導入・ブレイク・大サビ）
+    if ((section === 0 || section === 3 || grand) && s.bell[i] != null) {
+      this.bell(mtof(this.noteOf(s, chord + s.bell[i], 2)), t, grand ? 0.035 : 0.045);
+    }
+    // 対旋律（サビ）
+    if (section === 2) {
+      const cm = s.counter[(step % 64) % s.counter.length];
+      if (cm) this.lead(mtof(this.noteOf(s, chord + cm.d, 0)), t, this.spb * (cm.len + 0.4), false, 0.6);
+    }
+    // ブレイクでは静かなピアノ風メロディ
+    if (section === 3) {
+      const m = s.melody[(step % 64) % s.melody.length];
+      if (m) this.bell(mtof(this.noteOf(s, chord + m.d, 1)), t, 0.06, 1.4);
+    }
+    // 太鼓・ティンパニ（展開・サビ）と小節頭の衝撃音
+    if (full && s.taiko[i]) this.taiko(t, i === 0 ? 1 : 0.6);
+    if (full && i === 0 && bar === 0) this.timpani(mtof(this.noteOf(s, chord, -2)), t);
+    if (i === 0 && barAll % 8 === 0 && (section === 2 || section === 1)) this.impact(t, grand ? 1.3 : 1);
+    if (barAll % 8 === 7 && i === 0 && (sec5 === 1 || sec5 === 3)) this.reverseSwell(t, this.spb * 16);
 
     // ドラム
     if (section !== 0 || i % 4 === 0) {
@@ -257,9 +296,11 @@ export class ProcMusic {
   }
 
   // デチューンしたノコギリ波を重ねたスーパーソウ
-  lead(freq, t, dur, big) {
+  lead(freq, t, dur, big, vol = 1) {
     const c = this.ctx;
     const g = c.createGain();
+    const gv = c.createGain();
+    gv.gain.value = vol;
     const f = c.createBiquadFilter();
     f.type = 'lowpass';
     f.Q.value = 2;
@@ -286,9 +327,164 @@ export class ProcMusic {
       vib.start(t);
       vib.stop(t + dur + 0.3);
     }
-    f.connect(g).connect(pan).connect(this.pump);
+    f.connect(gv).connect(g).connect(pan).connect(this.pump);
     g.connect(this.verbIn);
     g.connect(this.dly);
+  }
+
+  // 聖歌隊風パッド：フォルマント（母音「あ」）を通した柔らかい合唱
+  choir(freq, t, dur, vol) {
+    const c = this.ctx;
+    const g = c.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(vol, t + 0.6);
+    g.gain.setValueAtTime(vol, t + dur - 0.4);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur + 0.4);
+    const mix = c.createGain();
+    for (const [ff, q, a] of [[800, 8, 1], [1150, 9, 0.6], [2900, 10, 0.3]]) {
+      const bp = c.createBiquadFilter();
+      bp.type = 'bandpass';
+      bp.frequency.value = ff;
+      bp.Q.value = q;
+      const ag = c.createGain();
+      ag.gain.value = a * 3;
+      mix.connect(bp).connect(ag).connect(g);
+    }
+    for (const [det, p] of [[-7, -0.5], [0, 0], [7, 0.5]]) {
+      const o = c.createOscillator();
+      o.type = 'sawtooth';
+      o.frequency.value = freq;
+      o.detune.value = det;
+      const vib = c.createOscillator();
+      const vg = c.createGain();
+      vib.frequency.value = 4.6 + det * 0.05;
+      vg.gain.value = 6;
+      vib.connect(vg).connect(o.detune);
+      const pan = c.createStereoPanner();
+      pan.pan.value = p;
+      o.connect(pan).connect(mix);
+      o.start(t);
+      o.stop(t + dur + 0.5);
+      vib.start(t);
+      vib.stop(t + dur + 0.5);
+    }
+    g.connect(this.pump);
+    g.connect(this.verbIn);
+  }
+
+  // 弦のスタッカート（刻み）
+  staccato(freq, t, dur, vol) {
+    const c = this.ctx;
+    const g = c.createGain();
+    this.env(g, t, 0.006, vol, dur, 0.04);
+    const f = c.createBiquadFilter();
+    f.type = 'lowpass';
+    f.frequency.value = 3000;
+    for (const det of [-6, 6]) {
+      const o = c.createOscillator();
+      o.type = 'sawtooth';
+      o.frequency.value = freq;
+      o.detune.value = det;
+      o.connect(f);
+      o.start(t);
+      o.stop(t + dur + 0.1);
+    }
+    f.connect(g).connect(this.pump);
+    g.connect(this.verbIn);
+  }
+
+  // 鐘・グロッケン（FM合成の金属的な響き）
+  bell(freq, t, vol, len = 1) {
+    const c = this.ctx;
+    const car = c.createOscillator();
+    const mod = c.createOscillator();
+    const mg = c.createGain();
+    car.frequency.value = freq;
+    mod.frequency.value = freq * 3.5;
+    mg.gain.setValueAtTime(freq * 2, t);
+    mg.gain.exponentialRampToValueAtTime(1, t + 0.8 * len);
+    mod.connect(mg).connect(car.frequency);
+    const g = c.createGain();
+    g.gain.setValueAtTime(vol, t);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 1.2 * len);
+    const pan = c.createStereoPanner();
+    pan.pan.value = (Math.random() - 0.5) * 0.8;
+    car.connect(g).connect(pan).connect(this.bus);
+    g.connect(this.verbIn);
+    g.connect(this.dly);
+    car.start(t);
+    mod.start(t);
+    car.stop(t + 1.3 * len);
+    mod.stop(t + 1.3 * len);
+  }
+
+  // 和太鼓
+  taiko(t, v) {
+    const c = this.ctx;
+    const o = c.createOscillator();
+    const g = c.createGain();
+    o.frequency.setValueAtTime(110, t);
+    o.frequency.exponentialRampToValueAtTime(55, t + 0.25);
+    g.gain.setValueAtTime(0.55 * v, t);
+    g.gain.exponentialRampToValueAtTime(0.001, t + 0.45);
+    o.connect(g).connect(this.bus);
+    g.connect(this.verbIn);
+    o.start(t);
+    o.stop(t + 0.5);
+    this.noiseHit(t, 0.25 * v, 0.08, 700, 'lowpass', this.bus);
+  }
+
+  // ティンパニ（ロール気味に3連打）
+  timpani(freq, t) {
+    const c = this.ctx;
+    for (let k = 0; k < 3; k++) {
+      const tt = t + k * this.spb * 0.5;
+      const o = c.createOscillator();
+      const g = c.createGain();
+      o.frequency.setValueAtTime(freq * 2, tt);
+      o.frequency.exponentialRampToValueAtTime(freq * 1.9, tt + 0.6);
+      g.gain.setValueAtTime(0.35 * (k === 2 ? 1.3 : 0.7), tt);
+      g.gain.exponentialRampToValueAtTime(0.001, tt + 0.9);
+      o.connect(g).connect(this.bus);
+      g.connect(this.verbIn);
+      o.start(tt);
+      o.stop(tt + 1);
+    }
+  }
+
+  // セクション頭の重低音インパクト
+  impact(t, v) {
+    const c = this.ctx;
+    const o = c.createOscillator();
+    const g = c.createGain();
+    o.frequency.setValueAtTime(90, t);
+    o.frequency.exponentialRampToValueAtTime(28, t + 1.2);
+    g.gain.setValueAtTime(0.8 * v, t);
+    g.gain.exponentialRampToValueAtTime(0.001, t + 1.4);
+    o.connect(g).connect(this.bus);
+    o.start(t);
+    o.stop(t + 1.5);
+    const n = this.noiseHit(t, 0.3 * v, 1.2, 2500, 'lowpass', this.bus);
+    n.connect(this.verbIn);
+  }
+
+  // 逆再生シンバル風の吸い込み
+  reverseSwell(t, dur) {
+    const c = this.ctx;
+    const src = c.createBufferSource();
+    src.buffer = this.noise;
+    src.loop = true;
+    const f = c.createBiquadFilter();
+    f.type = 'highpass';
+    f.frequency.value = 5000;
+    const g = c.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(0.18, t + dur);
+    g.gain.linearRampToValueAtTime(0, t + dur + 0.02);
+    src.connect(f).connect(g).connect(this.bus);
+    g.connect(this.verbIn);
+    src.start(t);
+    src.stop(t + dur + 0.05);
   }
 
   strings(freq, t, dur, vol) {

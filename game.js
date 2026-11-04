@@ -112,6 +112,7 @@ const G3 = {
   core: new THREE.IcosahedronGeometry(0.5, 1)
 };
 let fx3dLive = 0;
+let grandLive = 0;
 function lite(color, k = 0.4) {
   return new THREE.Color(color).lerp(new THREE.Color(0xffffff), k).getHex();
 }
@@ -284,6 +285,8 @@ export class Fighter {
     this.scale = o.scale || 1;
     this.tint = o.tint ?? this.def.tint ?? null;
     const u = o.upg || {};
+    this.upg = u;
+    this.hpMul = o.hpMul || 1;
     this.atkMul = (1 + 0.06 * (u.atk || 0)) * (this.def.power || 1);
     this.defMul = (1 - 0.05 * (u.def || 0)) * (this.def.armor || 1);
     this.fluxRate = 7 * (1 + 0.12 * (u.flux || 0)) * (this.def.fluxMul || 1);
@@ -522,6 +525,7 @@ export class Fighter {
         this.dotAcc = 0;
         this.hp = Math.max(0, this.hp - dmg);
         this.battle.ui.popup(this.pos, dmg, '#c890ff');
+        if (this.checkTransform()) return;
         if (this.hp <= 0) {
           this.dead = true;
         }
@@ -635,10 +639,50 @@ export class Fighter {
     this.inv = 0.04;
     this.hitFlash = 0.15;
     this.over = Math.min(100, this.over + dmg * 0.06 * this.og);
+    if (this.checkTransform()) return dmg;
     if (this.hp <= 0) {
       this.dead = true;
     }
     return dmg;
+  }
+
+  // 体力が半分を切ったら第二形態へ変身（form2 を持つ戦士のみ・1回だけ）
+  checkTransform() {
+    if (this.transformed || !this.def.form2 || this.remoteAuth || this.hp > this.maxHp * 0.5) return false;
+    const nk = this.def.form2;
+    if (!FIGHTERS[nk]) return false;
+    this.transformed = true;
+    this.key = nk;
+    this.def = FIGHTERS[nk];
+    this.name = this.def.name;
+    const u = this.upg;
+    this.atkMul = (1 + 0.06 * (u.atk || 0)) * (this.def.power || 1);
+    this.defMul = (1 - 0.05 * (u.def || 0)) * (this.def.armor || 1);
+    this.fluxRate = 7 * (1 + 0.12 * (u.flux || 0)) * (this.def.fluxMul || 1);
+    this.og = this.def.overGain * (1 + 0.1 * (u.over || 0));
+    this.maxHp = Math.round(this.def.hp * this.hpMul * (1 + 0.08 * (u.hp || 0)));
+    this.hp = this.maxHp;
+    this.flux = 100;
+    this.over = Math.max(this.over, 50);
+    this.status = {};
+    this.stun = 0;
+    this.action = null;
+    this.inv = 1.6;
+    this.dead = false;
+    // 見た目を作り直す
+    this.visual.clear();
+    this.root.remove(this.ringMesh, this.guardMesh);
+    this.visual.rotation.set(0, 0, 0);
+    this.visual.position.set(0, 0, 0);
+    this.mixer?.stopAllAction();
+    this.mixer = null;
+    this.curAnim = null;
+    this.curAction = null;
+    this.baseY = undefined;
+    this.radius = 0.45 * this.scale * (this.def.height / 1.8);
+    this.buildModel(this.battle.assets[nk]);
+    this.battle.transformFx(this);
+    return true;
   }
 }
 
@@ -658,6 +702,149 @@ export class Battle {
     this.shake = 0;
     this.ended = false;
     this.camCenter = new THREE.Vector3();
+    // 技の閃光用ライト（数を固定してシェーダー再コンパイルを防ぐ）
+    this.fxLights = [];
+    for (let i = 0; i < 4; i++) {
+      const L = new THREE.PointLight(0xffffff, 0, 14, 2);
+      L.userData.t = 0;
+      this.fx.add(L);
+      this.fxLights.push(L);
+    }
+    this.lightIdx = 0;
+    grandLive = 0;
+  }
+
+  // 一瞬の色付き閃光
+  flashLight(pos, color, power = 1, life = 0.4) {
+    const L = this.fxLights[this.lightIdx++ % this.fxLights.length];
+    L.position.copy(pos).setY(Math.max(1, pos.y + 0.8));
+    L.color.setHex(color);
+    L.userData.t = life;
+    L.userData.life = life;
+    L.userData.p = 40 * power;
+  }
+
+  // 豪華化レイヤー：多重魔法陣・螺旋に昇る光粒・光柱・衝撃環・飛散する光条・閃光
+  grandFx(pos, elem, color, power = 1) {
+    if (grandLive > 14) return;
+    grandLive++;
+    const P = power;
+    const g = new THREE.Group();
+    g.position.set(pos.x, 0.05, pos.z);
+    this.fx.add(g);
+    const lc = lite(color, 0.5), wc = lite(color, 0.85);
+    const parts = [];
+    const mk = (geo, col, op) => {
+      const m = new THREE.Mesh(geo, glow(col, op));
+      g.add(m);
+      parts.push(m);
+      return m;
+    };
+    // 3段に重なる回転魔法陣（地面・中段・上空）
+    const rings = [];
+    for (let i = 0; i < 3; i++) {
+      const r = mk(i === 1 ? SG.rune2 : runeOf({ elem }), i ? lc : color, 0.85 - i * 0.15);
+      r.position.y = i * 1.3 * P;
+      r.userData.s = (1.6 - i * 0.35) * P;
+      r.userData.spd = (i % 2 ? -1 : 1) * (3 + i * 2);
+      rings.push(r);
+    }
+    // 外周の細い衝撃環を2重に
+    const shock = [mk(G3.wave, wc, 0.9), mk(G3.wave, color, 0.6)];
+    for (const s of shock) s.rotation.x = Math.PI / 2;
+    // 中央の光柱（外殻＋白い芯）
+    const pillarA = mk(G3.beam, color, 0.4);
+    const pillarB = mk(G3.beam, 0xffffff, 0.65);
+    // 螺旋に昇る光粒
+    const orbs = [];
+    const no = Math.round(10 + P * 8);
+    for (let i = 0; i < no; i++) {
+      const o = mk(i % 3 ? G3.star : G3.drop, i % 2 ? color : wc, 1);
+      o.userData.a = (i / no) * Math.PI * 2;
+      o.userData.r = (1.2 + (i % 3) * 0.5) * P;
+      o.userData.h = 0;
+      o.userData.vs = 2.5 + Math.random() * 3;
+      orbs.push(o);
+    }
+    // 放射状に飛ぶ光条
+    const rays = [];
+    for (let i = 0; i < 12; i++) {
+      const ray = mk(G3.bolt, i % 2 ? wc : color, 1);
+      const a = (i / 12) * Math.PI * 2;
+      ray.userData.dir = new THREE.Vector3(Math.cos(a), 0.25 + Math.random() * 0.5, Math.sin(a)).normalize();
+      ray.position.y = 1;
+      ray.lookAt(ray.userData.dir.clone().add(ray.position));
+      rays.push(ray);
+    }
+    this.flashLight(new THREE.Vector3(pos.x, 1, pos.z), color, P, 0.5);
+    const life = 0.8 + P * 0.35;
+    let t = 0;
+    this.addEffect((dt) => {
+      t += dt;
+      const k = Math.min(1, t / life);
+      const ease = 1 - Math.pow(1 - Math.min(1, k * 2.5), 3);
+      for (const r of rings) {
+        r.scale.setScalar(r.userData.s * (0.3 + ease * 0.9));
+        r.rotation.y += r.userData.spd * dt;
+      }
+      shock[0].scale.setScalar(0.5 + k * 7 * P);
+      shock[1].scale.setScalar(0.3 + Math.max(0, k - 0.15) * 5.5 * P);
+      shock[0].position.y = 0.1;
+      shock[1].position.y = 0.2;
+      const pw = Math.sin(Math.min(1, k * 1.6) * Math.PI);
+      pillarA.scale.set(1.4 * P * (0.4 + pw), 9 * P * Math.min(1, k * 5), 1.4 * P * (0.4 + pw));
+      pillarB.scale.set(0.5 * P * pw + 0.01, 10 * P * Math.min(1, k * 5), 0.5 * P * pw + 0.01);
+      for (const o of orbs) {
+        const u = o.userData;
+        u.a += dt * (4 + u.vs * 0.4);
+        u.h += dt * u.vs;
+        const rr = u.r * (1 - k * 0.6);
+        o.position.set(Math.cos(u.a) * rr, u.h, Math.sin(u.a) * rr);
+        o.rotation.y += dt * 8;
+        o.scale.setScalar(Math.max(0.05, (1 - k) * 1.2));
+      }
+      for (const ray of rays) {
+        ray.position.addScaledVector(ray.userData.dir, dt * 14 * P);
+        ray.scale.set(1.8, 1.8, 0.5 + 3 * Math.sin(Math.min(1, k * 2) * Math.PI));
+      }
+      fade(g, 1 - k * k);
+      if (k >= 1) {
+        kill(this.fx, g);
+        grandLive--;
+        return false;
+      }
+      return true;
+    });
+  }
+
+  // 第二形態への変身演出
+  transformFx(f) {
+    const p = f.pos.clone();
+    this.slowmo = Math.max(this.slowmo, 1.2);
+    this.shake = Math.max(this.shake, 1.2);
+    this.ui.flash();
+    this.ui.flash();
+    this.ui.sfx('burst');
+    this.ui.banner?.({ name: `— ${f.def.title} —` }, '真の姿が目を覚ます');
+    this.ui.popup(p, '変身！', '#ff6080');
+    for (let i = 0; i < 3; i++) {
+      this.addEffect(((d) => (dt) => {
+        d -= dt;
+        if (d > 0) return true;
+        const c = [0xa040ff, 0xff2050, 0xffd060][i];
+        this.grandFx(p, i === 1 ? 9 : 6, c, 1.6 + i * 0.4);
+        this.fx3d(p.clone().setY(1), [6, 9, 5][i], 2, c);
+        this.burst(p.clone().setY(1.2), c, 2.4, { elem: [6, 9, 5][i] });
+        return false;
+      })(i * 0.25));
+    }
+    for (const e of this.enemiesOf(f)) {
+      if (!e.remoteAuth && e.pos.distanceTo(p) < 7) {
+        const d = e.pos.clone().sub(p).setY(0).normalize().multiplyScalar(12);
+        e.vel.set(d.x, 0, d.z);
+        e.stun = Math.max(e.stun, 0.6);
+      }
+    }
   }
 
   add(key, o) {
@@ -1084,6 +1271,23 @@ export class Battle {
     this.fxPop(base, el, 5, isOver ? 6 : 3.2, isOver ? 1.2 : 0.7, { flat: true, spin: 2.5, grow: 1.15, hold: true });
     this.fxPop(base.clone().setY(1.2), el, 1, isOver ? 5 : 2.6, 0.35, { spin: 4, grow: 1.5 });
     this.fx3d(base.clone().setY(0.4), el, isOver ? 1.8 : 0.8, color);
+    this.grandFx(base, el, color, isOver ? 1.8 : 0.9);
+    if (isOver) {
+      // 奥義：時間差で重なる魔法陣と立体エフェクトの多重展開
+      for (let i = 1; i <= 3; i++) {
+        let d = i * 0.18;
+        this.addEffect((dt) => {
+          d -= dt;
+          if (d > 0) return true;
+          const a = Math.random() * Math.PI * 2;
+          const q = base.clone().add(new THREE.Vector3(Math.cos(a) * 2.5, 0, Math.sin(a) * 2.5));
+          this.grandFx(q, el, i % 2 ? lite(color, 0.3) : color, 1 + i * 0.2);
+          this.fx3d(q.setY(0.6), (el + i) % 10, 1.2, color);
+          return false;
+        });
+      }
+      this.shake = Math.max(this.shake, 0.5);
+    }
     if (isOver) {
       for (let i = 0; i < 4; i++) this.fxPop(base.clone().setY(0.5 + i * 0.9), el, 9, 2.4, 0.9, { rise: 2.5, spin: 3, delay: i * 0.08, op: 0.8 });
     }
@@ -1154,6 +1358,8 @@ export class Battle {
       this.fxPop(pos.clone().setY(pos.y + 0.3), el, 3, size * 2, 0.8, { rise: 1.6, grow: 1.8, op: 0.55 });
       this.fxPop(new THREE.Vector3(pos.x, 0.1, pos.z), el, 4, size * 1.2, 0.45, { flat: true, grow: 2.6 });
       this.fx3d(pos.clone(), el, Math.min(2.2, 0.5 + size * 0.45), color);
+      if (size >= 1.2) this.grandFx(pos, el, color, Math.min(2, size * 0.6));
+      else this.flashLight(pos, color, size * 0.6, 0.25);
     }
     const n = 7;
     const geo = spec ? primOf(spec) : SG.tetra;
@@ -1632,6 +1838,11 @@ export class Battle {
   update(rawDt, playerInput) {
     this.slowmo -= rawDt;
     const dt = rawDt * (this.slowmo > 0 ? 0.4 : 1);
+    for (const L of this.fxLights) {
+      const u = L.userData;
+      u.t = Math.max(0, u.t - rawDt);
+      L.intensity = u.t > 0 ? u.p * (u.t / u.life) : 0;
+    }
     const idle = { mx: 0, mz: 0 };
     for (const f of this.fighters) {
       let inp = idle;

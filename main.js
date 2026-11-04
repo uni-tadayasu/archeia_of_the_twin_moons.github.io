@@ -648,11 +648,11 @@ function goBackCurrent() {
 }
 // 運営長：運営長キーでのみ（このタブの間だけ）
 function chiefUnlocked() {
-  return sessionStorage.getItem('arkeia-chief') === '1';
+  return localStorage.getItem('arkeia-chief') === '1' || sessionStorage.getItem('arkeia-chief') === '1';
 }
 // 運営：運営キー（このタブの間）／招待コードで登録済み（この端末）／運営長
 function operatorUnlocked() {
-  return sessionStorage.getItem('arkeia-op') === '1' || localStorage.getItem('arkeia-op-reg') === '1' || chiefUnlocked();
+  return localStorage.getItem('arkeia-op') === '1' || sessionStorage.getItem('arkeia-op') === '1' || localStorage.getItem('arkeia-op-reg') === '1' || chiefUnlocked();
 }
 // CPUの強さ：敵の頭の良さ(cpu)と体力を倍率で変える
 const DIFFS = [
@@ -671,7 +671,7 @@ function canUse(k) {
   if (d.locked) return operatorUnlocked();
   return true;
 }
-const SELECT_KEYS = () => [...ROSTER, 'seraphel', 'chief', 'crimson'];
+const SELECT_KEYS = () => [...ROSTER, 'seraphel', 'chief', 'sovereign', 'crimson'];
 function refreshTitle() {
   $('#btn-invade').hidden = !operatorUnlocked();
   $('#title-shards').textContent = `灯晶　${save.shards}`;
@@ -1802,7 +1802,8 @@ $('#op-form').addEventListener('submit', async (e) => {
     msg.textContent = '鍵穴が熱を持っています。少し待ってから。';
     return;
   }
-  const val = $('#op-key').value.slice(0, 128);
+  // 全角文字・前後の空白・改行を正規化（スマホやIMEの全角ハイフン対策）
+  const val = $('#op-key').value.normalize('NFKC').replace(/[‐‑‒–—―ー−]/g, '-').trim().slice(0, 128);
   $('#op-key').value = '';
   try {
     const h = await sha256(val);
@@ -1813,10 +1814,10 @@ $('#op-form').addEventListener('submit', async (e) => {
       refreshOptions();
     };
     if (safeEqual(h, CHIEF_KEY_SHA256)) {
-      sessionStorage.setItem('arkeia-chief', '1');
+      localStorage.setItem('arkeia-chief', '1');
       ok('運営長として認められた。白耀の天后ルミナリアが目を覚ます。');
     } else if (safeEqual(h, OPERATOR_KEY_SHA256)) {
-      sessionStorage.setItem('arkeia-op', '1');
+      localStorage.setItem('arkeia-op', '1');
       ok('かちり、と音がした。裁定者セラフェルが目を覚ます。');
     } else if (/^OP-[A-Z0-9-]{8,20}$/.test(val.trim().toUpperCase()) && (msg.textContent = '招待を確かめています…') && await redeemInvite(await sha256('arkeia-invite:' + val.trim().toUpperCase()))) {
       localStorage.setItem('arkeia-op-reg', '1');
