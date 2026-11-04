@@ -1,7 +1,7 @@
 // 運営キー設定。平文キーは置かず、SHA-256ハッシュのみを保持する。
 // 変更手順: ブラウザのコンソールで  await ArkeiaOps.hash('新しいキー')  を実行し、
 // 出力された文字列を下の値に貼り替える。（初期キーは "abc" — 必ず変更すること）
-export const OPERATOR_KEY_SHA256 = 'ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad';
+export const OPERATOR_KEY_SHA256 = 'tadayasu-uni-1996-01-28';
 // 運営長キー（運営キーとは別物）。運営長は運営招待コードを発行でき、ルミナリアを使える。
 // 初期キーは "password" — 必ず変更すること（変更手順は運営キーと同じ）
 export const CHIEF_KEY_SHA256 = '5e884898da28047151d0e56f8dc6292773603d0d6aabbdd62a11ef721d1542d8';
