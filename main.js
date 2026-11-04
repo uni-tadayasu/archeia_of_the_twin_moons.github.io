@@ -40,6 +40,7 @@ moon.castShadow = true;
 moon.shadow.mapSize.set(1024, 1024);
 Object.assign(moon.shadow.camera, { left: -16, right: 16, top: 16, bottom: -16 });
 scene.add(moon);
+scene.add(moon.target);
 
 const texLoader = new THREE.TextureLoader();
 const floorTex = texLoader.load('assets/arena-floor.webp');
@@ -228,10 +229,12 @@ pool('hit', 'assets/audio/hit-impact.mp3', 4);
 pool('burst', 'assets/audio/arte-burst.mp3', 2);
 let proc = null;
 function startProc() {
-  const m = /^bgm:(\d+)$/.exec(audio.current || '');
+  const m = /^(bgm|field):(\d+)$/.exec(audio.current || '');
   if (!m || !audio.ctx || audio.muted) return;
   proc ||= new ProcMusic(audio.ctx);
-  proc.play(BGM[+m[1] % BGM.length]);
+  const n = +m[2];
+  // フィールド用：壮大な冒険曲（金管・聖歌隊を必ず入れ、ゆったり力強いテンポ）
+  proc.play(m[1] === 'field' ? { seed: 50021 + n * 131, bpm: 104 + (n % 6) * 4, epic: true } : BGM[n % BGM.length]);
 }
 function playTrack(name) {
   if (audio.current === name) {
@@ -488,7 +491,7 @@ const padState = { mx: 0, mz: 0, guard: false };
 const KEYMAP = { KeyJ: 'attack', KeyZ: 'attack', KeyK: 'skill', KeyX: 'skill', KeyU: 'skill2', KeyV: 'skill2', KeyL: 'over', KeyC: 'over', Space: 'jump' };
 
 function inBattleView() {
-  return !!state.battle && !document.querySelector('.screen.on');
+  return (!!state.battle || !!state.field) && !document.querySelector('.screen.on');
 }
 
 window.addEventListener('keydown', (e) => {
@@ -910,6 +913,7 @@ function openStageSelect(crumb, onBack) {
 
 function goTitle() {
   endBattle();
+  leaveField();
   setStage(STAGES[0]);
   state.mode = null;
   state.invaded = false;
@@ -950,6 +954,24 @@ const ui = {
   },
   callout(f, name) {
     ui.popup(f.pos, name, '#f4ead2');
+  },
+  // 画面上部の技名表示：次の技で切り替わり、出なければ自然に消える
+  skillName(f, spec, isOver) {
+    const el = $('#skillname');
+    if (!el || !spec) return;
+    const KIND = { projectile: '飛び道具', dash: '突進', shockwave: '衝撃波', rain: '降りそそぐ範囲攻撃', implode: '引き寄せ爆発', judgment: '大範囲の奥義' };
+    const ally = f.team === 0;
+    el.querySelector('.sn-who').textContent = `${f.name}${ally ? '' : '（敵）'}`;
+    el.querySelector('.sn-name').textContent = spec.name;
+    el.querySelector('.sn-kind').textContent = (isOver ? '奥義 ／ ' : '技 ／ ') + (KIND[spec.kind] || '特技');
+    el.style.setProperty('--sc', '#' + (spec.color ?? 0xffffff).toString(16).padStart(6, '0'));
+    el.classList.toggle('over', !!isOver);
+    el.classList.toggle('foe', !ally);
+    el.classList.remove('show', 'hide');
+    void el.offsetWidth;
+    el.classList.add('show');
+    clearTimeout(el._t);
+    el._t = setTimeout(() => el.classList.add('hide'), isOver ? 3000 : 2200);
   },
   flash() {
     const fl = $('#flash');
@@ -999,6 +1021,30 @@ function beginBattle(boss) {
   const bgmIdx = (currentStage?.bgm ?? 0) % BGM.length;
   playTrack(boss ? 'boss' : 'bgm:' + bgmIdx);
   ui.banner({ name: boss ? '— 双月の下で —' : `— ♪ ${BGM[bgmIdx].name} —` }, '剣を抜け');
+  // 開戦の合図：構え → 3・2・1 → 戦闘開始！（その間は誰も動かない）
+  const b = state.battle;
+  b.intro = 4.3;
+  const cd = $('#countdown');
+  clearTimeout(cd._t);
+  const seq = [[1200, '構え……', 'ui'], [900, '3', 'ui'], [900, '2', 'ui'], [900, '1', 'ui'], [900, '戦闘開始！', 'burst']];
+  let i = 0;
+  const step = () => {
+    if (state.battle !== b || i >= seq.length) {
+      cd.hidden = true;
+      return;
+    }
+    const [ms, txt, s] = seq[i++];
+    cd.hidden = false;
+    cd.textContent = txt;
+    cd.classList.toggle('fight', i === seq.length);
+    cd.classList.remove('go');
+    void cd.offsetWidth;
+    cd.classList.add('go');
+    sfx(s);
+    if (i === seq.length) ui.flash();
+    cd._t = setTimeout(step, ms);
+  };
+  cd._t = setTimeout(step, 600);
 }
 
 function buildHud() {
@@ -1055,6 +1101,17 @@ function onBattleEnd(won) {
     return;
   }
   if (state.mode === 'story') {
+    // フィールドの魔物シンボルとの戦闘
+    if (state.encounter) {
+      const sym = state.encounter;
+      state.encounter = null;
+      if (won && state.invaded) grant(100);
+      const r = won ? grant(15 + Math.floor(state.chapter / 4)) : 0;
+      endBattle();
+      returnToField(sym, won);
+      ui.banner({ name: won ? '— 魔物を退けた —' : '— 町の宿で目を覚ました —' }, won ? `灯晶 +${r}` : 'もう一度、北を目指そう');
+      return;
+    }
     if (won) {
       if (state.invaded) {
         grant(100);
@@ -1063,6 +1120,7 @@ function onBattleEnd(won) {
       grant(REWARD.story);
       const ch = STORY[state.chapter];
       endBattle();
+      leaveField();
       playTrack('story');
       playDialogue(ch.after, () => {
         state.chapter++;
@@ -1101,7 +1159,8 @@ function showResult(title, text, reward, retry, next) {
 $('#btn-retry').addEventListener('click', () => {
   sfx('ui');
   if (state.mode === 'story') {
-    runStoryChapter();
+    if (state.field) startChapterBattle();
+    else runStoryChapter();
   } else {
     startOffline();
   }
@@ -1152,42 +1211,178 @@ function runStoryChapter() {
   $('#story-chapter').textContent = (ch.part ? ch.part + '　' : '') + ch.title;
   playTrack('story');
   setStage(stageById(ch.stage));
-  playDialogue(ch.before, async () => {
-    await loadPromise;
-    const b = makeBattle(null);
-    const party = save.party.length ? save.party : ['rowen'];
-    const mainKey = party.includes(save.main) ? save.main : party[0];
-    state.myKey = mainKey;
-    const me = b.add(mainKey, { team: 0, player: true, pos: [-4, 3], name: FIGHTERS[mainKey].name + '（あなた）', upg: upgFor(mainKey) });
-    const spots = [[-6, 0], [-6, 5], [-3, -2]];
-    party.filter((k) => k !== mainKey).forEach((k, i) => {
-      b.add(k, { team: 0, cpu: 0.8, pos: spots[i], upg: upgFor(k) });
-    });
-    if (allowInvade()) {
-      ensureWorld().then((w) => {
-        if (w && state.battle === b) {
-          b.net = w;
-          me.netId = w.myId;
-        }
-      });
-    }
-    // 通常の章は敵がランダムに1〜6体（先の章ほど多く出やすい）、ボス章は決められた敵
-    let foes = ch.enemies;
-    if (!ch.boss) {
-      const lvl = ch.enemies[0]?.hpMul || 1;
-      const prog = Math.min(1, state.chapter / Math.max(1, STORY.length - 1));
-      const w = [1, 2, 3, 4, 5, 6].map((k) => Math.pow(k, 4 * prog));
-      let roll = Math.random() * w.reduce((a, b) => a + b, 0);
-      let n = 1;
-      while (n < 6 && (roll -= w[n - 1]) > 0) n++;
-      foes = Array.from({ length: n }, () => ({ k: ENEMY_ROSTER[Math.floor(Math.random() * ENEMY_ROSTER.length)], hpMul: lvl }));
-    }
-    const baseCpu = Math.min(0.95, 0.55 + state.chapter * 0.006);
-    foes.forEach((e, i) => {
-      b.add(e.k, { team: 1, cpu: foeCpu(baseCpu), pos: [3 + (i % 3) * 2.4, -4 + Math.floor(i / 3) * 3], facing: Math.PI, tint: e.tint, name: e.name, hpMul: foeHp(e.hpMul) * (ch.boss ? 1 + 0.35 * (party.length - 1) : 1), scale: e.scale });
-    });
-    beginBattle(!!ch.boss);
+  playDialogue(ch.before, () => enterField());
+}
+
+// 1〜6体（先の章ほど多く出やすい）
+function rollFoeCount() {
+  const prog = Math.min(1, state.chapter / Math.max(1, STORY.length - 1));
+  const w = [1, 2, 3, 4, 5, 6].map((k) => Math.pow(k, 4 * prog));
+  let roll = Math.random() * w.reduce((a, b) => a + b, 0);
+  let n = 1;
+  while (n < 6 && (roll -= w[n - 1]) > 0) n++;
+  return n;
+}
+function storyParty() {
+  const party = save.party.length ? save.party : ['rowen'];
+  const mainKey = party.includes(save.main) ? save.main : party[0];
+  return { party, mainKey };
+}
+// 戦闘を組む（パーティ＋敵）
+function buildStoryBattle(foes, boss) {
+  const ch = STORY[state.chapter];
+  setStage(stageById(ch.stage));
+  if (arena) arena.visible = true;
+  if (state.field) state.field.group.visible = false;
+  document.body.classList.remove('field-mode');
+  resetFieldLight();
+  const b = makeBattle(null);
+  const { party, mainKey } = storyParty();
+  state.myKey = mainKey;
+  const me = b.add(mainKey, { team: 0, player: true, pos: [-4, 3], name: FIGHTERS[mainKey].name + '（あなた）', upg: upgFor(mainKey) });
+  const spots = [[-6, 0], [-6, 5], [-3, -2]];
+  party.filter((k) => k !== mainKey).forEach((k, i) => {
+    b.add(k, { team: 0, cpu: 0.8, pos: spots[i], upg: upgFor(k) });
   });
+  if (allowInvade()) {
+    ensureWorld().then((w) => {
+      if (w && state.battle === b) {
+        b.net = w;
+        me.netId = w.myId;
+      }
+    });
+  }
+  const baseCpu = Math.min(0.95, 0.55 + state.chapter * 0.006);
+  foes.forEach((e, i) => {
+    b.add(e.k, { team: 1, cpu: foeCpu(baseCpu), pos: [3 + (i % 3) * 2.4, -4 + Math.floor(i / 3) * 3], facing: Math.PI, tint: e.tint, name: e.name, hpMul: foeHp(e.hpMul) * (boss ? 1 + 0.35 * (party.length - 1) : 1), scale: e.scale });
+  });
+  beginBattle(!!boss);
+}
+// 目的地の決戦：ボス章は決められた敵、通常の章は1〜6体
+async function startChapterBattle() {
+  await loadPromise;
+  const ch = STORY[state.chapter];
+  state.encounter = null;
+  let foes = ch.enemies;
+  if (!ch.boss) {
+    const lvl = ch.enemies[0]?.hpMul || 1;
+    foes = Array.from({ length: rollFoeCount() }, (_, i) => ({ k: i === 0 && ch.enemies[0] ? ch.enemies[0].k : ENEMY_ROSTER[Math.floor(Math.random() * ENEMY_ROSTER.length)], hpMul: lvl }));
+  }
+  buildStoryBattle(foes, ch.boss);
+}
+// 魔物シンボルとの戦闘
+function startEncounter(sym) {
+  const ch = STORY[state.chapter];
+  const lvl = Math.min(ch.enemies.find((e) => !e.scale)?.hpMul || 1, 1 + state.chapter * 0.02);
+  const n = rollFoeCount();
+  const foes = Array.from({ length: n }, (_, i) => ({ k: i === 0 ? sym.key : ENEMY_ROSTER[Math.floor(Math.random() * ENEMY_ROSTER.length)], hpMul: lvl }));
+  state.encounter = sym;
+  buildStoryBattle(foes, false);
+}
+
+// ---------- Field（ワールド探索） ----------
+function resetFieldLight() {
+  moon.position.set(8, 16, 6);
+  moon.target.position.set(0, 0, 0);
+  scene.fog.near = 30;
+  scene.fog.far = 80;
+}
+async function enterField() {
+  // フィールドは物語でしか使わないので必要になった時だけ読み込む（初回表示を軽く）
+  const [{ Field }] = await Promise.all([import('./field.js'), loadPromise]);
+  leaveField();
+  const ch = STORY[state.chapter];
+  const st = stageById(ch.stage);
+  setStage(st);
+  const { party, mainKey } = storyParty();
+  state.myKey = mainKey;
+  state.field = new Field(scene, {
+    chapter: state.chapter, ch, stage: st, assets, floorTex,
+    mainKey, partyKeys: party, npcKeys: ROSTER, enemyPool: ENEMY_ROSTER,
+    onTalk: (lines) => {
+      sfx('ui');
+      playDialogue(lines, () => show(null));
+    },
+    onChest: (n) => {
+      grant(n);
+      sfx('burst');
+      ui.banner({ name: '— 宝箱をあけた —' }, `灯晶 +${n}`);
+    },
+    onRegion: (name, first) => {
+      if (!first) sfx('ui');
+      ui.banner({ name: first ? `— ${ch.title} —` : '— ここは —' }, name);
+    },
+    onEncounter: (sym) => {
+      sfx('burst');
+      ui.flash();
+      ui.banner({ name: '— 魔物が現れた！ —' }, FIGHTERS[sym.key]?.name || '魔物');
+      setTimeout(() => {
+        if (state.field && !state.battle) startEncounter(sym);
+      }, 700);
+    },
+    onGoal: () => {
+      sfx('burst');
+      ui.flash();
+      setTimeout(() => {
+        if (state.field && !state.battle) startChapterBattle();
+      }, 600);
+    }
+  });
+  if (arena) arena.visible = false;
+  scene.fog.near = 45;
+  scene.fog.far = 130;
+  document.body.classList.add('field-mode');
+  $('#hud-left').replaceChildren();
+  $('#hud-right').replaceChildren();
+  state.fieldHud = '';
+  show(null);
+  playTrack('field:' + state.chapter);
+}
+function returnToField(sym, won) {
+  const f = state.field;
+  if (!f) {
+    goTitle();
+    return;
+  }
+  if (arena) arena.visible = false;
+  f.group.visible = true;
+  f.resume(sym, won);
+  scene.fog.near = 45;
+  scene.fog.far = 130;
+  document.body.classList.add('field-mode');
+  $('#hud-left').replaceChildren();
+  $('#hud-right').replaceChildren();
+  show(null);
+  playTrack('field:' + state.chapter);
+}
+function leaveField() {
+  if (state.field) {
+    state.field.dispose();
+    state.field = null;
+  }
+  state.encounter = null;
+  document.body.classList.remove('field-mode');
+  if (arena) arena.visible = true;
+  resetFieldLight();
+}
+const mapCtx = $('#field-map')?.getContext('2d');
+function updateFieldHud() {
+  const f = state.field;
+  const p = f.player.pos;
+  moon.position.set(p.x + 8, 16, p.z + 6);
+  moon.target.position.set(p.x, 0, p.z);
+  const obj = f.objective();
+  if (obj !== state.fieldObj) {
+    state.fieldObj = obj;
+    $('#field-obj').textContent = obj;
+  }
+  if (f.prompt !== state.fieldHud) {
+    state.fieldHud = f.prompt;
+    $('#field-prompt').textContent = f.prompt;
+    $('#field-prompt').hidden = !f.prompt;
+  }
+  $('#field-region').textContent = f.region;
+  if (mapCtx) f.drawMap(mapCtx);
 }
 
 // ---------- Forge ----------
@@ -1602,7 +1797,7 @@ function worldTick(dt) {
 
 // ---------- Pause ----------
 function togglePause() {
-  if (!state.battle || document.querySelector('.screen.on')) {
+  if ((!state.battle && !state.field) || document.querySelector('.screen.on')) {
     return;
   }
   if (state.invaded || state.mode === 'invade') {
@@ -1937,6 +2132,10 @@ renderer.setAnimationLoop((time) => {
     state.battle.update(dt, state.paused ? { mx: 0, mz: 0 } : readInput());
     netTick(dt);
     updateHud();
+  } else if (state.field && !state.battle) {
+    const live = !state.paused && !document.querySelector('.screen.on');
+    state.field.update(live ? dt : 0, live ? readInput() : null, camera);
+    updateFieldHud();
   } else if (!state.battle) {
     camera.position.set(Math.sin(t * 0.1) * 16, 7, Math.cos(t * 0.1) * 16);
     camera.lookAt(0, 2, 0);

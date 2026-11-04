@@ -163,6 +163,13 @@ export class ProcMusic {
   play(track) {
     this.stop();
     this.song = this.compose(track.seed);
+    if (track.bpm) this.song.bpm = track.bpm;
+    if (track.epic) {
+      this.song.brass = true;
+      this.song.choir = true;
+      this.song.arpOct = 2;
+      this.song.keyUp = 2;
+    }
     this.step = 0;
     this.spb = 60 / this.song.bpm / 4;
     const dt = this.spb * 3;

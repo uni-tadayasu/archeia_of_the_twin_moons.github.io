@@ -23,13 +23,20 @@
     <link rel="icon" type="image/webp" href="assets/app-icon.webp" />
     <link rel="apple-touch-icon" href="assets/app-icon.webp" />
     <meta name="referrer" content="strict-origin-when-cross-origin" />
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://esm.sh https://storage.googleapis.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob: https:; media-src 'self' blob: https:; connect-src 'self' data: blob: https: wss:; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'none'; upgrade-insecure-requests" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://esm.sh https://storage.googleapis.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob: https:; media-src 'self' blob: https:; connect-src 'self' data: blob: https://esm.sh https://api.instantdb.com wss://api.instantdb.com https://*.instantdb.com wss://*.instantdb.com https://storage.googleapis.com; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'none'; upgrade-insecure-requests" />
     <script type="application/ld+json">
       {"@context":"https://schema.org","@type":"VideoGame","name":"双月のアルケイア","alternateName":"Arkeia of Twin Moons","description":"100人の戦士と全100章の物語を楽しめる、ブラウザ3Dアリーナファンタジーアクション。","image":"assets/app-icon.webp","genre":["Action","Fighting","Fantasy","RPG"],"gamePlatform":["Web browser","PC","Mobile"],"playMode":["SinglePlayer","MultiPlayer","CoOp"],"applicationCategory":"Game","operatingSystem":"Any","inLanguage":"ja","isAccessibleForFree":true,"offers":{"@type":"Offer","price":"0","priceCurrency":"JPY"}}
     </script>
     <link rel="modulepreload" href="./main.js" />
     <link rel="modulepreload" href="./game.js" />
     <link rel="modulepreload" href="./data.js" />
+    <link rel="modulepreload" href="./music.js" />
+    <link rel="preconnect" href="https://esm.sh" crossorigin>
+    <meta name="author" content="双月のアルケイア制作" />
+    <meta name="format-detection" content="telephone=no" />
+    <meta name="color-scheme" content="dark" />
+    <meta property="og:image:alt" content="双月のアルケイアのアイコン" />
+    <meta name="twitter:description" content="100人の戦士と全100章の物語。インストール不要、PC・スマホで無料プレイ。" />
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Shippori+Mincho:wght@500;800&display=swap" rel="stylesheet">
@@ -138,6 +145,32 @@
       #banner i { display:block; font-style:normal; letter-spacing:.5em; font-size:clamp(11px,1.8vmin,14px); color:var(--brass); }
       #banner b { font-size:clamp(20px,5vmin,46px); letter-spacing:.1em; text-shadow:0 0 20px #fff1a0, 0 2px 0 #000; }
       #banner.go { animation:ban 1.6s ease-out; }
+      #countdown { position:absolute; top:44%; left:0; right:0; text-align:center; pointer-events:none; font-size:clamp(40px,12vmin,120px); font-weight:900; letter-spacing:.08em; color:#fff6d8; text-shadow:0 0 24px #ffd060, 0 0 60px #ff9030, 0 4px 0 #000; transform:translateY(-50%); }
+      #countdown[hidden] { display:none; }
+      #field-hud { display:none; }
+      body.field-mode #field-hud { display:block; }
+      body.field-mode #gauges, body.field-mode #hud-left, body.field-mode #hud-right { display:none; }
+      #field-info { position:absolute; left:max(8px,env(safe-area-inset-left)); top:max(8px,env(safe-area-inset-top)); max-width:min(420px,60vw); background:linear-gradient(90deg,rgba(10,8,20,.8),rgba(10,8,20,0)); padding:6px 30px 6px 10px; border-left:3px solid var(--brass); pointer-events:none; }
+      #field-info b { display:block; font-size:clamp(15px,2.8vmin,22px); letter-spacing:.12em; text-shadow:0 2px 0 #000; }
+      #field-info span { display:block; font-size:clamp(11px,1.8vmin,14px); color:#ffe9a0; margin-top:2px; }
+      #field-info small { display:block; font-size:10px; color:#cfc6e0; margin-top:3px; opacity:.85; }
+      #field-map { position:absolute; right:max(8px,env(safe-area-inset-right)); top:max(8px,env(safe-area-inset-top)); width:clamp(96px,17vmin,150px); height:auto; background:rgba(10,12,28,.72); border:2px solid var(--brass); border-radius:6px; box-shadow:0 0 14px rgba(0,0,0,.7), inset 0 0 10px rgba(201,166,90,.25); pointer-events:none; image-rendering:auto; z-index:2; }
+      body.field-mode #field-map { display:block !important; }
+      #field-prompt { position:absolute; left:50%; bottom:22%; transform:translateX(-50%); background:rgba(10,8,20,.85); border:1px solid var(--brass); padding:6px 16px; font-size:clamp(12px,2vmin,16px); letter-spacing:.08em; pointer-events:none; animation:bob 1s infinite; white-space:nowrap; }
+      #field-prompt[hidden] { display:none; }
+      #skillname { --sc:#ffd060; position:absolute; top:clamp(54px,9vh,84px); left:50%; transform:translateX(-50%); min-width:min(80vw,280px); max-width:92vw; padding:6px 22px 7px; text-align:center; pointer-events:none; opacity:0; border-radius:6px; background:linear-gradient(90deg,transparent,rgba(10,8,20,.82) 15%,rgba(10,8,20,.82) 85%,transparent); border-top:2px solid var(--sc); border-bottom:1px solid color-mix(in srgb,var(--sc) 50%,transparent); }
+      #skillname .sn-who { display:block; font-size:clamp(10px,1.6vmin,13px); letter-spacing:.3em; color:#d8cfb8; }
+      #skillname .sn-name { display:block; font-size:clamp(16px,3.6vmin,30px); letter-spacing:.06em; color:#fff; text-shadow:0 0 14px var(--sc), 0 2px 0 #000; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+      #skillname .sn-kind { display:block; font-size:clamp(10px,1.5vmin,12px); color:var(--sc); letter-spacing:.15em; }
+      #skillname.foe .sn-who { color:#ff9a80; }
+      #skillname.over .sn-name { font-size:clamp(18px,4.4vmin,38px); }
+      #skillname.show { animation:snin .28s ease-out forwards; }
+      #skillname.show.hide { animation:snout .6s ease-in forwards; }
+      @keyframes snin { 0% { opacity:0; transform:translateX(-50%) translateY(-10px) scaleX(1.25); } 100% { opacity:1; transform:translateX(-50%); } }
+      @keyframes snout { 0% { opacity:1; transform:translateX(-50%); } 100% { opacity:0; transform:translateX(-50%) translateY(-8px); } }
+      #countdown.fight { color:#fff; font-size:clamp(36px,10vmin,104px); text-shadow:0 0 30px #ff5030, 0 0 80px #ffd060, 0 4px 0 #000; }
+      #countdown.go { animation:cdpop .85s cubic-bezier(.2,1.6,.4,1) forwards; }
+      @keyframes cdpop { 0% { opacity:0; transform:translateY(-50%) scale(2.4); } 25% { opacity:1; transform:translateY(-50%) scale(1); } 75% { opacity:1; } 100% { opacity:0; transform:translateY(-50%) scale(.85); } }
       @keyframes ban { 0% { opacity:0; transform:scaleX(1.6); } 15% { opacity:1; transform:none; } 80% { opacity:1; } 100% { opacity:0; } }
       #flash { position:absolute; inset:0; background:#fffbe6; opacity:0; }
       #flash.go { animation:fl .7s ease-out; }
@@ -243,8 +276,8 @@
         </div>
     </div>
 </div>
+    <noscript><h1>双月のアルケイア</h1><p>ブラウザで遊べる3Dアリーナファンタジーアクション。100人の戦士、全100章の物語、オンライン対戦・協力に対応。プレイにはJavaScriptを有効にしてください。</p></noscript>
     <div id="game-container"></div>
-    <noscript>『双月のアルケイア』はJavaScriptを有効にすると遊べる、ブラウザ向け3Dアリーナファンタジーアクションです。</noscript>
     <main id="ui">
       <section id="scr-press" class="screen on" aria-label="はじまり">
         <div class="inner">
@@ -386,10 +419,17 @@
         <div id="hud-right" class="hud-side"></div>
         <button id="btn-pause" aria-label="休む">‖ 休む</button>
         <div id="gauges"><div id="flux">灯力<i><u></u></i></div><div id="over">奥義<i><u></u></i></div></div>
+        <div id="field-hud">
+          <div id="field-info"><b id="field-region"></b><span id="field-obj"></span><small>WASD／スティックで移動・Shiftで駆け足・赤い輪の魔物に触れると戦闘</small></div>
+          <canvas id="field-map" width="104" height="228" aria-label="地図"></canvas>
+          <div id="field-prompt" hidden></div>
+        </div>
       </div>
       <div id="pops"></div>
       <div id="flash"></div>
       <div id="banner"><i></i><b></b></div>
+      <div id="countdown" hidden></div>
+      <div id="skillname"><span class="sn-who"></span><b class="sn-name"></b><small class="sn-kind"></small></div>
       <div id="touch" hidden>
         <div id="joy"><div id="knob"></div></div>
         <div id="tbtns">
