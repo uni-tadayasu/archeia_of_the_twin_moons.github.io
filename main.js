@@ -1389,6 +1389,7 @@ async function enterField() {
   state.fieldHud = '';
   show(null);
   playTrack('field:' + state.chapter);
+  state.field.setOwnName(myName());
   // 世界中の旅人とつながる
   ensureWorld().then(() => refreshFieldRemotes());
 }
@@ -1857,7 +1858,7 @@ function worldTick(dt) {
 
 // ---------- World（旅人どうしの交流：姿の反映・決闘・フレンド） ----------
 function myName() {
-  return (save.uname || $('#lobby-name').value || '旅人').replace(/[<>&"']/g, '').trim().slice(0, 12) || '旅人';
+  return [...(save.uname || $('#lobby-name').value || '旅人').replace(/[<>&"']/g, '').trim()].slice(0, 10).join('') || '旅人';
 }
 const isFriend = (pid) => !!pid && save.friends.some((f) => f.pid === pid);
 function refreshFieldRemotes() {
@@ -1865,8 +1866,8 @@ function refreshFieldRemotes() {
   const w = state.world;
   if (!f || !w) return;
   const list = Object.values(state.worldPeers || {})
-    .filter((p) => p.role === 'field' && p.ch === state.chapter && p.id !== w.myId && p.pid !== save.pid)
-    .map((p) => ({ id: p.id, name: p.name, fk: FIGHTERS[p.fk] ? p.fk : 'rowen', x: p.fx, z: p.fz, ry: p.ry, mv: p.mv, friend: isFriend(p.pid) }));
+    .filter((p) => p.role === 'field' && p.id !== w.myId && p.pid !== save.pid)
+    .map((p) => ({ id: p.id, name: [...p.name].slice(0, 10).join(''), fk: FIGHTERS[p.fk] ? p.fk : 'rowen', x: p.fx, z: p.fz, ry: p.ry, mv: p.mv, friend: isFriend(p.pid) }));
   f.setRemotes(list);
 }
 function peerStatus(p) {
@@ -2041,8 +2042,10 @@ $('#world-close').addEventListener('click', () => {
   $('#world-panel').hidden = true;
 });
 $('#world-name').addEventListener('change', () => {
-  save.uname = $('#world-name').value.replace(/[<>&"']/g, '').trim().slice(0, 12);
+  save.uname = [...$('#world-name').value.replace(/[<>&"']/g, '').trim()].slice(0, 10).join('');
+  $('#world-name').value = myName();
   persist();
+  state.field?.setOwnName(myName());
 });
 $('#world-req-yes').addEventListener('click', () => answerReq(true));
 $('#world-req-no').addEventListener('click', () => answerReq(false));

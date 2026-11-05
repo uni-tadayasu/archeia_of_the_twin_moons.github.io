@@ -1605,9 +1605,26 @@ export class Field {
     sp.renderOrder = 10;
     return sp;
   }
+  // 自分の頭上にも旅人名
+  setOwnName(name) {
+    const p = this.player;
+    if (p.label === name) return;
+    if (p.tag) {
+      p.root.remove(p.tag);
+      p.tag.material.map.dispose();
+      p.tag.material.dispose();
+    }
+    p.tag = this.nameTag(name, false);
+    p.tag.material.map.needsUpdate = true;
+    p.tag.position.y = (FIGHTERS[this.o.mainKey]?.height || 1.75) + 0.55;
+    p.root.add(p.tag);
+    p.label = name;
+  }
   setRemotes(list) {
     const seen = new Set();
-    for (const p of list.slice(0, 30)) {
+    const me = this.player.pos;
+    const near = list.slice().sort((u, v) => Math.hypot(u.x - me.x, u.z - me.z) - Math.hypot(v.x - me.x, v.z - me.z));
+    for (const p of near.slice(0, 60)) {
       seen.add(p.id);
       let a = this.remotes.get(p.id);
       if (a && a.fk !== p.fk) {
@@ -1694,6 +1711,8 @@ export class Field {
 
   dispose() {
     for (const id of [...this.remotes.keys()]) this.removeRemote(id);
+    this.player?.tag?.material.map.dispose();
+    this.player?.tag?.material.dispose();
     this.scene.remove(this.group);
     for (const a of [this.player, ...this.followers, ...this.npcs, ...this.syms, this.boss]) a?.mixer?.stopAllAction();
     for (const x of this.own) x.dispose?.();
