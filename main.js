@@ -187,6 +187,7 @@ function loadSave() {
   s.pid = raw.pid;
   s.friends = raw.friends;
   s.uname = raw.uname;
+  s.noHero = !!raw.noHero;
   return s;
 }
 const save = loadSave();
@@ -799,14 +800,26 @@ function openPartySelect(done) {
   $('#party-bar').hidden = false;
   const grid = $('#select-grid');
   const cards = {};
+  // 運営長・運営だけ：主人公（自分で操作するキャラ）を外し、全員を自動で戦わせられる
+  const op = operatorUnlocked();
+  let noHero = op && !!save.noHero;
+  const nh = $('#party-nohero');
+  nh.hidden = !op;
+  nh.onclick = () => {
+    sfx('ui');
+    noHero = !noHero;
+    render();
+  };
   const render = () => {
+    nh.textContent = noHero ? '主人公：外す（全員が自動で戦う）' : '主人公：あり（★を自分で操作）';
     const slots = $('#party-slots');
     slots.replaceChildren();
     for (let i = 0; i < 4; i++) {
       const k = party[i];
       const b = document.createElement('button');
-      b.textContent = k ? (k === main ? '★ ' : '') + FIGHTERS[k].name : '（空き）';
-      b.className = k === main ? 'main' : '';
+      const isMain = k === main && !noHero;
+      b.textContent = k ? (isMain ? '★ ' : '') + FIGHTERS[k].name : '（空き）';
+      b.className = isMain ? 'main' : '';
       b.disabled = !k;
       b.addEventListener('click', () => {
         sfx('ui');
@@ -857,6 +870,7 @@ function openPartySelect(done) {
     sfx('ui');
     save.party = party.slice();
     save.main = main;
+    save.noHero = op && noHero;
     persist();
     $('#party-bar').hidden = true;
     done();
@@ -1272,7 +1286,11 @@ function buildStoryBattle(foes, boss) {
   const foeAtkBal = Math.max(0.55, (0.82 + 0.3 * prog) * Math.pow(0.9, crowd) * (state.encounter ? 0.85 : 1));
   const allyDef = Math.max(0.7, 1 - 0.08 * Math.max(0, 4 - nA) - 0.04 * crowd);
   const allyAtk = 1 + 0.06 * Math.max(0, 4 - nA);
-  const me = b.add(mainKey, { team: 0, player: true, pos: [-4, 3], name: FIGHTERS[mainKey].name + '（あなた）', upg: upgFor(mainKey), defMul: allyDef, atkMul: allyAtk });
+  // 運営が主人公を外した場合：先頭の戦士もAIで戦い、プレイヤーは見守る
+  const noHero = !!save.noHero && operatorUnlocked();
+  const me = noHero
+    ? b.add(mainKey, { team: 0, cpu: Math.min(0.95, 0.8 + prog * 0.15), pos: [-4, 3], upg: upgFor(mainKey), defMul: allyDef, atkMul: allyAtk })
+    : b.add(mainKey, { team: 0, player: true, pos: [-4, 3], name: FIGHTERS[mainKey].name + '（あなた）', upg: upgFor(mainKey), defMul: allyDef, atkMul: allyAtk });
   const spots = [[-6, 0], [-6, 5], [-3, -2]];
   party.filter((k) => k !== mainKey).forEach((k, i) => {
     // 仲間AIは章が進むほど賢く、主人公よりわずかに控えめな火力
