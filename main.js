@@ -235,7 +235,65 @@ function persist() {
   } catch (err) {
     console.warn(err);
   }
+  scheduleAutoSync();
 }
+// ---- 常時同期：同期コードがある端末は、変更を自動で預け、他端末の新しい記録を自動で受け取る ----
+var autoPushTimer = 0, autoBusy = false;
+var syncReady = false; // 起動直後の保存では「変更あり」にしない（他端末の新しい記録を先に確認する）
+const syncCodeNow = () => String(localStorage.getItem('arkeia-sync') || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+function scheduleAutoSync() {
+  if (!syncReady || syncCodeNow().length !== 12) return;
+  try { localStorage.setItem('arkeia-sync-dirty', '1'); } catch {}
+  clearTimeout(autoPushTimer);
+  autoPushTimer = setTimeout(autoPush, 8000);
+}
+async function autoPush() {
+  const code = syncCodeNow();
+  if (code.length !== 12 || autoBusy) return;
+  autoBusy = true;
+  try {
+    const at = Date.now();
+    const json = JSON.stringify({ ...save, syncAt: at });
+    if (apiEnabled()) {
+      const r = await api('/sync/push', { code, data: json });
+      if (!r.ok) throw new Error('push');
+    } else await syncPush(await sha256('arkeia-sync:' + code), json);
+    localStorage.setItem('arkeia-sync-at', String(at));
+    localStorage.removeItem('arkeia-sync-dirty');
+  } catch {
+    autoPushTimer = setTimeout(autoPush, 30000); // 通信失敗時は後で再送
+  } finally {
+    autoBusy = false;
+  }
+}
+async function autoPull() {
+  const code = syncCodeNow();
+  if (code.length !== 12 || autoBusy || document.hidden) return;
+  if (localStorage.getItem('arkeia-sync-dirty')) return autoPush(); // 未送信の変更を優先
+  autoBusy = true;
+  try {
+    const json = apiEnabled() ? (await api('/sync/pull', { code })).data || null : await syncPull(await sha256('arkeia-sync:' + code));
+    if (!json) return;
+    const remoteAt = Number(JSON.parse(json).syncAt) || 0;
+    const localAt = Number(localStorage.getItem('arkeia-sync-at')) || 0;
+    // 戦闘中は反映せず、次回の確認（戦闘外）で取り込む
+    if (remoteAt > localAt && !state.battle && !localStorage.getItem('arkeia-sync-dirty')) {
+      localStorage.setItem(SAVE_KEY, json);
+      localStorage.setItem('arkeia-sync-at', String(remoteAt));
+      location.reload();
+    }
+  } catch {
+    /* 次回再試行 */
+  } finally {
+    autoBusy = false;
+  }
+}
+setTimeout(() => {
+  syncReady = true;
+  autoPull();
+  setInterval(() => { if (!state.battle) autoPull(); }, 45000);
+  document.addEventListener('visibilitychange', () => { if (!document.hidden && !state.battle) autoPull(); else if (document.hidden && localStorage.getItem('arkeia-sync-dirty')) autoPush(); });
+}, 3000);
 persist(); // 世界の印（pid）を確定させる
 {
   const cy = document.getElementById('copy-year');
@@ -2543,11 +2601,15 @@ $('#sync-push').addEventListener('click', async () => {
   if (normSync(code).length !== 12) code = randomCode(3);
   m.textContent = '預けています…';
   try {
+    const at = Date.now();
+    const data = JSON.stringify({ ...save, syncAt: at });
     if (apiEnabled()) {
-      const r = await api('/sync/push', { code: normSync(code), data: JSON.stringify(save) });
+      const r = await api('/sync/push', { code: normSync(code), data });
       if (!r.ok) throw new Error('push');
-    } else await syncPush(await sha256('arkeia-sync:' + normSync(code)), JSON.stringify(save));
+    } else await syncPush(await sha256('arkeia-sync:' + normSync(code)), data);
     localStorage.setItem('arkeia-sync', code);
+    localStorage.setItem('arkeia-sync-at', String(at));
+    localStorage.removeItem('arkeia-sync-dirty');
     $('#sync-code').value = code;
     m.textContent = `預けました。別の端末で同期コード「${code}」を入力してください（他人には教えないでください）。`;
   } catch {
@@ -2569,8 +2631,10 @@ $('#sync-pull').addEventListener('click', async () => {
       m.textContent = 'その同期コードの記録は見つかりませんでした。';
       return;
     }
-    JSON.parse(json); // 壊れたデータは弾く（中身は読み込み時に検証される）
+    const parsed = JSON.parse(json); // 壊れたデータは弾く（中身は読み込み時に検証される）
     localStorage.setItem(SAVE_KEY, json);
+    localStorage.setItem('arkeia-sync-at', String(Number(parsed?.syncAt) || Date.now()));
+    localStorage.removeItem('arkeia-sync-dirty');
     localStorage.setItem('arkeia-sync', n.match(/.{4}/g).join('-'));
     m.textContent = '受け取りました。読み込み直します…';
     setTimeout(() => location.reload(), 600);
