@@ -1,4 +1,5 @@
 User-agent: *
 Allow: /
 Disallow: /rosie/
+Disallow: /server/
 Disallow: /*.md$

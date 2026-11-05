@@ -97,6 +97,12 @@ export function initSocial(opts) {
       localStorage.setItem('arkeia-chief-news', JSON.stringify(S.chiefNews));
       rebuildTicker();
     },
+    onChiefEvent: async (n) => {
+      if (n.from === S.net?.myId) return;
+      if (!(await S.opts.verifyChief?.(n.tk))) return;
+      S.opts.onChiefEvent?.(n);
+      rebuildTicker();
+    },
     onGuildRole: onGuildRole,
     onChat: onChat,
     onNews: (n) => {
@@ -116,6 +122,10 @@ export function initSocial(opts) {
     news: (t, broadcast = true) => {
       pushNews(t);
       if (broadcast) S.net?.news(clean(t, 80));
+    },
+    sendEvent: () => {
+      broadcastChief();
+      rebuildTicker();
     },
     refresh: () => {
       publish();
@@ -138,6 +148,8 @@ function broadcastChief() {
   S.chiefNews = { list, at: Date.now() };
   localStorage.setItem('arkeia-chief-news', JSON.stringify(S.chiefNews));
   S.net.chiefNews(list, S.opts.roleToken?.() || '');
+  const own = S.opts.ownEvent?.();
+  if (own) S.net.chiefEvent(own.ev, S.opts.roleToken?.() || '', own.at);
 }
 function saveChiefOwn() {
   localStorage.setItem('arkeia-chief-own', JSON.stringify(S.chiefOwn));

@@ -94,6 +94,11 @@ export async function connectSocial(handlers) {
       handlers.onChiefNews?.({ list, tk: typeof e.tk === 'string' && e.tk.length < 1500 ? e.tk : '', at: num(e.at, 1e13), from: str(e.from, 40) });
       return;
     }
+    if (e.kind === 'cevent') {
+      // 運営長の特別イベント（中身は受信側で sanitizeEvent・役職トークンで検証）
+      if (e.ev === null || (e.ev && typeof e.ev === 'object')) handlers.onChiefEvent?.({ ev: e.ev, tk: typeof e.tk === 'string' && e.tk.length < 1500 ? e.tk : '', at: num(e.at, 1e13), from: str(e.from, 40) });
+      return;
+    }
     const t = txt(e.t, 80).trim();
     if (t) handlers.onNews?.({ t, from: str(e.from, 40) });
   });
@@ -109,6 +114,7 @@ export async function connectSocial(handlers) {
     chat: (e) => room.publishTopic('chat', { ...e, from: myId }),
     news: (t) => room.publishTopic('news', { t, from: myId }),
     chiefNews: (list, tk) => room.publishTopic('news', { kind: 'chief', list, tk, at: Date.now(), from: myId }),
+    chiefEvent: (ev, tk, at) => room.publishTopic('news', { kind: 'cevent', ev, tk, at, from: myId }),
     guildRole: (e) => room.publishTopic('grole', e),
     leave: () => {
       try {

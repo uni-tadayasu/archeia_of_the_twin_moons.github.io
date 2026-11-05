@@ -673,6 +673,15 @@ export class Fighter {
     if (!spec || this.flux < spec.cost) {
       return;
     }
+    // 技の順番待ち：同じチームで誰かが技を出している間は出せない（早い者順・重ならない）
+    const lk = (this.battle.skillLock ||= {})[this.team];
+    if (lk && lk.f !== this && lk.f.hp > 0 && lk.until > now) {
+      if (this.isPlayer && (!this.waitMsg || now - this.waitMsg > 0.8)) {
+        this.waitMsg = now;
+        this.battle.ui.popup?.(this.pos, '順番待ち', '#a0b8ff');
+      }
+      return;
+    }
     if (this.status.silence) {
       if (!this.silenceMsg || performance.now() - this.silenceMsg > 800) {
         this.silenceMsg = performance.now();
@@ -1209,6 +1218,8 @@ export class Battle {
         : slot[0] === 'f' ? followSpec(f.def, idx) || f.def.skills[0]
           : f.def.skills[idx] || f.def.skills[0];
     const isOver = slot === 'over' || slot === 'hi';
+    // 技の順番：このチームの技枠を確保（通信相手の技も含む）
+    if (!isOver) (this.skillLock ||= {})[f.team] = { f, until: performance.now() / 1000 + (spec.kind === 'dash' ? (spec.dur || 0.5) + 0.25 : 0.9) };
     let tx;
     let tz;
     if (net) {

@@ -2,7 +2,7 @@
 <html lang="ja">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <title>双月のアルケイア — ブラウザで遊べる3Dアリーナファンタジーアクション</title>
     <meta name="description" content="双つの月の下で戦う、ブラウザ3Dアリーナファンタジーアクション。100人の戦士、全100章（最大3話）の物語、覚醒と秘奥義、数百種の追加技、100曲のBGM、オンライン対戦・協力。PC・スマホ・ゲームパッド対応、インストール不要で無料プレイ。" />
     <meta name="keywords" content="ブラウザゲーム,3Dアクション,アリーナ,ファンタジー,RPG,無料ゲーム,オンライン対戦,スマホゲーム" />
@@ -43,7 +43,20 @@
     <meta name="twitter:description" content="100人の戦士と全100章の物語。インストール不要、PC・スマホで無料プレイ。" />
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Shippori+Mincho:wght@500;800&display=swap" rel="stylesheet">
+    <!-- 軽量化：Webフォントは描画を止めずに後から適用（失敗時はOSの明朝体） -->
+    <link id="webfont" href="https://fonts.googleapis.com/css2?family=Shippori+Mincho:wght@500;800&display=swap" rel="stylesheet" media="print">
+    <script>(function(l){if(l.sheet)l.media='all';else l.addEventListener('load',function(){l.media='all'});})(document.getElementById('webfont'));</script>
+    <noscript><link href="https://fonts.googleapis.com/css2?family=Shippori+Mincho:wght@500;800&display=swap" rel="stylesheet"></noscript>
+    <link rel="manifest" href="manifest.webmanifest" />
+    <meta name="google" content="notranslate" />
+    <script type="application/ld+json">
+      {"@context":"https://schema.org","@type":"FAQPage","mainEntity":[
+        {"@type":"Question","name":"双月のアルケイアは無料で遊べますか？","acceptedAnswer":{"@type":"Answer","text":"はい。インストール不要で、ブラウザからすぐに無料で遊べます。"}},
+        {"@type":"Question","name":"スマホやゲームパッドに対応していますか？","acceptedAnswer":{"@type":"Answer","text":"PC（キーボード・マウス）、スマホのタッチ操作、ゲームパッドに対応しています。"}},
+        {"@type":"Question","name":"オンラインで遊べますか？","acceptedAnswer":{"@type":"Answer","text":"合言葉で友達とつながるオンライン対戦・協力、世界チャット、ギルド、週替わりイベントがあります。"}},
+        {"@type":"Question","name":"端末を変えても続きから遊べますか？","acceptedAnswer":{"@type":"Answer","text":"同期コードを設定すると、複数の端末で進み具合が自動で常時同期されます。"}}
+      ]}
+    </script>
     <link rel="stylesheet" href="./rosebud-game-defaults.css" />
     <script src="./rosebud-game-defaults.js" defer></script>
     <script type="importmap">
@@ -367,7 +380,19 @@
         </div>
     </div>
 </div>
-    <noscript><h1>双月のアルケイア</h1><p>ブラウザで遊べる3Dアリーナファンタジーアクション。100人の戦士、全100章の物語、オンライン対戦・協力に対応。プレイにはJavaScriptを有効にしてください。</p></noscript>
+    <noscript>
+      <h1>双月のアルケイア（Arkeia of Twin Moons）</h1>
+      <p>ブラウザで遊べる無料の3Dアリーナファンタジーアクション。インストール不要で、PC・スマホ・ゲームパッドに対応。</p>
+      <h2>特徴</h2>
+      <ul>
+        <li>100人以上の戦士と、全100章の物語</li>
+        <li>3段コンボ・技・奥義・覚醒・秘奥義・追加技による爽快なバトル</li>
+        <li>100種の武器と防具、強化と限界突破</li>
+        <li>オンライン対戦・協力、世界チャット、ギルド、週替わりイベント</li>
+        <li>端末間の常時同期</li>
+      </ul>
+      <p>プレイにはJavaScriptを有効にしてください。© KASAI SOLUTIONS INC.</p>
+    </noscript>
     <div id="game-container"></div>
     <main id="ui">
       <section id="scr-press" class="screen on" aria-label="はじまり">
@@ -391,6 +416,7 @@
             <button data-go="online-vs">遠い誰かと剣を交える<small>合言葉でつながるオンライン対戦</small></button>
             <button data-go="online-coop">遠い誰かと肩を並べる<small>オンライン協力 — 裁定者討伐</small></button>
             <button id="btn-forge">鍛錬の工房<small>灯晶を注いで戦士を鍛える</small></button>
+            <button id="btn-evmaker" hidden>イベント作成の間<small>運営長専用 — 特別イベントを作って全員に配信</small></button>
             <button id="btn-invade" hidden>乱入の窓<small>運営専用 — 誰かの物語に裁定者として割り込む</small></button>
             <button id="btn-shop">灯晶商店<small>特別な戦士を迎える</small></button>
             <button id="btn-options">旅支度<small>音・CPUの強さ・ゲームパッド・運営の鍵</small></button>
@@ -555,9 +581,9 @@
       </div>
     </main>
     <script type="module" src="main.js"></script>
-    <script src="https://storage.googleapis.com/rosebud_staticfiles/ChatManager.js"></script>
-    <script src="https://storage.googleapis.com/rosebud_staticfiles/ProgressLogger.js"></script>
-    <script src="https://storage.googleapis.com/rosebud_staticfiles/OGP.js"></script>
+    <script src="https://storage.googleapis.com/rosebud_staticfiles/ChatManager.js" defer></script>
+    <script src="https://storage.googleapis.com/rosebud_staticfiles/ProgressLogger.js" defer></script>
+    <script src="https://storage.googleapis.com/rosebud_staticfiles/OGP.js" defer></script>
   
 <script>
     (() => {

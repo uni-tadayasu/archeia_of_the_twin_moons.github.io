@@ -1,0 +1,13 @@
+{
+  "name": "双月のアルケイア",
+  "short_name": "アルケイア",
+  "description": "ブラウザで遊べる3Dアリーナファンタジーアクション。",
+  "lang": "ja",
+  "start_url": "./",
+  "scope": "./",
+  "display": "fullscreen",
+  "orientation": "any",
+  "background_color": "#1b1d3a",
+  "theme_color": "#1b1d3a",
+  "icons": [{ "src": "assets/app-icon.webp", "sizes": "512x512", "type": "image/webp", "purpose": "any" }]
+}

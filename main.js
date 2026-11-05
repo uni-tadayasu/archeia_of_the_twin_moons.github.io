@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { Battle, ARENA_R } from './game.js';
-import { FIGHTERS, STORY, ROSTER, UPGRADES, MAX_LV, STAGES, BGM, APEX_BGM, ENEMY_ROSTER, UPG_CAP, LB_MAX, lbMaxLv, lbMul, lbCost, WEAPONS, ARMORS, STAT_LABEL, SPECIAL_KEYS, BOSS_ROSTER, currentEvent } from './data.js';
+import { FIGHTERS, STORY, ROSTER, UPGRADES, MAX_LV, STAGES, BGM, APEX_BGM, ENEMY_ROSTER, UPG_CAP, LB_MAX, lbMaxLv, lbMul, lbCost, WEAPONS, ARMORS, STAT_LABEL, SPECIAL_KEYS, BOSS_ROSTER, currentEvent, sanitizeEvent, EV_FOE_KINDS } from './data.js';
 import { ProcMusic } from './music.js';
 import { sayBattle, setVoiceMuted, stopVoices } from './voice.js';
 import { initSocial } from './social.js';
@@ -941,11 +941,12 @@ function canUse(k) {
 const SELECT_KEYS = () => [...ROSTER, 'seraphel', 'chief', 'sovereign', 'bloodfiend', 'crimson'];
 function refreshTitle() {
   $('#btn-invade').hidden = !operatorUnlocked();
+  if ($('#btn-evmaker')) $('#btn-evmaker').hidden = !chiefUnlocked();
   $('#title-shards').textContent = `灯晶　${save.shards}`;
   {
-    const { ev, ends } = currentEvent();
+    const { ev, ends } = activeEvent();
     const days = Math.max(0, Math.ceil((ends - Date.now()) / 86400000));
-    $('#event-sub').textContent = `今週：${ev.name} — ${ev.desc}（全8段階・${evCleared()}段階まで制覇・残り${days}日）`;
+    $('#event-sub').textContent = `${ev.custom ? '特別' : '今週'}：${ev.name} — ${ev.desc}（全8段階・${evCleared()}段階まで制覇・残り${days}日）`;
   }
   social?.refresh();
   const ch = save.chapter % STORY.length;
@@ -983,11 +984,11 @@ document.querySelectorAll('[data-go]').forEach((b) => b.addEventListener('click'
     return;
   }
   if (state.mode === 'event') {
-    const { ev } = currentEvent();
+    const { ev } = activeEvent();
     openSelect('あなたが握る剣は？', `週替わりイベント › ${ev.name}`, (k) => {
       state.myKey = k;
       openEventLevel((lv) => {
-        state.eventRun = { ...currentEvent(), lv };
+        state.eventRun = { ...activeEvent(), lv };
         startOffline();
       });
     }, { onBack: goTitle });
@@ -1332,10 +1333,10 @@ function endBattle() {
 // ---- 週替わりイベント：8段階 ----
 const EV_LV = (lv) => ({ hp: 1 + 0.35 * (lv - 1), atk: 1 + 0.15 * (lv - 1), reward: 1 + 0.5 * (lv - 1), first: lv });
 function evCleared() {
-  return save.evProg.week === currentEvent().week ? save.evProg.lv : 0;
+  return save.evProg.week === activeEvent().week ? save.evProg.lv : 0;
 }
 function openEventLevel(cb) {
-  const { ev } = currentEvent();
+  const { ev } = activeEvent();
   const done = evCleared();
   const ov = document.createElement('div');
   ov.style.cssText = 'position:fixed;inset:0;z-index:70;background:rgba(5,5,15,.82);display:flex;align-items:center;justify-content:center;padding:12px';
@@ -1379,7 +1380,7 @@ function openEventLevel(cb) {
 
 async function startOffline() {
   await loadPromise;
-  const evRun = state.mode === 'event' ? (state.eventRun ||= currentEvent()) : null;
+  const evRun = state.mode === 'event' ? (state.eventRun ||= activeEvent()) : null;
   setStage(evRun ? STAGES[evRun.ev.stage % STAGES.length] : state.stage || STAGES[0]);
   const b = makeBattle(null);
   b.add(state.myKey, { team: 0, player: true, awk: save.awk, pos: [-4, 3], name: FIGHTERS[state.myKey].name + '（あなた）', upg: upgFor(state.myKey), gear: gearFor(state.myKey) });
@@ -1585,7 +1586,7 @@ function onBattleEnd(won) {
     return;
   }
   if (state.mode === 'event') {
-    const run = state.eventRun || { ...currentEvent(), lv: 1 };
+    const run = state.eventRun || { ...activeEvent(), lv: 1 };
     const { week, ev } = run;
     const lv = run.lv || 1;
     const L = EV_LV(lv);
@@ -2714,9 +2715,104 @@ async function syncEntitlements() {
   }
 }
 syncEntitlements();
+// ---- 運営長の特別イベント ----
+function readJSON(k) { try { return JSON.parse(localStorage.getItem(k) || 'null'); } catch { return null; } }
+function activeEvent() {
+  const src = chiefUnlocked() ? readJSON('arkeia-cevent-own') : readJSON('arkeia-cevent');
+  const ev = src && sanitizeEvent(src.ev, FIGHTERS);
+  const now = Date.now();
+  if (ev && now >= ev.at && now < ev.ends) return { week: 5000000 + (Math.floor(ev.at / 60000) % 4000000), ev, ends: ev.ends };
+  return currentEvent();
+}
+function onChiefEvent(n) {
+  const cur = readJSON('arkeia-cevent');
+  if (cur && n.at <= cur.at) return;
+  const ev = n.ev === null ? null : sanitizeEvent(n.ev, FIGHTERS);
+  if (n.ev !== null && !ev) return;
+  localStorage.setItem('arkeia-cevent', JSON.stringify({ ev, at: n.at }));
+  if (isScreen('scr-title')) refreshTitle();
+}
+function openEventMaker() {
+  const own = readJSON('arkeia-cevent-own');
+  const base = sanitizeEvent(own?.ev, FIGHTERS) || { name: '', desc: '', foes: [['boss', 1]], hp: 1, atk: 1, scale: 1, ally: 0, first: 1000, reward: 200, stage: 0, at: Date.now(), ends: Date.now() + 7 * 86400000 };
+  const ov = document.createElement('div');
+  ov.style.cssText = 'position:fixed;inset:0;z-index:80;background:rgba(5,5,15,.86);display:flex;align-items:center;justify-content:center;padding:10px';
+  ov.addEventListener('keydown', (e) => e.stopPropagation());
+  const box = document.createElement('form');
+  box.style.cssText = 'background:#16163a;border:1px solid #d6b46a;border-radius:12px;padding:14px;width:min(560px,100%);max-height:calc(100dvh - 20px);overflow:auto;color:#f4ead2;font-size:13px;display:grid;gap:8px';
+  const inp = 'width:100%;font:inherit;padding:6px;background:#f4ead2;color:#1b1d3a;border:0;border-radius:4px';
+  const row = (label, node) => { const l = document.createElement('label'); l.style.cssText = 'display:grid;gap:2px'; l.append(label, node); return l; };
+  const mk = (tag, attrs) => Object.assign(document.createElement(tag), attrs);
+  const fName = mk('input', { maxLength: 24, value: base.name, required: true }); fName.style.cssText = inp;
+  const fDesc = mk('input', { maxLength: 80, value: base.desc }); fDesc.style.cssText = inp;
+  const num = (v, min, max, step) => { const e = mk('input', { type: 'number', min, max, step, value: v }); e.style.cssText = inp; return e; };
+  const foeOpts = [...Object.entries(EV_FOE_KINDS), ...SELECT_KEYS().map((k) => [k, FIGHTERS[k].name])];
+  const foeBox = document.createElement('div');
+  foeBox.style.cssText = 'display:grid;gap:4px';
+  const addFoe = (k = 'mob', n = 1) => {
+    if (foeBox.children.length >= 4) return;
+    const r = document.createElement('div');
+    r.style.cssText = 'display:grid;grid-template-columns:1fr 70px 34px;gap:4px';
+    const s = document.createElement('select'); s.style.cssText = inp;
+    for (const [v, t] of foeOpts) s.append(mk('option', { value: v, textContent: t, selected: v === k }));
+    const c = num(n, 1, 8, 1);
+    const x = mk('button', { type: 'button', textContent: '✕', className: 'btn mini' });
+    x.onclick = () => r.remove();
+    r.append(s, c, x);
+    foeBox.append(r);
+  };
+  base.foes.forEach(([k, n]) => addFoe(k, n));
+  const addB = mk('button', { type: 'button', textContent: '＋ 敵を追加（最大4組・合計10体）', className: 'btn mini' });
+  addB.onclick = () => addFoe();
+  const fHp = num(base.hp, 0.2, 10, 0.1), fAtk = num(base.atk, 0.2, 5, 0.1), fScale = num(base.scale, 0.6, 2.5, 0.1);
+  const fAlly = num(base.ally, 0, 3, 1), fFirst = num(base.first, 0, 20000, 50), fRew = num(base.reward, 0, 5000, 10);
+  const fStage = document.createElement('select'); fStage.style.cssText = inp;
+  STAGES.forEach((s, i) => fStage.append(mk('option', { value: i, textContent: s.name || `舞台${i + 1}`, selected: i === base.stage })));
+  const fDays = num(Math.max(1, Math.round((base.ends - Date.now()) / 86400000)), 1, 31, 1);
+  const grid2 = document.createElement('div');
+  grid2.style.cssText = 'display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:6px';
+  grid2.append(row('敵の体力倍率', fHp), row('敵の攻撃倍率', fAtk), row('敵の大きさ', fScale), row('相棒の数', fAlly), row('初回報酬（灯晶）', fFirst), row('通常報酬（灯晶）', fRew), row('舞台', fStage), row('開催日数', fDays));
+  const msg = mk('p', { className: 'foot' });
+  const btns = document.createElement('div');
+  btns.style.cssText = 'display:flex;flex-wrap:wrap;gap:6px';
+  const pub = mk('button', { type: 'submit', textContent: '公開する（全員に配信）', className: 'btn' });
+  const stop = mk('button', { type: 'button', textContent: '公開を終了', className: 'btn' });
+  const close = mk('button', { type: 'button', textContent: '閉じる', className: 'btn' });
+  btns.append(pub, stop, close);
+  const h = mk('h3', { textContent: '運営長専用　イベント作成' }); h.style.margin = '0';
+  box.append(h, row('イベント名', fName), row('説明', fDesc), mk('b', { textContent: '出現する敵' }), foeBox, addB, grid2, btns, msg);
+  box.addEventListener('submit', (e) => {
+    e.preventDefault();
+    const at = Date.now();
+    const ev = sanitizeEvent({
+      name: fName.value, desc: fDesc.value,
+      foes: [...foeBox.children].map((r) => [r.querySelector('select').value, +r.querySelector('input').value]),
+      hp: +fHp.value, atk: +fAtk.value, scale: +fScale.value, ally: +fAlly.value, first: +fFirst.value, reward: +fRew.value,
+      stage: +fStage.value, at, ends: at + Math.round(+fDays.value || 7) * 86400000
+    }, FIGHTERS);
+    if (!ev) { msg.textContent = '内容を確認してください（名前必須・敵は合計10体まで）。'; return; }
+    localStorage.setItem('arkeia-cevent-own', JSON.stringify({ ev, at }));
+    social?.sendEvent();
+    social?.news(`運営長の特別イベント「${ev.name}」が始まった！`);
+    msg.textContent = '公開しました。オンラインの全員に配信され、30秒ごとに再配信されます。';
+    refreshTitle();
+  });
+  stop.onclick = () => {
+    localStorage.setItem('arkeia-cevent-own', JSON.stringify({ ev: null, at: Date.now() }));
+    social?.sendEvent();
+    msg.textContent = '公開を終了しました。通常の週替わりイベントに戻ります。';
+    refreshTitle();
+  };
+  close.onclick = () => ov.remove();
+  ov.append(box);
+  document.body.append(ov);
+}
+$('#btn-evmaker')?.addEventListener('click', () => { sfx('ui'); openEventMaker(); });
 // ---- 交流（お知らせテロップ・チャット・ギルド） ----
 var social = initSocial({
   save, persist, myName, sfx,
+  onChiefEvent,
+  ownEvent: () => (chiefUnlocked() ? readJSON('arkeia-cevent-own') : null),
   isChief: () => chiefUnlocked(),
   roleToken: () => roleState.tok,
   // 運営長のお知らせはサーバー署名の役職トークンで確認（サーバー未設定時は受け入れる）
@@ -2726,10 +2822,10 @@ var social = initSocial({
     return d?.r === 'chief';
   },
   baseNews: () => {
-    const { ev, ends } = currentEvent();
+    const { ev, ends } = activeEvent();
     const days = Math.max(0, Math.ceil((ends - Date.now()) / 86400000));
     return [
-      `今週のイベント「${ev.name}」開催中！ ${ev.desc} 全8段階・あと${days}日`,
+      `${ev.custom ? '【運営長の特別イベント】' : '今週のイベント'}「${ev.name}」開催中！ ${ev.desc} 全8段階・あと${days}日`,
       `あなたの進行：第${evCleared()}段階まで制覇`,
       save.guild ? `所属ギルド「${save.guild.name}」` : 'ギルドを結成して仲間と語り合おう（チャット › ギルド）'
     ];
@@ -3031,10 +3127,26 @@ function pollPad(dt) {
 // ---------- Loop ----------
 setupTouch();
 const timer = new THREE.Timer();
+var adaptQ = null;
 renderer.setAnimationLoop((time) => {
   timer.update(time);
-  const dt = Math.min(0.05, Math.max(0, timer.getDelta()));
+  const rawDt = timer.getDelta();
+  const dt = Math.min(0.05, Math.max(0, rawDt));
   const t = time / 1000;
+  // 軽量化：重い端末では描画解像度を自動で下げ、余裕があれば戻す
+  {
+    const q = (adaptQ ||= { avg: 1 / 60, t: 0, pr: renderer.getPixelRatio(), max: renderer.getPixelRatio() });
+    q.avg += (Math.min(0.2, rawDt) - q.avg) * 0.05;
+    q.t += rawDt;
+    if (q.t > 2) {
+      q.t = 0;
+      const next = q.avg > 1 / 40 ? Math.max(0.6, q.pr - 0.15) : q.avg < 1 / 57 ? Math.min(q.max, q.pr + 0.1) : q.pr;
+      if (Math.abs(next - q.pr) > 0.01) {
+        q.pr = next;
+        renderer.setPixelRatio(next);
+      }
+    }
+  }
   pollPad(dt);
   crystals.forEach((c, i) => {
     c.position.y += Math.sin(t * 1.5 + i) * 0.004;

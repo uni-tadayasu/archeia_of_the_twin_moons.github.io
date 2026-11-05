@@ -1,14 +1,14 @@
 {
   "name": "Riftfall Arena",
-  "revisionLabel": "サーバー保護の設定不足",
+  "revisionLabel": "技の順番と特別イベント作成",
   "description": "Create an original, fast-paced arena fighting browser game inspired only by the broad appeal of classic fantasy action battles. Use entirely original characters, enemies, bosses, abilities, names, visuals, story, and systems. Center the experience on quick, readable matches against CPU or online opponents, with optional cooperative play and an original story mode. Include an operator-only key-gated secret boss character with spectacular original light- and judgment-themed attacks; do not reproduce characters or signature moves from existing games. Fit the game cleanly on both desktop and mobile screens, with distinctive human-sounding UI and text.",
   "mode": "Universal",
-  "exportDate": "2026-11-05T08:22:43.617Z",
+  "exportDate": "2026-11-05T12:39:21.761Z",
   "rosebudBuiltInSplash": {
     "present": true,
     "version": 1
   },
-  "assetCount": 168,
+  "assetCount": 172,
   "assetTypes": [
     "image",
     "audio",

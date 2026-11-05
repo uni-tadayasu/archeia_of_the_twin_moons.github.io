@@ -916,6 +916,27 @@ const WEEK_MS = 7 * 24 * 3600 * 1000;
 export function eventWeek(now = Date.now()) {
   return Math.floor((now + 9 * 3600 * 1000 - 4 * 24 * 3600 * 1000) / WEEK_MS);
 }
+// ---- 運営長が作る特別イベント（受信データもここで検証） ----
+export const EV_FOE_KINDS = { mob: '魔物', boss: 'ボス', roster: '戦士', mirror: '自分の写し' };
+const evNum = (v, lo, hi, d) => { const n = Number(v); return Number.isFinite(n) ? Math.max(lo, Math.min(hi, n)) : d; };
+export function sanitizeEvent(e, fighters) {
+  if (!e || typeof e !== 'object') return null;
+  const t = (v, n) => String(v ?? '').replace(/[\u0000-\u001f<>]/g, '').trim().slice(0, n);
+  const name = t(e.name, 24);
+  if (!name) return null;
+  const foes = (Array.isArray(e.foes) ? e.foes : []).slice(0, 4)
+    .map((f) => Array.isArray(f) ? [String(f[0]), Math.round(evNum(f[1], 1, 8, 1))] : null)
+    .filter((f) => f && (EV_FOE_KINDS[f[0]] || fighters?.[f[0]]));
+  if (!foes.length || foes.reduce((s, f) => s + f[1], 0) > 10) return null;
+  const at = Math.round(evNum(e.at, 0, 1e13, 0)), ends = Math.round(evNum(e.ends, 0, 1e13, 0));
+  if (!at || ends <= at || ends - at > 31 * 86400000) return null;
+  return {
+    custom: true, name, desc: t(e.desc, 80), foes,
+    hp: evNum(e.hp, 0.2, 10, 1), atk: evNum(e.atk, 0.2, 5, 1), scale: evNum(e.scale, 0.6, 2.5, 1),
+    ally: Math.round(evNum(e.ally, 0, 3, 0)), first: Math.round(evNum(e.first, 0, 20000, 500)),
+    reward: Math.round(evNum(e.reward, 0, 5000, 100)), stage: Math.round(evNum(e.stage, 0, 20, 0)), at, ends
+  };
+}
 export function currentEvent(now = Date.now()) {
   const w = eventWeek(now);
   const ends = (w + 1) * WEEK_MS - 9 * 3600 * 1000 + 4 * 24 * 3600 * 1000;
