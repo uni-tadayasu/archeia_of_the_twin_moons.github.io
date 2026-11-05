@@ -232,7 +232,8 @@ async function syncKey(env, code) {
   return n.length === 12 ? hmacHex(env.PEPPER, 'sync:' + n) : null;
 }
 // 書き込みは同期コードごとの Durable Object で直列化し、版番号(ver)で競合を検出する
-const FIRST_WEALTH_CAP = 300000;
+// 初回はサーバー導入前の進行分を含むため上限を大きく取る
+const FIRST_WEALTH_CAP = 100000000;
 async function syncPush(req, env, H, { code, data, base }) {
   if (await limited(env, req, 'sync', 40, 600000)) return json(H, { error: 'limit' }, 429);
   const h = await syncKey(env, code);
@@ -674,7 +675,10 @@ export class SyncLock {
       }
       const now = Date.now();
       const wealth = wealthOf(data);
-      const allowed = row ? (row.wealth ?? wealth) + EARN_PER_HOUR * ((now - (row.at || now)) / 3600000) + EARN_SLACK : FIRST_WEALTH_CAP;
+      const prevW = row ? (row.wealth ?? wealth) : 0;
+      const hours = row ? Math.max(0, (now - (row.at || now)) / 3600000) : 0;
+      // 時間あたりの上限＋資産に比例した余裕（後半の章ほど報酬が大きいため）
+      const allowed = row ? prevW + (EARN_PER_HOUR + prevW * 0.1) * Math.max(hours, 0.25) + EARN_SLACK : FIRST_WEALTH_CAP;
       if (wealth > allowed) return new Response(JSON.stringify({ error: 'wealth' }), { status: 422 });
       const nv = ver + 1;
       await store.put('row', { data: JSON.stringify(data), at: now, ver: nv, wealth });
