@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { Battle, ARENA_R } from './game.js';
-import { FIGHTERS, STORY, ROSTER, UPGRADES, MAX_LV, STAGES, BGM, ENEMY_ROSTER, UPG_CAP, WEAPONS, STAT_LABEL, SPECIAL_KEYS } from './data.js';
+import { FIGHTERS, STORY, ROSTER, UPGRADES, MAX_LV, STAGES, BGM, APEX_BGM, ENEMY_ROSTER, UPG_CAP, WEAPONS, ARMORS, STAT_LABEL, SPECIAL_KEYS } from './data.js';
 import { ProcMusic } from './music.js';
 import { OPERATOR_KEY_SHA256, CHIEF_KEY_SHA256, MAX_KEY_ATTEMPTS, LOCKOUT_MS, SHOP_ITEMS } from './config.js';
 import { connect, issueInvite, redeemInvite, syncPush, syncPull } from './net.js';
@@ -174,11 +174,15 @@ function loadSave() {
     }
   }
   const wids = new Set(WEAPONS.map((w) => w.id));
-  s.owned = Array.isArray(raw.owned) ? raw.owned.filter((id) => wids.has(id)) : [];
+  const aids = new Set(ARMORS.map((w) => w.id));
+  s.owned = Array.isArray(raw.owned) ? raw.owned.filter((id) => wids.has(id) || aids.has(id)) : [];
   s.equip = {};
+  s.armor = {};
   for (const k of Object.keys(FIGHTERS)) {
     const id = raw.equip?.[k];
     if (wids.has(id) && s.owned.includes(id)) s.equip[k] = id;
+    const ai = raw.armor?.[k];
+    if (aids.has(ai) && s.owned.includes(ai)) s.armor[k] = ai;
   }
   s.diff = raw.diff == null ? 1 : clampInt(raw.diff, 0, 3);
   s.chars = Array.isArray(raw.chars) ? raw.chars.filter((k) => FIGHTERS[k]?.shop) : [];
@@ -188,6 +192,7 @@ function loadSave() {
   s.friends = raw.friends;
   s.uname = raw.uname;
   s.noHero = !!raw.noHero;
+  s.awk = clampInt(raw.awk, 0, 99);
   return s;
 }
 const save = loadSave();
@@ -204,9 +209,13 @@ function upgFor(k) {
   for (const s in out) out[s] = Math.min(UPG_CAP[s], out[s]);
   const w = WEAPONS.find((x) => x.id === save.equip[k]);
   if (w) for (const s in w.bonus) out[s] += w.bonus[s];
+  const a = ARMORS.find((x) => x.id === save.armor[k]);
+  if (a) for (const s in a.bonus) out[s] += a.bonus[s];
   out.def = Math.min(18, out.def);
   return out;
 }
+// 装備の見た目（戦闘・ワールド用）
+const gearFor = (k) => ({ w: save.equip[k] || '', a: save.armor[k] || '' });
 function persist() {
   try {
     localStorage.setItem(SAVE_KEY, JSON.stringify(save));
@@ -215,6 +224,10 @@ function persist() {
   }
 }
 persist(); // 世界の印（pid）を確定させる
+{
+  const cy = document.getElementById('copy-year');
+  if (cy) cy.textContent = String(new Date().getFullYear());
+}
 
 // ---------- Audio ----------
 const audio = {
@@ -239,10 +252,14 @@ pool('hit', 'assets/audio/hit-impact.mp3', 4);
 pool('burst', 'assets/audio/arte-burst.mp3', 2);
 let proc = null;
 function startProc() {
-  const m = /^(bgm|field):(\d+)$/.exec(audio.current || '');
+  const m = /^(bgm|field|apex):(\d+)$/.exec(audio.current || '');
   if (!m || !audio.ctx || audio.muted) return;
   proc ||= new ProcMusic(audio.ctx);
   const n = +m[2];
+  if (m[1] === 'apex') {
+    proc.play(APEX_BGM[n] || APEX_BGM[1]);
+    return;
+  }
   // フィールド用：壮大な冒険曲（金管・聖歌隊を必ず入れ、ゆったり力強いテンポ）
   proc.play(m[1] === 'field' ? { seed: 50021 + n * 131, bpm: 104 + (n % 6) * 4, epic: true } : BGM[n % BGM.length]);
 }
@@ -1000,6 +1017,30 @@ const ui = {
     clearTimeout(el._t);
     el._t = setTimeout(() => el.classList.add('hide'), isOver ? 3000 : 2200);
   },
+  // カットイン（覚醒・秘奥義・運営長降臨）
+  cutin(f, title, sub) {
+    const el = $('#cutin');
+    if (!el || !f) return;
+    const d = f.def || FIGHTERS[f.key] || {};
+    const img = el.querySelector('img');
+    img.hidden = !d.face;
+    if (d.face) {
+      img.src = d.face;
+      img.style.filter = d.faceHue ? `hue-rotate(${d.faceHue}deg)` : '';
+    }
+    el.querySelector('.ci-who').textContent = f.name || d.name || '';
+    el.querySelector('.ci-title').textContent = title;
+    el.querySelector('.ci-sub').textContent = sub || '';
+    el.classList.toggle('foe', f.team !== 0);
+    el.hidden = false;
+    el.classList.remove('go');
+    void el.offsetWidth;
+    el.classList.add('go');
+    clearTimeout(el._t);
+    el._t = setTimeout(() => {
+      el.hidden = true;
+    }, 1900);
+  },
   flash() {
     const fl = $('#flash');
     fl.classList.remove('go');
@@ -1019,6 +1060,12 @@ function makeBattle(net) {
 }
 function endBattle() {
   if (state.battle) {
+    // 覚醒の蓄積ダメージは次の戦いへ持ち越す（覚醒中に終わったらリセット）
+    const me = state.battle.fighters.find((f) => f.isPlayer && !f.remoteAuth);
+    if (me) {
+      save.awk = me.awakened > 0 ? 0 : Math.max(0, Math.min(99, Math.round(me.awk)));
+      persist();
+    }
     state.battle.dispose();
     state.battle = null;
   }
@@ -1028,7 +1075,7 @@ async function startOffline() {
   await loadPromise;
   setStage(state.stage || STAGES[0]);
   const b = makeBattle(null);
-  b.add(state.myKey, { team: 0, player: true, pos: [-4, 3], name: FIGHTERS[state.myKey].name + '（あなた）', upg: upgFor(state.myKey) });
+  b.add(state.myKey, { team: 0, player: true, awk: save.awk, pos: [-4, 3], name: FIGHTERS[state.myKey].name + '（あなた）', upg: upgFor(state.myKey), gear: gearFor(state.myKey) });
   if (state.mode === 'cpu') {
     b.add(state.oppKey, { team: 1, cpu: foeCpu(0.8), hpMul: foeHp(1), pos: [4, -3], facing: Math.PI });
   } else {
@@ -1045,9 +1092,18 @@ async function startOffline() {
 function beginBattle(boss) {
   buildHud();
   show(null);
-  const bgmIdx = (currentStage?.bgm ?? 0) % BGM.length;
-  playTrack(boss ? 'boss' : 'bgm:' + bgmIdx);
-  ui.banner({ name: boss ? '— 双月の下で —' : `— ♪ ${BGM[bgmIdx].name} —` }, '剣を抜け');
+  // 物語は章ごとに100曲から、その他は舞台の曲。ヴェスペラ・運営長戦は専用曲
+  const bgmIdx = (state.mode === 'story' ? state.chapter : currentStage?.bgm ?? 0) % BGM.length;
+  // 敵側（運営の乱入時は両方）にヴェスペラ／運営長がいる時だけ
+  const ks = state.battle.fighters.filter((f) => f.team === 1 || state.mode === 'invade').map((f) => f.key);
+  const apex = ks.some((k) => k === 'sovereign' || k === 'sovereign2') ? 2 : ks.includes('chief') ? 1 : 0;
+  if (apex) {
+    playTrack('apex:' + apex);
+    ui.banner({ name: `— ♪ ${APEX_BGM[apex].name} —` }, '頂上決戦');
+  } else {
+    playTrack(boss ? 'boss' : 'bgm:' + bgmIdx);
+    ui.banner({ name: boss ? '— 双月の下で —' : `— ♪ ${BGM[bgmIdx].name} —` }, '剣を抜け');
+  }
   // 開戦の合図：構え → 3・2・1 → 戦闘開始！（その間は誰も動かない）
   const b = state.battle;
   b.intro = 4.3;
@@ -1108,6 +1164,11 @@ function updateHud() {
     $('#flux u').style.width = me.flux + '%';
     $('#over u').style.width = me.over + '%';
     $('#over').classList.toggle('full', me.over >= 100);
+    const aw = me.awakened > 0;
+    $('#awk u').style.width = (aw ? (me.awakened / 15) * 100 : me.awk) + '%';
+    $('#awk').classList.toggle('on', aw);
+    $('#awk b').textContent = aw ? '覚醒中' : '覚醒';
+    $('#over b').textContent = aw ? '秘奥義' : '奥義';
   }
 }
 
@@ -1154,8 +1215,20 @@ function onBattleEnd(won) {
         grant(100);
         ui.banner({ name: '— 乱入者を退けた —' }, '灯晶 +100');
       }
-      grant(REWARD.story);
       const ch = STORY[state.chapter];
+      // 章の中の次の話（最大3話）
+      const eps = Math.max(1, Math.min(3, ch.eps || 1));
+      if ((state.ep || 0) < eps - 1) {
+        state.ep = (state.ep || 0) + 1;
+        const r = grant(Math.round(REWARD.story / 2));
+        endBattle();
+        playTrack('story');
+        const lines = ch.epLines?.[state.ep - 1] || [['ロウエン', 'まだ気配が残っている……行こう！']];
+        $('#story-chapter').textContent = `${ch.title}　第${state.ep + 1}話`;
+        playDialogue([[`— 第${state.ep}話 完 —`, `灯晶 +${r}。物語は第${state.ep + 1}話へ。`], ...lines], () => startChapterBattle());
+        return;
+      }
+      grant(REWARD.story);
       endBattle();
       leaveField();
       playTrack('story');
@@ -1245,7 +1318,9 @@ $('#story-back').addEventListener('click', () => {
 
 function runStoryChapter() {
   const ch = STORY[state.chapter];
-  $('#story-chapter').textContent = (ch.part ? ch.part + '　' : '') + ch.title;
+  state.ep = 0;
+  const eps = Math.max(1, Math.min(3, ch.eps || 1));
+  $('#story-chapter').textContent = (ch.part ? ch.part + '　' : '') + ch.title + (eps > 1 ? `　第1話（全${eps}話）` : '');
   playTrack('story');
   setStage(stageById(ch.stage));
   playDialogue(ch.before, () => enterField());
@@ -1289,12 +1364,12 @@ function buildStoryBattle(foes, boss) {
   // 運営が主人公を外した場合：先頭の戦士もAIで戦い、プレイヤーは見守る
   const noHero = !!save.noHero && operatorUnlocked();
   const me = noHero
-    ? b.add(mainKey, { team: 0, cpu: Math.min(0.95, 0.8 + prog * 0.15), pos: [-4, 3], upg: upgFor(mainKey), defMul: allyDef, atkMul: allyAtk })
-    : b.add(mainKey, { team: 0, player: true, pos: [-4, 3], name: FIGHTERS[mainKey].name + '（あなた）', upg: upgFor(mainKey), defMul: allyDef, atkMul: allyAtk });
+    ? b.add(mainKey, { team: 0, cpu: Math.min(0.95, 0.8 + prog * 0.15), pos: [-4, 3], upg: upgFor(mainKey), gear: gearFor(mainKey), defMul: allyDef, atkMul: allyAtk })
+    : b.add(mainKey, { team: 0, player: true, awk: save.awk, pos: [-4, 3], name: FIGHTERS[mainKey].name + '（あなた）', upg: upgFor(mainKey), gear: gearFor(mainKey), defMul: allyDef, atkMul: allyAtk });
   const spots = [[-6, 0], [-6, 5], [-3, -2]];
   party.filter((k) => k !== mainKey).forEach((k, i) => {
     // 仲間AIは章が進むほど賢く、主人公よりわずかに控えめな火力
-    b.add(k, { team: 0, cpu: Math.min(0.95, 0.8 + prog * 0.15), pos: spots[i], upg: upgFor(k), defMul: allyDef, atkMul: allyAtk * 0.92 });
+    b.add(k, { team: 0, cpu: Math.min(0.95, 0.8 + prog * 0.15), pos: spots[i], upg: upgFor(k), gear: gearFor(k), defMul: allyDef, atkMul: allyAtk * 0.92 });
   });
   if (allowInvade()) {
     ensureWorld().then((w) => {
@@ -1316,11 +1391,14 @@ async function startChapterBattle() {
   const ch = STORY[state.chapter];
   state.encounter = null;
   let foes = ch.enemies;
-  if (!ch.boss) {
+  // ボスは最後の話にだけ現れる
+  const finalEp = (state.ep || 0) >= Math.max(1, Math.min(3, ch.eps || 1)) - 1;
+  const bossNow = ch.boss && finalEp;
+  if (!bossNow) {
     const lvl = ch.enemies[0]?.hpMul || 1;
-    foes = Array.from({ length: rollFoeCount() }, (_, i) => ({ k: i === 0 && ch.enemies[0] ? ch.enemies[0].k : ENEMY_ROSTER[Math.floor(Math.random() * ENEMY_ROSTER.length)], hpMul: lvl }));
+    foes = Array.from({ length: rollFoeCount() }, (_, i) => ({ k: i === 0 && ch.enemies[0] && !ch.boss ? ch.enemies[0].k : ENEMY_ROSTER[Math.floor(Math.random() * ENEMY_ROSTER.length)], hpMul: ch.boss ? Math.min(lvl, 1.2) : lvl }));
   }
-  buildStoryBattle(foes, ch.boss);
+  buildStoryBattle(foes, bossNow);
 }
 // 魔物シンボルとの戦闘
 function startEncounter(sym) {
@@ -1350,7 +1428,7 @@ async function enterField() {
   state.myKey = mainKey;
   state.field = new Field(scene, {
     chapter: state.chapter, ch, stage: st, assets, floorTex,
-    mainKey, partyKeys: party, npcKeys: ROSTER, enemyPool: ENEMY_ROSTER,
+    mainKey, gear: gearFor(mainKey), partyKeys: party, npcKeys: ROSTER, enemyPool: ENEMY_ROSTER,
     onTalk: (lines) => {
       sfx('ui');
       playDialogue(lines, () => show(null));
@@ -1465,7 +1543,7 @@ function renderForge() {
   rows.replaceChildren();
   const tabs = document.createElement('div');
   tabs.className = 'ftabs';
-  for (const [id, label] of [['upg', '強化（100種）'], ['wep', '武器・装備（100種）']]) {
+  for (const [id, label] of [['upg', '強化（100種）'], ['wep', '武器（100種）'], ['arm', '防具（100種）']]) {
     const tb = document.createElement('button');
     tb.className = 'btn mini' + (forgeTab === id ? ' on' : '');
     tb.textContent = label;
@@ -1477,14 +1555,16 @@ function renderForge() {
     tabs.append(tb);
   }
   rows.append(tabs);
-  if (forgeTab === 'wep') {
-    const cur = WEAPONS.find((w) => w.id === save.equip[forgeSel]);
+  if (forgeTab === 'wep' || forgeTab === 'arm') {
+    const LIST = forgeTab === 'wep' ? WEAPONS : ARMORS;
+    const slot = forgeTab === 'wep' ? save.equip : save.armor;
+    const cur = LIST.find((w) => w.id === slot[forgeSel]);
     const info = document.createElement('small');
-    info.textContent = `装備中：${cur ? cur.name : 'なし'}`;
+    info.textContent = `装備中：${cur ? cur.name : 'なし'}（装備は戦闘とワールドで姿に反映されます）`;
     rows.append(info);
-    for (const w of WEAPONS) {
+    for (const w of LIST) {
       const owned = save.owned.includes(w.id);
-      const on = save.equip[forgeSel] === w.id;
+      const on = slot[forgeSel] === w.id;
       const row = document.createElement('div');
       row.className = 'frow';
       const lab = document.createElement('span');
@@ -1495,14 +1575,14 @@ function renderForge() {
       btn.disabled = !owned && save.shards < w.price;
       btn.addEventListener('click', () => {
         if (on) {
-          delete save.equip[forgeSel];
+          delete slot[forgeSel];
         } else if (owned) {
-          save.equip[forgeSel] = w.id;
+          slot[forgeSel] = w.id;
         } else {
           if (save.shards < w.price) return;
           save.shards -= w.price;
           save.owned.push(w.id);
-          save.equip[forgeSel] = w.id;
+          slot[forgeSel] = w.id;
         }
         persist();
         sfx('skill');
@@ -1650,7 +1730,7 @@ async function startOnline(peer) {
   const vs = state.mode === 'online-vs';
   const mePos = host ? [-4, 3] : vs ? [4, -3] : [-6, -1];
   const peerPos = host ? (vs ? [4, -3] : [-6, -1]) : [-4, 3];
-  b.add(state.myKey, { team: 0, player: true, netId: myId, pos: mePos, name: state.online.name, upg: upgFor(state.myKey) });
+  b.add(state.myKey, { team: 0, player: true, awk: save.awk, netId: myId, pos: mePos, name: state.online.name, upg: upgFor(state.myKey), gear: gearFor(state.myKey) });
   b.add(peerKey, { team: vs ? 1 : 0, remote: true, netId: peer.id, pos: peerPos, name: peer.name, hpMul: 1.15 });
   if (!vs) {
     b.add('seraphel', { team: 1, cpu: 0.9, remote: !host, netId: 'boss', pos: [5, -5], facing: Math.PI, hpMul: 2.2, name: '裁定者セラフェル' });
@@ -1771,8 +1851,10 @@ function onInvaded(e) {
   buildHud();
   ui.flash();
   sfx('burst');
-  playTrack('boss');
-  ui.banner({ name: '— 空が裂けた —' }, '裁定者が降りてきた！');
+  const apex = ik === 'sovereign' || ik === 'sovereign2' ? 2 : ik === 'chief' ? 1 : 0;
+  playTrack(apex ? 'apex:' + apex : 'boss');
+  if (apex) ui.cutin(b.fighters[b.fighters.length - 1], FIGHTERS[ik].name, '運営長、降臨');
+  ui.banner({ name: '— 空が裂けた —' }, apex ? '運営長が降りてきた！' : '裁定者が降りてきた！');
 }
 
 function renderInvadeList() {
@@ -1823,8 +1905,8 @@ async function startInvade(p) {
   setStage(stageById(STORY[p.ch]?.stage));
   const b = makeBattle(w);
   const ik = (state.invadeKey === 'chief' || state.invadeKey === 'sovereign') && chiefUnlocked() ? state.invadeKey : 'seraphel';
-  b.add(ik, { team: 0, player: true, netId: w.myId, pos: [0, -9], name: FIGHTERS[ik].name + '（運営）', upg: upgFor(ik) });
-  b.add(FIGHTERS[p.fk] ? p.fk : 'rowen', { team: 1, remote: true, netId: p.id, pos: [p.x, p.z], name: p.name });
+  b.add(ik, { team: 0, player: true, awk: save.awk, netId: w.myId, pos: [0, -9], name: FIGHTERS[ik].name + '（運営）', upg: upgFor(ik), gear: gearFor(ik) });
+  b.add(FIGHTERS[p.fk] ? p.fk : 'rowen', { team: 1, remote: true, netId: p.id, pos: [p.x, p.z], name: p.name, gear: { w: p.gw, a: p.ga } });
   beginBattle(true);
   ui.flash();
   ui.banner({ name: `— ${STORY[p.ch]?.title || '旅の途中'} —` }, '裁きの時間だ');
@@ -1843,7 +1925,8 @@ function worldTick(dt) {
   worldTimer = 0;
   const b = state.battle;
   const me = b?.fighters.find((f) => f.isPlayer);
-  const base = { name: myName(), pid: save.pid, mode: 'world', ready: false };
+  const gk = state.myKey || '';
+  const base = { name: myName(), pid: save.pid, mode: 'world', ready: false, gw: save.equip[gk] || '', ga: save.armor[gk] || '' };
   if (state.mode === 'story' && state.field && !b) {
     const fp = state.field.player;
     w.publish({ ...base, role: 'field', fk: state.myKey, ch: state.chapter, ib: false, x: 0, z: 0, fx: fp.pos.x, fz: fp.pos.z, ry: fp.facing, hp: 1, mv: fp.cur === 'run' });
@@ -1867,7 +1950,7 @@ function refreshFieldRemotes() {
   if (!f || !w) return;
   const list = Object.values(state.worldPeers || {})
     .filter((p) => p.role === 'field' && p.id !== w.myId && p.pid !== save.pid)
-    .map((p) => ({ id: p.id, name: [...p.name].slice(0, 10).join(''), fk: FIGHTERS[p.fk] ? p.fk : 'rowen', x: p.fx, z: p.fz, ry: p.ry, mv: p.mv, friend: isFriend(p.pid) }));
+    .map((p) => ({ id: p.id, name: [...p.name].slice(0, 10).join(''), fk: FIGHTERS[p.fk] ? p.fk : 'rowen', x: p.fx, z: p.fz, ry: p.ry, mv: p.mv, friend: isFriend(p.pid), gw: p.gw || '', ga: p.ga || '' }));
   f.setRemotes(list);
 }
 function peerStatus(p) {
@@ -1947,6 +2030,15 @@ function canDuelNow() {
 function onWorldReq(e) {
   const w = state.world;
   if (!w || e.to !== w.myId) return;
+  // 申請の連打（スパム）対策：同じ相手から10秒に4件まで
+  const now = performance.now();
+  const rl = (state.reqRate ||= new Map());
+  const hist = (rl.get(e.from) || []).filter((t) => now - t < 10000);
+  if (hist.length >= 4) return;
+  hist.push(now);
+  rl.set(e.from, hist);
+  if (rl.size > 200) rl.clear();
+  if ((e.kind === 'duel' || e.kind === 'friend') && state.incoming && now - state.incoming.at < 30000) return;
   const peer = state.worldPeers?.[e.from];
   if (e.kind === 'duel' || e.kind === 'friend') {
     if (e.kind === 'duel' && !canDuelNow()) {
@@ -2019,8 +2111,8 @@ function startDuel(peer, challenger) {
   const b = makeBattle(w);
   const myPos = challenger ? [-4, 3] : [4, -3];
   const peerPos = challenger ? [4, -3] : [-4, 3];
-  b.add(state.myKey, { team: 0, player: true, netId: w.myId, pos: myPos, facing: challenger ? 0 : Math.PI, name: myName() + '（あなた）', upg: upgFor(state.myKey) });
-  b.add(FIGHTERS[peer.fk] ? peer.fk : 'rowen', { team: 1, remote: true, netId: peer.id, pos: peerPos, facing: challenger ? Math.PI : 0, name: peer.name });
+  b.add(state.myKey, { team: 0, player: true, awk: save.awk, netId: w.myId, pos: myPos, facing: challenger ? 0 : Math.PI, name: myName() + '（あなた）', upg: upgFor(state.myKey), gear: gearFor(state.myKey) });
+  b.add(FIGHTERS[peer.fk] ? peer.fk : 'rowen', { team: 1, remote: true, netId: peer.id, pos: peerPos, facing: challenger ? Math.PI : 0, name: peer.name, gear: { w: peer.gw, a: peer.ga } });
   beginBattle(false);
   ui.flash();
   sfx('burst');

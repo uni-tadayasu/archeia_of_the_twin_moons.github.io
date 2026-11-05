@@ -22,7 +22,8 @@ export function sanitizePresence(p) {
     id: str(p.id, 40), name: str(p.name, 12) || '旅人', fk: str(p.fk, 12), mode: str(p.mode, 12),
     x: num(p.x, 50), z: num(p.z, 50), ry: num(p.ry, 10), hp: num(p.hp, 99999), mv: !!p.mv, ready: !!p.ready,
     role: str(p.role, 8), ch: Math.floor(num(p.ch, 99)), ib: !!p.ib,
-    pid: str(p.pid, 24), fx: num(p.fx, 700), fz: num(p.fz, 700)
+    pid: str(p.pid, 24), fx: num(p.fx, 700), fz: num(p.fz, 700),
+    gw: /^w\d{1,2}$/.test(p.gw) ? p.gw : '', ga: /^a\d{1,2}$/.test(p.ga) ? p.ga : ''
   };
 }
 
@@ -77,7 +78,7 @@ export async function connect(mode, roomCode, handlers) {
   });
   room.subscribeTopic('cast', (e) => {
     if (e && typeof e === 'object') {
-      handlers.onCast({ id: str(e.id, 40), slot: ['s0', 's1', 's2', 's3', 'over'].includes(e.slot) ? e.slot : 's0', tx: num(e.tx, 50), tz: num(e.tz, 50), ry: num(e.ry, 10) });
+      handlers.onCast({ id: str(e.id, 40), slot: ['s0', 's1', 's2', 's3', 'f0', 'f1', 'f2', 'f3', 'over', 'hi'].includes(e.slot) ? e.slot : 's0', tx: num(e.tx, 50), tz: num(e.tz, 50), ry: num(e.ry, 10) });
     }
   });
   room.subscribeTopic('hit', (e) => {

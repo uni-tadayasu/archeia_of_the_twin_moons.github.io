@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1" />
     <title>双月のアルケイア — ブラウザで遊べる3Dアリーナファンタジーアクション</title>
-    <meta name="description" content="双つの月の下で戦う、ブラウザ3Dアリーナファンタジーアクション。100人の戦士、全100章の物語、4人パーティー、25体のボス、属性と状態異常、オンライン対戦・協力、武器鍛錬。PC・スマホ・ゲームパッド対応、インストール不要で無料プレイ。" />
+    <meta name="description" content="双つの月の下で戦う、ブラウザ3Dアリーナファンタジーアクション。100人の戦士、全100章（最大3話）の物語、覚醒と秘奥義、数百種の追加技、100曲のBGM、オンライン対戦・協力。PC・スマホ・ゲームパッド対応、インストール不要で無料プレイ。" />
     <meta name="keywords" content="ブラウザゲーム,3Dアクション,アリーナ,ファンタジー,RPG,無料ゲーム,オンライン対戦,スマホゲーム" />
     <meta name="theme-color" content="#1b1d3a" />
     <meta name="robots" content="index,follow,max-image-preview:large" />
@@ -23,16 +23,20 @@
     <link rel="icon" type="image/webp" href="assets/app-icon.webp" />
     <link rel="apple-touch-icon" href="assets/app-icon.webp" />
     <meta name="referrer" content="strict-origin-when-cross-origin" />
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://esm.sh https://storage.googleapis.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob: https:; media-src 'self' blob: https:; connect-src 'self' data: blob: https://esm.sh https://api.instantdb.com wss://api.instantdb.com https://*.instantdb.com wss://*.instantdb.com https://storage.googleapis.com; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'none'; upgrade-insecure-requests" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://esm.sh https://storage.googleapis.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob: https:; media-src 'self' blob: https:; connect-src 'self' data: blob: https://esm.sh https://api.instantdb.com wss://api.instantdb.com https://*.instantdb.com wss://*.instantdb.com https://storage.googleapis.com; worker-src 'self' blob:; object-src 'none'; frame-src 'none'; manifest-src 'self'; script-src-attr 'none'; base-uri 'self'; form-action 'none'; upgrade-insecure-requests" />
     <script type="application/ld+json">
-      {"@context":"https://schema.org","@type":"VideoGame","name":"双月のアルケイア","alternateName":"Arkeia of Twin Moons","description":"100人の戦士と全100章の物語を楽しめる、ブラウザ3Dアリーナファンタジーアクション。","image":"assets/app-icon.webp","genre":["Action","Fighting","Fantasy","RPG"],"gamePlatform":["Web browser","PC","Mobile"],"playMode":["SinglePlayer","MultiPlayer","CoOp"],"applicationCategory":"Game","operatingSystem":"Any","inLanguage":"ja","isAccessibleForFree":true,"offers":{"@type":"Offer","price":"0","priceCurrency":"JPY"}}
+      {"@context":"https://schema.org","@type":"VideoGame","name":"双月のアルケイア","alternateName":"Arkeia of Twin Moons","description":"100人の戦士と全100章の物語を楽しめる、ブラウザ3Dアリーナファンタジーアクション。","image":"assets/app-icon.webp","genre":["Action","Fighting","Fantasy","RPG"],"gamePlatform":["Web browser","PC","Mobile"],"playMode":["SinglePlayer","MultiPlayer","CoOp"],"applicationCategory":"Game","operatingSystem":"Any","inLanguage":"ja","isAccessibleForFree":true,"offers":{"@type":"Offer","price":"0","priceCurrency":"JPY"},"publisher":{"@type":"Organization","name":"KASAI SOLUTIONS INC."},"author":{"@type":"Organization","name":"KASAI SOLUTIONS INC."},"copyrightHolder":{"@type":"Organization","name":"KASAI SOLUTIONS INC."},"copyrightNotice":"© KASAI SOLUTIONS INC. All rights reserved.","musicBy":{"@type":"Organization","name":"KASAI SOLUTIONS INC."},"keywords":"3Dアクション,覚醒,秘奥義,追加技,オンライン対戦,ブラウザゲーム"}
     </script>
     <link rel="modulepreload" href="./main.js" />
     <link rel="modulepreload" href="./game.js" />
     <link rel="modulepreload" href="./data.js" />
     <link rel="modulepreload" href="./music.js" />
     <link rel="preconnect" href="https://esm.sh" crossorigin>
-    <meta name="author" content="双月のアルケイア制作" />
+    <meta name="author" content="KASAI SOLUTIONS INC." />
+    <meta name="copyright" content="© KASAI SOLUTIONS INC. All rights reserved." />
+    <meta name="publisher" content="KASAI SOLUTIONS INC." />
+    <meta name="rating" content="general" />
+    <link rel="dns-prefetch" href="https://api.instantdb.com" />
     <meta name="format-detection" content="telephone=no" />
     <meta name="color-scheme" content="dark" />
     <meta property="og:image:alt" content="双月のアルケイアのアイコン" />
@@ -191,6 +195,24 @@
       @keyframes ban { 0% { opacity:0; transform:scaleX(1.6); } 15% { opacity:1; transform:none; } 80% { opacity:1; } 100% { opacity:0; } }
       #flash { position:absolute; inset:0; background:#fffbe6; opacity:0; }
       #flash.go { animation:fl .7s ease-out; }
+      #gauges b { font-weight:normal; }
+      #awk u { background:linear-gradient(90deg,#8a0010,#ff3040) !important; }
+      #awk.on u { animation:awkp .4s infinite alternate; }
+      #awk.on b { color:#ff5060; text-shadow:0 0 8px #ff2030; }
+      @keyframes awkp { from { filter:brightness(1); } to { filter:brightness(1.8); } }
+      .license { opacity:.7; font-size:11px; letter-spacing:.08em; margin-top:6px; }
+      #cutin { position:absolute; inset:0; pointer-events:none; overflow:hidden; z-index:30; }
+      #cutin[hidden] { display:none; }
+      #cutin .ci-band { position:absolute; left:-10%; right:-10%; top:34%; height:min(30vh,220px); display:flex; align-items:center; gap:4vw; padding-left:16%; background:linear-gradient(100deg,rgba(255,40,60,0) 0%,rgba(120,0,20,.92) 12%,rgba(20,0,10,.95) 50%,rgba(120,0,20,.92) 88%,rgba(255,40,60,0) 100%); border-top:3px solid #ffd060; border-bottom:3px solid #ffd060; transform:skewY(-6deg); box-shadow:0 0 40px rgba(255,40,60,.6); }
+      #cutin.foe .ci-band { background:linear-gradient(100deg,rgba(80,40,255,0) 0%,rgba(40,0,90,.92) 12%,rgba(10,0,25,.95) 50%,rgba(40,0,90,.92) 88%,rgba(80,40,255,0) 100%); border-color:#c090ff; }
+      #cutin img { height:118%; aspect-ratio:1; object-fit:cover; border-radius:50%; border:3px solid #ffd060; box-shadow:0 0 30px #ff3040; transform:skewY(6deg); }
+      #cutin .ci-text { display:flex; flex-direction:column; transform:skewY(6deg); }
+      #cutin .ci-who { font-style:normal; color:#ffd8a0; letter-spacing:.3em; font-size:clamp(12px,2vmin,18px); }
+      #cutin .ci-title { color:#fff; font-size:clamp(26px,6.5vmin,64px); letter-spacing:.08em; text-shadow:0 0 18px #ff3040,0 3px 0 #000; white-space:nowrap; }
+      #cutin .ci-sub { color:#ffd060; letter-spacing:.25em; font-size:clamp(11px,1.8vmin,16px); }
+      #cutin.go .ci-band { animation:ciband 1.9s cubic-bezier(.2,.9,.2,1) forwards; }
+      @keyframes ciband { 0% { transform:skewY(-6deg) translateX(110%); } 14% { transform:skewY(-6deg) translateX(0); } 80% { transform:skewY(-6deg) translateX(-3%); opacity:1; } 100% { transform:skewY(-6deg) translateX(-120%); opacity:0; } }
+      @media (prefers-reduced-motion: reduce) { #cutin.go .ci-band { animation-duration:1.2s; } }
       @keyframes fl { 0% { opacity:.9; } 100% { opacity:0; } }
       #pause { position:absolute; inset:0; background:rgba(10,10,24,.78); display:flex; flex-direction:column; align-items:center; justify-content:center; gap:10px; padding:16px; }
       #pause[hidden] { display:none; }
@@ -320,7 +342,8 @@
             <button id="btn-shop">灯晶商店<small>特別な戦士を迎える</small></button>
             <button id="btn-options">旅支度<small>音・CPUの強さ・ゲームパッド・運営の鍵</small></button>
           </nav>
-          <p class="foot">WASD 移動／J 斬る／K 技A／U 技B／L 奥義／Shift 構え／Space 跳ぶ／Esc 戻る・休む<br>移動しながら技を出すと、別の技に変わります。</p>
+          <p class="foot">WASD 移動／J 斬る／K 技A／U 技B／L 奥義／Shift 構え／Space 跳ぶ／Esc 戻る・休む<br>移動しながら技を出すと、別の技に変わります。技の直後にタイミングよく同じ技で「追加技」。<br>ダメージを溜めると「覚醒」（被ダメージ半減）、覚醒中の奥義は「秘奥義」に。</p>
+          <p class="foot license">© <span id="copy-year">2025</span> KASAI SOLUTIONS INC. All rights reserved.</p>
         </div>
       </section>
 
@@ -436,7 +459,7 @@
         <div id="hud-left" class="hud-side"></div>
         <div id="hud-right" class="hud-side"></div>
         <button id="btn-pause" aria-label="休む">‖ 休む</button>
-        <div id="gauges"><div id="flux">灯力<i><u></u></i></div><div id="over">奥義<i><u></u></i></div></div>
+        <div id="gauges"><div id="flux">灯力<i><u></u></i></div><div id="over"><b>奥義</b><i><u></u></i></div><div id="awk"><b>覚醒</b><i><u></u></i></div></div>
         <div id="field-hud">
           <div id="field-info"><b id="field-region"></b><span id="field-obj"></span><small>WASD／スティックで移動・Shiftで駆け足・赤い輪の魔物に触れると戦闘</small></div>
           <canvas id="field-map" width="104" height="228" aria-label="地図"></canvas>
@@ -458,6 +481,7 @@
       </div>
       <div id="pops"></div>
       <div id="flash"></div>
+      <div id="cutin" hidden aria-hidden="true"><div class="ci-band"><img alt="" decoding="async"><div class="ci-text"><i class="ci-who"></i><b class="ci-title"></b><small class="ci-sub"></small></div></div></div>
       <div id="banner"><i></i><b></b></div>
       <div id="countdown" hidden></div>
       <div id="skillname"><span class="sn-who"></span><b class="sn-name"></b><small class="sn-kind"></small></div>

@@ -101,6 +101,20 @@ export class ProcMusic {
     bf.type = 'lowpass';
     bf.frequency.value = 900;
     this.drive.connect(bf).connect(this.bus);
+    // ギター用の歪み（パワーコード）
+    this.gtr = ctx.createWaveShaper();
+    this.gtr.curve = driveCurve(7);
+    this.gtr.oversample = '4x';
+    const gf = ctx.createBiquadFilter();
+    gf.type = 'lowpass';
+    gf.frequency.value = 3600;
+    const gh = ctx.createBiquadFilter();
+    gh.type = 'highpass';
+    gh.frequency.value = 90;
+    const gg = ctx.createGain();
+    gg.gain.value = 0.32;
+    this.gtr.connect(gh).connect(gf).connect(gg).connect(this.bus);
+    gg.connect(this.verbIn);
     this.timer = null;
     const len = ctx.sampleRate;
     this.noise = ctx.createBuffer(1, len, ctx.sampleRate);
@@ -150,6 +164,9 @@ export class ProcMusic {
     song.taiko = Array.from({ length: 16 }, (_, i) => i === 0 || i === 6 || i === 10 || (i === 14 && r() < 0.6));
     song.choir = r() < 0.75;
     song.keyUp = pick([1, 2, 2, 3]);
+    // 歪んだギターのパワーコード刻み（曲の半分ほどに入る）
+    song.rock = r() < 0.55;
+    song.gtrPat = Array.from({ length: 16 }, (_, i) => (i % 2 === 0 ? (r() < 0.85 ? 1 : 0) : r() < 0.3 ? 1 : 0));
     return song;
   }
 
@@ -169,6 +186,26 @@ export class ProcMusic {
       this.song.choir = true;
       this.song.arpOct = 2;
       this.song.keyUp = 2;
+    }
+    // 頂上決戦（運営長の乱入・ヴェスペラ戦）：和声的短音階・高速・全楽器フル編成
+    if (track.apex) {
+      const s = this.song;
+      s.apex = true;
+      s.scale = track.apex === 2 ? [0, 1, 4, 5, 7, 8, 10] : [0, 2, 3, 5, 7, 8, 11];
+      s.root = track.apex === 2 ? 38 : 40;
+      s.prog = [0, 5, 6, 4];
+      s.prog2 = [0, 6, 3, 4];
+      s.brass = true;
+      s.choir = true;
+      s.rock = true;
+      s.arpOct = 2;
+      s.leadDetune = 20;
+      s.keyUp = 1;
+      s.kick = Array.from({ length: 16 }, (_, i) => i % 4 === 0 || i === 7 || i === 14);
+      s.snare = Array.from({ length: 16 }, (_, i) => i === 4 || i === 12);
+      s.stabs = Array.from({ length: 16 }, (_, i) => [0, 3, 6, 8, 11, 14].includes(i));
+      s.gtrPat = Array.from({ length: 16 }, () => 1);
+      s.taiko = Array.from({ length: 16 }, (_, i) => i % 4 === 0 || i === 10 || i === 15);
     }
     this.step = 0;
     this.spb = 60 / this.song.bpm / 4;
@@ -215,8 +252,16 @@ export class ProcMusic {
     const bar = barAll % 4;
     const prog = section === 2 ? s.prog2 : s.prog;
     const chord = prog[bar];
-    const full = section === 1 || section === 2;
+    const full = section === 1 || section === 2 || (s.apex && section === 0 && barAll >= 4);
     const fill = barAll % 8 === 7 && i >= 12;
+    // ギターのパワーコード（展開・サビ、頂上決戦は常に）
+    if (s.rock && (full || (s.apex && section !== 3)) && s.gtrPat[i]) {
+      const root = mtof(this.noteOf(s, chord, -1));
+      this.guitar(root, t, this.spb * (i % 4 === 0 ? 1.6 : 0.7), i % 4 === 0 ? 1 : 0.7);
+    }
+    // 頂上決戦：ダブルキックの連打と低音の唸り
+    if (s.apex && full && section === 2 && i % 2 === 1) this.kick(t);
+    if (s.apex && i === 0 && bar % 2 === 0 && section !== 3) this.impact(t, 0.7);
     // ---- 追加の厚み ----
     // 聖歌隊パッド（ブレイクと大サビで）
     if (s.choir && i === 0 && (section === 3 || grand || (section === 2 && bar % 2 === 0))) {
@@ -542,6 +587,25 @@ export class ProcMusic {
     o2.start(t);
     o.stop(t + dur + 0.25);
     o2.stop(t + dur + 0.25);
+  }
+
+  // 歪みギター：根音＋5度＋オクターブのパワーコード、ミュート気味の刻み
+  guitar(freq, t, dur, v) {
+    const c = this.ctx;
+    const g = c.createGain();
+    this.env(g, t, 0.004, 0.16 * v, dur, 0.05);
+    for (const [mul, det] of [[1, -6], [1.4983, 5], [2, 0], [1, 9]]) {
+      const o = c.createOscillator();
+      o.type = 'sawtooth';
+      o.frequency.value = freq * mul;
+      o.detune.value = det;
+      o.connect(g);
+      o.start(t);
+      o.stop(t + dur + 0.12);
+    }
+    const pan = c.createStereoPanner();
+    pan.pan.value = (this.step % 2 ? 0.45 : -0.45);
+    g.connect(pan).connect(this.gtr);
   }
 
   pluck(freq, t, dur, vol) {

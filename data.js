@@ -434,8 +434,14 @@ const BGM_A = ['暁', '黄昏', '月影', '嵐', '星屑', '灯火', '雪解け'
 const BGM_B = ['の行進', 'の舞曲', 'の円舞', 'の鼓動', 'の追想', 'の戦歌', 'の祈り', 'の疾走', 'の残響', 'の序曲'];
 export const BGM = [];
 for (let i = 0; i < 100; i++) {
-  BGM.push({ name: BGM_A[i % 10] + BGM_B[Math.floor(i / 10)], seed: 1000 + i * 7919 });
+  // テンポは136〜175で散らし、10曲に3曲は壮大編成（金管・聖歌隊）に
+  BGM.push({ name: BGM_A[i % 10] + BGM_B[Math.floor(i / 10)], seed: 1000 + i * 7919, bpm: 136 + ((i * 17) % 40), epic: i % 10 < 3 });
 }
+// 頂上決戦の専用曲（1=運営長ルミナリアの乱入、2=ヴェスペラ戦）
+export const APEX_BGM = {
+  1: { name: '裁定の双月 — 天穹を裂く者', seed: 777001, bpm: 176, apex: 1 },
+  2: { name: '冥紫の深淵后 — 緋き終焉', seed: 777777, bpm: 168, apex: 2 }
+};
 
 // ---------- ステージ：合計100 ----------
 {
@@ -488,6 +494,16 @@ WEP_TIER.forEach((tier, ti) => WEP_TYPES.forEach((type, yi) => {
   const bonus = {};
   WEP_FOCUS[yi].forEach((s, j) => (bonus[s] = +(pow * (j ? 0.6 : 1)).toFixed(1)));
   WEAPONS.push({ id: 'w' + (ti * 10 + yi), name: tier + type, bonus, price: 30 + ti * ti * 25 + ti * 30 });
+}));
+// ---------- 防具：100種（装備すると戦闘・ワールドで見た目に反映） ----------
+const ARM_TYPES = ['軽鎧', '重鎧', '法衣', '外套', '胸当て', '肩鎧', '竜鱗鎧', '聖衣', '影装束', '王冠鎧'];
+const ARM_FOCUS = [['def', 'hp'], ['def'], ['flux', 'def'], ['hp', 'over'], ['def', 'atk'], ['def', 'hp'], ['hp', 'def'], ['over', 'flux'], ['atk', 'over'], ['def', 'over']];
+export const ARMORS = [];
+WEP_TIER.forEach((tier, ti) => ARM_TYPES.forEach((type, yi) => {
+  const pow = 0.8 + ti * 1.0;
+  const bonus = {};
+  ARM_FOCUS[yi].forEach((s, j) => (bonus[s] = +(pow * (j ? 0.6 : 1)).toFixed(1)));
+  ARMORS.push({ id: 'a' + (ti * 10 + yi), name: tier + type, bonus, price: 25 + ti * ti * 22 + ti * 28 });
 }));
 export const STAT_LABEL = { hp: '体力', atk: '攻撃', def: '守り', flux: '灯力', over: '奥義' };
 
@@ -795,6 +811,29 @@ export const STORY = [];
       const after = isBoss ? arc.close : mid ? [[en, 'ぐ……主よ、お許しを……'], ['ロウエン', `${place}の灯、ひとつ取り戻した。`]] : [pickOf(r, AFTER_LINES)(en, an, place)];
       STORY.push({ title: head, part: arc.part, stage, ally: arc.ally, enemies, before, after, boss: !!(isBoss || mid) });
     });
+  });
+}
+// ---- 各章を1〜3話に：話の合間の会話（第2話・第3話の前） ----
+{
+  const EP2 = [
+    (a, p) => [['ロウエン', '……まだ終わりじゃない。気配がもうひとつ近づいてくる。'], [a, `${p}の灯を狙う群れが、残っていたみたい。`]],
+    (a) => [[a, '待って、足音が増えてる！'], ['ロウエン', '休む暇はなさそうだな。構えろ！']],
+    (a, p) => [['謎の声', `${p}の灯は渡さぬ……我らが主のために。`], ['ロウエン', '主？　誰のことだ。答えてもらうぞ！']],
+    (a) => [[a, '空気が変わった……今度のは手ごわいよ。'], ['ロウエン', '背中は任せた。一気に行く！']]
+  ];
+  const EP3 = [
+    (a, p) => [['ロウエン', 'これで最後だ。この地の影を、ここで断つ！'], [a, `${p}に灯を還そう。全部、終わらせて。`]],
+    (a) => [['影の声', '……よくぞここまで。だが、最後の番人が貴様らを待つ。'], [a, '最後の番人……！　ロウエン、気をつけて。']],
+    (a) => [[a, '灯が震えてる……決着の時みたい。'], ['ロウエン', 'ああ。三度目の正直だ。']]
+  ];
+  STORY.forEach((ch, n) => {
+    ch.eps = 1 + (n % 3 === 1 ? 1 : n % 3 === 2 ? 2 : 0) + (ch.boss && n % 3 === 0 ? 1 : 0);
+    ch.eps = Math.min(3, ch.eps);
+    const an = NAME_OF(ch.ally || 'minase');
+    const place = (ch.part || '').split('　')[1] || 'この地';
+    ch.epLines = [];
+    if (ch.eps >= 2) ch.epLines.push(EP2[n % EP2.length](an, place));
+    if (ch.eps >= 3) ch.epLines.push(EP3[n % EP3.length](an, place));
   });
 }
 

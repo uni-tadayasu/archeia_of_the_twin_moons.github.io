@@ -3,6 +3,7 @@
 import * as THREE from 'three';
 import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js';
 import { FIGHTERS } from './data.js';
+import { makeGear, animGear } from './gear.js';
 
 function rng(seed) {
   let a = seed >>> 0;
@@ -1079,6 +1080,7 @@ export class Field {
     // 主人公と仲間
     const def = FIGHTERS[o.mainKey];
     this.player = makeActor(o.assets[o.mainKey], def.height, def.color, def.tint, this.own);
+    this.setGear(this.player, def.height, o.gear);
     // 2章目以降は前の地から旅を続け、南の街道の端から歩いてくる
     this.continued = o.chapter > 0;
     const [sx0, sz0] = this.road[0];
@@ -1569,6 +1571,7 @@ export class Field {
     for (const a of [p, ...this.followers, ...this.npcs, ...this.syms, this.boss]) {
       if (a.far) continue;
       a.mixer?.update(dt);
+      if (a.gear) animGear(a.gear, dt, false, a.cur === 'run');
       a.root.position.copy(a.pos);
       a.root.rotation.y = a.facing;
     }
@@ -1606,6 +1609,13 @@ export class Field {
     return sp;
   }
   // 自分の頭上にも旅人名
+  // 装備の見た目を付け替える
+  setGear(a, h, g) {
+    if (a.gear) a.root.remove(a.gear);
+    a.gkey = `${g?.w}|${g?.a}`;
+    a.gear = g ? makeGear(h, g.w, g.a) : null;
+    if (a.gear) a.root.add(a.gear);
+  }
   setOwnName(name) {
     const p = this.player;
     if (p.label === name) return;
@@ -1653,6 +1663,7 @@ export class Field {
         a.root.add(a.tag);
         a.label = p.name + p.friend;
       }
+      if (a.gkey !== `${p.gw}|${p.ga}`) this.setGear(a, a.h, { w: p.gw, a: p.ga });
       Object.assign(a, { id: p.id, name: p.name, friend: p.friend, tx: p.x, tz: p.z, tr: p.ry, mv: p.mv });
     }
     for (const id of [...this.remotes.keys()]) if (!seen.has(id)) this.removeRemote(id);
@@ -1689,6 +1700,7 @@ export class Field {
       if (a.far) continue;
       a.play(a.mv ? 'run' : 'idle');
       a.mixer?.update(dt);
+      if (a.gear) animGear(a.gear, dt, false, a.mv);
       a.root.position.copy(a.pos);
       a.root.rotation.y = a.facing;
     }

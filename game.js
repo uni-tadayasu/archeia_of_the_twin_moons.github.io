@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js';
 import { FIGHTERS, ELEMS } from './data.js';
+import { makeGear, animGear } from './gear.js';
 
 // 状態異常：持続秒数・継続ダメージ(毎秒)
 const ST_INFO = {
@@ -10,6 +11,45 @@ const ST_INFO = {
 const ST_ELEM = Object.fromEntries(ELEMS.map((e, i) => [e.st, i]));
 
 export const ARENA_R = 13;
+
+// ---- 追加技：技を出した直後にタイミングよく同じ技を押すと派生する（全戦士×各技＝数百種） ----
+const FOLLOW_NAMES = ['追の型', '連閃', '返し刃', '裂破', '重ね撃ち', '穿ち', '狂い咲き', '終の型', '翻り', '轟連', '双牙', '残光', '烈衝', '螺旋', '天翔'];
+const FOLLOW_CACHE = new WeakMap();
+const FOLLOW_MIN = 0.4, FOLLOW_MAX = 1.5; // 押す猶予（秒）
+export function followSpec(def, i) {
+  const base = def?.skills?.[i];
+  if (!base) return null;
+  let m = FOLLOW_CACHE.get(def);
+  if (!m) FOLLOW_CACHE.set(def, (m = {}));
+  if (m[i]) return m[i];
+  let h = i * 7;
+  for (const c of base.name) h = (h * 31 + c.charCodeAt(0)) >>> 0;
+  const s = { ...base, name: `${base.name}・${FOLLOW_NAMES[h % FOLLOW_NAMES.length]}`, cost: Math.ceil((base.cost || 0) * 0.5), follow: true };
+  if (s.dmg) s.dmg = Math.round(s.dmg * 1.35);
+  if (s.count) s.count = Math.min(9, s.count + 1 + (h % 2));
+  if (s.radius) s.radius = +(s.radius * 1.25).toFixed(2);
+  if (s.heal) s.heal = Math.round(s.heal * 1.3);
+  if (s.kind === 'shockwave') s.double = true;
+  if (s.speed) s.speed *= 1.15;
+  m[i] = s;
+  return s;
+}
+// ---- 秘奥義：覚醒中に放つ奥義 ----
+const HI_CACHE = new WeakMap();
+export function hiSpec(def) {
+  if (!def?.over) return null;
+  if (HI_CACHE.has(def)) return HI_CACHE.get(def);
+  const o = def.over;
+  const s = { ...o, name: `秘奥義・${o.name}`, hi: true };
+  if (s.dmg) s.dmg = Math.round(s.dmg * 1.8);
+  if (s.count) s.count = Math.min(12, s.count + 3);
+  if (s.radius) s.radius = +(s.radius * 1.4).toFixed(2);
+  if (s.heal) s.heal = Math.round(s.heal * 1.6);
+  HI_CACHE.set(def, s);
+  return s;
+}
+const AWAKEN_TIME = 15; // 覚醒の持続（秒）
+const AWAKEN_RED = new THREE.Color(0xff1a28);
 
 const GEO = {
   pillar: new THREE.CylinderGeometry(1, 1, 1, 20, 1, true).translate(0, 0.5, 0),
@@ -21,12 +61,25 @@ const GEO = {
   oct: new THREE.OctahedronGeometry(1)
 };
 
+// 技の立体素材：加算発光ではなく、面のある実体として見せる（控えめな自己発光＋フラットシェーディング）
 function glow(color, opacity = 0.85) {
-  const m = new THREE.MeshBasicMaterial({
-    color, transparent: true, opacity, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide
+  const op = opacity >= 0.6 ? Math.min(1, opacity + 0.15) : opacity;
+  const m = new THREE.MeshStandardMaterial({
+    color, emissive: color, emissiveIntensity: 0.3, roughness: 0.45, metalness: 0.15, flatShading: true,
+    transparent: true, opacity: op, depthWrite: op >= 0.9, side: THREE.DoubleSide
   });
-  m.userData.base = opacity;
+  m.userData.base = op;
   return m;
+}
+// 形をくっきり見せる暗い縁取り（裏面を少し大きく描く）
+const OUTLINE_COL = new THREE.Color(0x140a10);
+function outline(mesh, k = 1.08) {
+  const m = new THREE.MeshBasicMaterial({ color: OUTLINE_COL, side: THREE.BackSide, transparent: true, opacity: 0.85 });
+  m.userData.base = 0.85;
+  const o = new THREE.Mesh(mesh.geometry, m);
+  o.scale.setScalar(k);
+  mesh.add(o);
+  return o;
 }
 
 // ---- 形ある技エフェクト用ジオメトリ（共有・破棄しない） ----
@@ -80,6 +133,7 @@ for (let e = 0; e < 10; e++) for (let s = 0; s < 10; s++) fxTex(e, s);
 const elOf = (spec, fallback = 5) => (spec && spec.elem != null ? spec.elem : fallback);
 const PLANE = new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2);
 function fxSprite(elem, slot, size, opacity = 1) {
+  opacity *= 0.45; // 光のにじみは控えめに
   const m = new THREE.SpriteMaterial({ map: fxTex(elem, slot), transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, opacity });
   m.userData.base = opacity;
   m.rotation = Math.random() * Math.PI * 2;
@@ -88,6 +142,7 @@ function fxSprite(elem, slot, size, opacity = 1) {
   return s;
 }
 function fxFlat(elem, slot, size, opacity = 1) {
+  opacity *= 0.6;
   const m = new THREE.MeshBasicMaterial({ map: fxTex(elem, slot), transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, opacity, side: THREE.DoubleSide });
   m.userData.base = opacity;
   const p = new THREE.Mesh(PLANE, m);
@@ -124,6 +179,7 @@ function decorate(g, spec, s = 1) {
   const geo = primOf(spec);
   const core = new THREE.Mesh(geo, glow(spec.color, 0.8));
   core.scale.setScalar(0.32 * s);
+  outline(core, 1.12);
   d.add(core);
   const sats = ei % 4;
   for (let i = 0; i < sats; i++) {
@@ -167,6 +223,7 @@ function makeShape(kind, color, s = 1) {
     const m = new THREE.Mesh(geo, mat);
     m.position.set(x, y, z);
     m.scale.set(sx, sy, sz);
+    if (geo.type !== 'RingGeometry' && geo.type !== 'PlaneGeometry') outline(m, 1.1);
     g.add(m);
     return m;
   };
@@ -314,10 +371,15 @@ export class Fighter {
     this.guard = false;
     this.inv = 0;
     this.dead = false;
+    // 覚醒：受けたダメージを蓄積（戦いをまたいで持ち越せる）→ 満タンで覚醒
+    this.awk = Math.max(0, Math.min(99, +o.awk || 0));
+    this.awakened = 0;
+    this.lastSkill = null;
     this.radius = 0.45 * this.scale * (this.def.height / 1.8);
     this.root = new THREE.Group();
     this.visual = new THREE.Group();
     this.root.add(this.visual);
+    this.gearIds = o.gear || null;
     this.buildModel(battle.assets[key]);
     battle.scene.add(this.root);
   }
@@ -362,6 +424,8 @@ export class Fighter {
       mesh.castShadow = true;
       this.visual.add(mesh);
     }
+    this.gear = this.gearIds ? makeGear(h, this.gearIds.w, this.gearIds.a) : null;
+    if (this.gear) this.visual.add(this.gear);
     const teamColor = this.team === 0 ? 0x7fd3ff : 0xff7a5a;
     this.ringMesh = new THREE.Mesh(GEO.ring, glow(teamColor, 0.7));
     this.ringMesh.scale.setScalar(0.8 * this.scale);
@@ -409,6 +473,7 @@ export class Fighter {
     if (this.mixer) {
       this.mixer.update(dt);
     }
+    if (this.gear) animGear(this.gear, dt, !!this.action, this.vel.lengthSq() > 0.5);
     this.inv = Math.max(0, this.inv - dt);
     this.comboWindow = Math.max(0, this.comboWindow - dt);
     if (this.dead) {
@@ -428,6 +493,22 @@ export class Fighter {
     if (this.dead) {
       this.sync();
       return;
+    }
+    if (this.awakened > 0) {
+      this.awakened -= dt;
+      this.awkFx = (this.awkFx || 0) - dt;
+      if (this.awkFx <= 0) {
+        this.awkFx = 0.12;
+        const p = this.pos.clone().setY(0.3 + Math.random() * 1.6 + this.y);
+        p.x += (Math.random() - 0.5) * 0.7;
+        p.z += (Math.random() - 0.5) * 0.7;
+        this.battle.spark(p, 0xff2a3a, 0.45);
+      }
+      if (this.awakenAura) {
+        this.awakenAura.rotation.y += dt * 3;
+        this.awakenAura.scale.setScalar(1.25 + Math.sin(performance.now() / 120) * 0.12);
+      }
+      if (this.awakened <= 0) this.endAwaken();
     }
     const st = this.status;
     this.flux = Math.min(100, this.flux + (st.para ? 0 : this.fluxRate) * dt);
@@ -553,7 +634,10 @@ export class Fighter {
   }
 
   startSkill(i) {
-    const spec = this.def.skills[i];
+    const now = performance.now() / 1000;
+    const ls = this.lastSkill;
+    const follow = !!ls && ls.i === i && !ls.followed && now - ls.t >= FOLLOW_MIN && now - ls.t <= FOLLOW_MAX;
+    const spec = follow ? followSpec(this.def, i) : this.def.skills[i];
     if (!spec || this.flux < spec.cost) {
       return;
     }
@@ -566,7 +650,8 @@ export class Fighter {
     }
     this.flux -= spec.cost;
     this.faceNearest(14);
-    this.battle.cast(this, 's' + i);
+    this.lastSkill = { i, t: now, followed: follow };
+    this.battle.cast(this, (follow ? 'f' : 's') + i);
   }
 
   startOver() {
@@ -575,7 +660,49 @@ export class Fighter {
     }
     this.over = 0;
     this.faceNearest(14);
-    this.battle.cast(this, 'over');
+    this.battle.cast(this, this.awakened > 0 ? 'hi' : 'over');
+  }
+
+  // ---- 覚醒（赤く染まり、受けるダメージ半減） ----
+  awaken() {
+    if (this.awakened > 0 || this.dead) return;
+    this.awakened = AWAKEN_TIME;
+    this.awk = 0;
+    this.applyRed();
+    this.battle.awakenFx(this);
+  }
+  applyRed() {
+    this.redMats = [];
+    this.visual.traverse((c) => {
+      if (!c.isMesh || !c.material) return;
+      const orig = c.material;
+      const m = orig.clone();
+      m.color?.lerp(AWAKEN_RED, 0.55);
+      if (m.emissive) {
+        m.emissive.setHex(0x8a0010);
+        m.emissiveIntensity = 0.7;
+      }
+      c.material = m;
+      this.redMats.push([c, orig, m]);
+    });
+    if (!this.awakenAura) {
+      this.awakenAura = new THREE.Mesh(GEO.ring, glow(0xff2030, 0.85));
+      this.awakenAura.position.y = 0.06;
+      this.root.add(this.awakenAura);
+    }
+  }
+  endAwaken() {
+    this.awakened = 0;
+    for (const [c, orig, m] of this.redMats || []) {
+      c.material = orig;
+      m.dispose();
+    }
+    this.redMats = null;
+    if (this.awakenAura) {
+      this.root.remove(this.awakenAura);
+      this.awakenAura.material.dispose();
+      this.awakenAura = null;
+    }
   }
 
   tickAction(dt) {
@@ -630,8 +757,13 @@ export class Fighter {
         this.battle.spark(this.pos.clone().setY(1.1), 0x9fd8ff, 0.9);
       }
     }
-    dmg = Math.round(dmg * this.defMul * (this.status.curse ? 1.3 : 1));
+    dmg = Math.round(dmg * this.defMul * (this.status.curse ? 1.3 : 1) * (this.awakened > 0 ? 0.5 : 1));
     this.hp = Math.max(0, this.hp - dmg);
+    // 蓄積ダメージ：最大体力の1.2倍ぶん受けると覚醒
+    if (this.awakened <= 0 && dmg > 0 && this.hp > 0) {
+      this.awk = Math.min(100, this.awk + (dmg / this.maxHp) * 100 / 1.2);
+      if (this.awk >= 100) this.awaken();
+    }
     this.stun = Math.max(this.stun, stun);
     if (stun > 0.2) {
       this.action = null;
@@ -684,6 +816,10 @@ export class Fighter {
     this.baseY = undefined;
     this.radius = 0.45 * this.scale * (this.def.height / 1.8);
     this.buildModel(this.battle.assets[nk]);
+    if (this.awakened > 0) {
+      this.redMats = null;
+      this.applyRed(); // オーラは root に残っているので再利用
+    }
     this.battle.transformFx(this);
     return true;
   }
@@ -724,7 +860,7 @@ export class Battle {
     L.color.setHex(color);
     L.userData.t = life;
     L.userData.life = life;
-    L.userData.p = 40 * power;
+    L.userData.p = 12 * power; // 閃光は弱めに
   }
 
   // 豪華化レイヤー：多重魔法陣・螺旋に昇る光粒・光柱・衝撃環・飛散する光条・閃光
@@ -906,7 +1042,7 @@ export class Battle {
     if (!spec || spec.elem == null || spec.kind === 'heal') {
       return null;
     }
-    const chance = spec === att.def.over ? 0.4 : 0.25;
+    const chance = spec === att.def.over || spec.hi ? 0.4 : 0.25;
     return Math.random() < chance ? ELEMS[spec.elem].st : null;
   }
 
@@ -955,8 +1091,26 @@ export class Battle {
     }
   }
 
+  // 覚醒の演出（カットイン・赤い爆光）
+  awakenFx(f) {
+    const p = f.pos.clone();
+    this.ui.popup(p, '覚醒！', '#ff3040');
+    this.ui.cutin?.(f, '覚醒', '受けるダメージ半減 ／ 奥義が秘奥義に');
+    this.ui.sfx('burst');
+    this.shake = Math.max(this.shake, 0.6);
+    this.slowmo = Math.max(this.slowmo, 0.5);
+    this.grandFx(p, 9, 0xff2030, 1.6);
+    this.fx3d(p.clone().setY(1), 0, 1.6, 0xff3040);
+    this.burst(p.clone().setY(1.2), 0xff2030, 2, { elem: 0 });
+  }
+
   cast(f, slot, net) {
-    const spec = slot === 'over' ? f.def.over : f.def.skills[+slot[1]] || f.def.skills[0];
+    const idx = Math.max(0, Math.min(3, +slot[1] || 0));
+    const spec = slot === 'over' ? f.def.over
+      : slot === 'hi' ? hiSpec(f.def)
+        : slot[0] === 'f' ? followSpec(f.def, idx) || f.def.skills[0]
+          : f.def.skills[idx] || f.def.skills[0];
+    const isOver = slot === 'over' || slot === 'hi';
     let tx;
     let tz;
     if (net) {
@@ -972,15 +1126,37 @@ export class Battle {
         this.net.cast({ id: f.netId, slot, tx, tz, ry: f.facing });
       }
     }
-    this.ui.skillName?.(f, spec, slot === 'over');
-    if (slot === 'over') {
+    this.ui.skillName?.(f, spec, isOver);
+    if (slot === 'hi') {
+      // 秘奥義：カットイン＋長いスロー＋多重の大爆光
+      this.ui.cutin?.(f, spec.name, '秘奥義');
+      this.ui.banner(f, spec.name);
+      this.slowmo = 1.4;
+      this.shake = Math.max(this.shake, 1);
+      this.ui.flash?.();
+      this.ui.sfx('burst');
+      this.ui.sfx('skill', spec);
+      const el = elOf(spec);
+      for (let i = 0; i < 4; i++) {
+        let d = 0.1 + i * 0.22;
+        this.addEffect((dt) => {
+          d -= dt;
+          if (d > 0) return true;
+          const a = (i / 4) * Math.PI * 2;
+          const q = new THREE.Vector3(tx + Math.cos(a) * 2.2, 0.05, tz + Math.sin(a) * 2.2);
+          this.grandFx(q, el, i % 2 ? 0xff3040 : spec.color, 1.8);
+          this.fx3d(q.clone().setY(0.8), (el + i * 3) % 10, 1.8, spec.color);
+          return false;
+        });
+      }
+    } else if (slot === 'over') {
       this.ui.banner(f, spec.name);
       this.slowmo = 0.6;
       this.ui.sfx('burst');
       this.ui.sfx('skill', spec);
     } else {
       this.ui.sfx('skill', spec);
-      this.ui.callout(f, spec.name);
+      this.ui.callout(f, spec.follow ? `追加技！ ${spec.name}` : spec.name);
     }
     if (!f.remoteAuth) {
       f.action = spec.kind === 'dash'
@@ -993,6 +1169,22 @@ export class Battle {
       }
     }
     this.castFx(f, spec.color, spec);
+    // 技の具現化：狙った地点にも属性の立体エフェクトと閃光を出す
+    {
+      const tp = new THREE.Vector3(tx, 0.6, tz);
+      const el = elOf(spec);
+      let d = spec.kind === 'dash' ? 0.15 : 0.28;
+      this.addEffect((dt) => {
+        d -= dt;
+        if (d > 0) return true;
+        this.fx3d(tp, el, isOver ? 2 : spec.follow ? 1.5 : 1.1, spec.color);
+        this.fxPop(tp.clone().setY(0.08), el, 4, isOver ? 5 : 2.6, 0.5, { flat: true, grow: 2.2 });
+        this.fxPop(tp.clone().setY(1.2), el, 8, isOver ? 3.6 : 1.8, 0.4, { grow: 1.8, spin: 3 });
+        this.flashLight(tp, spec.color, isOver ? 1.6 : 0.8, 0.35);
+        if (spec.follow) this.grandFx(tp, el, lite(spec.color, 0.3), 1);
+        return false;
+      });
+    }
     if (spec.kind === 'projectile') {
       for (let i = 0; i < spec.count; i++) {
         const ang = f.facing + (i - (spec.count - 1) / 2) * spec.spreadAng;
@@ -1061,6 +1253,7 @@ export class Battle {
     const parts = [];
     const add = (geo, col, op, p) => {
       const m = new THREE.Mesh(geo, glow(col, op));
+      if (geo.type !== 'RingGeometry' && geo.type !== 'PlaneGeometry') outline(m);
       Object.assign(m.userData, { v: new THREE.Vector3(), spin: new THREE.Vector3(), s0: 1, s1: 1, grav: 0 }, p);
       if (p.pos) m.position.copy(p.pos);
       if (p.rot) m.rotation.copy(p.rot);
@@ -1270,7 +1463,7 @@ export class Battle {
     const r2 = new THREE.Mesh(SG.rune2, glow(lite(color), 0.6));
     r2.scale.setScalar(1.3);
     const el = elOf(spec);
-    const isOver = spec && spec === f.def.over;
+    const isOver = spec && (spec === f.def.over || spec.hi);
     const base = new THREE.Vector3(f.pos.x, 0.08, f.pos.z);
     this.fxPop(base, el, 5, isOver ? 6 : 3.2, isOver ? 1.2 : 0.7, { flat: true, spin: 2.5, grow: 1.15, hold: true });
     this.fxPop(base.clone().setY(1.2), el, 1, isOver ? 5 : 2.6, 0.35, { spin: 4, grow: 1.5 });
