@@ -111,6 +111,65 @@ function weaponMesh(type, tier) {
   return g;
 }
 
+// ---- 至宝：草薙の剣（黄金の神剣。ねじれた柄・十字の鍔・刻み模様の刃） ----
+function relicSword() {
+  const g = new THREE.Group();
+  const gold = mat(0xffcc33, 0xffa500, 0.35, { metal: 1, rough: 0.22 });
+  const goldD = mat(0xd9a520, 0xff9a00, 0.2, { metal: 1, rough: 0.3 });
+  g.add(part(G.sph, gold, 0.05, 0.035, 0.05, 0, -0.17, 0)); // 柄頭
+  for (let i = 0; i < 4; i++) g.add(part(G.sph, i % 2 ? goldD : gold, 0.032, 0.04, 0.032, 0, -0.12 + i * 0.05, 0)); // ねじれた柄
+  g.add(part(G.box, gold, 0.24, 0.06, 0.075, 0, 0.1, 0)); // 鍔
+  g.add(part(G.box, goldD, 0.06, 0.1, 0.09, 0.12, 0.1, 0));
+  g.add(part(G.box, goldD, 0.06, 0.1, 0.09, -0.12, 0.1, 0));
+  g.add(part(G.sph, gold, 0.045, 0.045, 0.045, 0, 0.1, 0.035));
+  g.add(part(G.box, gold, 0.085, 0.95, 0.022, 0, 0.6, 0)); // 刃
+  for (let i = 0; i < 7; i++) g.add(part(G.box, goldD, 0.06, 0.012, 0.026, 0, 0.22 + i * 0.12, 0)); // 刻み
+  g.add(part(G.cone, gold, 0.06, 0.16, 0.014, 0, 1.15, 0));
+  g.add(part(G.sph, mat(0xfff2a0, 0xffd040, 1.2, { metal: 0.2 }), 0.05, 0.5, 0.012, 0, 0.6, 0.012)); // 刃の輝き
+  return g;
+}
+// ---- 至宝：草薙の盾（黄金の縁・紅玉の盾面・双巴の紋。左腕に装着） ----
+function relicShield(M) {
+  const { h, k } = M;
+  const out = [];
+  const gold = mat(0xffcc33, 0xffa500, 0.3, { metal: 1, rough: 0.25 });
+  const red = mat(0xc8321e, 0x801000, 0.25, { metal: 0.4, rough: 0.4 });
+  const gem = mat(0xff3a6a, 0xff2050, 0.9, { metal: 0.3, rough: 0.1 });
+  const sh = new THREE.Group();
+  const R = 0.3 * k;
+  sh.add(part(G.cyl, gold, R * 1.08, 0.04 * k, R * 1.25, 0, 0, 0)); // 金の縁
+  sh.add(part(G.cyl, red, R * 0.92, 0.05 * k, R * 1.08, 0, 0, 0)); // 紅の盾面
+  sh.add(part(G.cone, gold, R * 0.18, 0.12 * k, R * 0.18, 0, 0.05 * k, 0)); // 中央の突起
+  for (const s of [1, -1]) { // 双巴の紋
+    const t = part(G.torus, gold, R * 0.38, R * 0.38, 0.6 * k, s * R * 0.32, 0.03 * k, 0);
+    t.rotation.x = Math.PI / 2;
+    sh.add(t);
+  }
+  for (let i = 0; i < 4; i++) { // 紅玉
+    const a = Math.PI / 4 + (i * Math.PI) / 2;
+    sh.add(part(G.sph, gem, 0.035 * k, 0.03 * k, 0.035 * k, Math.cos(a) * R * 0.98, 0.04 * k, Math.sin(a) * R * 1.15));
+  }
+  sh.add(part(G.cone, gold, R * 0.3, R * 0.5, 0.02 * k, 0, 0.02 * k, R * 1.35)); // 下の尖り
+  sh.children.forEach((c) => (c.castShadow = true));
+  // 円盤の面を外向き（左腕の外側・やや前）へ
+  sh.rotation.set(0, 0, -Math.PI / 2);
+  const holder = new THREE.Group();
+  holder.add(sh);
+  holder.position.set(M.shL.x + 0.12 * k * Math.sign(M.shL.x || 1), M.shY - 0.28 * h, 0.06 * k);
+  holder.rotation.y = 0.5 * Math.sign(M.shL.x || 1);
+  holder.userData.bone = 'lf';
+  out.push(holder);
+  // 神気の輪
+  if (!MATS.has('relicRing')) MATS.set('relicRing', new THREE.MeshBasicMaterial({ color: 0xffd040, transparent: true, opacity: 0.35, side: THREE.DoubleSide, depthWrite: false }));
+  const ring = new THREE.Mesh(G.ring, MATS.get('relicRing'));
+  ring.rotation.x = -Math.PI / 2;
+  ring.position.y = 0.05;
+  ring.scale.setScalar(Math.max(M.chest.rx, 0.15 * k) * 3.4);
+  ring.userData.spin = true;
+  out.push(ring);
+  return out;
+}
+
 // ---------- 体形と骨格の計測 ----------
 function findBones(model) {
   const B = {};
@@ -312,7 +371,7 @@ const Q_FWD = new THREE.Quaternion().setFromEuler(new THREE.Euler(Math.PI / 2 - 
 export function makeGear(h, wid, aid, model = null, parent = null) {
   const wi = idx(wid, 'w');
   const ai = idx(aid, 'a');
-  const hasW = wi >= 0 && wi < 100, hasA = ai >= 0 && ai < 100;
+  const hasW = wi >= 0 && wi <= 100, hasA = ai >= 0 && ai <= 100;
   if (!hasW && !hasA) return null;
   const k = h / 1.8;
   const root = new THREE.Group();
@@ -332,10 +391,11 @@ export function makeGear(h, wid, aid, model = null, parent = null) {
   const inv = parent ? new THREE.Matrix4().copy(parent.matrixWorld).invert() : null;
 
   const pieces = [];
-  if (hasA) pieces.push(...armorParts(ai % 10, Math.floor(ai / 10), M));
+  if (hasA) pieces.push(...(ai === 100 ? relicShield(M) : armorParts(ai % 10, Math.floor(ai / 10), M)));
 
   if (hasW) {
-    const type = wi % 10, tier = Math.floor(wi / 10);
+    const relic = wi === 100;
+    const type = relic ? 0 : wi % 10, tier = relic ? 7 : Math.floor(wi / 10);
     const mkHand = (side) => {
       const bone = side === 'r' ? B.rh : B.lh;
       const holder = new THREE.Group();
@@ -369,7 +429,7 @@ export function makeGear(h, wid, aid, model = null, parent = null) {
         else if (type !== 6 && type !== 7) holder.quaternion.copy(Q_FWD);
       }
       const swing = new THREE.Group();
-      const w = weaponMesh(type, tier);
+      const w = relic ? relicSword() : weaponMesh(type, tier);
       w.scale.setScalar(k);
       swing.add(w);
       holder.add(swing);

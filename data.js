@@ -525,6 +525,11 @@ WEP_TIER.forEach((tier, ti) => ARM_TYPES.forEach((type, yi) => {
   ARM_FOCUS[yi].forEach((s, j) => (bonus[s] = +(pow * (j ? 0.6 : 1)).toFixed(1)));
   ARMORS.push({ id: 'a' + (ti * 10 + yi), name: tier + type, bonus, price: 25 + ti * ti * 22 + ti * 28 });
 }));
+// ---------- 至宝（最高額の装備） ----------
+WEAPONS.push({ id: 'w100', name: '草薙の剣', bonus: { atk: 16, over: 9, flux: 6 }, price: 150000, relic: true, desc: '大蛇を討った英雄が尾より得たと伝わる黄金の神剣' });
+ARMORS.push({ id: 'a100', name: '草薙の盾', bonus: { def: 16, hp: 12, over: 5 }, price: 150000, relic: true, desc: '紅玉と黄金で鍛えられた、災いを退ける神盾' });
+// ---------- 召喚獣（運営長・ザルグレイヴ専用。通常攻撃の代わりに発動） ----------
+export const SUMMONS = [{ id: 's0', name: 'ヤマタノオロチ', fighter: 'bloodfiend', price: 300000, desc: '通常攻撃の代わりに八つ首の災竜を呼び出し、周囲の敵へ一斉に噛みつく' }];
 export const STAT_LABEL = { hp: '体力', atk: '攻撃', def: '守り', flux: '灯力', over: '奥義' };
 
 // 強化の合計上限（段換算）

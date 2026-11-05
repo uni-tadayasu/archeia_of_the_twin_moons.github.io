@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { Battle, ARENA_R } from './game.js';
-import { FIGHTERS, STORY, ROSTER, UPGRADES, MAX_LV, STAGES, BGM, APEX_BGM, ENEMY_ROSTER, UPG_CAP, LB_MAX, lbMaxLv, lbMul, lbCost, WEAPONS, ARMORS, STAT_LABEL, SPECIAL_KEYS, BOSS_ROSTER, currentEvent, sanitizeEvent, EV_FOE_KINDS } from './data.js';
+import { FIGHTERS, STORY, ROSTER, UPGRADES, MAX_LV, STAGES, BGM, APEX_BGM, ENEMY_ROSTER, UPG_CAP, LB_MAX, lbMaxLv, lbMul, lbCost, WEAPONS, ARMORS, SUMMONS, STAT_LABEL, SPECIAL_KEYS, BOSS_ROSTER, currentEvent, sanitizeEvent, EV_FOE_KINDS } from './data.js';
 import { ProcMusic } from './music.js';
 import { sayBattle, setVoiceMuted, stopVoices } from './voice.js';
 import { initSocial } from './social.js';
@@ -180,7 +180,9 @@ function loadSave() {
   }
   const wids = new Set(WEAPONS.map((w) => w.id));
   const aids = new Set(ARMORS.map((w) => w.id));
-  s.owned = Array.isArray(raw.owned) ? raw.owned.filter((id) => wids.has(id) || aids.has(id)) : [];
+  const sids = new Set(SUMMONS.map((x) => x.id));
+  s.owned = Array.isArray(raw.owned) ? raw.owned.filter((id) => wids.has(id) || aids.has(id) || sids.has(id)) : [];
+  s.summonOn = !!raw.summonOn;
   s.equip = {};
   s.armor = {};
   for (const k of Object.keys(FIGHTERS)) {
@@ -237,7 +239,8 @@ function upgFor(k) {
   return out;
 }
 // 装備の見た目（戦闘・ワールド用）
-const gearFor = (k) => ({ w: save.equip[k] || '', a: save.armor[k] || '' });
+const summonFor = (k) => SUMMONS.find((s) => s.fighter === k && save.owned.includes(s.id)) || null;
+const gearFor = (k) => ({ w: save.equip[k] || '', a: save.armor[k] || '', h: !!(save.summonOn && summonFor(k) && chiefUnlocked()) });
 function persist() {
   try {
     localStorage.setItem(SAVE_KEY, JSON.stringify(save));
@@ -1980,7 +1983,9 @@ function renderForge() {
   rows.replaceChildren();
   const tabs = document.createElement('div');
   tabs.className = 'ftabs';
-  for (const [id, label] of [['upg', '強化（100種）'], ['wep', '武器（100種）'], ['arm', '防具（100種）']]) {
+  const sumOk = SUMMONS.some((s) => s.fighter === forgeSel) && chiefUnlocked();
+  if (forgeTab === 'sum' && !sumOk) forgeTab = 'upg';
+  for (const [id, label] of [['upg', '強化（100種）'], ['wep', '武器'], ['arm', '防具'], ...(sumOk ? [['sum', '召喚獣']] : [])]) {
     const tb = document.createElement('button');
     tb.className = 'btn mini' + (forgeTab === id ? ' on' : '');
     tb.textContent = label;
@@ -1992,6 +1997,43 @@ function renderForge() {
     tabs.append(tb);
   }
   rows.append(tabs);
+  if (forgeTab === 'sum') {
+    const info = document.createElement('small');
+    info.textContent = '運営長専用。召喚を有効にすると、通常攻撃（斬）の代わりに召喚獣が攻撃します。';
+    rows.append(info);
+    for (const s of SUMMONS.filter((x) => x.fighter === forgeSel)) {
+      const owned = save.owned.includes(s.id);
+      const row = document.createElement('div');
+      row.className = 'frow';
+      const lab = document.createElement('span');
+      lab.textContent = s.name;
+      const btn = document.createElement('button');
+      btn.className = 'btn mini';
+      btn.textContent = owned ? (save.summonOn ? '召喚をやめる' : '召喚を有効にする') : `買う ${s.price}`;
+      btn.disabled = !owned && save.shards < s.price;
+      btn.addEventListener('click', () => {
+        if (owned) save.summonOn = !save.summonOn;
+        else {
+          if (save.shards < s.price) return;
+          save.shards -= s.price;
+          save.owned.push(s.id);
+          save.summonOn = true;
+          social?.news(`${myName()} が伝説の召喚獣「${s.name}」と契約した！`);
+        }
+        persist();
+        sfx('skill');
+        renderForge();
+      });
+      const pips = document.createElement('i');
+      pips.textContent = owned ? (save.summonOn ? '◆召喚中' : '◇所持') : '';
+      const desc = document.createElement('small');
+      desc.textContent = s.desc;
+      row.append(lab, btn, pips, desc);
+      rows.append(row);
+    }
+    $('#forge-shards').textContent = `手持ちの灯晶　${save.shards}`;
+    return;
+  }
   if (forgeTab === 'wep' || forgeTab === 'arm') {
     const LIST = forgeTab === 'wep' ? WEAPONS : ARMORS;
     const slot = forgeTab === 'wep' ? save.equip : save.armor;
@@ -2029,7 +2071,8 @@ function renderForge() {
       const pips = document.createElement('i');
       pips.textContent = on ? '◆装備中' : owned ? '◇所持' : '';
       const desc = document.createElement('small');
-      desc.textContent = Object.entries(w.bonus).map(([s, v]) => `${STAT_LABEL[s]}+${v}段`).join('／');
+      desc.textContent = (w.relic ? `【至宝】${w.desc}　` : '') + Object.entries(w.bonus).map(([s, v]) => `${STAT_LABEL[s]}+${v}段`).join('／');
+      if (w.relic) lab.style.color = '#ffd36a';
       row.append(lab, btn, pips, desc);
       rows.append(row);
     }

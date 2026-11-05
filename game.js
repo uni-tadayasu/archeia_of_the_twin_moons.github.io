@@ -389,6 +389,7 @@ export class Fighter {
     this.visual = new THREE.Group();
     this.root.add(this.visual);
     this.gearIds = o.gear || null;
+    this.hydra = !!o.gear?.h; // 召喚獣（通常攻撃の代わり）
     this.buildModel(battle.assets[key]);
     battle.scene.add(this.root);
   }
@@ -759,7 +760,9 @@ export class Fighter {
       if (!a.hit && a.t >= a.hitAt) {
         a.hit = true;
         const big = a.step === 2;
-        if (L.shots) {
+        if (this.hydra) {
+          this.battle.hydraStrike(this, big);
+        } else if (L.shots) {
           this.battle.laserVolley(this, L, big ? L.shots + 2 : L.shots);
         } else {
           this.battle.swingFx(this);
@@ -1713,6 +1716,99 @@ export class Battle {
         return true;
       });
     }
+  }
+
+  // 召喚獣《ヤマタノオロチ》：背後に八つ首の竜が現れ、周囲の敵へ一斉に噛みつく
+  buildHydra(f) {
+    const g = new THREE.Group();
+    const scale = (f.def.height / 1.8) * f.scale;
+    const skin = new THREE.MeshStandardMaterial({ color: 0x2a1a3a, roughness: 0.55, metalness: 0.25, emissive: 0x300010, emissiveIntensity: 0.6 });
+    const belly = new THREE.MeshStandardMaterial({ color: 0x7a2030, roughness: 0.6, emissive: 0x400010, emissiveIntensity: 0.5 });
+    const horn = new THREE.MeshStandardMaterial({ color: 0xd8d0c0, roughness: 0.4 });
+    const eye = new THREE.MeshBasicMaterial({ color: 0xff3020 });
+    const mats = [skin, belly, horn, eye];
+    const body = new THREE.Mesh(new THREE.SphereGeometry(1.1, 16, 12), skin);
+    body.scale.set(1.4, 0.8, 1.1);
+    body.position.y = 0.9;
+    g.add(body);
+    const heads = [];
+    for (let i = 0; i < 8; i++) {
+      const a = -Math.PI * 0.85 + (i / 7) * Math.PI * 1.7;
+      const neckLen = 2.4 + (i % 3) * 0.5;
+      const base = new THREE.Vector3(Math.sin(a) * 0.9, 1.2, -0.3 + Math.cos(a) * 0.4);
+      const tip = new THREE.Vector3(Math.sin(a) * 2.2, 1.2 + neckLen, Math.cos(a) * 0.6 - 0.6);
+      const mid = base.clone().lerp(tip, 0.5).add(new THREE.Vector3(Math.sin(a) * 0.8, 0, 0.4));
+      const curve = new THREE.QuadraticBezierCurve3(base, mid, tip);
+      const neck = new THREE.Mesh(new THREE.TubeGeometry(curve, 12, 0.28, 8, false), i % 2 ? skin : belly);
+      g.add(neck);
+      const head = new THREE.Group();
+      const skull = new THREE.Mesh(new THREE.ConeGeometry(0.34, 1.1, 8), skin);
+      skull.rotation.x = Math.PI / 2;
+      skull.position.z = 0.4;
+      const jaw = new THREE.Mesh(new THREE.ConeGeometry(0.22, 0.9, 6), belly);
+      jaw.rotation.x = Math.PI / 2 + 0.35;
+      jaw.position.set(0, -0.18, 0.35);
+      head.add(skull, jaw);
+      for (const s of [1, -1]) {
+        const h = new THREE.Mesh(new THREE.ConeGeometry(0.07, 0.6, 5), horn);
+        h.position.set(s * 0.18, 0.25, -0.05);
+        h.rotation.set(-0.9, 0, s * 0.3);
+        const e = new THREE.Mesh(new THREE.SphereGeometry(0.06, 6, 4), eye);
+        e.position.set(s * 0.17, 0.1, 0.35);
+        head.add(h, e);
+      }
+      head.position.copy(tip);
+      head.userData = { tip: tip.clone(), jaw, a };
+      g.add(head);
+      heads.push(head);
+    }
+    g.scale.setScalar(scale * 0.75);
+    g.traverse((c) => { if (c.isMesh) c.castShadow = true; });
+    g.userData = { heads, mats, t: 0, show: 0 };
+    g.visible = false;
+    f.root.add(g);
+    f.hydraObj = g;
+    // 毎フレーム：出現・首のうねり・時間で退場
+    this.addEffect((dt) => {
+      if (!f.hydraObj || f.dead) {
+        g.visible = false;
+        return !!f.hydraObj && !f.dead;
+      }
+      const u = g.userData;
+      u.t += dt;
+      u.show = Math.max(0, u.show - dt);
+      const s = Math.min(1, u.show / 0.3);
+      g.visible = s > 0.01;
+      if (!g.visible) return true;
+      g.position.set(0, -1.6 * (1 - s), -1.3); // root は向きに合わせて回転済み（ローカルの背後）
+      const lunge = Math.max(0, u.lunge || 0);
+      u.lunge = lunge - dt * 3;
+      for (const hd of u.heads) {
+        const d = hd.userData;
+        const w = Math.sin(u.t * 3 + d.a * 2) * 0.15;
+        hd.position.set(d.tip.x * (1 - lunge * 0.3), d.tip.y - lunge * 1.4 + w, d.tip.z + lunge * 2.6);
+        hd.rotation.set(0.3 + lunge * 0.8, d.a * 0.2, 0);
+        d.jaw.rotation.x = Math.PI / 2 + 0.35 + lunge * 0.6;
+      }
+      return true;
+    });
+    return g;
+  }
+
+  hydraStrike(f, big) {
+    const g = f.hydraObj || this.buildHydra(f);
+    g.userData.show = 1.6;
+    g.userData.lunge = 1;
+    const L = f.def.light;
+    // 全方位に噛みつく（範囲は通常攻撃の約1.6倍）
+    this.meleeHit(f, 4.2, L.dmg * 1.5, big ? 0.5 : 0.3, big ? 8 : 3.5, null, null, true);
+    const c = 0xb01030;
+    for (let i = 0; i < 8; i++) {
+      const a = f.facing + (i / 8) * Math.PI * 2;
+      this.spark(new THREE.Vector3(f.pos.x + Math.sin(a) * 3, 1 + Math.random() * 0.6, f.pos.z + Math.cos(a) * 3), i % 2 ? 0xff4020 : c, 0.9);
+    }
+    this.fxPop(new THREE.Vector3(f.pos.x, 0.6, f.pos.z), 9, 8, 4.4, 0.35, { flat: true, grow: 1.5, spin: 6 });
+    if (big) this.shake = Math.max(this.shake || 0, 0.25);
   }
 
   swingFx(f) {

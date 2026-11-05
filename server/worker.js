@@ -3,7 +3,7 @@
 // 役割：運営/運営長の認証、乱入許可、招待コードの原子的な一回使用、同期セーブの保護、
 //       Stripe 決済通知の検証と購入キャラの解放、戦闘用ステータス（強化・装備・キャラ）の検証と署名。
 // 署名は ECDSA P-256。クライアントは公開鍵（config.js の SERVER_PUBKEY_JWK）で検証します。
-import { FIGHTERS, UPGRADES, UPG_CAP, WEAPONS, ARMORS, LB_MAX, lbMaxLv, lbMul, lbCost } from '../data.js';
+import { FIGHTERS, UPGRADES, UPG_CAP, WEAPONS, ARMORS, SUMMONS, LB_MAX, lbMaxLv, lbMul, lbCost } from '../data.js';
 
 const enc = new TextEncoder();
 const HEX64 = /^[0-9a-f]{64}$/;
@@ -142,7 +142,7 @@ function wealthOf(save) {
     for (let i = 0; i < lb; i++) w += lbCost(i);
   }
   const owned = new Set(Array.isArray(save?.owned) ? save.owned : []);
-  for (const x of [...WEAPONS, ...ARMORS]) if (owned.has(x.id)) w += x.price || 0;
+  for (const x of [...WEAPONS, ...ARMORS, ...SUMMONS]) if (owned.has(x.id)) w += x.price || 0;
   return w;
 }
 // 1時間に稼げる灯晶の上限（報酬の最大値から余裕を持って設定）
