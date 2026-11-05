@@ -198,7 +198,21 @@ function renderDonate(g) {
       if (amt > save.shards) throw err('shards');
       needOnline();
       if (!(await uiConfirm(`ギルド「${G.name}」に灯晶 ${amt.toLocaleString()} を寄付しますか？\n（取り消しできません）`, '寄付する', true))) return;
-      const res = await gapi('/guild/donate', { gid: G.id, amount: amt });
+      // 寄付ごとの操作ID：通信失敗後に同じ額を再送した時は同じIDを使い、二重に減らさない
+      let pd = S.pendingDon;
+      if (!pd || pd.gid !== G.id || pd.amt !== amt) {
+        const A = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789';
+        pd = S.pendingDon = { gid: G.id, amt, did: [...crypto.getRandomValues(new Uint8Array(20))].map((x) => A[x % A.length]).join('') };
+      }
+      let res;
+      try {
+        res = await gapi('/guild/donate', { gid: G.id, amount: amt, did: pd.did });
+      } catch (e) {
+        // 結果が不明な失敗（通信・混雑・サーバー）だけIDを残す。確定的な拒否なら次は新しい寄付として扱う
+        if (!['net', 'server', 'limit'].includes(e?.code)) S.pendingDon = null;
+        throw e;
+      }
+      S.pendingDon = null;
       S.opts.onServerSpend?.(amt, res.ver);
       if (res.state) applyState(res.state, true);
       S.opts.sfx?.('burst');
@@ -553,6 +567,14 @@ function applyState(st, quiet = false) {
     setGuildNote(t);
     sys('guild', t);
     return;
+  }
+  // チャット鍵の世代が変わった（誰かが脱退・除名された）→ 新しいルームに入り直す
+  if (st.epoch !== undefined && S.gstate && S.gstate.gid === st.gid && S.gstate.epoch !== st.epoch) {
+    const ch = 'g:' + st.gid;
+    S.rooms?.get(ch)?.conn?.leave();
+    S.rooms?.delete(ch);
+    S.gstate = st;
+    syncRooms();
   }
   S.gstate = st;
   S.rankCache = null;

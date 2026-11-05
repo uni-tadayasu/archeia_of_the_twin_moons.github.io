@@ -1,12 +1,22 @@
 // InstantDB はオンラインモード選択時にのみ動的読み込み（初期ロード軽量化）
 let dbPromise = null;
+let netFailCount = 0;
 
 function getDb() {
   if (!dbPromise) {
     dbPromise = Promise.all([
       import('@instantdb/core'),
       import('./instant_db_config.js')
-    ]).then(([lib, cfg]) => ({ db: lib.init({ appId: cfg.INSTANT_DB_APP_ID }), id: lib.id }));
+    ]).then(([lib, cfg]) => ({ db: lib.init({ appId: cfg.INSTANT_DB_APP_ID }), id: lib.id }))
+      .catch((err) => {
+        // 失敗結果を保持しない：回線が戻れば次の呼び出しで読み込み直す
+        dbPromise = null;
+        netFailCount++;
+        try {
+          window.dispatchEvent(new CustomEvent('arkeia-net-fail', { detail: { count: netFailCount } }));
+        } catch {}
+        throw err;
+      });
   }
   return dbPromise;
 }
@@ -53,14 +63,38 @@ export async function redeemInvite(h) {
 }
 // 端末間同期：同期コードのハッシュをキーに、セーブデータ(JSON文字列)を置く
 // 版番号(ver)で競合を検出：手元の版と違えば最新を返して端末側で合流させる
-export async function syncPush(h, json, base = 0) {
+// 文字列から決まった UUID を作る（同じ版への書き込み権を、全端末が同じ行で取り合うため）
+async function uuidOf(s) {
+  const b = new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(s))).slice(0, 16);
+  b[6] = (b[6] & 0x0f) | 0x40;
+  b[8] = (b[8] & 0x3f) | 0x80;
+  const x = [...b].map((v) => v.toString(16).padStart(2, '0')).join('');
+  return `${x.slice(0, 8)}-${x.slice(8, 12)}-${x.slice(12, 16)}-${x.slice(16, 20)}-${x.slice(20)}`;
+}
+// wid：この書き込み固有のID。再送時に同じ wid なら「反映済み」として扱う（二重反映を防ぐ）
+// サーバー未設定時の保護：次の版（ver+1）の「書き込み権」行を先に取り、少し待って読み直し、
+// 自分が勝っていた時だけ本体を書く。負けた端末には競合を返す。
+// （InstantDB単体では完全な原子性は保証できないため、確実な保護にはサーバー設定が必要）
+export async function syncPush(h, json, base = 0, wid = '') {
   if (!HEX64.test(h) || typeof json !== 'string' || json.length > 200000) throw new Error('bad data');
   const { db, id } = await getDb();
   const row = await findOne('syncsaves', h);
   const ver = +row?.ver || 0;
-  if (row && ver !== base) return { conflict: true, data: typeof row.data === 'string' ? row.data : '{}', ver };
-  await db.transact(db.tx.syncsaves[row?.id || id()].update({ h, data: json, at: Date.now(), ver: ver + 1 }));
-  return { ok: true, ver: ver + 1 };
+  if (row && wid && row.wid === wid) return { ok: true, ver, dup: true };
+  const conflict = (r) => ({ conflict: true, data: typeof r?.data === 'string' ? r.data : '{}', ver: +r?.ver || 0, wid: r?.wid || '' });
+  if (row && ver !== base) return conflict(row);
+  const nv = ver + 1;
+  const claimH = `${h}:c${nv}`;
+  const cid = await uuidOf(claimH);
+  const me = wid || id();
+  await db.transact(db.tx.syncsaves[cid].update({ h: claimH, data: '', wid: me, at: Date.now(), ver: nv }));
+  await new Promise((r) => setTimeout(r, 1200));
+  const claim = await findOne('syncsaves', claimH);
+  const now = await findOne('syncsaves', h);
+  if (claim?.wid !== me || (+now?.ver || 0) !== ver) return conflict(now || row);
+  // 本体の行IDも同期コードから固定（初回に2端末が同時に作っても行が分かれない）
+  await db.transact(db.tx.syncsaves[row?.id || (await uuidOf(h))].update({ h, data: json, at: Date.now(), ver: nv, wid: me }));
+  return { ok: true, ver: nv };
 }
 export async function syncPullV(h) {
   if (!HEX64.test(h)) return { data: null, ver: 0 };

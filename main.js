@@ -210,6 +210,11 @@ function loadSave() {
   s.cevent = raw.cevent && typeof raw.cevent === 'object' && Number.isFinite(+raw.cevent.at) ? { ev: raw.cevent.ev ?? null, at: +raw.cevent.at } : null;
   s.ceventOwn = raw.ceventOwn && typeof raw.ceventOwn === 'object' && Number.isFinite(+raw.ceventOwn.at) ? { ev: raw.ceventOwn.ev ?? null, at: +raw.ceventOwn.at } : null;
   s.guild = raw.guild && /^[A-Za-z0-9]{8}$/.test(raw.guild.id) ? { id: raw.guild.id, name: String(raw.guild.name || 'ギルド').replace(/[<>\u0000-\u001f]/g, '').slice(0, 16), role: ['master', 'sub', 'officer', 'member'].includes(raw.guild.role) ? raw.guild.role : 'member', master: /^[a-z0-9]{1,24}$/i.test(raw.guild.master || '') ? raw.guild.master : '' } : null;
+  // 所属の変更日時と通知（「所属なし」も日時つきで残し、他端末の古い所属で上書きされないようにする）
+  s.guildAt = Number.isFinite(+raw.guildAt) && +raw.guildAt > 0 ? +raw.guildAt : 0;
+  s.guildNote = typeof raw.guildNote === 'string' ? raw.guildNote.replace(/[<>\u0000-\u001f]/g, '').slice(0, 200) : null;
+  // 直近の同期書き込みID（再送時の二重反映を防ぐ）
+  s.wids = Array.isArray(raw.wids) ? raw.wids.filter((w) => typeof w === 'string' && /^[A-Za-z0-9_-]{8,64}$/.test(w)).slice(-20) : [];
   return s;
 }
 const save = loadSave();
@@ -258,23 +263,45 @@ const syncCodeNow = () => String(localStorage.getItem('arkeia-sync') || '').toUp
 function scheduleAutoSync() {
   if (!syncReady || syncCodeNow().length !== 12) return;
   try { localStorage.setItem('arkeia-sync-dirty', '1'); } catch {}
+  syncGen++; // 送信中に変化があったかを判定するための世代番号
   clearTimeout(autoPushTimer);
   // 再送待ち（通信失敗・増え方の制限）の間は、その時刻まで待ってから送る
   autoPushTimer = setTimeout(autoPush, Math.max(8000, syncHoldUntil - Date.now()));
 }
 var syncHoldUntil = 0;
+var syncGen = 0;
+// 書き込みごとの一意ID（wid）。セーブ内の wids に直近分を残し、再送時に「反映済みか」を判定する
+const newWid = () => {
+  const A = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789';
+  return [...crypto.getRandomValues(new Uint8Array(20))].map((x) => A[x % A.length]).join('');
+};
+const widList = (...ls) => [...new Set(ls.flatMap((l) => (Array.isArray(l) ? l : [])).filter((w) => typeof w === 'string' && /^[A-Za-z0-9_-]{8,64}$/.test(w)))].slice(-20);
+// 送信したが結果が分からない書き込み（応答前に通信が切れた等）
+// 結果不明の書き込みは複数たまり得るので、直近5件を古い順に保持する
+const getPends = () => {
+  try {
+    const l = JSON.parse(localStorage.getItem('arkeia-sync-pend') || '[]');
+    return Array.isArray(l) ? l.filter((p) => p && typeof p.wid === 'string' && Number.isFinite(+p.shards)) : [];
+  } catch {
+    return [];
+  }
+};
+const setPend = (p) => {
+  if (!p) return localStorage.removeItem('arkeia-sync-pend');
+  localStorage.setItem('arkeia-sync-pend', JSON.stringify([...getPends(), p].slice(-5)));
+};
 // 版番号つきの送受信（サーバー時は Durable Object で直列化、未設定時は InstantDB に直接）
 const syncVer = () => Number(localStorage.getItem('arkeia-sync-ver')) || 0;
-async function sendVersioned(code, json, base) {
+async function sendVersioned(code, json, base, wid = '') {
   if (apiEnabled()) {
-    const r = await api('/sync/push', { code, data: json, base });
-    if (r.status === 409) return { conflict: true, data: r.data, ver: r.ver };
+    const r = await api('/sync/push', { code, data: json, base, wid });
+    if (r.status === 409) return { conflict: true, data: r.data, ver: r.ver, wid: r.wid || '' };
     if (r.status === 422) return { rejected: true };
     if (r.status === 403 && r.error === 'pid') throw new Error('pid');
     if (!r.ok) throw new Error('push');
     return { ok: true, ver: r.ver };
   }
-  return syncPush(await sha256('arkeia-sync:' + code), json, base);
+  return syncPush(await sha256('arkeia-sync:' + code), json, base, wid);
 }
 async function fetchVersioned(code) {
   if (apiEnabled()) {
@@ -314,6 +341,7 @@ function mergeSaves(local, remote, baseShards) {
   out.guildAt = Math.max(gla, gra);
   out.guildNote = gla >= gra ? local.guildNote ?? null : remote.guildNote ?? null;
   out.shards = Math.max(0, (+remote.shards || 0) + ((+local.shards || 0) - baseShards));
+  out.wids = widList(remote.wids, local.wids);
   out.syncAt = Date.now();
   return out;
 }
@@ -328,27 +356,61 @@ async function autoPush() {
   const code = syncCodeNow();
   if (code.length !== 12 || autoBusy) return;
   autoBusy = true;
+  // 送信開始時点の状態（この後に増えた変更は「未送信」として別扱い）
+  const gen0 = syncGen;
+  const snap = JSON.parse(JSON.stringify(save));
+  const snapShards = +snap.shards || 0;
+  // 送信後にローカルで起きた変化を、送った内容(sent)の上に重ねて手元へ反映する
+  const settle = (sent, ver, reload) => {
+    const changed = syncGen !== gen0;
+    const final = changed ? mergeSaves(save, sent, snapShards) : { ...sent };
+    if (changed) final.shards = Math.max(0, (+sent.shards || 0) + ((+save.shards || 0) - snapShards));
+    localStorage.setItem(SAVE_KEY, JSON.stringify(final));
+    Object.assign(save, final); // 戦闘中でも合流後の値で続ける（終了時の保存で巻き戻さない）
+    setPend(null);
+    markSynced(ver, sent.syncAt, +sent.shards || 0); // 同期済みにするのは「実際に送った内容」だけ
+    syncErr = '';
+    syncHoldUntil = 0;
+    if (changed || syncGen !== gen0) {
+      // 送信中に増えた変更は、改めて送る
+      localStorage.setItem('arkeia-sync-dirty', '1');
+      clearTimeout(autoPushTimer);
+      autoPushTimer = setTimeout(autoPush, 3000);
+    }
+    if (reload && !state.battle) location.reload();
+  };
   try {
     const at = Date.now();
-    let payload = { ...save, syncAt: at };
-    let r = await sendVersioned(code, JSON.stringify(payload), syncVer());
+    let wid = newWid();
+    let payload = { ...snap, syncAt: at, wids: widList(snap.wids, [wid]) };
+    setPend({ wid, shards: +payload.shards || 0 });
+    let r = await sendVersioned(code, JSON.stringify(payload), syncVer(), wid);
     if (r.conflict) {
-      // 別の端末が先に更新 → 合流させてから、その版の上に書き込む
+      // 別の端末が先に更新、または前回の書き込みが実は反映済み → 合流させてから、その版の上に書き込む
       const remote = JSON.parse(r.data || '{}');
-      const base = Number(localStorage.getItem('arkeia-sync-base'));
-      payload = mergeSaves(save, remote, Number.isFinite(base) ? base : +remote.shards || 0);
-      r = await sendVersioned(code, JSON.stringify(payload), r.ver);
+      const rw = Array.isArray(remote.wids) ? remote.wids : [];
+      // 前回の書き込み（結果不明）が反映済みなら、その時に送った灯晶を基準にする（二重加算を防ぐ）
+      let base = Number(localStorage.getItem('arkeia-sync-base'));
+      // 結果不明の書き込み（今回分を含む）のうち、最後に反映されていたものの灯晶を基準にする
+      for (const p of getPends()) if (r.wid === p.wid || rw.includes(p.wid)) base = +p.shards;
+      if (!Number.isFinite(base)) base = +remote.shards || 0;
+      // 判明した基準をすぐ保存（この後の送信が失敗しても、次回に同じ増減を二重に足さない）
+      localStorage.setItem('arkeia-sync-base', String(base));
+      wid = newWid();
+      payload = mergeSaves(snap, remote, base);
+      payload.wids = widList(payload.wids, [wid]);
+      setPend({ wid, shards: +payload.shards || 0 });
+      r = await sendVersioned(code, JSON.stringify(payload), r.ver, wid);
       if (r.ok) {
-        localStorage.setItem(SAVE_KEY, JSON.stringify(payload));
-        Object.assign(save, payload); // 戦闘中でも合流後の値で続ける（終了時の保存で巻き戻さない）
-        markSynced(r.ver, payload.syncAt, payload.shards);
-        if (!state.battle) location.reload();
+        settle(payload, r.ver, true);
         return;
       }
+      if (r.conflict) throw new Error('conflict'); // さらに別の更新が来た：少し待って最初からやり直す
     }
     if (r.rejected) {
       // 変更は捨てずに残し、時間をおいて再送（時間経過で許容量が増える）
       console.warn('同期：資産の増え方が大きいため、時間をおいて再送します');
+      setPend(null);
       syncErr = 'wealth';
       syncHoldUntil = Date.now() + 10 * 60000;
       clearTimeout(autoPushTimer);
@@ -356,9 +418,7 @@ async function autoPush() {
       return;
     }
     if (!r.ok) throw new Error('push');
-    syncErr = '';
-    syncHoldUntil = 0;
-    markSynced(r.ver, at, save.shards);
+    settle(payload, r.ver, false);
   } catch (e) {
     syncErr = e?.message === 'pid' ? 'pid' : 'net';
     if (syncErr === 'pid') return; // 別の同期コードに登録済み：再送しても通らない
@@ -390,6 +450,7 @@ async function autoPull() {
       if (remote.pid == null && save.pid) remote.pid = save.pid;
       json = JSON.stringify(remote);
       localStorage.setItem(SAVE_KEY, json);
+      setPend(null);
       markSynced(ver, Number(remote.syncAt) || Date.now(), +remote.shards || 0);
       location.reload();
     }
@@ -405,6 +466,27 @@ setTimeout(() => {
   setInterval(() => { if (!state.battle) autoPull(); }, 45000);
   document.addEventListener('visibilitychange', () => { if (!document.hidden && !state.battle) autoPull(); else if (document.hidden && localStorage.getItem('arkeia-sync-dirty')) autoPush(); });
 }, 3000);
+// 通信ライブラリの読み込みに続けて失敗した時：再読み込みが必要な旨を画面に出す
+window.addEventListener('arkeia-net-fail', (e) => {
+  if ((e.detail?.count || 0) < 3 || document.getElementById('net-fail-note')) return;
+  const d = document.createElement('div');
+  d.id = 'net-fail-note';
+  d.setAttribute('role', 'alert');
+  d.style.cssText = 'position:fixed;left:50%;bottom:16px;transform:translateX(-50%);z-index:9999;background:#2a1420;border:1px solid #d6b46a;color:#f3ead2;padding:10px 14px;border-radius:10px;font-size:14px;display:flex;gap:10px;align-items:center;pointer-events:auto';
+  d.textContent = '通信機能を読み込めませんでした。回線を確認し、ページを再読み込みしてください。';
+  const b = document.createElement('button');
+  b.type = 'button';
+  b.className = 'btn mini';
+  b.textContent = '再読み込み';
+  b.addEventListener('click', () => location.reload());
+  const x = document.createElement('button');
+  x.type = 'button';
+  x.className = 'btn mini';
+  x.textContent = '閉じる';
+  x.addEventListener('click', () => d.remove());
+  d.append(b, x);
+  document.body.append(d);
+});
 persist(); // 世界の印（pid）を確定させる
 {
   const cy = document.getElementById('copy-year');
@@ -1013,15 +1095,35 @@ async function refreshProfile(key) {
   }
 }
 const profOk = {}; // peerId → 検証済みプロフィール
+// 署名を検証し、その証明が「このプレイヤー(pid)」のものかも確認する
+async function verifyPeer(p) {
+  if (!apiEnabled() || !p?.prof) return null;
+  if (profOk[p.id]?.tok === p.prof) return profOk[p.id].d;
+  const d = await verifyToken(p.prof, 'prof');
+  if (d && d.p && d.p === p.pid) {
+    profOk[p.id] = { tok: p.prof, d };
+    return d;
+  }
+  return null;
+}
 function verifyPeerProfs(peers) {
   if (!apiEnabled()) return;
-  for (const p of Object.values(peers)) {
-    if (p.prof && profOk[p.id]?.tok !== p.prof) {
-      verifyToken(p.prof, 'prof').then((d) => {
-        if (d) profOk[p.id] = { tok: p.prof, d };
-      });
-    }
-  }
+  for (const p of Object.values(peers)) if (p.prof && profOk[p.id]?.tok !== p.prof) verifyPeer(p);
+}
+// 使用権が必要なキャラ（運営・運営長専用、購入・灯晶交換キャラ）
+const restrictedKey = (k) => {
+  const d = FIGHTERS[k];
+  return !!(d && (d.locked || d.special || d.shop || d.shardPrice || d.hidden || k === 'seraphel'));
+};
+const peerVerified = (id, k) => {
+  const v = profOk[id]?.d;
+  return !!(v && v.k === k && v.exp > Date.now());
+};
+// 相手キャラの決定：サーバー運用時、使用権の要るキャラは検証済みの時だけ出す（それ以外は標準キャラ）
+function peerKeyOf(id, fk) {
+  const k = FIGHTERS[fk] ? fk : 'rowen';
+  if (!apiEnabled() || !restrictedKey(k) || peerVerified(id, k)) return k;
+  return 'rowen';
 }
 // 相手の戦士を出すときの強化値（署名が合っていて、キャラも一致する時だけ反映）
 function peerOpts(peerId, key) {
@@ -2229,7 +2331,8 @@ $('#btn-join').addEventListener('click', async () => {
     });
     state.online = { name, started: false };
     $('#lobby-status').textContent = `焚き火を起こしました（合言葉: ${room}）。相手を待っています…`;
-    state.net.publish({ name, fk: state.myKey, mode: state.mode, x: 0, z: 0, ry: 0, hp: 1, mv: false, ready: true });
+    if (apiEnabled()) await refreshProfile(state.myKey).catch(() => {});
+    state.net.publish({ name, pid: save.pid, prof: profState.key === state.myKey ? profState.tok : '', fk: state.myKey, mode: state.mode, x: 0, z: 0, ry: 0, hp: 1, mv: false, ready: true });
   } catch (err) {
     console.error(err);
     $('#lobby-status').textContent = 'つながりませんでした。少し置いてから、もう一度。';
@@ -2275,7 +2378,9 @@ async function startOnline(peer) {
   state.online.peerId = peer.id;
   const myId = state.net.myId;
   const host = myId < peer.id;
-  const peerKey = FIGHTERS[peer.fk] ? peer.fk : 'rowen';
+  await verifyPeer(peer); // サーバー運用時は相手の使用権を確認してから生成
+  if (!state.online) return;
+  const peerKey = peerKeyOf(peer.id, peer.fk);
   const roomSeed = [...($('#lobby-room').value || 'a')].reduce((s, c) => s + c.charCodeAt(0), 0);
   setStage(state.mode === 'online-coop' ? stageById('heaven') : STAGES[roomSeed % STAGES.length]);
   const b = makeBattle(state.net);
@@ -2283,7 +2388,7 @@ async function startOnline(peer) {
   const mePos = host ? [-4, 3] : vs ? [4, -3] : [-6, -1];
   const peerPos = host ? (vs ? [4, -3] : [-6, -1]) : [-4, 3];
   b.add(state.myKey, { team: 0, player: true, awk: save.awk, netId: myId, pos: mePos, name: state.online.name, upg: upgFor(state.myKey), gear: gearFor(state.myKey) });
-  b.add(peerKey, { team: vs ? 1 : 0, remote: true, netId: peer.id, pos: peerPos, name: peer.name, hpMul: 1.15 });
+  b.add(peerKey, { team: vs ? 1 : 0, remote: true, netId: peer.id, pos: peerPos, name: peer.name, hpMul: 1.15, ...peerOpts(peer.id, peerKey) });
   if (!vs) {
     b.add('seraphel', { team: 1, cpu: 0.9, remote: !host, netId: 'boss', pos: [5, -5], facing: Math.PI, hpMul: 2.2, name: '裁定者セラフェル' });
   }
@@ -2302,7 +2407,7 @@ function netTick(dt) {
   }
   netTimer = 0;
   const me = b.fighters.find((f) => f.isPlayer);
-  state.net.publish({ name: state.online.name, fk: state.myKey, mode: state.mode, x: me.pos.x, z: me.pos.z, ry: me.facing, hp: me.hp, mv: !!me.moving, ready: true });
+  state.net.publish({ name: state.online.name, pid: save.pid, prof: profState.key === state.myKey ? profState.tok : '', fk: state.myKey, mode: state.mode, x: me.pos.x, z: me.pos.z, ry: me.facing, hp: me.hp, mv: !!me.moving, ready: true });
   const boss = b.fighters.find((f) => f.netId === 'boss' && !f.remoteAuth);
   if (boss) {
     state.net.boss({ x: boss.pos.x, z: boss.pos.z, ry: boss.facing, hp: boss.hp, mv: !!boss.moving });
@@ -2407,7 +2512,7 @@ async function onInvaded(e) {
   $('#pause').hidden = true;
   const p = state.worldPeers?.[e.from];
   const apexOk = !apiEnabled() || tr === 'chief';
-  const ik = apexOk && ['chief', 'sovereign', 'sovereign2', 'bloodfiend'].includes(p?.fk) ? p.fk : 'seraphel';
+  const ik = apexOk && ['chief', 'sovereign', 'sovereign2', 'bloodfiend'].includes(p?.fk) && (!apiEnabled() || peerVerified(e.from, p.fk)) ? p.fk : 'seraphel';
   b.add(ik, { team: 1, remote: true, netId: e.from, pos: p ? [p.x, p.z] : [0, -9], facing: Math.PI, name: `乱入者・${e.name}`, ...peerOpts(e.from, ik) });
   b.net = w;
   b.strictNet = apiEnabled();
@@ -2479,7 +2584,7 @@ async function startInvade(p) {
   const b = makeBattle(w);
   const ik = ['chief', 'sovereign', 'bloodfiend'].includes(state.invadeKey) && chiefUnlocked() ? state.invadeKey : 'seraphel';
   b.add(ik, { team: 0, player: true, awk: save.awk, netId: w.myId, pos: [0, -9], name: FIGHTERS[ik].name + '（運営）', upg: upgFor(ik), gear: gearFor(ik) });
-  b.add(FIGHTERS[p.fk] ? p.fk : 'rowen', { team: 1, remote: true, netId: p.id, pos: [p.x, p.z], name: p.name, gear: { w: p.gw, a: p.ga }, ...peerOpts(p.id, FIGHTERS[p.fk] ? p.fk : 'rowen') });
+  b.add(peerKeyOf(p.id, p.fk), { team: 1, remote: true, netId: p.id, pos: [p.x, p.z], name: p.name, gear: { w: p.gw, a: p.ga }, ...peerOpts(p.id, peerKeyOf(p.id, p.fk)) });
   b.strictNet = apiEnabled();
   beginBattle(true);
   ui.flash();
@@ -2687,7 +2792,8 @@ function startDuel(peer, challenger) {
   const myPos = challenger ? [-4, 3] : [4, -3];
   const peerPos = challenger ? [4, -3] : [-4, 3];
   b.add(state.myKey, { team: 0, player: true, awk: save.awk, netId: w.myId, pos: myPos, facing: challenger ? 0 : Math.PI, name: myName() + '（あなた）', upg: upgFor(state.myKey), gear: gearFor(state.myKey) });
-  b.add(FIGHTERS[peer.fk] ? peer.fk : 'rowen', { team: 1, remote: true, netId: peer.id, pos: peerPos, facing: challenger ? Math.PI : 0, name: peer.name, gear: { w: peer.gw, a: peer.ga }, ...peerOpts(peer.id, FIGHTERS[peer.fk] ? peer.fk : 'rowen') });
+  const dk = peerKeyOf(peer.id, peer.fk);
+  b.add(dk, { team: 1, remote: true, netId: peer.id, pos: peerPos, facing: challenger ? Math.PI : 0, name: peer.name, gear: { w: peer.gw, a: peer.ga }, ...peerOpts(peer.id, dk) });
   b.strictNet = apiEnabled();
   beginBattle(false);
   ui.flash();
@@ -2854,6 +2960,7 @@ $('#sync-pull').addEventListener('click', async () => {
     }
     const parsed = JSON.parse(json); // 壊れたデータは弾く（中身は読み込み時に検証される）
     localStorage.setItem(SAVE_KEY, json);
+    setPend(null);
     markSynced(ver, Number(parsed?.syncAt) || Date.now(), +parsed?.shards || 0);
     localStorage.setItem('arkeia-sync', n.match(/.{4}/g).join('-'));
     m.textContent = '受け取りました。読み込み直します…';
@@ -3032,6 +3139,9 @@ var social = initSocial({
     } else {
       const b = localStorage.getItem('arkeia-sync-base');
       if (b != null && Number.isFinite(+b)) localStorage.setItem('arkeia-sync-base', String(+b - amt));
+      // 結果不明の書き込みの基準も、サーバー側の消費分だけ下げる
+      const ps = getPends().map((p) => ({ ...p, shards: +p.shards - amt }));
+      if (ps.length) localStorage.setItem('arkeia-sync-pend', JSON.stringify(ps));
       persist();
     }
   },
@@ -3132,8 +3242,19 @@ function renderShop() {
       const buy = document.createElement('button');
       buy.className = 'btn mini';
       buy.textContent = '購入する';
+      // 購入後に解放できる経路（サーバーの決済確認 または 解放コード）が無い間は、購入させない
+      const canUnlock = apiEnabled() || /^[0-9a-f]{64}$/.test(it.codeSha256 || '');
+      if (!canUnlock) {
+        buy.disabled = true;
+        buy.textContent = '準備中';
+        buy.title = '購入後の解放手続きを準備中です';
+      }
       buy.addEventListener('click', () => {
         sfx('ui');
+        if (!canUnlock) {
+          $('#shop-msg').textContent = '購入ページは準備中です。もう少しお待ちください。';
+          return;
+        }
         if (it.url) {
           // 決済をこの端末の購入IDに結びつける（Stripe 支払いリンクの client_reference_id）
           const u = new URL(it.url);

@@ -1361,8 +1361,10 @@ export class Battle {
       });
     }
     if (spec.kind === 'projectile') {
-      for (let i = 0; i < spec.count; i++) {
-        const ang = f.facing + (i - (spec.count - 1) / 2) * spec.spreadAng;
+      const cnt = Math.max(1, Math.floor(+spec.count || 1));
+      const spr = Number.isFinite(+spec.spreadAng) ? +spec.spreadAng : 0;
+      for (let i = 0; i < cnt; i++) {
+        const ang = f.facing + (i - (cnt - 1) / 2) * spr;
         if (spec.chain) {
           let w = -i * spec.chain;
           this.addEffect((dt) => {
@@ -2441,13 +2443,17 @@ export class Battle {
       }
     }
     // 技の跡を素早く消す：例外で止まった演出や取り残しも強制回収
-    this.effects = this.effects.filter((fn) => {
+    // 実行中に追加された処理（光線・時間差発射など）は捨てずに次フレームへ持ち越す
+    const running = this.effects;
+    this.effects = [];
+    const keep = running.filter((fn) => {
       try {
         return fn(dt);
       } catch (e) {
         return false;
       }
     });
+    this.effects = keep.concat(this.effects);
     this.fxClock = (this.fxClock || 0) + rawDt;
     for (let i = this.fx.children.length - 1; i >= 0; i--) {
       const o = this.fx.children[i];
@@ -2506,6 +2512,14 @@ export class Battle {
     for (const f of this.fighters) {
       this.scene.remove(f.root);
       f.mixer?.stopAllAction();
+      // 召喚獣も戦闘終了時に必ず片付ける
+      const s = f.summon;
+      if (s) {
+        s.dying = 1;
+        s.mixer?.stopAllAction();
+        if (s.g) this.scene.remove(s.g);
+        f.summon = null;
+      }
     }
     this.scene.remove(this.fx);
     this.fighters = [];

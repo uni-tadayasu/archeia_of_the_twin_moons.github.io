@@ -213,7 +213,7 @@ FIGHTERS.crimson = {
   color: 0xe04a28, height: 1.75, hp: 1150, speed: 6.6, overGain: 1.15, shop: true,
   light: { dmg: 44, range: 2.2 },
   skills: [
-    { name: '魔神閃', cost: 16, kind: 'projectile', dmg: 70, speed: 18, radius: 0.8, elem: 3, color: 0x40ffc0, vivid: true },
+    { name: '魔神閃', cost: 16, kind: 'projectile', dmg: 70, speed: 18, radius: 0.8, count: 1, spreadAng: 0, elem: 3, color: 0x40ffc0, vivid: true },
     { name: '紅蓮翔斬', cost: 20, kind: 'dash', dmg: 105, speed: 20, dur: 0.3, elem: 0, color: 0xff4010, vivid: true },
     { name: '獅吼烈破', cost: 22, kind: 'shockwave', dmg: 110, radius: 5, elem: 5, color: 0xffc040, vivid: true },
     { name: '天落雷斬', cost: 24, kind: 'rain', visual: 'bolt', count: 3, spread: 1, radius: 1.8, dmg: 60, delay: 0.3, interval: 0.15, elem: 2, color: 0xfff040, vivid: true }
@@ -226,7 +226,7 @@ FIGHTERS.sovereign = {
   color: 0x9a40ff, height: 1.8, hp: 1600, speed: 6.4, overGain: 1.6, locked: true, special: 'chief', form2: 'sovereign2',
   light: { dmg: 30, range: 2.6, shots: 6, color: 0xb050ff },
   skills: [
-    { name: '冥鎖刃《ノクス・チェイン》', cost: 20, kind: 'projectile', dmg: 150, speed: 22, radius: 1.1, elem: 6, color: 0xa040ff, vivid: true },
+    { name: '冥鎖刃《ノクス・チェイン》', cost: 20, kind: 'projectile', dmg: 150, speed: 22, radius: 1.1, count: 1, spreadAng: 0, elem: 6, color: 0xa040ff, vivid: true },
     { name: '紫影閃舞', cost: 20, kind: 'dash', dmg: 170, speed: 24, dur: 0.32, elem: 6, color: 0xc060ff, vivid: true },
     { name: '冥雷葬列', cost: 24, kind: 'rain', visual: 'bolt', count: 9, spread: 3.2, radius: 2.1, dmg: 80, delay: 0.25, interval: 0.07, elem: 2, color: 0xd070ff, vivid: true },
     { name: '虚空の檻', cost: 26, kind: 'implode', dmg: 220, radius: 7.5, elem: 6, color: 0x8020ff, vivid: true }
@@ -238,7 +238,7 @@ FIGHTERS.sovereign2 = {
   color: 0xff3050, height: 2.15, hp: 2400, speed: 6.8, overGain: 2, locked: true, special: 'chief', hidden: true,
   light: { dmg: 34, range: 2.8, shots: 8, color: 0xff3060 },
   skills: [
-    { name: '緋天冠刃《クラウン・レイ》', cost: 18, kind: 'projectile', dmg: 190, speed: 26, radius: 1.3, elem: 9, color: 0xff2040, vivid: true },
+    { name: '緋天冠刃《クラウン・レイ》', cost: 18, kind: 'projectile', dmg: 190, speed: 26, radius: 1.3, count: 1, spreadAng: 0, elem: 9, color: 0xff2040, vivid: true },
     { name: '深淵環《アビス・ヘイロー》', cost: 22, kind: 'shockwave', dmg: 240, radius: 9, elem: 6, color: 0xc040ff, vivid: true },
     { name: '血紅流星雨', cost: 24, kind: 'rain', visual: 'nova', count: 6, spread: 3.5, radius: 3.2, dmg: 150, delay: 0.5, interval: 0.12, elem: 0, color: 0xff3020, vivid: true },
     { name: '冥后の抱擁', cost: 26, kind: 'implode', dmg: 280, radius: 8.5, elem: 9, color: 0xff2060, vivid: true }
