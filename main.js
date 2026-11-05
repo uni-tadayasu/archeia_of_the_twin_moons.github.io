@@ -1891,7 +1891,7 @@ function renderWorldPanel() {
     return e;
   };
   const list = state.field ? state.field.nearbyRemotes(40) : [];
-  if (!list.length) near.append(mk('p', '近くに旅人はいません。同じ章を旅する人が現れると、ここに映ります。', 'wp-empty'));
+  if (!list.length) near.append(mk('p', '近くに旅人はいません。どの章を旅している人でも、近づくとここに映ります。', 'wp-empty'));
   for (const r of list) {
     const p = peers[r.id];
     if (!p) continue;
