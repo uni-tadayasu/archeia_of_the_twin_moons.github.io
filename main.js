@@ -3,6 +3,7 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { Battle, ARENA_R } from './game.js';
 import { FIGHTERS, STORY, ROSTER, UPGRADES, MAX_LV, STAGES, BGM, APEX_BGM, ENEMY_ROSTER, UPG_CAP, WEAPONS, ARMORS, STAT_LABEL, SPECIAL_KEYS } from './data.js';
 import { ProcMusic } from './music.js';
+import { sayBattle, setVoiceMuted, stopVoices } from './voice.js';
 import { OPERATOR_KEY_SHA256, CHIEF_KEY_SHA256, MAX_KEY_ATTEMPTS, LOCKOUT_MS, SHOP_ITEMS } from './config.js';
 import { connect, issueInvite, redeemInvite, syncPush, syncPull } from './net.js';
 import { apiEnabled, api, verifyToken } from './api.js';
@@ -609,6 +610,7 @@ function unlockAudio() {
 }
 function setMuted(m) {
   audio.muted = m;
+  setVoiceMuted(m);
   localStorage.setItem('arkeia-muted', m ? '1' : '0');
   const t = audio.tracks[audio.current];
   if (m) {
@@ -1170,6 +1172,8 @@ const ui = {
   skillName(f, spec, isOver) {
     const el = $('#skillname');
     if (!el || !spec) return;
+    // 戦闘ボイス（奥義・味方の技は割り込んで優先）
+    sayBattle(f, spec.hi ? 'hi' : isOver ? 'over' : 'skill', spec.name, isOver || f.isPlayer);
     const KIND = { projectile: '飛び道具', dash: '突進', shockwave: '衝撃波', rain: '降りそそぐ範囲攻撃', implode: '引き寄せ爆発', judgment: '大範囲の奥義' };
     const ally = f.team === 0;
     el.querySelector('.sn-who').textContent = `${f.name}${ally ? '' : '（敵）'}`;
@@ -1188,6 +1192,7 @@ const ui = {
   cutin(f, title, sub) {
     const el = $('#cutin');
     if (!el || !f) return;
+    if (/覚醒/.test(title || '')) sayBattle(f, 'awaken', '', true);
     const d = f.def || FIGHTERS[f.key] || {};
     const img = el.querySelector('img');
     img.hidden = !d.face;
@@ -1226,6 +1231,7 @@ function makeBattle(net) {
   return state.battle;
 }
 function endBattle() {
+  stopVoices();
   if (state.battle) {
     // 覚醒の蓄積ダメージは次の戦いへ持ち越す（覚醒中に終わったらリセット）
     const me = state.battle.fighters.find((f) => f.isPlayer && !f.remoteAuth);
