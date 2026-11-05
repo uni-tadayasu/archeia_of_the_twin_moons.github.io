@@ -2814,7 +2814,14 @@ var social = initSocial({
   onChiefEvent,
   ownEvent: () => (chiefUnlocked() ? readJSON('arkeia-cevent-own') : null),
   isChief: () => chiefUnlocked(),
+  isOperator: () => operatorUnlocked(),
   roleToken: () => roleState.tok,
+  // 運営会議：送信者が運営長か運営であることを役職トークンで確認（サーバー未設定時は受け入れる）
+  verifyStaff: async (tk) => {
+    if (!apiEnabled()) return true;
+    const d = await verifyToken(tk, 'role').catch(() => null);
+    return d?.r === 'chief' || d?.r === 'op';
+  },
   // 運営長のお知らせはサーバー署名の役職トークンで確認（サーバー未設定時は受け入れる）
   verifyChief: async (tk) => {
     if (!apiEnabled()) return true;

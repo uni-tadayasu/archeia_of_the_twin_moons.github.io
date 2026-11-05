@@ -65,7 +65,7 @@ export async function syncPull(h) {
 }
 
 // ---- 交流用の常設ルーム（チャット・お知らせ・ギルド） ----
-const CH_RE = /^(world|g:[A-Za-z0-9]{8}|dm:[A-Za-z0-9]{1,24}:[A-Za-z0-9]{1,24})$/;
+const CH_RE = /^(world|staff|g:[A-Za-z0-9]{8}|dm:[A-Za-z0-9]{1,24}:[A-Za-z0-9]{1,24})$/;
 const txt = (v, n) => String(v ?? '').replace(/[\u0000-\u001f<>]/g, '').slice(0, n);
 export async function connectSocial(handlers) {
   const { db, id } = await getDb();
@@ -75,7 +75,7 @@ export async function connectSocial(handlers) {
     const peers = {};
     for (const p of Object.values(data.peers || {})) {
       if (!p || typeof p !== 'object') continue;
-      const s = { id: str(p.id, 40), pid: str(p.pid, 24), name: str(p.name, 12) || '旅人', gid: /^[A-Za-z0-9]{8}$/.test(p.gid) ? p.gid : '', gname: txt(p.gname, 16), grole: ['master', 'sub', 'officer', 'member'].includes(p.grole) ? p.grole : 'member', gm: str(p.gm, 24) };
+      const s = { id: str(p.id, 40), pid: str(p.pid, 24), name: str(p.name, 12) || '旅人', gid: /^[A-Za-z0-9]{8}$/.test(p.gid) ? p.gid : '', gname: txt(p.gname, 16), grole: ['master', 'sub', 'officer', 'member'].includes(p.grole) ? p.grole : 'member', gm: str(p.gm, 24), st: p.st === 1 };
       if (s.id) peers[s.id] = s;
     }
     handlers.onPeers?.(peers);
@@ -84,7 +84,7 @@ export async function connectSocial(handlers) {
     if (!e || typeof e !== 'object' || !CH_RE.test(e.ch)) return;
     const t = txt(e.t, 120).trim();
     if (!t) return;
-    handlers.onChat?.({ ch: e.ch, t, from: str(e.from, 40), pid: str(e.pid, 24), name: str(e.name, 12) || '旅人', gname: txt(e.gname, 16), at: Date.now() });
+    handlers.onChat?.({ ch: e.ch, t, from: str(e.from, 40), pid: str(e.pid, 24), name: str(e.name, 12) || '旅人', gname: txt(e.gname, 16), tk: e.ch === 'staff' && typeof e.tk === 'string' && e.tk.length < 1500 ? e.tk : '', at: Date.now() });
   });
   room.subscribeTopic('news', (e) => {
     if (!e || typeof e !== 'object') return;

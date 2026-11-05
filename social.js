@@ -53,7 +53,7 @@ const dmCh = (a, b) => 'dm:' + [a, b].sort().join(':');
  */
 export function initSocial(opts) {
   if (S) return S.api;
-  S = { opts, net: null, peers: {}, logs: { world: [], guild: [], friend: {} }, tab: 'world', dmPid: '', unread: 0, news: [], rate: [], lastFrom: new Map() };
+  S = { opts, net: null, peers: {}, logs: { world: [], guild: [], friend: {}, staff: [] }, tab: 'world', dmPid: '', unread: 0, news: [], rate: [], lastFrom: new Map() };
   const style = document.createElement('style');
   style.textContent = CSS;
   document.head.append(style);
@@ -135,10 +135,13 @@ export function initSocial(opts) {
   return S.api;
 }
 
+function isStaff() {
+  return !!(S.opts.isChief?.() || S.opts.isOperator?.());
+}
 function publish() {
   const { save, myName } = S.opts;
   const g = save.guild;
-  S.net?.publish({ pid: save.pid, name: myName(), gid: g?.id || '', gname: g?.name || '', grole: g?.role || 'member', gm: g?.master || '' });
+  S.net?.publish({ pid: save.pid, name: myName(), gid: g?.id || '', gname: g?.name || '', grole: g?.role || 'member', gm: g?.master || '', st: isStaff() ? 1 : 0 });
 }
 
 // ---------- 運営長のお知らせ ----------
@@ -279,10 +282,11 @@ function buildChat() {
     }
   });
   const tabs = el('div', 'cp-tabs');
-  for (const [k, n] of [['world', '世界'], ['guild', 'ギルド'], ['friend', 'フレンド'], ['chief', 'お知らせ管理']]) {
+  for (const [k, n] of [['world', '世界'], ['guild', 'ギルド'], ['friend', 'フレンド'], ['staff', '運営会議'], ['chief', 'お知らせ管理']]) {
     const b = el('button', k === S.tab ? 'on' : '', n);
     b.dataset.tab = k;
     if (k === 'chief') S.chiefTab = b;
+    if (k === 'staff') S.staffTab = b;
     b.addEventListener('click', () => {
       S.tab = k;
       tabs.querySelectorAll('button').forEach((x) => x.classList.toggle('on', x.dataset.tab === k));
@@ -316,6 +320,7 @@ function curChannel() {
   const { save } = S.opts;
   if (S.tab === 'world') return 'world';
   if (S.tab === 'guild') return save.guild ? 'g:' + save.guild.id : null;
+  if (S.tab === 'staff') return isStaff() ? 'staff' : null;
   return S.dmPid ? dmCh(save.pid, S.dmPid) : null;
 }
 function sendChat(raw) {
@@ -332,7 +337,8 @@ function sendChat(raw) {
   }
   S.rate.push(now);
   const { save, myName } = S.opts;
-  const msg = { ch, t, pid: save.pid, name: myName(), gname: save.guild?.name || '' };
+  const msg = { ch, t, pid: save.pid, name: myName(), gname: ch === 'staff' ? (S.opts.isChief?.() ? '運営長' : '運営') : save.guild?.name || '' };
+  if (ch === 'staff') msg.tk = S.opts.roleToken?.() || '';
   S.net.chat(msg);
   onChat({ ...msg, from: S.net.myId, at: now, me: true });
 }
@@ -340,7 +346,7 @@ function onChat(m) {
   const { save } = S.opts;
   if (!m.me && m.from === S.net?.myId) return;
   // 受信側の連投対策：同じ相手から5秒に4件まで
-  if (!m.me) {
+  if (!m.me && !m.verified) {
     const now = Date.now();
     const h = (S.lastFrom.get(m.from) || []).filter((x) => now - x < 5000);
     if (h.length >= 4) return;
@@ -349,7 +355,15 @@ function onChat(m) {
   }
   let box;
   if (m.ch === 'world') box = S.logs.world;
-  else if (m.ch.startsWith('g:')) {
+  else if (m.ch === 'staff') {
+    // 運営会議：自分が運営長/運営で、送信者の役職トークンが確認できたものだけ
+    if (!isStaff()) return;
+    if (!m.me && !m.verified) {
+      Promise.resolve(S.opts.verifyStaff?.(m.tk) ?? true).then((ok) => { if (ok) onChat({ ...m, verified: true, from: m.from + '' }); }).catch(() => {});
+      return;
+    }
+    box = S.logs.staff;
+  } else if (m.ch.startsWith('g:')) {
     if (!save.guild || m.ch !== 'g:' + save.guild.id) return;
     box = S.logs.guild;
   } else {
@@ -378,6 +392,10 @@ function renderAll() {
   const chief = !!S.opts.isChief?.();
   S.chiefTab.hidden = !chief;
   if (S.tab === 'chief' && !chief) S.tab = 'world';
+  const staff = isStaff();
+  S.staffTab.hidden = !staff;
+  if (S.tab === 'staff' && !staff) S.tab = 'world';
+  S.panel.querySelectorAll('.cp-tabs button').forEach((x) => x.classList.toggle('on', x.dataset.tab === S.tab));
   const form = S.panel.querySelector('form');
   form.hidden = S.tab === 'chief';
   S.log.hidden = S.tab === 'chief';
@@ -459,6 +477,8 @@ function renderHead() {
   h.replaceChildren();
   if (S.tab === 'chief') {
     h.append(el('span', null, 'お知らせ管理（運営長専用）'));
+  } else if (S.tab === 'staff') {
+    h.append(el('span', null, `運営会議（運営長・運営専用） — 参加中 ${onlineCount((p) => p.st)} 人`));
   } else if (S.tab === 'world') {
     h.append(el('span', null, `世界チャット — 接続中 ${onlineCount(() => true)} 人`));
   } else if (S.tab === 'guild') {
@@ -615,6 +635,7 @@ function renderLog() {
   let box = S.logs.world;
   if (S.tab === 'guild') box = S.logs.guild;
   else if (S.tab === 'friend') box = S.logs.friend[S.dmPid] || [];
+  else if (S.tab === 'staff') box = S.logs.staff;
   S.log.replaceChildren();
   if (S.tab === 'guild' && !save.guild) {
     S.log.append(el('p', 'sys', 'ギルドに入るとギルドチャットが使えます。'));
