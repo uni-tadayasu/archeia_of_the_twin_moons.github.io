@@ -898,6 +898,62 @@ export class Battle {
     L.userData.p = 4 * power; // 閃光は弱めに
   }
 
+  // 追加技：パチパチと弾け飛ぶ火花＋はじける衝撃環＋連続ポップ
+  burstFx(pos, color, el) {
+    const N = 70;
+    const geo = new THREE.BufferGeometry();
+    const p = new Float32Array(N * 3), v = [];
+    for (let i = 0; i < N; i++) {
+      p[i * 3] = pos.x; p[i * 3 + 1] = 1.1; p[i * 3 + 2] = pos.z;
+      const a = Math.random() * Math.PI * 2, e = Math.random() * 1.2 - 0.2, s = 5 + Math.random() * 9;
+      v.push(Math.cos(a) * Math.cos(e) * s, Math.sin(e) * s + 3, Math.sin(a) * Math.cos(e) * s);
+    }
+    geo.setAttribute('position', new THREE.BufferAttribute(p, 3));
+    const mat = new THREE.PointsMaterial({ color: lite(color, 0.55), size: 0.28, transparent: true, opacity: 1, blending: THREE.AdditiveBlending, depthWrite: false });
+    const pts = new THREE.Points(geo, mat);
+    this.fx.add(pts);
+    const ring = new THREE.Mesh(new THREE.RingGeometry(0.6, 0.85, 40), glow(lite(color, 0.7), 0.95));
+    ring.rotation.x = -Math.PI / 2;
+    ring.position.set(pos.x, 0.12, pos.z);
+    this.fx.add(ring);
+    const core = new THREE.Mesh(new THREE.SphereGeometry(0.5, 14, 10), glow(0xffffff, 0.9));
+    core.position.set(pos.x, 1.1, pos.z);
+    this.fx.add(core);
+    let t = 0, pops = 0;
+    const life = 0.75;
+    this.addEffect((dt) => {
+      t += dt;
+      const k = t / life;
+      for (let i = 0; i < N; i++) {
+        v[i * 3 + 1] -= 18 * dt;
+        v[i * 3] *= 0.96; v[i * 3 + 2] *= 0.96;
+        p[i * 3] += v[i * 3] * dt; p[i * 3 + 1] = Math.max(0.05, p[i * 3 + 1] + v[i * 3 + 1] * dt); p[i * 3 + 2] += v[i * 3 + 2] * dt;
+      }
+      geo.attributes.position.needsUpdate = true;
+      mat.opacity = Math.max(0, 1 - k) * (0.6 + 0.4 * Math.sin(t * 60)); // チカチカ明滅
+      mat.size = 0.28 * (1 - k * 0.5);
+      ring.scale.setScalar(1 + k * 7);
+      ring.material.opacity = Math.max(0, 0.95 * (1 - k * 1.4));
+      core.scale.setScalar(Math.max(0.01, 1.6 - k * 4));
+      core.material.opacity = Math.max(0, 0.9 - k * 3);
+      // 弾けの連鎖：周囲で小さな破裂が続く
+      if (pops < 4 && t > pops * 0.09) {
+        pops++;
+        const q = new THREE.Vector3(pos.x + (Math.random() - 0.5) * 3, 0.9 + Math.random(), pos.z + (Math.random() - 0.5) * 3);
+        this.fxPop(q, el, 6, 1.2, 0.25, { grow: 2.6, spin: 6 });
+      }
+      if (t < life) return true;
+      for (const o of [pts, ring, core]) {
+        this.fx.remove(o);
+        o.geometry.dispose();
+        o.material.dispose();
+      }
+      return false;
+    });
+    this.flashLight(pos, color, 1.2, 0.25);
+    this.shake = Math.max(this.shake || 0, 0.25);
+  }
+
   // 豪華化レイヤー：多重魔法陣・螺旋に昇る光粒・光柱・衝撃環・飛散する光条・閃光
   grandFx(pos, elem, color, power = 1) {
     if (grandLive > 14) return;
@@ -1223,7 +1279,7 @@ export class Battle {
         this.fxPop(tp.clone().setY(0.08), el, 4, isOver ? 5 : 2.6, 0.5, { flat: true, grow: 2.2 });
         this.fxPop(tp.clone().setY(1.2), el, 8, isOver ? 3.6 : 1.8, 0.4, { grow: 1.8, spin: 3 });
         this.flashLight(tp, spec.color, isOver ? 1.6 : 0.8, 0.35);
-        if (spec.follow) this.grandFx(tp, el, lite(spec.color, 0.3), 1);
+        if (spec.follow) this.burstFx(tp, spec.color, el);
         return false;
       });
     }

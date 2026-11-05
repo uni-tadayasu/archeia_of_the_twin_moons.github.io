@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { Battle, ARENA_R } from './game.js';
-import { FIGHTERS, STORY, ROSTER, UPGRADES, MAX_LV, STAGES, BGM, APEX_BGM, ENEMY_ROSTER, UPG_CAP, WEAPONS, ARMORS, STAT_LABEL, SPECIAL_KEYS, BOSS_ROSTER, currentEvent } from './data.js';
+import { FIGHTERS, STORY, ROSTER, UPGRADES, MAX_LV, STAGES, BGM, APEX_BGM, ENEMY_ROSTER, UPG_CAP, LB_MAX, lbMaxLv, lbMul, lbCost, WEAPONS, ARMORS, STAT_LABEL, SPECIAL_KEYS, BOSS_ROSTER, currentEvent } from './data.js';
 import { ProcMusic } from './music.js';
 import { sayBattle, setVoiceMuted, stopVoices } from './voice.js';
 import { initSocial } from './social.js';
@@ -167,12 +167,14 @@ function loadSave() {
   } catch {
     raw = {};
   }
-  const s = { shards: clampInt(raw.shards, 0, 999999), chapter: clampInt(raw.chapter, 0, STORY.length), upg: {} };
+  const s = { shards: clampInt(raw.shards, 0, 999999), chapter: clampInt(raw.chapter, 0, STORY.length), upg: {}, lb: {} };
   for (const k of Object.keys(FIGHTERS)) {
+    const lb = clampInt(raw.lb?.[k], 0, LB_MAX);
+    if (lb) s.lb[k] = lb;
     const src = raw.upg?.[k];
     if (!src || typeof src !== 'object') continue;
     for (const u of UPGRADES) {
-      const v = clampInt(src[u.id], 0, MAX_LV);
+      const v = clampInt(src[u.id], 0, lbMaxLv(lb));
       if (v) (s.upg[k] ||= {})[u.id] = v;
     }
   }
@@ -215,11 +217,15 @@ if (!Array.isArray(save.friends)) save.friends = [];
 save.friends = save.friends.filter((f) => f && typeof f.pid === 'string').slice(0, 100).map((f) => ({ pid: String(f.pid).slice(0, 24), name: String(f.name || '旅人').replace(/[<>&"']/g, '').slice(0, 12) }));
 if (typeof save.uname !== 'string') save.uname = '';
 const lvOf = (k, id) => save.upg[k]?.[id] || 0;
-// 100種の強化を戦闘用の5能力（段換算）にまとめる
+const lbOf = (k) => save.lb[k] || 0;
+const maxLvOf = (k) => lbMaxLv(lbOf(k));
+const allMaxed = (k) => UPGRADES.every((u) => lvOf(k, u.id) >= maxLvOf(k));
+// 100種の強化を戦闘用の5能力（段換算）にまとめる（限界突破で効果と上限が上がる）
 function upgFor(k) {
   const out = { hp: 0, atk: 0, def: 0, flux: 0, over: 0 };
-  for (const u of UPGRADES) out[u.stat] += lvOf(k, u.id) * u.w;
-  for (const s in out) out[s] = Math.min(UPG_CAP[s], out[s]);
+  const lb = lbOf(k), mul = lbMul(lb);
+  for (const u of UPGRADES) out[u.stat] += lvOf(k, u.id) * u.w * mul;
+  for (const s in out) out[s] = Math.min(UPG_CAP[s] * (1 + 0.6 * lb), out[s]);
   const w = WEAPONS.find((x) => x.id === save.equip[k]);
   if (w) for (const s in w.bonus) out[s] += w.bonus[s];
   const a = ARMORS.find((x) => x.id === save.armor[k]);
@@ -1884,7 +1890,7 @@ function renderForge() {
     const b = document.createElement('button');
     b.className = 'chip' + (k === forgeSel ? ' on' : '');
     const total = UPGRADES.reduce((s, u) => s + lvOf(k, u.id), 0);
-    b.textContent = `${FIGHTERS[k].name}　${total}/${UPGRADES.length * MAX_LV}`;
+    b.textContent = `${FIGHTERS[k].name}${lbOf(k) ? `【突破${lbOf(k)}】` : ''}　${total}/${UPGRADES.length * maxLvOf(k)}`;
     b.addEventListener('click', () => {
       sfx('ui');
       forgeSel = k;
@@ -1954,8 +1960,41 @@ function renderForge() {
     $('#forge-shards').textContent = `手持ちの灯晶　${save.shards}`;
     return;
   }
+  // 限界突破
+  const lb = lbOf(forgeSel), MAXL = maxLvOf(forgeSel), mulNow = lbMul(lb);
+  {
+    const row = document.createElement('div');
+    row.className = 'frow';
+    row.style.cssText = 'background:linear-gradient(90deg,rgba(255,200,90,.35),rgba(255,120,60,.15));padding:6px;border:1px solid #c9a65a';
+    const lab = document.createElement('span');
+    lab.textContent = `限界突破　${lb}/${LB_MAX}`;
+    const btn = document.createElement('button');
+    btn.className = 'btn mini';
+    const cost = lbCost(lb);
+    const ready = allMaxed(forgeSel);
+    btn.textContent = lb >= LB_MAX ? '頂に至る' : ready ? `突破 ${cost}` : '全強化で解放';
+    btn.disabled = lb >= LB_MAX || !ready || save.shards < cost;
+    btn.addEventListener('click', () => {
+      if (lb >= LB_MAX || !allMaxed(forgeSel) || save.shards < cost) return;
+      save.shards -= cost;
+      save.lb[forgeSel] = lb + 1;
+      persist();
+      sfx('burst');
+      social?.news(`${myName()} が${FIGHTERS[forgeSel]?.name || '戦士'}の限界を突破した！（${lb + 1}回目）`);
+      renderForge();
+    });
+    const info = document.createElement('i');
+    info.textContent = `効果×${mulNow.toFixed(1)}`;
+    const desc = document.createElement('small');
+    desc.textContent = lb >= LB_MAX
+      ? 'すべての限界を越えました。'
+      : `すべての強化を${MAXL}段まで極めると突破できます。突破すると各強化の上限が${lbMaxLv(lb + 1)}段に伸び、効果が×${lbMul(lb + 1).toFixed(1)}になります。`;
+    row.append(lab, btn, info, desc);
+    rows.append(row);
+  }
   for (const u of UPGRADES) {
     const lv = lvOf(forgeSel, u.id);
+    const MAX_LV = MAXL; // 限界突破後の上限
     const cost = (lv + 1) * 40;
     const row = document.createElement('div');
     row.className = 'frow';
@@ -1977,9 +2016,9 @@ function renderForge() {
       renderForge();
     });
     const pips = document.createElement('i');
-    pips.textContent = '◆'.repeat(lv) + '◇'.repeat(MAX_LV - lv);
+    pips.textContent = MAX_LV <= 5 ? '◆'.repeat(lv) + '◇'.repeat(MAX_LV - lv) : `${lv}/${MAX_LV}段`;
     const desc = document.createElement('small');
-    desc.textContent = u.desc;
+    desc.textContent = `${u.what} ${u.sign}${+(u.pct * mulNow).toFixed(2)}%／段${lb ? `（突破×${mulNow.toFixed(1)}）` : ''}`;
     row.append(lab, btn, pips, desc);
     rows.append(row);
   }

@@ -496,8 +496,14 @@ export const UPGRADES = [];
 UPG_PRE.forEach((pre, pi) => UPG_STATS.forEach((s) => {
   const w = pi === 0 ? 1 : 0.25;
   const pct = +(s.per * w).toFixed(2);
-  UPGRADES.push({ id: pi === 0 ? s.id : s.id + pi, stat: s.id, w, label: pi === 0 ? FIRST_LABEL[s.id] : pre + s.noun, desc: `${s.what} ${s.sign}${pct}%／段` });
+  UPGRADES.push({ id: pi === 0 ? s.id : s.id + pi, stat: s.id, w, pct, what: s.what, sign: s.sign, label: pi === 0 ? FIRST_LABEL[s.id] : pre + s.noun, desc: `${s.what} ${s.sign}${pct}%／段` });
 }));
+// ---------- 限界突破：全強化を極めると解放。上限段+5、各強化の効果+20%（1回ごと） ----------
+export const LB_MAX = 10;
+export const LB_STEP = 5;
+export const lbMaxLv = (lb) => MAX_LV + LB_STEP * lb;
+export const lbMul = (lb) => 1 + 0.2 * lb;
+export const lbCost = (lb) => 5000 * (lb + 1);
 // ---------- 武器・装備：100種 ----------
 const WEP_TYPES = ['剣', '杖', '大斧', '双刃', '槍', '弓', '錬金瓶', '拳甲', '聖鈴', '雅扇'];
 const WEP_TIER = ['木の', '鉄の', '鋼の', '銀の', '霊銀の', '竜骨の', '月光の', '天星の', '灯脈の', '双月の'];
