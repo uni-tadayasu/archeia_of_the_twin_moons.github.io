@@ -129,7 +129,7 @@ function validateSaveShape(save) {
 
 // キャラ使用の可否：運営/運営長専用・購入キャラはサーバーで確認
 const OP_ONLY = new Set(['seraphel']);
-const CHIEF_ONLY = new Set(['chief', 'sovereign', 'sovereign2']);
+const CHIEF_ONLY = new Set(['chief', 'sovereign', 'sovereign2', 'bloodfiend']);
 
 // ---------- ルート ----------
 export default {
