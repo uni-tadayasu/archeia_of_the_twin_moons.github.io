@@ -1,5 +1,43 @@
 // 交流機能：画面上部のお知らせテロップ・世界／ギルド／フレンドチャット・ギルド
 import { connectSocial, saveChiefEvent, loadChiefEvent, donateGuild, guildDonors, guildBoard } from './net.js';
+// ---------- UI確認ダイアログ（ブラウザのconfirmは使わない） ----------
+function uiConfirm(text, okLabel = 'はい', danger = false) {
+  return new Promise((resolve) => {
+    const ov = document.createElement('div');
+    ov.style.cssText = 'position:fixed;inset:0;z-index:99999;background:rgba(5,6,14,.72);display:flex;align-items:center;justify-content:center;padding:16px;pointer-events:auto';
+    const box = document.createElement('div');
+    box.style.cssText = 'max-width:360px;width:100%;background:linear-gradient(#1b1830,#100e1e);border:1px solid rgba(214,180,106,.7);border-radius:12px;padding:18px;color:#f3ead2;font-size:15px;line-height:1.6;box-shadow:0 10px 40px rgba(0,0,0,.6);text-align:center';
+    const p = document.createElement('div');
+    p.textContent = text;
+    p.style.cssText = 'margin-bottom:14px;white-space:pre-wrap';
+    const row = document.createElement('div');
+    row.style.cssText = 'display:flex;gap:10px;justify-content:center';
+    const mk = (label, bg) => {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.textContent = label;
+      b.style.cssText = `flex:1;padding:10px;border-radius:8px;border:1px solid rgba(214,180,106,.6);background:${bg};color:#fff;font-size:15px;cursor:pointer`;
+      return b;
+    };
+    const no = mk('キャンセル', '#2a2740');
+    const ok = mk(okLabel, danger ? '#8a2330' : '#7a5a1e');
+    const done = (v) => { ov.remove(); document.removeEventListener('keydown', key, true); resolve(v); };
+    const key = (e) => {
+      if (e.key === 'Escape') { e.stopPropagation(); e.preventDefault(); done(false); }
+      else if (e.key === 'Enter') { e.stopPropagation(); e.preventDefault(); done(true); }
+    };
+    no.addEventListener('click', () => done(false));
+    ok.addEventListener('click', () => done(true));
+    ov.addEventListener('click', (e) => { if (e.target === ov) done(false); });
+    document.addEventListener('keydown', key, true);
+    row.append(no, ok);
+    box.append(p, row);
+    ov.append(box);
+    document.body.append(ov);
+    ok.focus();
+  });
+}
+export { uiConfirm };
 // ---------- ギルド寄付とランキング ----------
 function renderDonate(g) {
   const { save, persist, sfx, myName } = S.opts;
@@ -21,7 +59,8 @@ function renderDonate(g) {
     const amt = Math.floor(+inp.value);
     if (!(amt > 0)) { msg.textContent = '寄付額を入力してください。'; return; }
     if (amt > save.shards) { msg.textContent = '灯晶が足りません。'; return; }
-    if (!confirm(`ギルド「${G.name}」に灯晶 ${amt} を寄付しますか？（戻せません）`)) return;
+    if (!(await uiConfirm(`ギルド「${G.name}」に灯晶 ${amt} を寄付しますか？\n（取り消しできません）`, '寄付する'))) return;
+    if (amt > save.shards) { msg.textContent = '灯晶が足りません。'; return; }
     btn.disabled = true;
     try {
       save.shards -= amt;
@@ -676,8 +715,8 @@ function renderGuild() {
           sel.append(op);
         }
         sel.value = opts.includes(pr) ? pr : 'member';
-        sel.addEventListener('change', () => {
-          if (sel.value === 'master' && !confirm(`${p.name} にギルドマスターを譲りますか？`)) {
+        sel.addEventListener('change', async () => {
+          if (sel.value === 'master' && !(await uiConfirm(`${p.name} にギルドマスターを譲りますか？`, '譲る', true))) {
             sel.value = pr;
             return;
           }
@@ -686,8 +725,8 @@ function renderGuild() {
         });
         const kick = el('button', 'cp-b', '除名');
         kick.type = 'button';
-        kick.addEventListener('click', () => {
-          if (confirm(`${p.name} をギルドから除名しますか？`)) setRole(p, 'kick');
+        kick.addEventListener('click', async () => {
+          if (await uiConfirm(`${p.name} をギルドから除名しますか？`, '除名する', true)) setRole(p, 'kick');
         });
         r.append(sel, kick);
       }
