@@ -202,6 +202,9 @@ function loadSave() {
   s.buyId = raw.buyId;
   // 週替わりイベントの進行：{ week, lv=クリア済み最高段階(0-8) }
   s.evProg = raw.evProg && typeof raw.evProg === 'object' ? { week: clampInt(raw.evProg.week, 0, 1e7), lv: clampInt(raw.evProg.lv, 0, 8) } : { week: 0, lv: 0 };
+  // 特別イベント（同期コードで他端末へ運ぶ。中身は使う時に sanitizeEvent で検証）
+  s.cevent = raw.cevent && typeof raw.cevent === 'object' && Number.isFinite(+raw.cevent.at) ? { ev: raw.cevent.ev ?? null, at: +raw.cevent.at } : null;
+  s.ceventOwn = raw.ceventOwn && typeof raw.ceventOwn === 'object' && Number.isFinite(+raw.ceventOwn.at) ? { ev: raw.ceventOwn.ev ?? null, at: +raw.ceventOwn.at } : null;
   s.guild = raw.guild && /^[A-Za-z0-9]{8}$/.test(raw.guild.id) ? { id: raw.guild.id, name: String(raw.guild.name || 'ギルド').replace(/[<>\u0000-\u001f]/g, '').slice(0, 16), role: ['master', 'sub', 'officer', 'member'].includes(raw.guild.role) ? raw.guild.role : 'member', master: /^[a-z0-9]{1,24}$/i.test(raw.guild.master || '') ? raw.guild.master : '' } : null;
   return s;
 }
@@ -294,6 +297,9 @@ function mergeSaves(local, remote, baseShards) {
   out.armor = { ...(remote.armor || {}), ...(local.armor || {}) };
   const ea = remote.evProg || { week: 0, lv: 0 }, eb = local.evProg || { week: 0, lv: 0 };
   out.evProg = ea.week !== eb.week ? (ea.week > eb.week ? ea : eb) : { week: ea.week, lv: Math.max(ea.lv || 0, eb.lv || 0) };
+  const newer = (a, b) => (!a ? b || null : !b ? a : (+a.at >= +b.at ? a : b));
+  out.cevent = newer(remote.cevent, local.cevent);
+  out.ceventOwn = newer(remote.ceventOwn, local.ceventOwn);
   out.guild = local.guild ?? remote.guild ?? null;
   out.shards = Math.max(0, (+remote.shards || 0) + ((+local.shards || 0) - baseShards));
   out.syncAt = Date.now();
@@ -2782,7 +2788,26 @@ async function syncEntitlements() {
 syncEntitlements();
 // ---- 運営長の特別イベント ----
 function readJSON(k) { try { return JSON.parse(localStorage.getItem(k) || 'null'); } catch { return null; } }
+// セーブ（同期で届く）と端末内の記録のうち新しい方に揃える
+const CEV_KEYS = [['arkeia-cevent', 'cevent'], ['arkeia-cevent-own', 'ceventOwn']];
+function reconcileEvents() {
+  let changed = false;
+  for (const [lk, sk] of CEV_KEYS) {
+    const loc = readJSON(lk), sv = save[sk];
+    if (sv && (!loc || +sv.at > +loc.at)) localStorage.setItem(lk, JSON.stringify(sv));
+    else if (loc && (!sv || +loc.at > +sv.at)) { save[sk] = { ev: loc.ev ?? null, at: +loc.at }; changed = true; }
+  }
+  return changed;
+}
+function setEventRec(lk, rec) {
+  localStorage.setItem(lk, JSON.stringify(rec));
+  const sk = CEV_KEYS.find((x) => x[0] === lk)[1];
+  save[sk] = rec;
+  persist();
+}
+if (reconcileEvents()) persist();
 function activeEvent() {
+  reconcileEvents();
   // 運営長は自分の作成分と受信分のうち新しい方（他端末で作った分も反映）
   const own = chiefUnlocked() ? readJSON('arkeia-cevent-own') : null;
   const got = readJSON('arkeia-cevent');
@@ -2797,10 +2822,10 @@ function onChiefEvent(n) {
   if (cur && n.at <= cur.at) return;
   const ev = n.ev === null ? null : sanitizeEvent(n.ev, FIGHTERS);
   if (n.ev !== null && !ev) return;
-  localStorage.setItem('arkeia-cevent', JSON.stringify({ ev, at: n.at }));
+  setEventRec('arkeia-cevent', { ev, at: n.at });
   // 運営長の別端末：古い自作イベントを再配信して上書きしないよう、新しい方に揃える
   const own = readJSON('arkeia-cevent-own');
-  if (own && own.at < n.at) localStorage.setItem('arkeia-cevent-own', JSON.stringify({ ev, at: n.at }));
+  if (own && own.at < n.at) setEventRec('arkeia-cevent-own', { ev, at: n.at });
   if (isScreen('scr-title')) refreshTitle();
 }
 function openEventMaker() {
@@ -2862,14 +2887,14 @@ function openEventMaker() {
       stage: +fStage.value, at, ends: at + Math.round(+fDays.value || 7) * 86400000
     }, FIGHTERS);
     if (!ev) { msg.textContent = '内容を確認してください（名前必須・敵は合計10体まで）。'; return; }
-    localStorage.setItem('arkeia-cevent-own', JSON.stringify({ ev, at }));
+    setEventRec('arkeia-cevent-own', { ev, at });
     social?.sendEvent();
     social?.news(`運営長の特別イベント「${ev.name}」が始まった！`);
     msg.textContent = '公開しました。オンラインの全員に配信され、30秒ごとに再配信されます。';
     refreshTitle();
   });
   stop.onclick = () => {
-    localStorage.setItem('arkeia-cevent-own', JSON.stringify({ ev: null, at: Date.now() }));
+    setEventRec('arkeia-cevent-own', { ev: null, at: Date.now() });
     social?.sendEvent();
     msg.textContent = '公開を終了しました。通常の週替わりイベントに戻ります。';
     refreshTitle();
