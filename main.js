@@ -259,8 +259,10 @@ function scheduleAutoSync() {
   if (!syncReady || syncCodeNow().length !== 12) return;
   try { localStorage.setItem('arkeia-sync-dirty', '1'); } catch {}
   clearTimeout(autoPushTimer);
-  autoPushTimer = setTimeout(autoPush, 8000);
+  // 再送待ち（通信失敗・増え方の制限）の間は、その時刻まで待ってから送る
+  autoPushTimer = setTimeout(autoPush, Math.max(8000, syncHoldUntil - Date.now()));
 }
+var syncHoldUntil = 0;
 // 版番号つきの送受信（サーバー時は Durable Object で直列化、未設定時は InstantDB に直接）
 const syncVer = () => Number(localStorage.getItem('arkeia-sync-ver')) || 0;
 async function sendVersioned(code, json, base) {
@@ -345,18 +347,24 @@ async function autoPush() {
       }
     }
     if (r.rejected) {
-      console.warn('同期：資産の増え方が不自然なため、サーバーが受け付けませんでした');
+      // 変更は捨てずに残し、時間をおいて再送（時間経過で許容量が増える）
+      console.warn('同期：資産の増え方が大きいため、時間をおいて再送します');
       syncErr = 'wealth';
-      localStorage.removeItem('arkeia-sync-dirty');
+      syncHoldUntil = Date.now() + 10 * 60000;
+      clearTimeout(autoPushTimer);
+      autoPushTimer = setTimeout(autoPush, 10 * 60000);
       return;
     }
     if (!r.ok) throw new Error('push');
     syncErr = '';
+    syncHoldUntil = 0;
     markSynced(r.ver, at, save.shards);
   } catch (e) {
     syncErr = e?.message === 'pid' ? 'pid' : 'net';
     if (syncErr === 'pid') return; // 別の同期コードに登録済み：再送しても通らない
-    autoPushTimer = setTimeout(autoPush, 30000); // 通信失敗時は後で再送
+    syncHoldUntil = Date.now() + 60000;
+    clearTimeout(autoPushTimer);
+    autoPushTimer = setTimeout(autoPush, 60000); // 通信失敗時は後で再送
   } finally {
     autoBusy = false;
   }
@@ -364,14 +372,23 @@ async function autoPush() {
 async function autoPull() {
   const code = syncCodeNow();
   if (code.length !== 12 || autoBusy || document.hidden) return;
-  if (localStorage.getItem('arkeia-sync-dirty')) return autoPush(); // 未送信の変更を優先
+  if (localStorage.getItem('arkeia-sync-dirty')) {
+    // 未送信の変更を優先（再送待ちの間は送らない）
+    if (Date.now() >= syncHoldUntil) return autoPush();
+    return;
+  }
   autoBusy = true;
   try {
-    const { data: json, ver } = await fetchVersioned(code);
+    let { data: json, ver } = await fetchVersioned(code);
     if (!json) return;
     // 戦闘中は反映せず、次回の確認（戦闘外）で取り込む
     if (ver > syncVer() && !state.battle && !localStorage.getItem('arkeia-sync-dirty')) {
       const remote = JSON.parse(json);
+      // サーバーは購入キャラ(chars)を保存しないため、端末側の分を残す
+      const uni = (a, b) => [...new Set([...(Array.isArray(a) ? a : []), ...(Array.isArray(b) ? b : [])])];
+      remote.chars = uni(remote.chars, save.chars);
+      if (remote.pid == null && save.pid) remote.pid = save.pid;
+      json = JSON.stringify(remote);
       localStorage.setItem(SAVE_KEY, json);
       markSynced(ver, Number(remote.syncAt) || Date.now(), +remote.shards || 0);
       location.reload();
