@@ -79,10 +79,10 @@ function weaponMesh(type, tier) {
       g.add(part(G.torus, glowM, 0.05, 0.05, 0.05, 0, 0.37 + 0.95 * L, 0));
       break;
     case 5: { // 弓（握りが原点）
-      const b = part(G.bow, metal, 0.55 * L, 0.55 * L, 0.55 * L, 0.55 * L, 0, 0);
+      const b = part(G.bow, metal, 0.55 * L, 0.55 * L, 0.55 * L, -0.55 * L, 0, 0);
       b.rotation.z = -Math.PI / 2;
       g.add(b);
-      g.add(part(G.cyl, glowM, 0.004, 1.1 * L, 0.004, 0.55 * L, 0, 0));
+      g.add(part(G.cyl, glowM, 0.004, 1.1 * L, 0.004, -0.55 * L, 0, 0));
       g.add(part(G.cyl, grip, 0.03, 0.18, 0.03, 0, 0, 0));
       break;
     }
@@ -320,6 +320,9 @@ export function makeGear(h, wid, aid, model = null, parent = null) {
   if (parent) parent.add(root);
   parent?.updateMatrixWorld(true);
   const B = model ? findBones(model) : {};
+  // 骨はバインド姿勢で計測（アニメの途中で付けても位置がずれないように）
+  const restore = model && parent ? bindPose(model) : null;
+  parent?.updateMatrixWorld(true);
   const M = model && parent ? measure(model, parent, h, B) : {
     h, k, hipY: 0.5 * h, chestY: 0.7 * h, headY: 0.88 * h, shY: 0.8 * h,
     shR: new THREE.Vector3(-0.2 * k, 0.8 * h, 0), shL: new THREE.Vector3(0.2 * k, 0.8 * h, 0),
@@ -337,19 +340,34 @@ export function makeGear(h, wid, aid, model = null, parent = null) {
       const bone = side === 'r' ? B.rh : B.lh;
       const holder = new THREE.Group();
       if (bone && inv) {
-        holder.position.copy(localPos(bone, inv));
-        // 手の甲側へ少しずらし、拳の中に握る
+        // 手の骨の向き（指の方向・親指の方向）から握りの姿勢を決める
+        const hp = localPos(bone, inv);
         const fore = side === 'r' ? B.rf : B.lf;
-        if (fore) {
-          const dir = holder.position.clone().sub(localPos(fore, inv)).normalize();
-          holder.position.addScaledVector(dir, 0.04 * k);
+        const kids = bone.children.filter((c) => c.isBone);
+        const fing = new THREE.Vector3();
+        let thumb = null;
+        for (const c of kids) {
+          const cp = localPos(c, inv).sub(hp);
+          if (/thumb/i.test(c.name)) thumb = cp;
+          else fing.add(cp);
         }
+        if (fing.lengthSq() < 1e-8) fing.copy(fore ? hp.clone().sub(localPos(fore, inv)) : new THREE.Vector3(side === 'r' ? -1 : 1, 0, 0));
+        fing.normalize();
+        // 刃先方向＝親指側（無ければ正面やや上）。指方向と直交させる
+        const blade = thumb ? thumb.clone() : new THREE.Vector3(0, 0.35, 1);
+        blade.addScaledVector(fing, -blade.dot(fing));
+        if (blade.lengthSq() < 1e-6) blade.set(0, 0, 1).addScaledVector(fing, -fing.z);
+        blade.normalize();
+        const zAx = new THREE.Vector3().crossVectors(fing, blade).normalize();
+        holder.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(fing, blade, zAx));
+        // 掌の中心（指の付け根の少し手前）で握る
+        const palmLen = kids.length ? Math.min(0.09 * k, Math.max(0.03 * k, localPos(kids[0], inv).distanceTo(hp) * 0.8)) : 0.06 * k;
+        holder.position.copy(hp).addScaledVector(fing, palmLen);
       } else {
         holder.position.set((side === 'r' ? -1 : 1) * Math.max(0.24 * k, Math.abs(M.shR.x) + 0.06 * k), 0.5 * h, 0.1 * k);
+        if (type === 5) holder.rotation.set(0, side === 'r' ? -Math.PI / 2 : Math.PI / 2, 0);
+        else if (type !== 6 && type !== 7) holder.quaternion.copy(Q_FWD);
       }
-      if (type === 5) holder.rotation.set(0, side === 'r' ? -Math.PI / 2 : Math.PI / 2, 0); // 弓は縦に構える
-      else if (type === 6 || type === 7) holder.rotation.set(0, 0, 0);
-      else holder.quaternion.copy(Q_FWD);
       const swing = new THREE.Group();
       const w = weaponMesh(type, tier);
       w.scale.setScalar(k);
@@ -377,7 +395,46 @@ export function makeGear(h, wid, aid, model = null, parent = null) {
     }
   }
   for (const p of pieces) p.userData.q0 = p.quaternion.clone();
+  if (restore) restore();
   return root;
+}
+
+// バインド姿勢に一時的に戻す。戻り値の関数で元の姿勢を復元
+function bindPose(model) {
+  let sm = null;
+  model.traverse((o) => {
+    if (!sm && o.isSkinnedMesh && o.skeleton) sm = o;
+  });
+  if (!sm) return null;
+  model.updateMatrixWorld(true);
+  const base = new THREE.Matrix4().multiplyMatrices(sm.matrixWorld, sm.bindMatrixInverse);
+  const target = new Map();
+  sm.skeleton.bones.forEach((b, i) => {
+    const inv = sm.skeleton.boneInverses[i];
+    if (inv) target.set(b, new THREE.Matrix4().copy(inv).invert().premultiply(base));
+  });
+  const saved = [];
+  const pinv = new THREE.Matrix4();
+  model.traverse((o) => {
+    if (!o.isBone) return;
+    saved.push([o, o.position.clone(), o.quaternion.clone(), o.scale.clone()]);
+    const t = target.get(o);
+    if (t && o.parent) {
+      pinv.copy(o.parent.matrixWorld).invert();
+      new THREE.Matrix4().multiplyMatrices(pinv, t).decompose(o.position, o.quaternion, o.scale);
+    }
+    o.updateMatrix();
+    o.matrixWorld.multiplyMatrices(o.parent ? o.parent.matrixWorld : new THREE.Matrix4(), o.matrix);
+  });
+  model.updateMatrixWorld(true);
+  return () => {
+    for (const [o, p, q, s] of saved) {
+      o.position.copy(p);
+      o.quaternion.copy(q);
+      o.scale.copy(s);
+    }
+    model.updateMatrixWorld(true);
+  };
 }
 
 /** 装備を外す（骨に付け替えた部位もまとめて外す） */
@@ -396,11 +453,8 @@ export function animGear(g, dt, attacking, moving) {
   u.t += dt;
   u.sw = Math.max(0, (u.sw || 0) - dt * 3.2);
   if (attacking && u.sw <= 0) u.sw = 1;
-  for (const hnd of u.hands) {
-    if (!hnd.swingOn) continue;
-    const s = u.sw;
-    hnd.swing.rotation.x = s > 0 ? -Math.sin((1 - s) * Math.PI) * 1.3 : Math.sin(u.t * 2) * 0.04;
-  }
+  // 武器は手に固定（手の骨のアニメだけで動かす。独自の揺れは付けない）
+  for (const hnd of u.hands) hnd.swing.rotation.set(0, 0, 0);
   for (const c of u.parts) {
     if (c.userData.cape && c.userData.q0) {
       // 肩を支点に後ろへなびく（付け替え後の向きを基準に、キャラ空間の X 軸まわり）
