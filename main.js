@@ -1331,6 +1331,11 @@ const ui = {
     void b.offsetWidth;
     b.classList.add('go');
   },
+  // 戦闘ボイス（召喚・被弾・瀕死・撃破など）
+  voice(f, kind, name = '') {
+    if (!f) return;
+    sayBattle(f, kind, name, kind === 'summon' || (kind === 'ko' && f.isPlayer));
+  },
   callout(f, name) {
     ui.popup(f.pos, name, '#f4ead2');
   },

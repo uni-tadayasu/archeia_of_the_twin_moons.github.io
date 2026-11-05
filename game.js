@@ -6,8 +6,8 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 
 // 召喚獣の見た目と性能（HPは使い手の最大HPに比例）
 const SUMMON_DEFS = {
-  s0: { name: 'ヤマタノオロチ', model: 'assets/models/summon-orochi.glb', height: 3.6, hpMul: 0.6, dist: 2.4, range: 4.4, mul: 1.5, color: 0xd01030, color2: 0xff6020 },
-  s1: { name: 'スサノオ', model: 'assets/models/summon-susanoo.glb', height: 3.4, hpMul: 0.6, dist: 2.2, range: 4.4, mul: 1.5, color: 0x30ff70, color2: 0xa0ffc0 }
+  s0: { name: 'ヤマタノオロチ', model: 'assets/models/summon-orochi.glb', height: 3.6, hpMul: 0.6, dist: 2.4, range: 4.4, mul: 1.5, autoMul: 1.3, autoCd: 1.8, autoRange: 4.5, color: 0xd01030, color2: 0xff6020 },
+  s1: { name: 'スサノオ', model: 'assets/models/summon-susanoo.glb', height: 3.4, hpMul: 0.6, dist: 2.2, range: 4.4, mul: 1.5, autoMul: 1.4, autoCd: 1.6, autoRange: 4.0, color: 0x30ff70, color2: 0xa0ffc0 }
 };
 const SUMMON_CACHE = new Map();
 const summonLoader = new GLTFLoader();
@@ -502,6 +502,8 @@ export class Fighter {
     }
     if (this.gear) animGear(this.gear, dt, !!this.action, this.vel.lengthSq() > 0.5);
     if (this.summonCd > 0) this.summonCd -= dt;
+    // 召喚獣は戦闘開始時と、倒されてから15秒後に自動で現れる
+    else if (this.summonId && !this.summon && !this.dead && !this.remoteAuth) this.battle.spawnSummon(this);
     this.inv = Math.max(0, this.inv - dt);
     this.comboWindow = Math.max(0, this.comboWindow - dt);
     if (this.dead) {
@@ -852,8 +854,15 @@ export class Fighter {
     this.hitFlash = 0.15;
     this.over = Math.min(100, this.over + dmg * 0.06 * this.og);
     if (this.checkTransform()) return dmg;
+    const vo = this.battle.ui.voice;
     if (this.hp <= 0) {
       this.dead = true;
+      vo?.(this, 'ko');
+    } else if (!this.pinchSaid && this.hp < this.maxHp * 0.25) {
+      this.pinchSaid = true;
+      vo?.(this, 'pinch');
+    } else if (dmg > this.maxHp * 0.04) {
+      vo?.(this, 'hurt');
     }
     return dmg;
   }
@@ -1815,6 +1824,7 @@ export class Battle {
     // 出現演出
     this.burstFx ? this.burstFx(g.position.clone().setY(1.2), d.color, elOf(f.def.skills[0])) : this.spark(g.position.clone().setY(1.2), d.color, 2);
     this.ui.popup?.(g.position, `召喚！${d.name}`, '#' + d.color.toString(16).padStart(6, '0'));
+    this.ui.voice?.(f, 'summon', d.name);
     this.shake = Math.max(this.shake || 0, 0.4);
     this.addEffect((dt) => this.tickSummon(s, dt));
     return s;
@@ -1856,6 +1866,31 @@ export class Battle {
     s.body.position.z = lunge * 0.8 * s.k;
     s.body.position.y = Math.sin(s.t * 2) * 0.05;
     if (!s.mixer) s.body.rotation.x = -lunge * 0.15;
+    // 自動攻撃：近くの敵へ一定間隔で攻撃（威力は使い手の攻撃力に比例）
+    s.auto = (s.auto ?? 0.8) - dt;
+    if (s.auto <= 0 && !f.remoteAuth && !f.dead) {
+      s.auto = d.autoCd || 1.8;
+      const p = s.g.position;
+      let best = null, bd = Infinity;
+      for (const e of this.enemiesOf(f)) {
+        if (e.dead) continue;
+        const dd = Math.hypot(e.pos.x - p.x, e.pos.z - p.z);
+        if (dd < bd) { bd = dd; best = e; }
+      }
+      const reach = d.autoRange * s.k;
+      if (best && bd < reach + best.radius) {
+        // 敵の方へ向き直って攻撃
+        s.g.rotation.y = Math.atan2(best.pos.x - p.x, best.pos.z - p.z);
+        s.atk = 0.6;
+        if (s.acts.atk) { s.acts.atk.reset().play(); s.cur?.fadeOut(0.1); s.cur = s.acts.atk; }
+        const dmg = f.def.light.dmg * d.autoMul;
+        this.strikeAt(f, best.pos.x, best.pos.z, 1.6, dmg, 0.3, 4, null);
+        for (let i = 0; i < 4; i++) this.spark(best.pos.clone().setY(0.8 + i * 0.3), i % 2 ? d.color2 : d.color, 0.8);
+        this.fxPop(best.pos.clone().setY(1), elOf(f.def.skills[0]), 5, 2.2, 0.28, { grow: 1.6, spin: 8 });
+      } else {
+        s.auto = 0.3; // 敵が居なければ短い間隔で再確認
+      }
+    }
     s.bar.quaternion.copy(this.camera.quaternion);
     s.bar.quaternion.premultiply(new THREE.Quaternion().setFromEuler(new THREE.Euler(0, -s.g.rotation.y, 0)));
     s.fill.scale.x = Math.max(0.001, s.hp / s.maxHp);

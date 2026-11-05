@@ -10,6 +10,8 @@ const rules = {
   entitlements: { allow: deny },
   // 運営長の特別イベント：誰でも読める。書き込みは可能だが、受信側が運営長の署名トークンを検証する
   chiefevents: { allow: { view: 'true', create: 'true', update: 'true', delete: 'false' } },
+  // ギルド寄付ランキング：誰でも読める・追加更新できる（サーバー未設定時は端末の申告を信頼）
+  guilddonations: { allow: { view: 'true', create: 'true', update: 'true', delete: 'false' } },
   $default: { allow: { $default: 'false' } }
 };
 
