@@ -1183,13 +1183,25 @@ export class Battle {
   receiveNetHit(e) {
     const t = this.fighters.find((f) => f.netId === e.to && !f.remoteAuth);
     if (t) {
-      // サーバー検証モード：攻撃者の検証済み強化値から1撃の上限を出し、超える値は切り詰める
-      let dmg = e.dmg;
-      if (this.strictNet) {
-        const a = this.fighters.find((f) => f.netId === e.from && f.remoteAuth);
-        if (!a) return;
-        dmg = Math.min(dmg, netHitCap(a));
-      }
+      // 受信する攻撃の検証：攻撃者の実在・生存・距離・攻撃回数・技のクールダウン・1撃の上限
+      const a = this.fighters.find((f) => f.netId === e.from && f.remoteAuth);
+      if (!a || a.hp <= 0 || t.hp <= 0) return;
+      const now = performance.now() / 1000;
+      const dx = a.pos.x - t.pos.x, dz = a.pos.z - t.pos.z;
+      const dist = Math.hypot(dx, dz);
+      if (!(dist <= ARENA_R * 2 + 2)) return; // 闘技場の外からの攻撃は無効
+      let dmg = Math.max(0, Math.min(+e.dmg || 0, netHitCap(a)));
+      // 通常攻撃の届く距離を超える大きな一撃は、直前（3秒以内）に技・奥義を出していなければ無効
+      const lightCap = Math.round((+a.def.light?.dmg || 30) * (1 + 0.06 * (a.verified ? a.upg.atk || 0 : 0)) * (a.def.power || 1) * 1.6);
+      const castRecent = a.netCastAt && now - a.netCastAt < 3;
+      if (dmg > lightCap && !castRecent) dmg = lightCap;
+      if (dist > 4.5 && !castRecent) return;
+      // 攻撃回数：1秒あたり最大10撃、1秒あたりの総ダメージは上限の3倍まで
+      const w = (a.netHitWin ||= { t: now, n: 0, d: 0 });
+      if (now - w.t > 1) { w.t = now; w.n = 0; w.d = 0; }
+      if (w.n >= 10 || w.d + dmg > netHitCap(a) * 3) return;
+      w.n++;
+      w.d += dmg;
       const real = t.receive(dmg, e.stun, e.kx, e.kz);
       this.ui.popup(t.pos, real, '#ff8f7a');
       if (e.st) t.applyStatus(e.st);
@@ -1218,6 +1230,16 @@ export class Battle {
         : slot[0] === 'f' ? followSpec(f.def, idx) || f.def.skills[0]
           : f.def.skills[idx] || f.def.skills[0];
     const isOver = slot === 'over' || slot === 'hi';
+    // 通信相手の技：クールダウン（技0.35秒・奥義3秒）より速い連発は無視
+    if (net && f.remoteAuth) {
+      const nowS = performance.now() / 1000;
+      const cd = isOver ? 3 : 0.35;
+      const last = isOver ? f.netOverAt : f.netSkillAt;
+      if (last && nowS - last < cd) return;
+      if (isOver) f.netOverAt = nowS;
+      else f.netSkillAt = nowS;
+      f.netCastAt = nowS;
+    }
     // 技の順番：このチームの技枠を確保（通信相手の技も含む）
     if (!isOver) (this.skillLock ||= {})[f.team] = { f, until: performance.now() / 1000 + (spec.kind === 'dash' ? (spec.dur || 0.5) + 0.25 : 0.9) };
     let tx;

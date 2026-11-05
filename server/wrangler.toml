@@ -21,6 +21,14 @@ class_name = "InviteLock"
 name = "LIMITER"
 class_name = "Limiter"
 
+[[durable_objects.bindings]]
+name = "SYNC_LOCK"
+class_name = "SyncLock"
+
 [[migrations]]
 tag = "v1"
 new_sqlite_classes = ["InviteLock", "Limiter"]
+
+[[migrations]]
+tag = "v2"
+new_sqlite_classes = ["SyncLock"]

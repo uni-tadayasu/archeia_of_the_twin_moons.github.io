@@ -6,7 +6,7 @@ import { ProcMusic } from './music.js';
 import { sayBattle, setVoiceMuted, stopVoices } from './voice.js';
 import { initSocial } from './social.js';
 import { OPERATOR_KEY_SHA256, CHIEF_KEY_SHA256, MAX_KEY_ATTEMPTS, LOCKOUT_MS, SHOP_ITEMS } from './config.js';
-import { connect, issueInvite, redeemInvite, syncPush, syncPull } from './net.js';
+import { connect, issueInvite, redeemInvite, syncPush, syncPullV } from './net.js';
 import { apiEnabled, api, verifyToken } from './api.js';
 
 const $ = (s) => document.querySelector(s);
@@ -253,19 +253,87 @@ function scheduleAutoSync() {
   clearTimeout(autoPushTimer);
   autoPushTimer = setTimeout(autoPush, 8000);
 }
+// 版番号つきの送受信（サーバー時は Durable Object で直列化、未設定時は InstantDB に直接）
+const syncVer = () => Number(localStorage.getItem('arkeia-sync-ver')) || 0;
+async function sendVersioned(code, json, base) {
+  if (apiEnabled()) {
+    const r = await api('/sync/push', { code, data: json, base });
+    if (r.status === 409) return { conflict: true, data: r.data, ver: r.ver };
+    if (r.status === 422) return { rejected: true };
+    if (!r.ok) throw new Error('push');
+    return { ok: true, ver: r.ver };
+  }
+  return syncPush(await sha256('arkeia-sync:' + code), json, base);
+}
+async function fetchVersioned(code) {
+  if (apiEnabled()) {
+    const r = await api('/sync/pull', { code });
+    return { data: r.data || null, ver: r.ver || 0 };
+  }
+  return syncPullV(await sha256('arkeia-sync:' + code));
+}
+// 競合解決：進み具合は「より進んだ方」を採用し、灯晶は両端末の増減を足し合わせる
+function mergeSaves(local, remote, baseShards) {
+  const out = { ...remote };
+  out.chapter = Math.max(+local.chapter || 0, +remote.chapter || 0);
+  out.upg = { ...(remote.upg || {}) };
+  for (const [k, m] of Object.entries(local.upg || {})) {
+    out.upg[k] = { ...(out.upg[k] || {}) };
+    for (const [id, v] of Object.entries(m || {})) out.upg[k][id] = Math.max(+out.upg[k][id] || 0, +v || 0);
+  }
+  out.lb = { ...(remote.lb || {}) };
+  for (const [k, v] of Object.entries(local.lb || {})) out.lb[k] = Math.max(+out.lb[k] || 0, +v || 0);
+  const uni = (a, b) => [...new Set([...(Array.isArray(a) ? a : []), ...(Array.isArray(b) ? b : [])])];
+  out.owned = uni(remote.owned, local.owned);
+  out.gemChars = uni(remote.gemChars, local.gemChars);
+  out.chars = uni(remote.chars, local.chars);
+  const fr = new Map();
+  for (const f of [...(remote.friends || []), ...(local.friends || [])]) if (f?.pid) fr.set(f.pid, f);
+  out.friends = [...fr.values()].slice(0, 100);
+  out.equip = { ...(remote.equip || {}), ...(local.equip || {}) };
+  out.armor = { ...(remote.armor || {}), ...(local.armor || {}) };
+  const ea = remote.evProg || { week: 0, lv: 0 }, eb = local.evProg || { week: 0, lv: 0 };
+  out.evProg = ea.week !== eb.week ? (ea.week > eb.week ? ea : eb) : { week: ea.week, lv: Math.max(ea.lv || 0, eb.lv || 0) };
+  out.guild = local.guild ?? remote.guild ?? null;
+  out.shards = Math.max(0, (+remote.shards || 0) + ((+local.shards || 0) - baseShards));
+  out.syncAt = Date.now();
+  return out;
+}
+function markSynced(ver, at, shards) {
+  localStorage.setItem('arkeia-sync-ver', String(ver || 0));
+  localStorage.setItem('arkeia-sync-at', String(at));
+  localStorage.setItem('arkeia-sync-base', String(shards));
+  localStorage.removeItem('arkeia-sync-dirty');
+}
 async function autoPush() {
   const code = syncCodeNow();
   if (code.length !== 12 || autoBusy) return;
   autoBusy = true;
   try {
     const at = Date.now();
-    const json = JSON.stringify({ ...save, syncAt: at });
-    if (apiEnabled()) {
-      const r = await api('/sync/push', { code, data: json });
-      if (!r.ok) throw new Error('push');
-    } else await syncPush(await sha256('arkeia-sync:' + code), json);
-    localStorage.setItem('arkeia-sync-at', String(at));
-    localStorage.removeItem('arkeia-sync-dirty');
+    let payload = { ...save, syncAt: at };
+    let r = await sendVersioned(code, JSON.stringify(payload), syncVer());
+    if (r.conflict) {
+      // 別の端末が先に更新 → 合流させてから、その版の上に書き込む
+      const remote = JSON.parse(r.data || '{}');
+      const base = Number(localStorage.getItem('arkeia-sync-base'));
+      payload = mergeSaves(save, remote, Number.isFinite(base) ? base : +remote.shards || 0);
+      r = await sendVersioned(code, JSON.stringify(payload), r.ver);
+      if (r.ok) {
+        localStorage.setItem(SAVE_KEY, JSON.stringify(payload));
+        Object.assign(save, payload); // 戦闘中でも合流後の値で続ける（終了時の保存で巻き戻さない）
+        markSynced(r.ver, payload.syncAt, payload.shards);
+        if (!state.battle) location.reload();
+        return;
+      }
+    }
+    if (r.rejected) {
+      console.warn('同期：資産の増え方が不自然なため、サーバーが受け付けませんでした');
+      localStorage.removeItem('arkeia-sync-dirty');
+      return;
+    }
+    if (!r.ok) throw new Error('push');
+    markSynced(r.ver, at, save.shards);
   } catch {
     autoPushTimer = setTimeout(autoPush, 30000); // 通信失敗時は後で再送
   } finally {
@@ -278,14 +346,13 @@ async function autoPull() {
   if (localStorage.getItem('arkeia-sync-dirty')) return autoPush(); // 未送信の変更を優先
   autoBusy = true;
   try {
-    const json = apiEnabled() ? (await api('/sync/pull', { code })).data || null : await syncPull(await sha256('arkeia-sync:' + code));
+    const { data: json, ver } = await fetchVersioned(code);
     if (!json) return;
-    const remoteAt = Number(JSON.parse(json).syncAt) || 0;
-    const localAt = Number(localStorage.getItem('arkeia-sync-at')) || 0;
     // 戦闘中は反映せず、次回の確認（戦闘外）で取り込む
-    if (remoteAt > localAt && !state.battle && !localStorage.getItem('arkeia-sync-dirty')) {
+    if (ver > syncVer() && !state.battle && !localStorage.getItem('arkeia-sync-dirty')) {
+      const remote = JSON.parse(json);
       localStorage.setItem(SAVE_KEY, json);
-      localStorage.setItem('arkeia-sync-at', String(remoteAt));
+      markSynced(ver, Number(remote.syncAt) || Date.now(), +remote.shards || 0);
       location.reload();
     }
   } catch {
@@ -897,7 +964,9 @@ async function refreshProfile(key) {
   profState.busy = true;
   Object.assign(profState, { key, tok: '', at: Date.now() }); // 失敗時は1分おいて再試行
   try {
-    const r = await api('/profile', { save, key, role: roleState.tok, buyer: save.buyId });
+    // 強化・装備はサーバーに預けた同期セーブから算出される（端末の申告は使わない）
+    if (localStorage.getItem('arkeia-sync-dirty')) await autoPush();
+    const r = await api('/profile', { code: syncCodeNow(), key, role: roleState.tok, buyer: save.buyId });
     if (r.ok && (await verifyToken(r.token, 'prof'))) Object.assign(profState, { key, tok: r.token, at: Date.now() });
   } catch (err) {
     console.warn(err);
@@ -2641,15 +2710,12 @@ $('#sync-push').addEventListener('click', async () => {
   if (normSync(code).length !== 12) code = randomCode(3);
   m.textContent = '預けています…';
   try {
-    const at = Date.now();
-    const data = JSON.stringify({ ...save, syncAt: at });
-    if (apiEnabled()) {
-      const r = await api('/sync/push', { code: normSync(code), data });
-      if (!r.ok) throw new Error('push');
-    } else await syncPush(await sha256('arkeia-sync:' + normSync(code)), data);
+    if (localStorage.getItem('arkeia-sync') !== code) localStorage.setItem('arkeia-sync-ver', '0');
     localStorage.setItem('arkeia-sync', code);
-    localStorage.setItem('arkeia-sync-at', String(at));
-    localStorage.removeItem('arkeia-sync-dirty');
+    localStorage.setItem('arkeia-sync-dirty', '1');
+    while (autoBusy) await new Promise((r) => setTimeout(r, 100));
+    await autoPush(); // 版番号・競合解決つきで送る
+    if (localStorage.getItem('arkeia-sync-dirty')) throw new Error('push');
     $('#sync-code').value = code;
     m.textContent = `預けました。別の端末で同期コード「${code}」を入力してください（他人には教えないでください）。`;
   } catch {
@@ -2666,15 +2732,14 @@ $('#sync-pull').addEventListener('click', async () => {
   }
   m.textContent = '受け取っています…';
   try {
-    const json = apiEnabled() ? (await api('/sync/pull', { code: n })).data || null : await syncPull(await sha256('arkeia-sync:' + n));
+    const { data: json, ver } = await fetchVersioned(n);
     if (!json) {
       m.textContent = 'その同期コードの記録は見つかりませんでした。';
       return;
     }
     const parsed = JSON.parse(json); // 壊れたデータは弾く（中身は読み込み時に検証される）
     localStorage.setItem(SAVE_KEY, json);
-    localStorage.setItem('arkeia-sync-at', String(Number(parsed?.syncAt) || Date.now()));
-    localStorage.removeItem('arkeia-sync-dirty');
+    markSynced(ver, Number(parsed?.syncAt) || Date.now(), +parsed?.shards || 0);
     localStorage.setItem('arkeia-sync', n.match(/.{4}/g).join('-'));
     m.textContent = '受け取りました。読み込み直します…';
     setTimeout(() => location.reload(), 600);

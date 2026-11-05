@@ -3,7 +3,7 @@
 // 役割：運営/運営長の認証、乱入許可、招待コードの原子的な一回使用、同期セーブの保護、
 //       Stripe 決済通知の検証と購入キャラの解放、戦闘用ステータス（強化・装備・キャラ）の検証と署名。
 // 署名は ECDSA P-256。クライアントは公開鍵（config.js の SERVER_PUBKEY_JWK）で検証します。
-import { FIGHTERS, UPGRADES, UPG_CAP, MAX_LV, WEAPONS, ARMORS } from '../data.js';
+import { FIGHTERS, UPGRADES, UPG_CAP, WEAPONS, ARMORS, LB_MAX, lbMaxLv, lbMul, lbCost } from '../data.js';
 
 const enc = new TextEncoder();
 const HEX64 = /^[0-9a-f]{64}$/;
@@ -105,17 +105,20 @@ async function limited(env, req, bucket, max, windowMs) {
 // ---------- セーブ検証（戦闘用ステータスの算出：クライアントの upgFor と同じ規則） ----------
 function statsFor(save, key) {
   const out = { hp: 0, atk: 0, def: 0, flux: 0, over: 0 };
+  const lb = Math.max(0, Math.min(LB_MAX, Math.floor(+save?.lb?.[key] || 0)));
   const up = save?.upg?.[key];
   if (up && typeof up === 'object') {
     for (const u of UPGRADES) {
-      const lv = Math.max(0, Math.min(MAX_LV, Math.floor(+up[u.id] || 0)));
-      out[u.stat] += lv * u.w;
+      const lv = Math.max(0, Math.min(lbMaxLv(lb), Math.floor(+up[u.id] || 0)));
+      out[u.stat] += lv * u.w * lbMul(lb);
     }
   }
-  for (const s in out) out[s] = Math.min(UPG_CAP[s], out[s]);
-  const w = WEAPONS.find((x) => x.id === save?.equip?.[key]);
+  for (const s in out) out[s] = Math.min(UPG_CAP[s] * (1 + 0.6 * lb), out[s]);
+  // 装備は「所持している」ものだけ
+  const owned = new Set(Array.isArray(save?.owned) ? save.owned : []);
+  const w = WEAPONS.find((x) => x.id === save?.equip?.[key] && owned.has(x.id));
   if (w) for (const s in w.bonus) out[s] += w.bonus[s];
-  const a = ARMORS.find((x) => x.id === save?.armor?.[key]);
+  const a = ARMORS.find((x) => x.id === save?.armor?.[key] && owned.has(x.id));
   if (a) for (const s in a.bonus) out[s] += a.bonus[s];
   out.def = Math.min(18, out.def);
   for (const s in out) out[s] = +out[s].toFixed(2);
@@ -126,6 +129,25 @@ function validateSaveShape(save) {
   const s = JSON.stringify(save);
   return s.length <= 200000;
 }
+// 資産総額：手持ち灯晶＋強化・限界突破・装備に注いだ灯晶（クライアントの価格規則と同じ）
+function wealthOf(save) {
+  let w = Math.max(0, Math.floor(+save?.shards || 0));
+  for (const key of Object.keys(save?.upg || {})) {
+    if (!FIGHTERS[key]) continue;
+    const lb = Math.max(0, Math.min(LB_MAX, Math.floor(+save?.lb?.[key] || 0)));
+    for (const u of UPGRADES) {
+      const lv = Math.max(0, Math.min(lbMaxLv(lb), Math.floor(+save.upg[key]?.[u.id] || 0)));
+      w += 20 * lv * (lv + 1); // 1段ごと (段)×40
+    }
+    for (let i = 0; i < lb; i++) w += lbCost(i);
+  }
+  const owned = new Set(Array.isArray(save?.owned) ? save.owned : []);
+  for (const x of [...WEAPONS, ...ARMORS]) if (owned.has(x.id)) w += x.price || 0;
+  return w;
+}
+// 1時間に稼げる灯晶の上限（報酬の最大値から余裕を持って設定）
+const EARN_PER_HOUR = 30000;
+const EARN_SLACK = 5000;
 
 // キャラ使用の可否：運営/運営長専用・購入キャラはサーバーで確認
 const OP_ONLY = new Set(['seraphel']);
@@ -213,8 +235,10 @@ async function syncKey(env, code) {
   const n = String(code || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
   return n.length === 12 ? hmacHex(env.PEPPER, 'sync:' + n) : null;
 }
-async function syncPush(req, env, H, { code, data }) {
-  if (await limited(env, req, 'sync', 20, 600000)) return json(H, { error: 'limit' }, 429);
+// 書き込みは同期コードごとの Durable Object で直列化し、版番号(ver)で競合を検出する
+const FIRST_WEALTH_CAP = 300000;
+async function syncPush(req, env, H, { code, data, base }) {
+  if (await limited(env, req, 'sync', 40, 600000)) return json(H, { error: 'limit' }, 429);
   const h = await syncKey(env, code);
   if (!h || typeof data !== 'string' || data.length > 200000) return json(H, { error: 'bad' }, 400);
   let parsed;
@@ -225,19 +249,20 @@ async function syncPush(req, env, H, { code, data }) {
   }
   if (!validateSaveShape(parsed)) return json(H, { error: 'bad' }, 400);
   delete parsed.chars; // 購入キャラは決済記録からのみ復元する
-  const db = dbOf(env);
-  const res = await db.query({ syncsaves: { $: { where: { h } } } });
-  const row = res?.syncsaves?.[0];
-  await db.transact(db.tx.syncsaves[row?.id || id()].update({ h, data: JSON.stringify(parsed), at: Date.now() }));
-  return json(H, { ok: true });
+  const stub = env.SYNC_LOCK.get(env.SYNC_LOCK.idFromName(h));
+  const r = await stub.fetch('https://sync/', { method: 'POST', body: JSON.stringify({ h, data: parsed, base: Math.floor(+base || 0) }) });
+  return json(H, await r.json(), r.status);
 }
 async function syncPull(req, env, H, { code }) {
-  if (await limited(env, req, 'sync', 20, 600000)) return json(H, { error: 'limit' }, 429);
+  if (await limited(env, req, 'sync', 40, 600000)) return json(H, { error: 'limit' }, 429);
   const h = await syncKey(env, code);
   if (!h) return json(H, { error: 'bad' }, 400);
+  const row = await syncRow(env, h);
+  return json(H, { data: typeof row?.data === 'string' ? row.data : null, ver: row?.ver || 0 });
+}
+async function syncRow(env, h) {
   const res = await dbOf(env).query({ syncsaves: { $: { where: { h } } } });
-  const row = res?.syncsaves?.[0];
-  return json(H, { data: typeof row?.data === 'string' ? row.data : null });
+  return res?.syncsaves?.[0] || null;
 }
 
 // Stripe：署名を検証し、支払い完了したセッションだけを購入記録にする
@@ -281,9 +306,19 @@ async function entitlements(req, env, H, { buyer }) {
 }
 
 // 戦闘プロフィール：キャラ使用権・強化・装備をサーバーで検証し、上限内の値だけを署名して返す
-async function profile(req, env, H, { save, key, role, buyer }) {
+// 強化・装備はクライアント申告ではなく、サーバーに預けられ資産検証を通った同期セーブから算出する
+async function profile(req, env, H, { code, key, role, buyer }) {
   if (await limited(env, req, 'prof', 60, 600000)) return json(H, { error: 'limit' }, 429);
-  if (!FIGHTERS[key] || !validateSaveShape(save)) return json(H, { error: 'bad' }, 400);
+  const h = await syncKey(env, code);
+  if (!FIGHTERS[key] || !h) return json(H, { error: 'bad' }, 400);
+  const row = await syncRow(env, h);
+  let save = null;
+  try {
+    save = row?.data ? JSON.parse(row.data) : null;
+  } catch {
+    save = null;
+  }
+  if (!save) save = {}; // 未登録なら強化なしとして署名
   const r = (await verify(env, role, 'role'))?.r || null;
   if (CHIEF_ONLY.has(key) && r !== 'chief') return json(H, { error: 'denied' }, 403);
   if (OP_ONLY.has(key) && !r) return json(H, { error: 'denied' }, 403);
@@ -313,6 +348,32 @@ export class InviteLock {
       await this.state.storage.put('used', true);
       await db.transact(db.tx.opinvites[row.id].update({ used: true, usedAt: Date.now() }));
       return new Response('ok');
+    });
+  }
+}
+// 同期セーブの直列化：版番号の比較と資産の増え方の検証
+export class SyncLock {
+  constructor(state, env) {
+    this.state = state;
+    this.env = env;
+  }
+  async fetch(req) {
+    const { h, data, base } = await req.json();
+    return this.state.blockConcurrencyWhile(async () => {
+      const db = dbOf(this.env);
+      const row = await syncRow(this.env, h);
+      const ver = row?.ver || 0;
+      if (row && base !== ver) {
+        // 競合：別の端末が先に更新した → 最新を返し、端末側で合流させる
+        return new Response(JSON.stringify({ conflict: true, data: row.data, ver }), { status: 409 });
+      }
+      const now = Date.now();
+      const wealth = wealthOf(data);
+      const allowed = row ? (row.wealth ?? wealth) + EARN_PER_HOUR * ((now - (row.at || now)) / 3600000) + EARN_SLACK : FIRST_WEALTH_CAP;
+      if (wealth > allowed) return new Response(JSON.stringify({ error: 'wealth' }), { status: 422 });
+      const nv = ver + 1;
+      await db.transact(db.tx.syncsaves[row?.id || id()].update({ h, data: JSON.stringify(data), at: now, ver: nv, wealth }));
+      return new Response(JSON.stringify({ ok: true, ver: nv }), { status: 200 });
     });
   }
 }

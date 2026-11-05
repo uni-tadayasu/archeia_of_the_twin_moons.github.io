@@ -52,16 +52,20 @@ export async function redeemInvite(h) {
   return true;
 }
 // 端末間同期：同期コードのハッシュをキーに、セーブデータ(JSON文字列)を置く
-export async function syncPush(h, json) {
+// 版番号(ver)で競合を検出：手元の版と違えば最新を返して端末側で合流させる
+export async function syncPush(h, json, base = 0) {
   if (!HEX64.test(h) || typeof json !== 'string' || json.length > 200000) throw new Error('bad data');
   const { db, id } = await getDb();
   const row = await findOne('syncsaves', h);
-  await db.transact(db.tx.syncsaves[row?.id || id()].update({ h, data: json, at: Date.now() }));
+  const ver = +row?.ver || 0;
+  if (row && ver !== base) return { conflict: true, data: typeof row.data === 'string' ? row.data : '{}', ver };
+  await db.transact(db.tx.syncsaves[row?.id || id()].update({ h, data: json, at: Date.now(), ver: ver + 1 }));
+  return { ok: true, ver: ver + 1 };
 }
-export async function syncPull(h) {
-  if (!HEX64.test(h)) return null;
+export async function syncPullV(h) {
+  if (!HEX64.test(h)) return { data: null, ver: 0 };
   const row = await findOne('syncsaves', h);
-  return typeof row?.data === 'string' && row.data.length <= 200000 ? row.data : null;
+  return { data: typeof row?.data === 'string' && row.data.length <= 200000 ? row.data : null, ver: +row?.ver || 0 };
 }
 
 // ---- 交流用の常設ルーム（チャット・お知らせ・ギルド） ----
