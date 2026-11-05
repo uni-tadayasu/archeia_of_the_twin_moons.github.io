@@ -287,8 +287,10 @@ export class Fighter {
     const u = o.upg || {};
     this.upg = u;
     this.hpMul = o.hpMul || 1;
-    this.atkMul = (1 + 0.06 * (u.atk || 0)) * (this.def.power || 1);
-    this.defMul = (1 - 0.05 * (u.def || 0)) * (this.def.armor || 1);
+    this.balAtk = o.atkMul || 1; // 戦闘バランス用の攻撃倍率（人数差・章の進み具合）
+    this.balDef = o.defMul || 1; // 受けるダメージ倍率
+    this.atkMul = (1 + 0.06 * (u.atk || 0)) * (this.def.power || 1) * this.balAtk;
+    this.defMul = (1 - 0.05 * (u.def || 0)) * (this.def.armor || 1) * this.balDef;
     this.fluxRate = 7 * (1 + 0.12 * (u.flux || 0)) * (this.def.fluxMul || 1);
     this.og = this.def.overGain * (1 + 0.1 * (u.over || 0));
     this.maxHp = Math.round(this.def.hp * (o.hpMul || 1) * (1 + 0.08 * (u.hp || 0)));
@@ -657,8 +659,8 @@ export class Fighter {
     this.def = FIGHTERS[nk];
     this.name = this.def.name;
     const u = this.upg;
-    this.atkMul = (1 + 0.06 * (u.atk || 0)) * (this.def.power || 1);
-    this.defMul = (1 - 0.05 * (u.def || 0)) * (this.def.armor || 1);
+    this.atkMul = (1 + 0.06 * (u.atk || 0)) * (this.def.power || 1) * this.balAtk;
+    this.defMul = (1 - 0.05 * (u.def || 0)) * (this.def.armor || 1) * this.balDef;
     this.fluxRate = 7 * (1 + 0.12 * (u.flux || 0)) * (this.def.fluxMul || 1);
     this.og = this.def.overGain * (1 + 0.1 * (u.over || 0));
     this.maxHp = Math.round(this.def.hp * this.hpMul * (1 + 0.08 * (u.hp || 0)));

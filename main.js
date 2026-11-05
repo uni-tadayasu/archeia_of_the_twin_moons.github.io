@@ -1239,10 +1239,21 @@ function buildStoryBattle(foes, boss) {
   const b = makeBattle(null);
   const { party, mainKey } = storyParty();
   state.myKey = mainKey;
-  const me = b.add(mainKey, { team: 0, player: true, pos: [-4, 3], name: FIGHTERS[mainKey].name + '（あなた）', upg: upgFor(mainKey) });
+  // ---- 強さの調整 ----
+  // 敵が味方より多いほど1体あたりを弱く、少人数パーティーは味方を少し頑丈に。
+  // 序盤はやさしく、章が進むほど敵の攻撃が上がる。道中の戦闘は決戦より軽め。
+  const nA = party.length, nF = foes.length;
+  const prog = state.chapter / Math.max(1, STORY.length - 1);
+  const crowd = Math.max(0, nF - nA);
+  const foeHpBal = (boss ? 1 : 1 / (1 + 0.16 * (nF - 1))) * (state.encounter ? 0.8 : 1) * (state.chapter < 8 ? 0.85 : 1);
+  const foeAtkBal = Math.max(0.55, (0.82 + 0.3 * prog) * Math.pow(0.9, crowd) * (state.encounter ? 0.85 : 1));
+  const allyDef = Math.max(0.7, 1 - 0.08 * Math.max(0, 4 - nA) - 0.04 * crowd);
+  const allyAtk = 1 + 0.06 * Math.max(0, 4 - nA);
+  const me = b.add(mainKey, { team: 0, player: true, pos: [-4, 3], name: FIGHTERS[mainKey].name + '（あなた）', upg: upgFor(mainKey), defMul: allyDef, atkMul: allyAtk });
   const spots = [[-6, 0], [-6, 5], [-3, -2]];
   party.filter((k) => k !== mainKey).forEach((k, i) => {
-    b.add(k, { team: 0, cpu: 0.8, pos: spots[i], upg: upgFor(k) });
+    // 仲間AIは章が進むほど賢く、主人公よりわずかに控えめな火力
+    b.add(k, { team: 0, cpu: Math.min(0.95, 0.8 + prog * 0.15), pos: spots[i], upg: upgFor(k), defMul: allyDef, atkMul: allyAtk * 0.92 });
   });
   if (allowInvade()) {
     ensureWorld().then((w) => {
@@ -1254,7 +1265,7 @@ function buildStoryBattle(foes, boss) {
   }
   const baseCpu = Math.min(0.95, 0.55 + state.chapter * 0.006);
   foes.forEach((e, i) => {
-    b.add(e.k, { team: 1, cpu: foeCpu(baseCpu), pos: [3 + (i % 3) * 2.4, -4 + Math.floor(i / 3) * 3], facing: Math.PI, tint: e.tint, name: e.name, hpMul: foeHp(e.hpMul) * (boss ? 1 + 0.35 * (party.length - 1) : 1), scale: e.scale });
+    b.add(e.k, { team: 1, cpu: foeCpu(baseCpu), pos: [3 + (i % 3) * 2.4, -4 + Math.floor(i / 3) * 3], facing: Math.PI, tint: e.tint, name: e.name, hpMul: foeHp(e.hpMul) * foeHpBal * (boss && i === 0 ? 1 + 0.3 * (nA - 1) : 1), atkMul: foeAtkBal * (boss && i === 0 ? 1.1 : 1), scale: e.scale });
   });
   beginBattle(!!boss);
 }
