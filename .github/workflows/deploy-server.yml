@@ -1,0 +1,51 @@
+# 双月のアルケイア — 認証・検証サーバーの自動デプロイ
+# main ブランチの server/ か data.js が変わったとき、または Actions 画面から手動で実行
+name: Deploy server
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'server/**'
+      - 'data.js'
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      # Cloudflare Workers へデプロイし、秘密変数も登録する
+      - name: Deploy Worker
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: server
+          secrets: |
+            INSTANT_ADMIN_TOKEN
+            SIGN_PRIVATE_JWK
+            PEPPER
+            OP_KEY_SHA256
+            CHIEF_KEY_SHA256
+            STRIPE_WEBHOOK_SECRET
+        env:
+          INSTANT_ADMIN_TOKEN: ${{ secrets.INSTANT_ADMIN_TOKEN }}
+          SIGN_PRIVATE_JWK: ${{ secrets.SIGN_PRIVATE_JWK }}
+          PEPPER: ${{ secrets.PEPPER }}
+          OP_KEY_SHA256: ${{ secrets.OP_KEY_SHA256 }}
+          CHIEF_KEY_SHA256: ${{ secrets.CHIEF_KEY_SHA256 }}
+          STRIPE_WEBHOOK_SECRET: ${{ secrets.STRIPE_WEBHOOK_SECRET }}
+
+      # InstantDB のアクセス権限を反映
+      - name: Push InstantDB perms
+        working-directory: server
+        run: npx -y instant-cli@latest push perms --yes
+        env:
+          INSTANT_APP_ID: ${{ secrets.INSTANT_APP_ID }}
+          INSTANT_CLI_AUTH_TOKEN: ${{ secrets.INSTANT_CLI_AUTH_TOKEN }}
