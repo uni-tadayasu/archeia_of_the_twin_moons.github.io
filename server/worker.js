@@ -235,7 +235,7 @@ async function syncKey(env, code) {
 // 初回はサーバー導入前の進行分を含むため上限を大きく取る
 const FIRST_WEALTH_CAP = 100000000;
 async function syncPush(req, env, H, { code, data, base }) {
-  if (await limited(env, req, 'sync', 40, 600000)) return json(H, { error: 'limit' }, 429);
+  if (await limited(env, req, 'syncw', 120, 600000)) return json(H, { error: 'limit' }, 429);
   const h = await syncKey(env, code);
   if (!h || typeof data !== 'string' || data.length > 200000) return json(H, { error: 'bad' }, 400);
   let parsed;
@@ -254,7 +254,7 @@ async function syncPush(req, env, H, { code, data, base }) {
   return json(H, await r.json(), r.status);
 }
 async function syncPull(req, env, H, { code }) {
-  if (await limited(env, req, 'sync', 40, 600000)) return json(H, { error: 'limit' }, 429);
+  if (await limited(env, req, 'syncr', 120, 600000)) return json(H, { error: 'limit' }, 429);
   const h = await syncKey(env, code);
   if (!h) return json(H, { error: 'bad' }, 400);
   const row = await syncRow(env, h);
