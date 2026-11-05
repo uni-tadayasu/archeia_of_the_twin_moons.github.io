@@ -237,6 +237,58 @@
         #forge-list { flex-direction:row; flex-wrap:wrap; max-height:none; }
         #gauges { width:30vw; }
       }
+      /* ===== 重なり・はみ出し防止レイアウト（PC／スマホ共通） ===== */
+      /* 上部のお知らせテロップ(24px)の下からUIを配置する */
+      #ui { top:calc(24px + env(safe-area-inset-top)); }
+      .screen { padding-top:var(--pad); }
+      .topbar { flex-wrap:wrap; }
+      .crumb, .shards { min-width:0; overflow-wrap:anywhere; }
+      .inner, .menu, .field, .fpanel, #story-box { max-width:100%; }
+      .menu button, .btn, .chip, .card, .foot, #res-text, #story-line { overflow-wrap:anywhere; }
+      img, canvas { max-width:100%; }
+      #game-container canvas { max-width:none; }
+      /* 戦闘HUD：左右の体力枠と中央の柱（休む・ゲージ）が交わらない幅に固定 */
+      .hud-side { top:6px; width:calc(50% - 72px - max(8px,env(safe-area-inset-left))); max-width:280px; }
+      #btn-pause { top:6px; padding:4px 10px; font-size:12px; white-space:nowrap; max-width:120px; }
+      #gauges { top:40px; width:min(260px,120px + 8vw); max-width:calc(100% - 2 * min(280px,50% - 64px) - 16px); min-width:96px; font-size:10px; gap:3px; }
+      #skillname { top:clamp(108px,20vh,150px); }
+      #banner { top:34%; }
+      .pop { max-width:60vw; overflow:hidden; text-overflow:ellipsis; }
+      /* フィールド：情報枠は左半分、地図は右上、休むボタンと交差しない */
+      #field-info { top:6px; max-width:calc(50% - 72px); padding-right:12px; }
+      #field-info small { overflow-wrap:anywhere; }
+      #field-map { top:6px; }
+      #btn-world { top:calc(14px + clamp(96px,17vmin,150px) * 2.2); }
+      #field-prompt { white-space:normal; max-width:min(92vw,520px); text-align:center; bottom:calc(max(4vh,env(safe-area-inset-bottom)) + 3 * var(--tb,62px) + 30px); }
+      #world-panel { max-height:calc(100% - 24px); width:min(420px,calc(100vw - 16px)); }
+      #world-req { top:30%; width:max-content; max-width:calc(100vw - 16px); }
+      /* 奥義カットイン：長い技名も画面内に収める */
+      #cutin .ci-band { padding-left:10%; padding-right:4%; gap:3vw; }
+      #cutin .ci-text { min-width:0; max-width:70vw; }
+      #cutin .ci-title { overflow:hidden; text-overflow:ellipsis; font-size:clamp(20px,5.5vmin,60px); }
+      #skillname .sn-name { max-width:86vw; }
+      #pause { overflow-y:auto; }
+      /* タッチ操作：スティックとボタン群が横に並んでも重ならない大きさ */
+      #tbtns { --tb:clamp(40px,min(12vmin,(100vw - 60px) / 6.2),60px); gap:5px; }
+      #joy { width:clamp(90px,min(26vmin,100vw - 3 * 60px - 60px),140px); }
+      /* スマホ縦：HUDを細く、ゲージは体力枠の下段へ */
+      @media (max-width:560px) and (orientation:portrait) {
+        .hud-side { width:calc(50% - 50px); }
+        #btn-pause { font-size:11px; padding:3px 6px; max-width:84px; }
+        #gauges { width:84px; min-width:0; max-width:84px; top:34px; font-size:9px; }
+        #field-info { max-width:calc(50% - 50px); }
+        #field-info small { display:none; }
+      }
+      /* スマホ横（低い画面）：上下を詰める */
+      @media (max-height:520px) and (orientation:landscape) {
+        .hud-side { gap:2px; }
+        .plate i { height:6px; }
+        #skillname { top:clamp(70px,24vh,110px); padding:3px 16px 4px; }
+        #field-info small { display:none; }
+        #tbtns { --tb:clamp(38px,15vh,54px); }
+        #joy { width:clamp(84px,34vh,120px); }
+        #field-prompt { bottom:calc(3 * 54px + 26px); }
+      }
     </style>
   
 <style>

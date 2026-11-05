@@ -2,15 +2,15 @@
 import { connectSocial } from './net.js';
 
 const CSS = `
-#ticker{position:fixed;top:0;left:0;right:0;height:24px;z-index:60;overflow:hidden;pointer-events:none;
+#ticker{position:fixed;top:env(safe-area-inset-top);left:0;right:0;height:24px;z-index:60;overflow:hidden;pointer-events:none;
   background:linear-gradient(90deg,rgba(10,8,24,.88),rgba(30,18,50,.82),rgba(10,8,24,.88));border-bottom:1px solid rgba(214,180,106,.55);}
 #ticker .tk-track{position:absolute;top:0;white-space:nowrap;line-height:24px;font-size:13px;color:#f4ead2;font-weight:700;will-change:transform;}
 #ticker .tk-track b{color:#ffd36a;margin:0 .4em}
 #ticker .tk-track span{margin-right:3.5em}
-#chat-btn{position:fixed;right:10px;top:30px;z-index:61;border-radius:18px;border:1px solid #d6b46a;background:rgba(27,29,58,.85);color:#f4ead2;font-weight:800;padding:6px 12px;font-size:13px;cursor:pointer}
+#chat-btn{position:fixed;right:env(safe-area-inset-right);top:env(safe-area-inset-top);height:24px;z-index:61;border-radius:0 0 0 10px;border:1px solid #d6b46a;border-top:0;border-right:0;background:rgba(27,29,58,.96);color:#f4ead2;font-weight:800;padding:0 10px;font-size:12px;line-height:22px;cursor:pointer;white-space:nowrap}
 #chat-btn i{display:inline-block;min-width:16px;margin-left:4px;border-radius:8px;background:#e0103c;color:#fff;font-style:normal;font-size:11px;padding:0 4px}
 #chat-btn i:empty{display:none}
-#chat-panel{position:fixed;right:10px;top:64px;z-index:62;width:min(380px,94vw);height:min(470px,72vh);display:flex;flex-direction:column;
+#chat-panel{position:fixed;right:max(6px,env(safe-area-inset-right));top:calc(30px + env(safe-area-inset-top));z-index:62;width:min(380px,calc(100vw - 12px));height:min(470px,calc(100dvh - 40px - env(safe-area-inset-top) - env(safe-area-inset-bottom)));max-height:calc(100vh - 40px);display:flex;flex-direction:column;
   background:rgba(14,14,34,.95);border:1px solid #d6b46a;border-radius:10px;color:#f4ead2;font-size:13px;box-shadow:0 8px 30px rgba(0,0,0,.6)}
 #chat-panel[hidden]{display:none}
 #chat-panel .cp-tabs{display:flex;gap:2px;padding:6px 6px 0}
