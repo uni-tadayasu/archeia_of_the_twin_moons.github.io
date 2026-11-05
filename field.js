@@ -15,10 +15,12 @@ function rng(seed) {
   };
 }
 
-export const BOUNDS = { minX: -62, maxX: 62, minZ: -238, maxZ: 36 };
+// 広大な世界：南の街道（前章の地から続く道）→ 町 → 長い野 → 最北の迷宮
+export const BOUNDS = { minX: -130, maxX: 130, minZ: -536, maxZ: 120 };
+const AREA = 3.2; // 以前の世界に対する自然物の密度倍率（広さに合わせる）
 const TOWN = { x: 0, z: 10, r: 15 };
 // 迷宮の大きさは章ごとに変わる（Field生成時に設定）
-let DUN = { x0: -40, z0: -176, cols: 8, rows: 6, cell: 10 };
+let DUN = { x0: -40, z0: -470, cols: 8, rows: 6, cell: 10 };
 // ---- 10種の風土 × 10種の地形配置 = 100通りの世界 ----
 const BIOMES = [
   { name: '若草', ground: 'tex-grass', tint: 0xffffff, sky: 0xcfe8ff, gnd: 0x5a8a3a, hue: 0.28, crowns: [0x4ab040, 0x6ac848, 0x3a9a50, 0x58c070, 0xffc838], flowers: [0xff5a8a, 0xffd23a, 0xffffff, 0xb070ff, 0x5ab0ff], trees: 1, conifer: 0.5, wall: 0xffffff, rune: 0x4ad8ff, water: 0x3aa8ff, glow: 0xd8ff70, roof: 0xffffff, field: ['の野', '平原', '草原'], dun: ['遺跡', '古城'] },
@@ -125,7 +127,7 @@ export class Field {
     const B = (this.B = BIOMES[o.chapter % BIOMES.length]);
     const L = (this.L = Math.floor(o.chapter / BIOMES.length) % 10);
     const cols = 6 + ((L * 3 + o.chapter) % 5), rows = 4 + ((L + o.chapter) % 3);
-    DUN = { x0: -(cols * 10) / 2 + ((L % 3) - 1) * 6, z0: -176, cols, rows, cell: 10 };
+    DUN = { x0: -(cols * 10) / 2 + ((L % 3) - 1) * 30, z0: -470, cols, rows, cell: 10 };
     this.houseN = 6 + ((L * 7 + o.chapter) % 5);
     this.treeMul = B.trees * (0.75 + (L % 4) * 0.15);
     this.pondN = 1 + ((L + o.chapter) % 5);
@@ -137,6 +139,7 @@ export class Field {
     this.buildRoad();
     this.buildTown();
     this.buildDungeon();
+    this.buildRoutes();
     this.buildWilds();
     this.buildActors();
     this.buildMapImage();
@@ -192,9 +195,16 @@ export class Field {
   buildRoad() {
     const r = this.r;
     const ex = DUN.x0 + this.entranceCol() * DUN.cell + DUN.cell / 2;
-    const pts = [[0, 30], [0, -6]];
-    for (let i = 1; i <= 10; i++) pts.push([(r() - 0.5) * 50 * (i < 10 ? 1 : 0.3), -6 - i * 15.6]);
-    pts.push([ex, -168], [ex, -177]);
+    // 南の街道（前章から続く道）→ 町 → 曲がりくねった長い野道 → 迷宮
+    const pts = [[0, BOUNDS.maxZ - 2], [(r() - 0.5) * 30, 75], [0, 40], [0, 30], [0, -6]];
+    const N = 24, endZ = DUN.z0 + 10;
+    let x = 0;
+    for (let i = 1; i <= N; i++) {
+      const t = i / N;
+      x = Math.max(-95, Math.min(95, x + (r() - 0.5) * 70));
+      pts.push([x * (1 - t) + ex * t * t, -6 + (endZ + 6) * t]);
+    }
+    pts.push([ex, DUN.z0 + 8], [ex, DUN.z0 - 1]);
     this.road = pts;
     const mat = this.std(0xffffff, { map: this.tex('tex-dirt-road', 1, 1) });
     const geo = this.geo(new THREE.PlaneGeometry(1, 1));
@@ -225,14 +235,255 @@ export class Field {
   }
   roadDist(x, z) {
     let best = 1e9;
-    const p = this.road;
-    for (let i = 0; i < p.length - 1; i++) {
-      const [ax, az] = p[i], [bx, bz] = p[i + 1];
-      const dx = bx - ax, dz = bz - az;
-      const t = Math.max(0, Math.min(1, ((x - ax) * dx + (z - az) * dz) / (dx * dx + dz * dz || 1)));
-      best = Math.min(best, Math.hypot(x - (ax + dx * t), z - (az + dz * t)));
+    for (const p of [this.road, ...(this.branches || [])]) {
+      for (let i = 0; i < p.length - 1; i++) {
+        const [ax, az] = p[i], [bx, bz] = p[i + 1];
+        const dx = bx - ax, dz = bz - az;
+        const t = Math.max(0, Math.min(1, ((x - ax) * dx + (z - az) * dz) / (dx * dx + dz * dz || 1)));
+        best = Math.min(best, Math.hypot(x - (ax + dx * t), z - (az + dz * t)));
+      }
     }
     return best;
+  }
+  // 拠点（村・遺跡）の中か
+  inSite(x, z, pad = 0) {
+    for (const s of this.sites || []) if (Math.hypot(x - s.x, z - s.z) < s.r + pad) return s;
+    return null;
+  }
+  // 脇道を敷く
+  paintRoad(pts, width) {
+    const geo = this.geo(new THREE.PlaneGeometry(1, 1));
+    const disc = this.geo(new THREE.CircleGeometry(width / 2, 14));
+    const dm = this.std(0xffffff, { map: this.tex('tex-dirt-road', 1, 1) });
+    for (let i = 0; i < pts.length - 1; i++) {
+      const [ax, az] = pts[i], [bx, bz] = pts[i + 1];
+      const len = Math.hypot(bx - ax, bz - az);
+      const m = new THREE.Mesh(geo, this.std(0xffffff, { map: this.tex('tex-dirt-road', 1, len / width) }));
+      m.scale.set(width, len, 1);
+      m.rotation.set(-Math.PI / 2, 0, Math.atan2(bx - ax, bz - az));
+      m.position.set((ax + bx) / 2, 0.019, (az + bz) / 2);
+      m.receiveShadow = true;
+      const j = new THREE.Mesh(disc, dm);
+      j.rotation.x = -Math.PI / 2;
+      j.position.set(bx, 0.018, bz);
+      this.group.add(m, j);
+    }
+  }
+
+  // ---- 経路・村・遺跡：章ごとに数も形も変わる ----
+  // 村の様式8種 × 遺跡の様式6種 × 数(村1〜3・遺跡1〜3・分かれ道) × 風土10種 → 100通り以上
+  buildRoutes() {
+    const r = this.r, o = this.o;
+    const pick = (a) => a[Math.floor(r() * a.length)];
+    this.sites = [];
+    this.branches = [];
+    this.extraChests = [];
+    this.extraSyms = [];
+    this.villageNpcs = [];
+    const nV = 1 + ((o.chapter * 7 + this.L) % 3);
+    const nR = 1 + ((o.chapter * 3 + this.L * 2) % 3);
+    const plan = [...Array(nV).fill('v'), ...Array(nR).fill('r')];
+    for (let i = plan.length - 1; i > 0; i--) {
+      const j = Math.floor(r() * (i + 1));
+      [plan[i], plan[j]] = [plan[j], plan[i]];
+    }
+    const road = this.road;
+    const first = 6, last = road.length - 4;
+    plan.forEach((kind, idx) => {
+      for (let tries = 0; tries < 40; tries++) {
+        const wi = first + Math.floor(((idx + r()) / plan.length) * (last - first));
+        const [wx, wz] = road[Math.min(last, wi)];
+        const side = r() < 0.5 ? -1 : 1;
+        const x = Math.max(-112, Math.min(112, wx + side * (38 + r() * 40)));
+        const z = wz + (r() - 0.5) * 30;
+        const rad = kind === 'v' ? 17 : 13;
+        if (z > -40 || z < DUN.z0 + 28) continue;
+        if (this.roadDist(x, z) < rad + 6) continue;
+        if (this.sites.some((s) => Math.hypot(s.x - x, s.z - z) < s.r + rad + 12)) continue;
+        // 分かれ道：本道から曲がりながら拠点へ
+        const mx = (wx + x) / 2 + (r() - 0.5) * 16, mz = (wz + z) / 2 + (r() - 0.5) * 16;
+        const path = [[wx, wz], [mx, mz], [x, z]];
+        this.branches.push(path);
+        this.paintRoad(path, 3.6);
+        if (kind === 'v') {
+          const name = pick(SYL) + pick(SYL) + pick(['村', 'の集落', 'の宿場', 'の隠れ里', 'の野営地', 'の宿', '牧場', 'の市']);
+          this.sites.push({ x, z, r: rad, name, kind });
+          this.buildVillage(x, z, (o.chapter + idx * 3 + this.L) % 8, name);
+        } else {
+          const name = pick(SYL) + pick(SYL) + pick(['の廃墟', '小迷宮', 'の塔跡', '地下祠', 'の砦跡', 'の古墓']);
+          this.sites.push({ x, z, r: rad, name, kind });
+          this.buildRuin(x, z, (o.chapter * 5 + idx + this.L) % 6, Math.atan2(wx - x, wz - z));
+        }
+        break;
+      }
+    });
+    // 本道どうしをつなぐ近道（輪になる経路）
+    const nShort = (o.chapter + this.L) % 3;
+    for (let k = 0; k < nShort; k++) {
+      const a = first + Math.floor(r() * (last - first - 6)), b = a + 3 + Math.floor(r() * 3);
+      const [ax, az] = road[a], [bx, bz] = road[Math.min(last, b)];
+      const side = r() < 0.5 ? -1 : 1;
+      const mx = Math.max(-115, Math.min(115, (ax + bx) / 2 + side * (30 + r() * 25)));
+      const path = [[ax, az], [mx, (az * 2 + bz) / 3], [mx, (az + bz * 2) / 3], [bx, bz]];
+      if (path.some(([px, pz]) => this.inSite(px, pz, 4))) continue;
+      this.branches.push(path);
+      this.paintRoad(path, 3.6);
+    }
+  }
+
+  // 小さな村（8様式）
+  buildVillage(cx, cz, style, name) {
+    const r = this.r;
+    const plaza = new THREE.Mesh(this.geo(new THREE.CircleGeometry(8, 28)), this.std(0xffffff, { map: this.tex('tex-cobble', 3, 3) }));
+    plaza.rotation.x = -Math.PI / 2;
+    plaza.position.set(cx, 0.025, cz);
+    plaza.receiveShadow = true;
+    this.group.add(plaza);
+    // 中央：井戸・焚き火・石碑・花壇 のどれか
+    const center = style % 4;
+    if (center === 0) {
+      const well = new THREE.Mesh(this.geo(new THREE.CylinderGeometry(1, 1.1, 1, 14)), this.std(0x9a9488));
+      well.position.set(cx, 0.5, cz);
+      const roof = new THREE.Mesh(this.geo(new THREE.ConeGeometry(1.6, 1, 4)), this.std(0x8a3a2a, { map: this.tex('tex-roof', 2, 1) }));
+      roof.position.set(cx, 2.6, cz);
+      roof.rotation.y = Math.PI / 4;
+      this.group.add(well, roof);
+    } else if (center === 1) {
+      const fire = new THREE.Mesh(this.geo(new THREE.ConeGeometry(0.5, 1.2, 8)), this.mat(new THREE.MeshBasicMaterial({ color: 0xffa040 })));
+      fire.position.set(cx, 0.6, cz);
+      this.flames.push(fire);
+      this.group.add(fire);
+      this.pointLight(0xff9a40, 8, 16, cx, 1.5, cz, 0.3);
+    } else if (center === 2) {
+      const stele = new THREE.Mesh(this.geo(new THREE.BoxGeometry(1.2, 3, 0.5)), this.std(0xd0c8b8));
+      stele.position.set(cx, 1.5, cz);
+      const gem = new THREE.Mesh(this.geo(new THREE.OctahedronGeometry(0.4)), this.mat(new THREE.MeshStandardMaterial({ color: this.B.rune, emissive: this.B.rune, emissiveIntensity: 1.4 })));
+      gem.position.set(cx, 3.6, cz);
+      this.spinners.push(gem);
+      this.group.add(stele, gem);
+    } else {
+      const fl = [];
+      for (let i = 0; i < 60; i++) {
+        const a = r() * 6.28, d = r() * 1.6;
+        fl.push([cx + Math.cos(a) * d, 0.2, cz + Math.sin(a) * d, 0.14]);
+      }
+      this.dots(fl, 1, this.B.flowers, 0.2);
+    }
+    this.circles.push({ x: cx, z: cz, r: 1.3 });
+    // 家々：様式で形が変わる
+    const shape = Math.floor(style / 2) % 4; // 0:木組み 1:丸小屋 2:塔の家 3:天幕
+    const n = 3 + Math.floor(r() * 4);
+    const tentCols = [0xe04050, 0x3a80e0, 0xf0c040, 0x40b070, 0xb060e0];
+    for (let i = 0; i < n; i++) {
+      const a = (i / n) * Math.PI * 2 + r() * 0.4;
+      const hx = cx + Math.cos(a) * 12, hz = cz + Math.sin(a) * 12;
+      const g = new THREE.Group();
+      if (shape === 0) {
+        const w = 4.5 + r() * 1.5, h = 3 + r();
+        const body = new THREE.Mesh(this.geo(new THREE.BoxGeometry(w, h, w)), this.std(0xffffff, { map: this.tex('tex-house-wall', w / 4, h / 4) }));
+        body.position.y = h / 2;
+        const roof = new THREE.Mesh(this.geo(new THREE.ConeGeometry(w * 0.8, 2.2, 4)), this.std(new THREE.Color(this.B.roof), { map: this.tex('tex-roof', 3, 2) }));
+        roof.position.y = h + 1.1;
+        roof.rotation.y = Math.PI / 4;
+        g.add(body, roof);
+        this.addBox(hx, hz, w, w);
+      } else if (shape === 1) {
+        const body = new THREE.Mesh(this.geo(new THREE.CylinderGeometry(2.2, 2.4, 2.6, 14)), this.std(0xe8d8b8));
+        body.position.y = 1.3;
+        const roof = new THREE.Mesh(this.geo(new THREE.ConeGeometry(3, 2.4, 14)), this.std(0xc8a050));
+        roof.position.y = 3.8;
+        g.add(body, roof);
+        this.circles.push({ x: hx, z: hz, r: 2.4 });
+      } else if (shape === 2) {
+        const h = 6 + r() * 3;
+        const body = new THREE.Mesh(this.geo(new THREE.CylinderGeometry(1.8, 2, h, 10)), this.std(0xffffff, { map: this.tex('tex-dungeon-wall', 2, h / 4) }));
+        body.position.y = h / 2;
+        const roof = new THREE.Mesh(this.geo(new THREE.ConeGeometry(2.4, 3, 10)), this.std(new THREE.Color(this.B.roof).multiplyScalar(0.8), { map: this.tex('tex-roof', 3, 2) }));
+        roof.position.y = h + 1.5;
+        g.add(body, roof);
+        this.circles.push({ x: hx, z: hz, r: 2 });
+      } else {
+        const c = tentCols[(i + style) % tentCols.length];
+        const tent = new THREE.Mesh(this.geo(new THREE.ConeGeometry(2.4, 3.2, 6)), this.std(c, { emissive: c, emissiveIntensity: 0.08 }));
+        tent.position.y = 1.6;
+        g.add(tent);
+        this.circles.push({ x: hx, z: hz, r: 2.2 });
+      }
+      g.traverse((m) => { if (m.isMesh) { m.castShadow = true; m.receiveShadow = true; } });
+      g.position.set(hx, 0, hz);
+      g.rotation.y = a;
+      this.group.add(g);
+      this.houses.push({ x: hx, z: hz });
+    }
+    // 村人（話しかけられる）
+    this.villageNpcs.push({ x: cx + 3, z: cz + 3, name });
+  }
+
+  // 小さな遺跡（6様式）：壁の迷路・柱の環・塔跡など。奥に宝箱、番人の魔物
+  buildRuin(cx, cz, style, faceA) {
+    const r = this.r;
+    const S = 10 + (style % 3) * 2;
+    const floor = new THREE.Mesh(this.geo(new THREE.PlaneGeometry(S * 2, S * 2)), this.std(0xffffff, { map: this.tex('tex-dungeon-floor', S / 3, S / 3) }));
+    floor.rotation.x = -Math.PI / 2;
+    floor.position.set(cx, 0.03, cz);
+    floor.receiveShadow = true;
+    this.group.add(floor);
+    const wallM = this.std(new THREE.Color(this.B.wall), { map: this.tex('tex-dungeon-wall', 2, 1), emissive: this.B.rune, emissiveMap: this.tex('tex-dungeon-wall', 2, 1), emissiveIntensity: 0.15 });
+    const box = this.geo(new THREE.BoxGeometry(1, 1, 1));
+    const wall = (x, z, w, d, h) => {
+      const m = new THREE.Mesh(box, wallM);
+      m.scale.set(w, h, d);
+      m.position.set(x, h / 2, z);
+      m.castShadow = m.receiveShadow = true;
+      this.group.add(m);
+      this.addBox(x, z, w, d);
+    };
+    // 入口は本道の方向に開ける
+    const gx = Math.sin(faceA), gz = Math.cos(faceA);
+    const openSide = Math.abs(gx) > Math.abs(gz) ? (gx > 0 ? 'e' : 'w') : (gz > 0 ? 's' : 'n');
+    const H = style >= 3 ? 3.6 : 2.6;
+    if (style % 2 === 0) {
+      // 外壁（入口つき）＋内壁
+      for (const side of ['n', 's', 'e', 'w']) {
+        const hor = side === 'n' || side === 's';
+        const off = side === 'n' || side === 'w' ? -S : S;
+        if (side === openSide) {
+          const seg = S - 2.5;
+          for (const sgn of [-1, 1]) hor ? wall(cx + sgn * (2.5 + seg / 2), cz + off, seg, 0.8, H) : wall(cx + off, cz + sgn * (2.5 + seg / 2), 0.8, seg, H);
+        } else hor ? wall(cx, cz + off, S * 2, 0.8, H) : wall(cx + off, cz, 0.8, S * 2, H);
+      }
+      const inner = 2 + style;
+      for (let i = 0; i < inner; i++) {
+        const hor = r() < 0.5, len = 4 + r() * (S - 4);
+        const x = cx + (r() - 0.5) * S, z = cz + (r() - 0.5) * S;
+        if (Math.hypot(x - cx, z - cz) < 3) continue;
+        hor ? wall(x, z, len, 0.7, H * 0.8) : wall(x, z, 0.7, len, H * 0.8);
+      }
+    } else {
+      // 柱の環（崩れた神殿・塔跡）
+      const n = 8 + style * 2;
+      const colGeo = this.geo(new THREE.CylinderGeometry(0.6, 0.75, 1, 8));
+      for (let i = 0; i < n; i++) {
+        const a = (i / n) * Math.PI * 2;
+        const h = r() < 0.3 ? 1 + r() * 2 : 4 + r() * 2;
+        const c = new THREE.Mesh(colGeo, wallM);
+        c.scale.y = h;
+        c.position.set(cx + Math.cos(a) * (S - 1), h / 2, cz + Math.sin(a) * (S - 1));
+        c.castShadow = true;
+        this.group.add(c);
+        this.circles.push({ x: c.position.x, z: c.position.z, r: 0.8 });
+      }
+    }
+    // 中央の魔法陣と灯り
+    const ring = new THREE.Mesh(this.geo(new THREE.RingGeometry(2, 2.5, 8)), this.mat(new THREE.MeshBasicMaterial({ color: this.B.rune, transparent: true, opacity: 0.6, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide })));
+    ring.rotation.x = -Math.PI / 2;
+    ring.position.set(cx, 0.06, cz);
+    (this.runes ||= []).push(ring);
+    this.group.add(ring);
+    this.pointLight(this.B.rune, 6, 16, cx, 3, cz, 0.2);
+    this.extraChests.push([cx + 1.5, cz + 1.5]);
+    // 番人
+    for (let i = 0; i < 1 + (style % 3); i++) this.extraSyms.push([cx + (r() - 0.5) * S, cz + (r() - 0.5) * S]);
   }
 
   // ---- 町：広場・噴水・家々・街灯・門 ----
@@ -607,13 +858,13 @@ export class Field {
     const r = this.r, st = this.st;
     const inDun = (x, z) => z < DUN.z0 + 4 && x > DUN.x0 - 4 && x < DUN.x0 + DUN.cols * DUN.cell + 4;
     const inTown = (x, z) => Math.hypot(x - TOWN.x, z - TOWN.z) < 38;
-    const free = (x, z, roadGap) => !inDun(x, z) && !inTown(x, z) && this.roadDist(x, z) > roadGap;
+    const free = (x, z, roadGap) => !inDun(x, z) && !inTown(x, z) && !this.inSite(x, z, 2) && this.roadDist(x, z) > roadGap;
     const rnd = () => [BOUNDS.minX + r() * (BOUNDS.maxX - BOUNDS.minX), BOUNDS.minZ + r() * (BOUNDS.maxZ - BOUNDS.minZ)];
     // 木
     const trees = [];
     const B = this.B;
-    const nCon = Math.round(340 * this.treeMul * (0.4 + B.conifer));
-    for (let i = 0; i < 2600 && trees.length < nCon; i++) {
+    const nCon = Math.round(340 * AREA * this.treeMul * (0.4 + B.conifer));
+    for (let i = 0; i < 2600 * AREA && trees.length < nCon; i++) {
       const [x, z] = rnd();
       const edge = Math.min(x - BOUNDS.minX, BOUNDS.maxX - x) < 8;
       if (!free(x, z, 4.5) || (!edge && r() < 0.35)) continue;
@@ -636,8 +887,8 @@ export class Field {
     });
     // 広葉樹（緑・桜・紅葉・黄金）
     const rounds = [];
-    const nRound = Math.round(200 * this.treeMul * (1.1 - B.conifer));
-    for (let i = 0; i < 2000 && rounds.length < nRound; i++) {
+    const nRound = Math.round(200 * AREA * this.treeMul * (1.1 - B.conifer));
+    for (let i = 0; i < 2000 * AREA && rounds.length < nRound; i++) {
       const [x, z] = rnd();
       if (free(x, z, 5)) rounds.push([x, z, 0.8 + r() * 0.8]);
     }
@@ -661,7 +912,7 @@ export class Field {
     this.treePts = trees.concat(rounds);
     // 野の花（道ばたに多め）
     const flowers = [];
-    for (let i = 0; i < 9000 && flowers.length < 2200; i++) {
+    for (let i = 0; i < 9000 * AREA && flowers.length < 2200 * AREA; i++) {
       const [x, z] = rnd();
       if (inTown(x, z) || inDun(x, z)) continue;
       const rd = this.roadDist(x, z);
@@ -672,7 +923,7 @@ export class Field {
     this.dots(flowers, 1, B.flowers, 0.25);
     // 茂みと実
     const bushes = [], berries = [];
-    for (let i = 0; i < 1200 && bushes.length < 160; i++) {
+    for (let i = 0; i < 1200 * AREA && bushes.length < 160 * AREA; i++) {
       const [x, z] = rnd();
       if (!free(x, z, 3.5)) continue;
       const k = 0.6 + r() * 0.7;
@@ -683,7 +934,7 @@ export class Field {
     this.dots(berries, 1, [0xff3050, 0x6a50ff, 0xffd040], 0.3);
     // 光るきのこ
     const shrooms = [];
-    for (let i = 0; i < 400 && shrooms.length < 70; i++) {
+    for (let i = 0; i < 400 * AREA && shrooms.length < 70 * AREA; i++) {
       const [x, z] = rnd();
       if (free(x, z, 3)) shrooms.push([x, 0.2, z, 0.18 + r() * 0.15]);
     }
@@ -692,10 +943,10 @@ export class Field {
     const waterMat = this.mat(new THREE.MeshStandardMaterial({ color: B.water, emissive: new THREE.Color(B.water).multiplyScalar(0.4), emissiveIntensity: 0.45, roughness: 0.05, metalness: 0.3, transparent: true, opacity: 0.88 }));
     this.ponds = [];
     const pads = [];
-    for (let i = 0, made = 0; i < 300 && made < this.pondN; i++) {
+    for (let i = 0, made = 0; i < 900 && made < this.pondN * 3; i++) {
       const [x, z] = rnd();
-      const pr = 3 + r() * 3;
-      if (!free(x, z, pr + 4) || Math.abs(x) > 52) continue;
+      const pr = 3 + r() * 6;
+      if (!free(x, z, pr + 4) || Math.abs(x) > 115) continue;
       made++;
       const w = new THREE.Mesh(this.geo(new THREE.CircleGeometry(pr, 32)), waterMat);
       w.rotation.x = -Math.PI / 2;
@@ -723,7 +974,7 @@ export class Field {
     this.group.add(padM);
     if (bloom.length) this.dots(bloom, 1, [0xffb0d8, 0xffffff], 0.4);
     // 蛍
-    this.fireflies = this.particles(320, B.glow, 0.2, () => {
+    this.fireflies = this.particles(900, B.glow, 0.2, () => {
       let x, z;
       do [x, z] = rnd(); while (inDun(x, z));
       return [x, 0.6 + r() * 2.5, z];
@@ -732,10 +983,9 @@ export class Field {
       im.castShadow = true;
       this.group.add(im);
     }
-    this.treePts = trees;
     // 岩
     const rocks = [];
-    for (let i = 0; i < 800 && rocks.length < 90; i++) {
+    for (let i = 0; i < 800 * AREA && rocks.length < 90 * AREA; i++) {
       const [x, z] = rnd();
       if (free(x, z, 3.5)) rocks.push([x, z, 0.5 + r() * 1.3, r() * 6]);
     }
@@ -750,7 +1000,7 @@ export class Field {
     this.group.add(rockM);
     // 草むら
     q.identity();
-    const NG = 2600;
+    const NG = Math.round(2600 * AREA);
     const grass = new THREE.InstancedMesh(this.geo(new THREE.ConeGeometry(0.16, 0.7, 4)), this.std(0xffffff), NG);
     for (let i = 0; i < NG; i++) {
       const [x, z] = rnd();
@@ -763,7 +1013,7 @@ export class Field {
     const cGeo = this.geo(new THREE.OctahedronGeometry(0.7).scale(0.6, 1.6, 0.6));
     const pMat = this.std(st.pillar);
     const pGeo = this.geo(new THREE.CylinderGeometry(0.6, 0.75, 1, 8));
-    for (let i = 0, made = 0; i < 400 && made < 34; i++) {
+    for (let i = 0, made = 0; i < 400 * AREA && made < 34 * AREA; i++) {
       const [x, z] = rnd();
       if (!free(x, z, 4)) continue;
       made++;
@@ -789,14 +1039,15 @@ export class Field {
     const boxM = this.std(0x8a5a2a), bandM = this.std(0xe0b040, { metalness: 0.8, roughness: 0.3 });
     const baseG = this.geo(new THREE.BoxGeometry(1.1, 0.7, 0.8)), lidG = this.geo(new THREE.BoxGeometry(1.15, 0.3, 0.85)), bandG = this.geo(new THREE.BoxGeometry(1.18, 0.12, 0.88));
     const spotsC = [];
-    for (let i = 0; i < 300 && spotsC.length < 4; i++) {
+    for (let i = 0; i < 1200 && spotsC.length < 12; i++) {
       const [x, z] = rnd();
-      if (free(x, z, 3) && z < -20 && z > -165 && Math.abs(x) < 52) spotsC.push([x, z]);
+      if (free(x, z, 3) && z < -20 && z > DUN.z0 + 12 && Math.abs(x) < 115) spotsC.push([x, z]);
     }
     for (let i = 0; i < 3; i++) {
       const c = Math.floor(r() * DUN.cols), rr = 1 + Math.floor(r() * (DUN.rows - 1));
       spotsC.push([DUN.x0 + c * DUN.cell + DUN.cell / 2 + 2, DUN.z0 - rr * DUN.cell - DUN.cell / 2 + 2]);
     }
+    spotsC.push(...this.extraChests);
     for (const [x, z] of spotsC) {
       const g = new THREE.Group();
       const base = new THREE.Mesh(baseG, boxM);
@@ -827,9 +1078,29 @@ export class Field {
     // 主人公と仲間
     const def = FIGHTERS[o.mainKey];
     this.player = makeActor(o.assets[o.mainKey], def.height, def.color, def.tint, this.own);
-    this.player.pos = new THREE.Vector3(0, 0, 24);
+    // 2章目以降は前の地から旅を続け、南の街道の端から歩いてくる
+    this.continued = o.chapter > 0;
+    const [sx0, sz0] = this.road[0];
+    this.player.pos = this.continued ? new THREE.Vector3(sx0, 0, sz0 - 4) : new THREE.Vector3(0, 0, 24);
     this.player.facing = Math.PI;
     this.group.add(this.player.root);
+    if (this.continued) {
+      // 旅路の門（前章の地との境）
+      const stone = this.std(0x8a8478);
+      for (const dx of [-4, 4]) {
+        const p = new THREE.Mesh(this.geo(new THREE.BoxGeometry(1.2, 6, 1.2)), stone);
+        p.position.set(sx0 + dx, 3, sz0 - 8);
+        p.castShadow = true;
+        this.group.add(p);
+        this.circles.push({ x: sx0 + dx, z: sz0 - 8, r: 0.8 });
+      }
+      const top = new THREE.Mesh(this.geo(new THREE.BoxGeometry(10, 1, 1.4)), stone);
+      top.position.set(sx0, 6.3, sz0 - 8);
+      const glow = new THREE.Mesh(this.geo(new THREE.OctahedronGeometry(0.6)), this.mat(new THREE.MeshStandardMaterial({ color: this.B.rune, emissive: this.B.rune, emissiveIntensity: 1.5 })));
+      glow.position.set(sx0, 7.6, sz0 - 8);
+      this.spinners.push(glow);
+      this.group.add(top, glow);
+    }
     this.followers = o.partyKeys.filter((k) => k !== o.mainKey).map((k) => {
       const d = FIGHTERS[k];
       const a = makeActor(o.assets[k], d.height, d.color, d.tint, this.own);
@@ -852,6 +1123,17 @@ export class Field {
     ];
     const npcModels = o.npcKeys;
     const spots = [[-6, 2], [6, 2], [-8, 18], [8, 18], [0, -2], [-14, 10], [14, 10], [0, 26]];
+    // 道中の村の人々
+    const vLines = [
+      (n) => [[`${n}の村人`, `ようこそ${n}へ。${dun}へ向かうなら、本道へ戻って北へ進みなされ。`]],
+      (n) => [[`${n}の狩人`, '脇道の先の遺跡には宝が眠っているが、番人の魔物もいる。気をつけな。']],
+      (n) => [[`${n}の旅人`, `${town}から来たのかい？この先は道が分かれている。地図をよく見るといい。`]],
+      (n) => [[`${n}の娘`, '近道もあるけれど、魔物も多いの。']]
+    ];
+    this.villageNpcs.forEach((v, i) => {
+      people.push([`${v.name}の人`, vLines[i % vLines.length](v.name)]);
+      spots.push([v.x, v.z]);
+    });
     people.forEach(([role, lines], i) => {
       const k = npcModels[i % npcModels.length];
       const d = FIGHTERS[k];
@@ -878,11 +1160,18 @@ export class Field {
     // 魔物シンボル
     const auraGeo = this.geo(new THREE.RingGeometry(0.6, 1.05, 24));
     const auraMat = this.mat(new THREE.MeshBasicMaterial({ color: 0xff3050, transparent: true, opacity: 0.7, side: THREE.DoubleSide, depthWrite: false }));
-    const nField = 8 + Math.floor(o.chapter / 12);
+    const nField = 22 + Math.floor(o.chapter / 6);
     const spotsE = [];
-    for (let i = 0; i < 600 && spotsE.length < nField; i++) {
-      const z = -24 - r() * 140, x = (r() - 0.5) * 100;
-      if (this.roadDist(x, z) < 18) spotsE.push([x, z]);
+    const span = -24 - (DUN.z0 + 14);
+    for (let i = 0; i < 3000 && spotsE.length < nField; i++) {
+      const z = -24 - r() * span, x = (r() - 0.5) * 230;
+      if (this.roadDist(x, z) < 26) spotsE.push([x, z]);
+    }
+    spotsE.push(...this.extraSyms);
+    // 南の街道にも少しだけ
+    for (let i = 0; i < 300 && spotsE.length < nField + 3; i++) {
+      const z = 50 + r() * 50, x = (r() - 0.5) * 80;
+      if (this.roadDist(x, z) < 14 && this.roadDist(x, z) > 5) spotsE.push([x, z]);
     }
     for (let i = 0; i < 4; i++) {
       const c = Math.floor(r() * DUN.cols), rr = 1 + Math.floor(r() * (DUN.rows - 1));
@@ -916,14 +1205,15 @@ export class Field {
 
   // ---- 地図の下絵（静的部分）を一度だけ描く ----
   buildMapImage() {
-    const W = 104, Hh = 228;
-    this.mapW = W;
-    this.mapH = Hh;
+    // 広い世界全体を1m=1pxで描き、表示時に自分の周りだけ切り出す（スクロール地図）
+    this.mapW = 104;
+    this.mapH = 228;
+    const W = BOUNDS.maxX - BOUNDS.minX, Hh = BOUNDS.maxZ - BOUNDS.minZ;
     const c = document.createElement('canvas');
     c.width = W;
     c.height = Hh;
     const g = c.getContext('2d');
-    const sx = W / (BOUNDS.maxX - BOUNDS.minX), sz = Hh / (BOUNDS.maxZ - BOUNDS.minZ);
+    const sx = 1, sz = 1;
     this.toMap = (x, z) => [(x - BOUNDS.minX) * sx, (BOUNDS.maxZ - z) * sz];
     g.fillStyle = 'rgba(30,50,30,0.85)';
     g.fillRect(0, 0, W, Hh);
@@ -932,8 +1222,26 @@ export class Field {
       const [a, b] = this.toMap(x, z);
       g.fillRect(a - 0.8, b - 0.8, 1.6, 1.6);
     }
+    g.strokeStyle = '#b8a070';
+    g.lineWidth = 3;
+    for (const br of this.branches) {
+      g.beginPath();
+      br.forEach(([x, z], i) => {
+        const [a, b] = this.toMap(x, z);
+        if (i) g.lineTo(a, b);
+        else g.moveTo(a, b);
+      });
+      g.stroke();
+    }
+    for (const s of this.sites) {
+      const [a, b] = this.toMap(s.x, s.z);
+      g.fillStyle = s.kind === 'v' ? 'rgba(200,184,152,0.85)' : 'rgba(90,70,120,0.9)';
+      g.beginPath();
+      g.arc(a, b, s.r * 0.8, 0, Math.PI * 2);
+      g.fill();
+    }
     g.strokeStyle = '#d8c090';
-    g.lineWidth = 2.2;
+    g.lineWidth = 4;
     g.beginPath();
     this.road.forEach(([x, z], i) => {
       const [a, b] = this.toMap(x, z);
@@ -949,7 +1257,14 @@ export class Field {
     g.fillStyle = '#a04030';
     for (const h of this.houses) {
       const [a, b] = this.toMap(h.x, h.z);
-      g.fillRect(a - 1.5, b - 1.5, 3, 3);
+      g.fillRect(a - 3, b - 3, 6, 6);
+    }
+    for (const pd of this.ponds) {
+      const [a, b] = this.toMap(pd.position.x, pd.position.z);
+      g.fillStyle = '#4aa0e0';
+      g.beginPath();
+      g.arc(a, b, pd.geometry.parameters.radius, 0, Math.PI * 2);
+      g.fill();
     }
     const [d0x, d0z] = this.toMap(DUN.x0, DUN.z0);
     const [d1x, d1z] = this.toMap(DUN.x0 + DUN.cols * DUN.cell, DUN.z0 - DUN.rows * DUN.cell);
@@ -978,6 +1293,11 @@ export class Field {
   drawMap(ctx) {
     const W = this.mapW, Hh = this.mapH;
     ctx.clearRect(0, 0, W, Hh);
+    const [pmx, pmz] = this.toMap(this.player.pos.x, this.player.pos.z);
+    const ox = Math.max(0, Math.min(this.mapBase.width - W, pmx - W / 2));
+    const oz = Math.max(0, Math.min(this.mapBase.height - Hh, pmz - Hh * 0.6));
+    ctx.save();
+    ctx.translate(-ox, -oz);
     ctx.drawImage(this.mapBase, 0, 0);
     for (const c of this.chests) {
       if (c.open) continue;
@@ -992,7 +1312,10 @@ export class Field {
       ctx.arc(a, b, 2, 0, Math.PI * 2);
       ctx.fill();
     }
-    const [gx, gz] = this.toMap(this.goal.x, this.goal.z);
+    let [gx, gz] = this.toMap(this.goal.x, this.goal.z);
+    // 画面外の目的地は地図の端に表示
+    gx = Math.max(ox + 6, Math.min(ox + W - 6, gx));
+    gz = Math.max(oz + 6, Math.min(oz + Hh - 6, gz));
     const pulse = 3.5 + Math.sin(this.t * 5) * 1.2;
     ctx.fillStyle = '#fff070';
     ctx.beginPath();
@@ -1016,6 +1339,7 @@ export class Field {
     ctx.closePath();
     ctx.fill();
     ctx.stroke();
+    ctx.restore();
     ctx.restore();
   }
 
@@ -1053,6 +1377,9 @@ export class Field {
   }
 
   regionAt(z, x) {
+    if (z > TOWN.z + 40) return `${this.townName}へ続く旅路`;
+    const site = this.inSite(x, z);
+    if (site) return site.name;
     if (z > -10 && Math.hypot(x - TOWN.x, z - TOWN.z) < 38) return this.townName;
     if (z < DUN.z0) return this.dunName;
     return this.fieldName;
@@ -1162,6 +1489,10 @@ export class Field {
     for (const s of this.syms) {
       const dx = p.pos.x - s.pos.x, dz = p.pos.z - s.pos.z;
       const d = Math.hypot(dx, dz);
+      // 遠くの魔物は止めて描画もしない（広い世界でも軽く）
+      s.far = d > 90;
+      s.root.visible = !s.far;
+      if (s.far) continue;
       let mx = 0, mz = 0, sp = 0;
       if (this.inv > 0 && d < 10) {
         mx = -dx / d; mz = -dz / d; sp = 3; // 戦闘直後は逃げる
@@ -1230,6 +1561,7 @@ export class Field {
     this.boss.facing = Math.atan2(p.pos.x - this.boss.pos.x, p.pos.z - this.boss.pos.z);
     // 反映
     for (const a of [p, ...this.followers, ...this.npcs, ...this.syms, this.boss]) {
+      if (a.far) continue;
       a.mixer?.update(dt);
       a.root.position.copy(a.pos);
       a.root.rotation.y = a.facing;
