@@ -1,5 +1,94 @@
 // 交流機能：画面上部のお知らせテロップ・世界／ギルド／フレンドチャット・ギルド
-import { connectSocial, saveChiefEvent, loadChiefEvent } from './net.js';
+import { connectSocial, saveChiefEvent, loadChiefEvent, donateGuild, guildDonors, guildBoard } from './net.js';
+// ---------- ギルド寄付とランキング ----------
+function renderDonate(g) {
+  const { save, persist, sfx, myName } = S.opts;
+  const G = save.guild;
+  const box = el('div');
+  box.style.cssText = 'border-top:1px solid rgba(214,180,106,.35);margin-top:6px;padding-top:6px;display:grid;gap:4px';
+  box.append(el('b', null, '灯晶の寄付'));
+  const r = el('div', 'row');
+  const inp = el('input');
+  inp.type = 'number';
+  inp.min = 1;
+  inp.step = 100;
+  inp.placeholder = `寄付額（手持ち ${save.shards}）`;
+  inp.style.flex = '1';
+  const btn = el('button', 'cp-b', '寄付');
+  btn.type = 'button';
+  const msg = el('div', 'cp-mem', '');
+  btn.addEventListener('click', async () => {
+    const amt = Math.floor(+inp.value);
+    if (!(amt > 0)) { msg.textContent = '寄付額を入力してください。'; return; }
+    if (amt > save.shards) { msg.textContent = '灯晶が足りません。'; return; }
+    if (!confirm(`ギルド「${G.name}」に灯晶 ${amt} を寄付しますか？（戻せません）`)) return;
+    btn.disabled = true;
+    try {
+      save.shards -= amt;
+      persist();
+      const total = await donateGuild(G.id, G.name, save.pid, myName(), amt);
+      sfx?.('burst');
+      msg.textContent = `寄付しました！あなたの累計：${total}`;
+      if (amt >= 1000) S.api.news(`${myName()} がギルド「${G.name}」に灯晶 ${amt} を寄付した！`);
+      inp.value = '';
+      inp.placeholder = `寄付額（手持ち ${save.shards}）`;
+      loadRanks(rankBox, S.rankView || 'member');
+    } catch (err) {
+      console.warn(err);
+      save.shards += amt; // 失敗したら返す
+      persist();
+      msg.textContent = '寄付できませんでした（オンライン接続を確認してください）。';
+    }
+    btn.disabled = false;
+  });
+  r.append(inp, btn);
+  box.append(r, msg);
+  // ランキング（ギルド内／全ギルド）
+  const tabs = el('div', 'row');
+  for (const [k, n] of [['member', 'メンバー寄付ランキング'], ['guild', 'ギルドランキング']]) {
+    const b = el('button', 'cp-b', n);
+    b.type = 'button';
+    if ((S.rankView || 'member') === k) b.style.outline = '1px solid #ffd36a';
+    b.addEventListener('click', () => { S.rankView = k; renderAll(); });
+    tabs.append(b);
+  }
+  const rankBox = el('div');
+  rankBox.style.cssText = 'display:grid;gap:2px';
+  box.append(tabs, rankBox);
+  g.append(box);
+  loadRanks(rankBox, S.rankView || 'member');
+}
+async function loadRanks(box, view) {
+  const { save } = S.opts;
+  box.replaceChildren(el('div', 'cp-mem', '読み込み中…'));
+  try {
+    const medal = (i) => (i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `${i + 1}位`);
+    if (view === 'guild') {
+      const list = await guildBoard();
+      box.replaceChildren();
+      if (!list.length) box.append(el('div', 'cp-mem', 'まだ寄付したギルドはありません。'));
+      list.forEach((x, i) => {
+        const d = el('div', 'cp-mem', `${medal(i)}　${x.gname}　灯晶 ${x.total.toLocaleString()}（寄付者 ${x.members}人）`);
+        if (x.gid === save.guild?.id) d.style.color = '#ffd36a';
+        box.append(d);
+      });
+    } else {
+      const list = await guildDonors(save.guild.id);
+      box.replaceChildren();
+      const sum = list.reduce((s, x) => s + x.total, 0);
+      box.append(el('div', 'cp-mem', `ギルドの寄付総額：灯晶 ${sum.toLocaleString()}`));
+      if (!list.length) box.append(el('div', 'cp-mem', 'まだ寄付した人はいません。最初の寄付者になろう！'));
+      list.forEach((x, i) => {
+        const d = el('div', 'cp-mem', `${medal(i)}　${x.name}　灯晶 ${x.total.toLocaleString()}`);
+        if (x.pid === save.pid) d.style.color = '#ffd36a';
+        box.append(d);
+      });
+    }
+  } catch (err) {
+    console.warn(err);
+    box.replaceChildren(el('div', 'cp-mem', 'ランキングを読み込めませんでした。'));
+  }
+}
 // DBに保存された特別イベントを取り込む（起動時・定期・タブ復帰時）
 async function pullChiefEvent() {
   try {
@@ -624,6 +713,7 @@ function renderGuild() {
     });
     row.append(copy, leave);
     g.append(row, el('div', 'cp-mem', '役職：ギルドマスター＞サブマスター＞幹部＞メンバー。コードを仲間に教えると、同じギルドに入れます。'));
+    renderDonate(g);
     return;
   }
   const r1 = el('div', 'row');

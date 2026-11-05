@@ -85,6 +85,43 @@ export async function loadChiefEvent() {
   return { ev, tk: typeof row.tk === 'string' && row.tk.length < 1500 ? row.tk : '', at: num(row.at, 1e13), from: '' };
 }
 
+// ---- ギルド寄付（灯晶）：メンバーごとの累計をDBに保存し、ランキングに使う ----
+const GID_RE = /^[A-Za-z0-9]{8}$/;
+export async function donateGuild(gid, gname, pid, name, amount) {
+  if (!GID_RE.test(gid) || !/^[a-z0-9]{1,24}$/i.test(pid)) throw new Error('bad id');
+  const amt = Math.floor(+amount);
+  if (!(amt > 0 && amt <= 1e7)) throw new Error('bad amount');
+  const { db, id } = await getDb();
+  const h = gid + ':' + pid;
+  const row = await findOne('guilddonations', h);
+  const total = (+row?.total || 0) + amt;
+  await db.transact(db.tx.guilddonations[row?.id || id()].update({ h, gid, gname: txt(gname, 16), pid, name: txt(name, 12), total, at: Date.now() }));
+  return total;
+}
+const donRow = (r) => ({ gid: String(r.gid || ''), gname: txt(r.gname, 16) || 'ギルド', pid: str(r.pid, 24), name: txt(r.name, 12) || '旅人', total: Math.max(0, Math.min(1e12, Math.floor(+r.total || 0))) });
+// ギルド内のメンバー寄付ランキング
+export async function guildDonors(gid) {
+  if (!GID_RE.test(gid)) return [];
+  const { db } = await getDb();
+  const res = await db.queryOnce({ guilddonations: { $: { where: { gid } } } });
+  return (res?.data?.guilddonations || []).map(donRow).filter((r) => r.total > 0).sort((a, b) => b.total - a.total);
+}
+// 全ギルドの寄付総額ランキング
+export async function guildBoard() {
+  const { db } = await getDb();
+  const res = await db.queryOnce({ guilddonations: {} });
+  const m = new Map();
+  for (const r of (res?.data?.guilddonations || []).map(donRow)) {
+    if (!GID_RE.test(r.gid) || r.total <= 0) continue;
+    const g = m.get(r.gid) || { gid: r.gid, gname: r.gname, total: 0, members: 0 };
+    g.total += r.total;
+    g.members++;
+    if (r.gname) g.gname = r.gname;
+    m.set(r.gid, g);
+  }
+  return [...m.values()].sort((a, b) => b.total - a.total).slice(0, 50);
+}
+
 // ---- 交流用の常設ルーム（チャット・お知らせ・ギルド） ----
 const CH_RE = /^(world|staff|g:[A-Za-z0-9]{8}|dm:[A-Za-z0-9]{1,24}:[A-Za-z0-9]{1,24})$/;
 const txt = (v, n) => String(v ?? '').replace(/[\u0000-\u001f<>]/g, '').slice(0, n);
