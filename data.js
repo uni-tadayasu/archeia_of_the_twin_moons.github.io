@@ -873,3 +873,38 @@ export const STORY = [];
   v2.light.dmg = Math.ceil((c.light.dmg * c.light.shots * 1.7) / v2.light.shots);
   v2.power = c.power * 1.7; v2.armor = c.armor * 0.6; v2.fluxMul = 3;
 }
+
+// ---- 全戦士共通の回復技（skills[4]。H キー／「癒」ボタン） ----
+export const HEAL_SLOT = 4;
+for (const [k, f] of Object.entries(FIGHTERS)) {
+  if (!f.skills || f.skills.length > HEAL_SLOT) continue;
+  while (f.skills.length < HEAL_SLOT) f.skills.push({ ...f.skills[0] });
+  const v = k === 'sovereign' || k === 'sovereign2';
+  f.skills.push(finalizeSkill({
+    name: v ? '冥后の再誕《リザレクト・ノクス》' : '癒しの灯',
+    cost: v ? 22 : 30, kind: 'heal', heal: Math.round((f.hp || 300) * (v ? 0.3 : 0.2)), radius: v ? 9 : 5, elem: v ? 5 : 7, vivid: true
+  }, 7));
+}
+
+// ---- ヴェスペラ：全10属性の最上級技（skills[5..14]）。技ボタンを押すたびに順に繰り出す ----
+{
+  const TOP = [
+    { name: '劫焔煉獄《インフェルノ・クラウン》', kind: 'rain', visual: 'meteor', count: 9, spread: 3.6, radius: 2.6, dmg: 150, delay: 0.5, interval: 0.08 },
+    { name: '永劫氷葬《アブソリュート・ゼロ》', kind: 'implode', dmg: 260, radius: 9 },
+    { name: '神鳴万雷《ディヴァイン・ボルト》', kind: 'rain', visual: 'bolt', count: 12, spread: 4, radius: 2.2, dmg: 110, delay: 0.25, interval: 0.05 },
+    { name: '天嵐神威《テンペスト・ロード》', kind: 'shockwave', dmg: 250, radius: 10, double: true },
+    { name: '大地崩壊《ガイア・ブレイカー》', kind: 'rain', visual: 'crystal', count: 10, spread: 3.8, radius: 2.4, dmg: 130, delay: 0.4, interval: 0.07 },
+    { name: '聖天裁光《ジャッジメント・レイ》', kind: 'rain', visual: 'pillar', count: 10, spread: 4, radius: 2.3, dmg: 135, delay: 0.4, interval: 0.06 },
+    { name: '冥獄終夜《エターナル・ナイト》', kind: 'implode', dmg: 290, radius: 9.5 },
+    { name: '蒼海大渦《リヴァイアサン・タイド》', kind: 'projectile', visual: 'orb', count: 5, spreadAng: 0.22, dmg: 160, speed: 24, radius: 1.3 },
+    { name: '万毒腐界《ヴェノム・パンデミア》', kind: 'rain', visual: 'nova', count: 7, spread: 4, radius: 3, dmg: 140, delay: 0.45, interval: 0.1 },
+    { name: '血華千刃《ブラッド・サウザンド》', kind: 'rain', visual: 'blade', count: 14, spread: 4, radius: 1.8, dmg: 105, delay: 0.25, interval: 0.04 }
+  ];
+  for (const [key, mul] of [['sovereign', 1], ['sovereign2', 1.25]]) {
+    const f = FIGHTERS[key];
+    TOP.forEach((t, ei) => {
+      f.skills.push(finalizeSkill({ ...t, dmg: Math.round(t.dmg * mul), cost: 24, elem: ei, color: ELEMS[ei].c, vivid: true }, ei));
+    });
+    f.pool = [0, 1, 2, 3, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14];
+  }
+}

@@ -623,14 +623,14 @@ setMuted(audio.muted);
 
 // ---------- Input ----------
 const keys = new Set();
-const edges = { attack: false, skill: false, skill2: false, over: false, jump: false };
+const edges = { attack: false, skill: false, skill2: false, heal: false, over: false, jump: false };
 const touchState = { mx: 0, mz: 0, guard: false, skill: false, skill2: false };
 const padState = { mx: 0, mz: 0, guard: false, skill: false, skill2: false };
 let mouseSkillHeld = false; // 右クリック長押し（追加技）
 window.addEventListener('mouseup', (e) => {
   if (e.button === 2) mouseSkillHeld = false;
 });
-const KEYMAP = { KeyJ: 'attack', KeyZ: 'attack', KeyK: 'skill', KeyX: 'skill', KeyU: 'skill2', KeyV: 'skill2', KeyL: 'over', KeyC: 'over', Space: 'jump' };
+const KEYMAP = { KeyJ: 'attack', KeyZ: 'attack', KeyK: 'skill', KeyX: 'skill', KeyU: 'skill2', KeyV: 'skill2', KeyH: 'heal', KeyL: 'over', KeyC: 'over', Space: 'jump' };
 
 function inBattleView() {
   return (!!state.battle || !!state.field) && !document.querySelector('.screen.on');
@@ -2693,6 +2693,7 @@ function pollPad(dt) {
     if (down(5)) edges.skill2 = true;
     if (down(3)) edges.over = true;
     if (down(1)) edges.jump = true;
+    if (down(12) || down(10)) edges.heal = true;
     if (down(9)) togglePause();
   } else {
     const root = state.paused ? $('#pause') : document.querySelector('.screen.on');

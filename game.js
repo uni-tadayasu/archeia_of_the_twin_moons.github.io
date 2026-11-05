@@ -558,9 +558,11 @@ export class Fighter {
       if (inp.attack) {
         this.startLight();
       } else if (inp.skill) {
-        this.startSkill(mv ? 1 : 0, 'holdSkill');
+        this.startSkill(this.poolPick(mv ? 1 : 0), 'holdSkill');
       } else if (inp.skill2) {
-        this.startSkill(mv ? 3 : 2, 'holdSkill2');
+        this.startSkill(this.poolPick(mv ? 3 : 2), 'holdSkill2');
+      } else if (inp.heal) {
+        this.startSkill(4, 'holdHeal');
       } else if (inp.skillIdx != null) {
         this.startSkill(inp.skillIdx, 'cpu');
       } else if (inp.over) {
@@ -653,6 +655,16 @@ export class Fighter {
     this.faceNearest(4);
     this.action = { type: 'light', t: 0, dur: this.combo === 2 ? 0.42 : 0.32, hitAt: 0.13, hit: false, step: this.combo };
     this.vel.copy(this.forward().multiplyScalar(3));
+  }
+
+  // 全属性の技を持つ戦士（ヴェスペラ）は押すたびに次の技へ
+  poolPick(i) {
+    const p = this.def.pool;
+    if (!p?.length) return i;
+    const j = this.poolI ?? -1;
+    const next = p[(j + 1) % p.length];
+    if (this.flux >= (this.def.skills[next]?.cost ?? 0) && !this.status.silence) this.poolI = (j + 1) % p.length;
+    return next;
   }
 
   startSkill(i, hold = null, follow = false) {
@@ -1135,7 +1147,7 @@ export class Battle {
   }
 
   cast(f, slot, net) {
-    const idx = Math.max(0, Math.min(3, +slot[1] || 0));
+    const idx = Math.max(0, Math.min((f.def.skills?.length || 1) - 1, +slot.slice(1) || 0));
     const spec = slot === 'over' ? f.def.over
       : slot === 'hi' ? hiSpec(f.def)
         : slot[0] === 'f' ? followSpec(f.def, idx) || f.def.skills[0]
@@ -2049,7 +2061,7 @@ export class Battle {
     if (d < (f.def.light.shots ? 9 : f.def.light.range + 0.5) && Math.random() < dt * 5 * st.level) {
       inp.attack = true;
     }
-    const si = Math.floor(Math.random() * 4);
+    const si = Math.floor(Math.random() * f.def.skills.length);
     const sp = f.def.skills[si];
     const k2 = sp.kind;
     const ok = k2 === 'heal' ? f.hp < f.maxHp * 0.55 : d < (k2 === 'dash' ? 7 : k2 === 'shockwave' ? sp.radius : 12);

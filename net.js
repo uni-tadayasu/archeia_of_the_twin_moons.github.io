@@ -80,7 +80,7 @@ export async function connect(mode, roomCode, handlers) {
   });
   room.subscribeTopic('cast', (e) => {
     if (e && typeof e === 'object') {
-      handlers.onCast({ id: str(e.id, 40), slot: ['s0', 's1', 's2', 's3', 'f0', 'f1', 'f2', 'f3', 'over', 'hi'].includes(e.slot) ? e.slot : 's0', tx: num(e.tx, 50), tz: num(e.tz, 50), ry: num(e.ry, 10) });
+      handlers.onCast({ id: str(e.id, 40), slot: typeof e.slot === 'string' && (/^[sf]\d{1,2}$/.test(e.slot) || e.slot === 'over' || e.slot === 'hi') ? e.slot : 's0', tx: num(e.tx, 50), tz: num(e.tz, 50), ry: num(e.ry, 10) });
     }
   });
   room.subscribeTopic('hit', (e) => {
