@@ -1,5 +1,16 @@
 // 交流機能：画面上部のお知らせテロップ・世界／ギルド／フレンドチャット・ギルド
-import { connectSocial } from './net.js';
+import { connectSocial, saveChiefEvent, loadChiefEvent } from './net.js';
+// DBに保存された特別イベントを取り込む（起動時・定期・タブ復帰時）
+async function pullChiefEvent() {
+  try {
+    const n = await loadChiefEvent();
+    if (!n || !(await S.opts.verifyChief?.(n.tk))) return;
+    S.opts.onChiefEvent?.(n);
+    rebuildTicker();
+  } catch (err) {
+    console.warn(err);
+  }
+}
 
 const CSS = `
 #ticker{position:fixed;top:env(safe-area-inset-top);left:0;right:0;height:24px;z-index:60;overflow:hidden;pointer-events:none;
@@ -113,6 +124,9 @@ export function initSocial(opts) {
     S.net = n;
     publish();
     broadcastChief();
+    pullChiefEvent();
+    setInterval(pullChiefEvent, 60000);
+    document.addEventListener('visibilitychange', () => { if (!document.hidden) pullChiefEvent(); });
     sys('world', '世界チャットにつながりました。');
   }).catch((err) => {
     console.warn(err);
@@ -124,6 +138,8 @@ export function initSocial(opts) {
       if (broadcast) S.net?.news(clean(t, 80));
     },
     sendEvent: () => {
+      const own = S.opts.ownEvent?.();
+      if (own && S.opts.isChief?.()) saveChiefEvent(own.ev, S.opts.roleToken?.() || '', own.at).catch((err) => console.warn(err));
       broadcastChief();
       rebuildTicker();
     },

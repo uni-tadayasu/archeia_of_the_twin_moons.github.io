@@ -68,6 +68,23 @@ export async function syncPullV(h) {
   return { data: typeof row?.data === 'string' && row.data.length <= 200000 ? row.data : null, ver: +row?.ver || 0 };
 }
 
+// ---- 運営長の特別イベント（DBに保存し、後から来た人・他端末も読めるようにする） ----
+export async function saveChiefEvent(ev, tk, at) {
+  const { db, id } = await getDb();
+  const row = await findOne('chiefevents', 'current');
+  if (row && +row.at >= at) return false;
+  await db.transact(db.tx.chiefevents[row?.id || id()].update({ h: 'current', ev: JSON.stringify(ev), tk: String(tk || ''), at }));
+  return true;
+}
+export async function loadChiefEvent() {
+  const row = await findOne('chiefevents', 'current');
+  if (!row || typeof row.ev !== 'string' || row.ev.length > 20000) return null;
+  let ev;
+  try { ev = JSON.parse(row.ev); } catch { return null; }
+  if (!(ev === null || (ev && typeof ev === 'object'))) return null;
+  return { ev, tk: typeof row.tk === 'string' && row.tk.length < 1500 ? row.tk : '', at: num(row.at, 1e13), from: '' };
+}
+
 // ---- 交流用の常設ルーム（チャット・お知らせ・ギルド） ----
 const CH_RE = /^(world|staff|g:[A-Za-z0-9]{8}|dm:[A-Za-z0-9]{1,24}:[A-Za-z0-9]{1,24})$/;
 const txt = (v, n) => String(v ?? '').replace(/[\u0000-\u001f<>]/g, '').slice(0, n);

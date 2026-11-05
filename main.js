@@ -2783,7 +2783,10 @@ syncEntitlements();
 // ---- 運営長の特別イベント ----
 function readJSON(k) { try { return JSON.parse(localStorage.getItem(k) || 'null'); } catch { return null; } }
 function activeEvent() {
-  const src = chiefUnlocked() ? readJSON('arkeia-cevent-own') : readJSON('arkeia-cevent');
+  // 運営長は自分の作成分と受信分のうち新しい方（他端末で作った分も反映）
+  const own = chiefUnlocked() ? readJSON('arkeia-cevent-own') : null;
+  const got = readJSON('arkeia-cevent');
+  const src = own && (!got || own.at >= got.at) ? own : got;
   const ev = src && sanitizeEvent(src.ev, FIGHTERS);
   const now = Date.now();
   if (ev && now >= ev.at && now < ev.ends) return { week: 5000000 + (Math.floor(ev.at / 60000) % 4000000), ev, ends: ev.ends };
@@ -2795,6 +2798,9 @@ function onChiefEvent(n) {
   const ev = n.ev === null ? null : sanitizeEvent(n.ev, FIGHTERS);
   if (n.ev !== null && !ev) return;
   localStorage.setItem('arkeia-cevent', JSON.stringify({ ev, at: n.at }));
+  // 運営長の別端末：古い自作イベントを再配信して上書きしないよう、新しい方に揃える
+  const own = readJSON('arkeia-cevent-own');
+  if (own && own.at < n.at) localStorage.setItem('arkeia-cevent-own', JSON.stringify({ ev, at: n.at }));
   if (isScreen('scr-title')) refreshTitle();
 }
 function openEventMaker() {
