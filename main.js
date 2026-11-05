@@ -4,6 +4,7 @@ import { Battle, ARENA_R } from './game.js';
 import { FIGHTERS, STORY, ROSTER, UPGRADES, MAX_LV, STAGES, BGM, APEX_BGM, ENEMY_ROSTER, UPG_CAP, WEAPONS, ARMORS, STAT_LABEL, SPECIAL_KEYS, BOSS_ROSTER, currentEvent } from './data.js';
 import { ProcMusic } from './music.js';
 import { sayBattle, setVoiceMuted, stopVoices } from './voice.js';
+import { initSocial } from './social.js';
 import { OPERATOR_KEY_SHA256, CHIEF_KEY_SHA256, MAX_KEY_ATTEMPTS, LOCKOUT_MS, SHOP_ITEMS } from './config.js';
 import { connect, issueInvite, redeemInvite, syncPush, syncPull } from './net.js';
 import { apiEnabled, api, verifyToken } from './api.js';
@@ -197,7 +198,9 @@ function loadSave() {
   s.noHero = !!raw.noHero;
   s.awk = clampInt(raw.awk, 0, 99);
   s.buyId = raw.buyId;
-  s.evClear = clampInt(raw.evClear, 0, 1e7); // 初回クリア報酬を受け取った週
+  // 週替わりイベントの進行：{ week, lv=クリア済み最高段階(0-8) }
+  s.evProg = raw.evProg && typeof raw.evProg === 'object' ? { week: clampInt(raw.evProg.week, 0, 1e7), lv: clampInt(raw.evProg.lv, 0, 8) } : { week: 0, lv: 0 };
+  s.guild = raw.guild && /^[A-Za-z0-9]{8}$/.test(raw.guild.id) ? { id: raw.guild.id, name: String(raw.guild.name || 'ギルド').replace(/[<>\u0000-\u001f]/g, '').slice(0, 16) } : null;
   return s;
 }
 const save = loadSave();
@@ -876,10 +879,11 @@ function refreshTitle() {
   $('#btn-invade').hidden = !operatorUnlocked();
   $('#title-shards').textContent = `灯晶　${save.shards}`;
   {
-    const { week, ev, ends } = currentEvent();
+    const { ev, ends } = currentEvent();
     const days = Math.max(0, Math.ceil((ends - Date.now()) / 86400000));
-    $('#event-sub').textContent = `今週：${ev.name} — ${ev.desc}（残り${days}日${save.evClear === week ? '・初回報酬受取済' : `・初回 灯晶+${ev.first}`}）`;
+    $('#event-sub').textContent = `今週：${ev.name} — ${ev.desc}（全8段階・${evCleared()}段階まで制覇・残り${days}日）`;
   }
+  social?.refresh();
   const ch = save.chapter % STORY.length;
   $('#story-sub').textContent = save.chapter >= STORY.length ? '旅は終わった。もう一度、最初の灯から' : `続きから：${STORY[ch].title}`;
 }
@@ -918,8 +922,10 @@ document.querySelectorAll('[data-go]').forEach((b) => b.addEventListener('click'
     const { ev } = currentEvent();
     openSelect('あなたが握る剣は？', `週替わりイベント › ${ev.name}`, (k) => {
       state.myKey = k;
-      state.eventRun = currentEvent();
-      startOffline();
+      openEventLevel((lv) => {
+        state.eventRun = { ...currentEvent(), lv };
+        startOffline();
+      });
     }, { onBack: goTitle });
     return;
   }
@@ -1259,6 +1265,54 @@ function endBattle() {
   }
 }
 
+// ---- 週替わりイベント：8段階 ----
+const EV_LV = (lv) => ({ hp: 1 + 0.35 * (lv - 1), atk: 1 + 0.15 * (lv - 1), reward: 1 + 0.5 * (lv - 1), first: lv });
+function evCleared() {
+  return save.evProg.week === currentEvent().week ? save.evProg.lv : 0;
+}
+function openEventLevel(cb) {
+  const { ev } = currentEvent();
+  const done = evCleared();
+  const ov = document.createElement('div');
+  ov.style.cssText = 'position:fixed;inset:0;z-index:70;background:rgba(5,5,15,.82);display:flex;align-items:center;justify-content:center;padding:12px';
+  const box = document.createElement('div');
+  box.style.cssText = 'background:#16163a;border:1px solid #d6b46a;border-radius:12px;padding:16px;max-width:520px;width:100%;color:#f4ead2;max-height:90vh;overflow:auto';
+  const h = document.createElement('h3');
+  h.textContent = `${ev.name} — 段階を選ぶ`;
+  h.style.margin = '0 0 4px';
+  const p = document.createElement('p');
+  p.textContent = `${ev.desc} 段階をクリアすると次の段階が開放されます。`;
+  p.style.cssText = 'margin:0 0 10px;font-size:13px;opacity:.85';
+  const grid = document.createElement('div');
+  grid.style.cssText = 'display:grid;grid-template-columns:repeat(2,1fr);gap:6px';
+  for (let lv = 1; lv <= 8; lv++) {
+    const m = EV_LV(lv);
+    const b = document.createElement('button');
+    b.className = 'btn mini';
+    const open = lv <= done + 1;
+    b.disabled = !open;
+    b.style.cssText = 'text-align:left;padding:8px';
+    b.textContent = `${lv <= done ? '★' : open ? '☆' : '🔒'} 第${lv}段階　敵の強さ×${m.hp.toFixed(2)}　報酬 ${Math.round(ev.reward * m.reward)}${lv > done ? `（初回+${ev.first * m.first}）` : ''}`;
+    b.addEventListener('click', () => {
+      sfx('ui');
+      ov.remove();
+      cb(lv);
+    });
+    grid.append(b);
+  }
+  const back = document.createElement('button');
+  back.className = 'btn mini';
+  back.textContent = 'やめる';
+  back.style.marginTop = '10px';
+  back.addEventListener('click', () => {
+    ov.remove();
+    goTitle();
+  });
+  box.append(h, p, grid, back);
+  ov.append(box);
+  document.body.append(ov);
+}
+
 async function startOffline() {
   await loadPromise;
   const evRun = state.mode === 'event' ? (state.eventRun ||= currentEvent()) : null;
@@ -1268,6 +1322,7 @@ async function startOffline() {
   if (evRun) {
     // ---- 週替わりイベント ----
     const ev = evRun.ev;
+    const L = EV_LV(evRun.lv || 1);
     const rnd = (a) => a[Math.floor(Math.random() * a.length)];
     for (let i = 0; i < ev.ally; i++) {
       const ak = rnd(ROSTER);
@@ -1282,13 +1337,13 @@ async function startOffline() {
     list.forEach((k, i) => {
       const a = (i / list.length) * Math.PI * 2;
       b.add(k, {
-        team: 1, cpu: foeCpu(0.8), hpMul: foeHp(ev.hp), atkMul: ev.atk, scale: ev.scale || 1, facing: Math.PI,
+        team: 1, cpu: foeCpu(0.8), hpMul: foeHp(ev.hp * L.hp), atkMul: ev.atk * L.atk, scale: ev.scale || 1, facing: Math.PI,
         pos: list.length === 1 ? [4, -3] : [4 + Math.cos(a) * 3, -2 + Math.sin(a) * 3],
         name: k === state.myKey ? FIGHTERS[k].name + '（写し）' : FIGHTERS[k].name
       });
     });
     beginBattle(false);
-    ui.banner({ name: `— 週替わりイベント —` }, ev.name);
+    ui.banner({ name: `— 週替わりイベント 第${evRun.lv || 1}段階 —` }, ev.name);
     return;
   }
   if (state.mode === 'cpu') {
@@ -1451,6 +1506,7 @@ function onBattleEnd(won) {
         state.chapter++;
         save.chapter = Math.max(save.chapter, state.chapter);
         persist();
+        social?.news(`${myName()} が「${ch.title}」を踏破した！`);
         if (state.chapter >= STORY.length) {
           showResult('旅の終わり、旅のはじまり', '双つの空に灯が戻った。最後まで付き合ってくれて、ありがとう。', `灯晶 +${REWARD.story}`, false, false);
         } else {
@@ -1463,20 +1519,25 @@ function onBattleEnd(won) {
     return;
   }
   if (state.mode === 'event') {
-    const { week, ev } = state.eventRun || currentEvent();
+    const run = state.eventRun || { ...currentEvent(), lv: 1 };
+    const { week, ev } = run;
+    const lv = run.lv || 1;
+    const L = EV_LV(lv);
     let r = 5, note = '';
     if (won) {
-      r = ev.reward;
-      if (save.evClear !== week) {
-        r += ev.first;
-        save.evClear = week;
-        note = '（今週の初回クリアボーナス込み）';
+      r = Math.round(ev.reward * L.reward);
+      if (save.evProg.week !== week) save.evProg = { week, lv: 0 };
+      if (lv > save.evProg.lv) {
+        r += ev.first * L.first;
+        save.evProg.lv = lv;
+        note = '（初回クリアボーナス込み）';
+        social?.news(`${myName()} がイベント「${ev.name}」第${lv}段階を制覇！`);
       }
     }
     grant(r);
     showResult(
-      won ? `イベント「${ev.name}」制覇！` : 'イベント失敗',
-      won ? `見事な戦いぶりだった${note}。来週は別のイベントが待っている。` : '何度でも挑戦できる。装備を整えて再挑戦だ！',
+      won ? `「${ev.name}」第${lv}段階 制覇！` : 'イベント失敗',
+      won ? `見事な戦いぶりだった${note}。${lv < 8 ? `第${lv + 1}段階が開放された！` : '全8段階を制覇した！'}` : '何度でも挑戦できる。装備を整えて再挑戦だ！',
       `灯晶 +${r}`, true, false
     );
     return;
@@ -2546,6 +2607,19 @@ async function syncEntitlements() {
   }
 }
 syncEntitlements();
+// ---- 交流（お知らせテロップ・チャット・ギルド） ----
+var social = initSocial({
+  save, persist, myName, sfx,
+  baseNews: () => {
+    const { ev, ends } = currentEvent();
+    const days = Math.max(0, Math.ceil((ends - Date.now()) / 86400000));
+    return [
+      `今週のイベント「${ev.name}」開催中！ ${ev.desc} 全8段階・あと${days}日`,
+      `あなたの進行：第${evCleared()}段階まで制覇`,
+      save.guild ? `所属ギルド「${save.guild.name}」` : 'ギルドを結成して仲間と語り合おう（チャット › ギルド）'
+    ];
+  }
+});
 function renderShop() {
   const list = $('#shop-list');
   list.replaceChildren();
@@ -2583,6 +2657,7 @@ function renderShop() {
           save.shards -= d.shardPrice;
           save.gemChars.push(k);
           persist();
+          social?.news(`運営長が特別な戦士「${d.name}」を迎え入れた！`);
           sfx('burst');
           $('#shop-msg').textContent = `${d.name} が仲間になった！`;
           renderShop();

@@ -64,6 +64,48 @@ export async function syncPull(h) {
   return typeof row?.data === 'string' && row.data.length <= 200000 ? row.data : null;
 }
 
+// ---- 交流用の常設ルーム（チャット・お知らせ・ギルド） ----
+const CH_RE = /^(world|g:[A-Za-z0-9]{8}|dm:[A-Za-z0-9]{1,24}:[A-Za-z0-9]{1,24})$/;
+const txt = (v, n) => String(v ?? '').replace(/[\u0000-\u001f<>]/g, '').slice(0, n);
+export async function connectSocial(handlers) {
+  const { db, id } = await getDb();
+  const myId = id();
+  const room = db.joinRoom('arkeia', 'social-global');
+  room.subscribePresence({}, (data) => {
+    const peers = {};
+    for (const p of Object.values(data.peers || {})) {
+      if (!p || typeof p !== 'object') continue;
+      const s = { id: str(p.id, 40), pid: str(p.pid, 24), name: str(p.name, 12) || '旅人', gid: /^[A-Za-z0-9]{8}$/.test(p.gid) ? p.gid : '', gname: txt(p.gname, 16) };
+      if (s.id) peers[s.id] = s;
+    }
+    handlers.onPeers?.(peers);
+  });
+  room.subscribeTopic('chat', (e) => {
+    if (!e || typeof e !== 'object' || !CH_RE.test(e.ch)) return;
+    const t = txt(e.t, 120).trim();
+    if (!t) return;
+    handlers.onChat?.({ ch: e.ch, t, from: str(e.from, 40), pid: str(e.pid, 24), name: str(e.name, 12) || '旅人', gname: txt(e.gname, 16), at: Date.now() });
+  });
+  room.subscribeTopic('news', (e) => {
+    if (!e || typeof e !== 'object') return;
+    const t = txt(e.t, 80).trim();
+    if (t) handlers.onNews?.({ t, from: str(e.from, 40) });
+  });
+  return {
+    myId,
+    publish: (s) => room.publishPresence({ ...s, id: myId }),
+    chat: (e) => room.publishTopic('chat', { ...e, from: myId }),
+    news: (t) => room.publishTopic('news', { t, from: myId }),
+    leave: () => {
+      try {
+        room.leaveRoom?.();
+      } catch (err) {
+        console.warn(err);
+      }
+    }
+  };
+}
+
 export async function connect(mode, roomCode, handlers) {
   const { db, id } = await getDb();
   const myId = id();
