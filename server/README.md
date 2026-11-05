@@ -6,7 +6,7 @@
 - 運営・運営長の認証をサーバーで判定（キーのハッシュはサーバーの秘密変数のみ）
 - 乱入はサーバー発行の署名付き許可証がないと相手端末が受け付けない
 - 招待コードは Durable Object で **原子的に一度だけ** 使用可能
-- 同期セーブ・招待コード・購入記録は InstantDB 権限でクライアントから完全に遮断
+- 同期セーブ・招待コード・購入記録・ギルド・特別イベントはすべて Cloudflare の Durable Object に保存（InstantDB の管理トークン不要）
 - Stripe の決済成功 Webhook を署名検証し、購入キャラを解放
 - 強化・装備・キャラ使用権をサーバーが検証して署名 → 対戦相手はその値でダメージ・HPを上限チェック
 
@@ -27,7 +27,6 @@ console.log('PUBLIC (config.jsへ):', JSON.stringify({ kty: pub.kty, crv: pub.cr
 ```
 cd server
 npm install
-npx wrangler secret put INSTANT_ADMIN_TOKEN     # InstantDB ダッシュボードの Admin token
 npx wrangler secret put SIGN_PRIVATE_JWK        # 手順1の PRIVATE
 npx wrangler secret put PEPPER                  # 長いランダム文字列
 npx wrangler secret put OP_KEY_SHA256           # 運営キーの SHA-256
@@ -35,12 +34,13 @@ npx wrangler secret put CHIEF_KEY_SHA256        # 運営長キーの SHA-256
 npx wrangler secret put STRIPE_WEBHOOK_SECRET   # whsec_...
 ```
 
-`wrangler.toml` の `ALLOWED_ORIGINS`・`INSTANT_APP_ID`・`STRIPE_LINKS` を書き換えてから `npm run deploy`。
+`wrangler.toml` の `ALLOWED_ORIGINS`・`STRIPE_LINKS` を書き換えてから `npm run deploy`。
+（GitHub の場合は `.github/workflows/deploy-server.yml` が自動で行います）
 
-## 3. InstantDB の権限を反映
+## 3. InstantDB について
 
-`instant.perms.ts` を InstantDB のプロジェクトに置き `npx instant-cli push perms`（またはダッシュボードの Permissions に同じ内容を設定）。
-**反映後は、クライアントから招待コード・同期データへ直接アクセスできなくなります**（サーバー経由のみ）。
+InstantDB は新規登録を停止しています。サーバーは InstantDB を使わないため設定不要です。
+`instant.perms.ts` は参考用に残しています（ゲームのリアルタイム通信は既存の App ID をそのまま使用）。
 
 ## 4. Stripe
 

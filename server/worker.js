@@ -61,25 +61,8 @@ async function verify(env, tok, type) {
   }
 }
 
-// InstantDB 管理HTTP API（管理トークンはサーバーの秘密変数のみ。権限ルールを越えて読み書きできる）
-const id = () => crypto.randomUUID();
-function dbOf(env) {
-  const call = async (path, body) => {
-    const r = await fetch(`https://api.instantdb.com/admin/${path}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${env.INSTANT_ADMIN_TOKEN}`, 'App-Id': env.INSTANT_APP_ID },
-      body: JSON.stringify(body)
-    });
-    if (!r.ok) throw new Error(`instant ${path} ${r.status}`);
-    return r.json();
-  };
-  const tx = new Proxy({}, { get: (_, ns) => new Proxy({}, { get: (_, eid) => ({ update: (attrs) => ['update', ns, eid, attrs] }) }) });
-  return {
-    tx,
-    query: (q) => call('query', { query: q }),
-    transact: (step) => call('transact', { steps: [step] })
-  };
-}
+// 保存はすべて Cloudflare の Durable Object（InstantDB の管理トークンは不要）
+const storeCall = (env, name, body) => doCall(env.STORE.get(env.STORE.idFromName(name)), body);
 
 function cors(env, req) {
   const origin = req.headers.get('Origin') || '';
@@ -185,6 +168,7 @@ export default {
         case '/chat/room': return await chatRoom(req, env, H, body);
         case '/chief/sign': return await chiefSign(req, env, H, body);
         case '/chief/event': return await chiefEvent(req, env, H, body);
+        case '/chief/current': return await chiefCurrent(req, env, H);
         default: return json(H, { error: 'not found' }, 404);
       }
     } catch (err) {
@@ -215,8 +199,9 @@ async function inviteIssue(req, env, H, { token }) {
   const b = crypto.getRandomValues(new Uint8Array(12));
   const code = 'OP-' + [0, 1, 2].map((g) => [...b.slice(g * 4, g * 4 + 4)].map((x) => A[x % A.length]).join('')).join('-');
   const h = await hmacHex(env.PEPPER, 'invite:' + code);
-  const db = dbOf(env);
-  await db.transact(db.tx.opinvites[id()].update({ h, used: false, at: Date.now() }));
+  const stub = env.INVITE_LOCK.get(env.INVITE_LOCK.idFromName(h));
+  const r = await stub.fetch('https://lock/', { method: 'POST', body: JSON.stringify({ op: 'issue' }) });
+  if (r.status !== 200) return json(H, { error: 'server' }, 500);
   return json(H, { code });
 }
 
@@ -227,7 +212,7 @@ async function inviteRedeem(req, env, H, { code }) {
   if (!/^OP-[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}$/.test(c)) return json(H, { error: 'bad' }, 400);
   const h = await hmacHex(env.PEPPER, 'invite:' + c);
   const stub = env.INVITE_LOCK.get(env.INVITE_LOCK.idFromName(h));
-  const r = await stub.fetch('https://lock/', { method: 'POST', body: JSON.stringify({ h }) });
+  const r = await stub.fetch('https://lock/', { method: 'POST', body: JSON.stringify({ op: 'redeem' }) });
   if (r.status !== 200) return json(H, { error: 'used or invalid' }, 403);
   return json(H, { token: await sign(env, { t: 'role', r: 'op', exp: Date.now() + 30 * DAY }) });
 }
@@ -275,8 +260,8 @@ async function syncPull(req, env, H, { code }) {
   return json(H, { data: typeof row?.data === 'string' ? row.data : null, ver: row?.ver || 0 });
 }
 async function syncRow(env, h) {
-  const res = await dbOf(env).query({ syncsaves: { $: { where: { h } } } });
-  return res?.syncsaves?.[0] || null;
+  const r = await doCall(env.SYNC_LOCK.get(env.SYNC_LOCK.idFromName(h)), { op: 'get' });
+  return r.data?.row || null;
 }
 
 // Stripe：署名を検証し、支払い完了したセッションだけを購入記録にする
@@ -297,11 +282,10 @@ async function stripeWebhook(req, env) {
     const key = links[s.payment_link];
     const buyer = String(s.client_reference_id || '');
     if (s.payment_status === 'paid' && key && FIGHTERS[key] && /^[A-Za-z0-9_-]{16,64}$/.test(buyer)) {
-      const db = dbOf(env);
-      const dup = await db.query({ entitlements: { $: { where: { sid: s.id } } } });
-      if (!dup?.entitlements?.length) {
+      const first = await storeCall(env, 'sid:' + s.id, { op: 'once' });
+      if (first.status === 200) {
         const b = await hmacHex(env.PEPPER, 'buyer:' + buyer);
-        await db.transact(db.tx.entitlements[id()].update({ b, key, sid: s.id, at: Date.now() }));
+        await storeCall(env, 'ent:' + b, { op: 'add', item: key });
       }
     }
   }
@@ -310,8 +294,8 @@ async function stripeWebhook(req, env) {
 async function ownedKeys(env, buyer) {
   if (!/^[A-Za-z0-9_-]{16,64}$/.test(String(buyer || ''))) return [];
   const b = await hmacHex(env.PEPPER, 'buyer:' + buyer);
-  const res = await dbOf(env).query({ entitlements: { $: { where: { b } } } });
-  return [...new Set((res?.entitlements || []).map((e) => e.key).filter((k) => FIGHTERS[k]))];
+  const r = await storeCall(env, 'ent:' + b, { op: 'get' });
+  return [...new Set((Array.isArray(r.data?.v) ? r.data.v : []).filter((k) => FIGHTERS[k]))];
 }
 async function entitlements(req, env, H, { buyer }) {
   if (await limited(env, req, 'ent', 30, 600000)) return json(H, { error: 'limit' }, 429);
@@ -451,12 +435,14 @@ async function chiefEvent(req, env, H, { token, body, at }) {
   if (await limited(env, req, 'cevent', 20, 600000)) return json(H, { error: 'limit' }, 429);
   if (typeof body !== 'string' || body.length > 20000 || !(+at > 0 && +at <= Date.now() + 60000)) return json(H, { error: 'bad' }, 400);
   const sig = await sign(env, { t: 'cpub', k: 'event', h: await sha256(body), at: +at, exp: Date.now() + 30 * DAY });
-  const db = dbOf(env);
-  const res = await db.query({ chiefevents: { $: { where: { h: 'current' } } } });
-  const row = res?.chiefevents?.[0];
-  if (row && +row.at >= +at) return json(H, { ok: false, sig });
-  await db.transact(db.tx.chiefevents[row?.id || id()].update({ h: 'current', ev: body, sig, at: +at }));
-  return json(H, { ok: true, sig });
+  const r = await storeCall(env, 'chiefevent', { op: 'newer', v: { body, sig, at: +at } });
+  return json(H, { ok: !!r.data?.ok, sig });
+}
+// 現在の運営長の特別イベント（誰でも取得可。受信側は sig を公開鍵で検証）
+async function chiefCurrent(req, env, H) {
+  if (await limited(env, req, 'ccur', 60, 600000)) return json(H, { error: 'limit' }, 429);
+  const r = await storeCall(env, 'chiefevent', { op: 'get' });
+  return json(H, { v: r.data?.v || null });
 }
 
 // ---------- Durable Objects ----------
@@ -600,40 +586,74 @@ export class GuildBoard {
     });
   }
 }
+// 招待コード1件（コードのハッシュごとに1インスタンス）。状態：未発行 → valid → used
 export class InviteLock {
-  constructor(state, env) {
+  constructor(state) {
     this.state = state;
-    this.env = env;
   }
   async fetch(req) {
-    const { h } = await req.json();
+    const { op } = await req.json();
     // DOは1インスタンスで直列実行 → 同時に2回使われても成功は1回だけ
     return this.state.blockConcurrencyWhile(async () => {
-      if (await this.state.storage.get('used')) return new Response('used', { status: 409 });
-      const db = dbOf(this.env);
-      const res = await db.query({ opinvites: { $: { where: { h } } } });
-      const row = res?.opinvites?.[0];
-      if (!row || row.used) {
-        await this.state.storage.put('used', true);
-        return new Response('invalid', { status: 404 });
+      const st = await this.state.storage.get('st');
+      if (op === 'issue') {
+        if (st) return new Response('exists', { status: 409 });
+        await this.state.storage.put('st', 'valid');
+        await this.state.storage.put('at', Date.now());
+        return new Response('ok');
       }
-      await this.state.storage.put('used', true);
-      await db.transact(db.tx.opinvites[row.id].update({ used: true, usedAt: Date.now() }));
+      if (st !== 'valid') return new Response('used or invalid', { status: 409 });
+      await this.state.storage.put('st', 'used');
+      await this.state.storage.put('usedAt', Date.now());
       return new Response('ok');
     });
   }
 }
-// 同期セーブの直列化：版番号の比較と資産の増え方の検証
-export class SyncLock {
-  constructor(state, env) {
+// 汎用の小さな保存領域（購入記録・決済の重複防止・運営長の特別イベント）
+export class Store {
+  constructor(state) {
     this.state = state;
-    this.env = env;
   }
   async fetch(req) {
-    const { h, data, base, op, amt } = await req.json();
+    const b = await req.json();
     return this.state.blockConcurrencyWhile(async () => {
-      const db = dbOf(this.env);
-      const row = await syncRow(this.env, h);
+      const s = this.state.storage;
+      const cur = await s.get('v');
+      const out = (x, status = 200) => new Response(JSON.stringify(x), { status });
+      switch (b.op) {
+        case 'get':
+          return out({ v: cur ?? null });
+        case 'once': // 初回だけ成功（Stripe の同じ決済を二重に処理しない）
+          if (cur) return out({ ok: false }, 409);
+          await s.put('v', true);
+          return out({ ok: true });
+        case 'add': {
+          const l = Array.isArray(cur) ? cur : [];
+          if (!l.includes(b.item)) l.push(b.item);
+          await s.put('v', l);
+          return out({ v: l });
+        }
+        case 'newer': // 日時が新しい時だけ置き換える
+          if (cur && +cur.at >= +b.v?.at) return out({ ok: false });
+          await s.put('v', b.v);
+          return out({ ok: true });
+        default:
+          return out({ error: 'bad' }, 400);
+      }
+    });
+  }
+}
+// 同期セーブ（同期コードのハッシュごとに1インスタンス）：保存・版番号の比較・資産の増え方の検証
+export class SyncLock {
+  constructor(state) {
+    this.state = state;
+  }
+  async fetch(req) {
+    const { data, base, op, amt } = await req.json();
+    return this.state.blockConcurrencyWhile(async () => {
+      const store = this.state.storage;
+      const row = (await store.get('row')) || null;
+      if (op === 'get') return new Response(JSON.stringify({ row }), { status: 200 });
       if (op === 'spend') {
         // サーバー側の通貨消費（寄付など）：残高確認と減算を同じ直列処理内で行う
         let s;
@@ -644,7 +664,7 @@ export class SyncLock {
         if (a > 0 && cur < a) return new Response(JSON.stringify({ error: 'shards' }), { status: 402 });
         s.shards = cur - a;
         const nv = (row.ver || 0) + 1;
-        await db.transact(db.tx.syncsaves[row.id].update({ data: JSON.stringify(s), ver: nv, wealth: wealthOf(s) }));
+        await store.put('row', { ...row, data: JSON.stringify(s), ver: nv, wealth: wealthOf(s) });
         return new Response(JSON.stringify({ ok: true, ver: nv, shards: s.shards }), { status: 200 });
       }
       const ver = row?.ver || 0;
@@ -657,7 +677,7 @@ export class SyncLock {
       const allowed = row ? (row.wealth ?? wealth) + EARN_PER_HOUR * ((now - (row.at || now)) / 3600000) + EARN_SLACK : FIRST_WEALTH_CAP;
       if (wealth > allowed) return new Response(JSON.stringify({ error: 'wealth' }), { status: 422 });
       const nv = ver + 1;
-      await db.transact(db.tx.syncsaves[row?.id || id()].update({ h, data: JSON.stringify(data), at: now, ver: nv, wealth }));
+      await store.put('row', { data: JSON.stringify(data), at: now, ver: nv, wealth });
       return new Response(JSON.stringify({ ok: true, ver: nv }), { status: 200 });
     });
   }

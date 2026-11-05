@@ -7,12 +7,12 @@ compatibility_flags = ["nodejs_compat"]
 # ゲームを公開しているURL（カンマ区切り）
 # GitHub Pages（https://uni-tadayasu.github.io/archeia_of_the_twin_moons.github.io/）のオリジン。パスは含めない
 ALLOWED_ORIGINS = "https://uni-tadayasu.github.io"
-INSTANT_APP_ID = "ここにInstantDBのApp ID"
 # Stripeの支払いリンクID → 解放するキャラ
 STRIPE_LINKS = '{"plink_XXXXXXXX":"crimson"}'
 
-# 以下は `wrangler secret put 名前` で登録（ファイルには書かない）
-# INSTANT_ADMIN_TOKEN / SIGN_PRIVATE_JWK / PEPPER / OP_KEY_SHA256 / CHIEF_KEY_SHA256 / STRIPE_WEBHOOK_SECRET
+# 以下は GitHub Secrets（または `wrangler secret put 名前`）で登録（ファイルには書かない）
+# SIGN_PRIVATE_JWK / PEPPER / OP_KEY_SHA256 / CHIEF_KEY_SHA256 / STRIPE_WEBHOOK_SECRET
+# ※保存は Durable Object で行うため、InstantDB の管理トークンは不要
 
 [[durable_objects.bindings]]
 name = "INVITE_LOCK"
@@ -38,6 +38,10 @@ class_name = "GuildLock"
 name = "GUILD_BOARD"
 class_name = "GuildBoard"
 
+[[durable_objects.bindings]]
+name = "STORE"
+class_name = "Store"
+
 [[migrations]]
 tag = "v1"
 new_sqlite_classes = ["InviteLock", "Limiter"]
@@ -48,4 +52,4 @@ new_sqlite_classes = ["SyncLock"]
 
 [[migrations]]
 tag = "v3"
-new_sqlite_classes = ["PidBind", "GuildLock", "GuildBoard"]
+new_sqlite_classes = ["PidBind", "GuildLock", "GuildBoard", "Store"]

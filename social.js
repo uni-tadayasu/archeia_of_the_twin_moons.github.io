@@ -300,7 +300,10 @@ async function handleChiefEvent(n) {
 }
 async function pullChiefEvent() {
   try {
-    await handleChiefEvent(await loadChiefEvent());
+    if (serverMode()) {
+      const r = await api('/chief/current', {});
+      if (r.ok && r.v && typeof r.v.body === 'string') await handleChiefEvent({ body: r.v.body, sig: String(r.v.sig || ''), at: +r.v.at || 0 });
+    } else await handleChiefEvent(await loadChiefEvent());
   } catch (e) {
     console.warn(e);
   }
