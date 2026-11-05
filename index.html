@@ -158,6 +158,23 @@
       body.field-mode #field-map { display:block !important; }
       #field-prompt { position:absolute; left:50%; bottom:22%; transform:translateX(-50%); background:rgba(10,8,20,.85); border:1px solid var(--brass); padding:6px 16px; font-size:clamp(12px,2vmin,16px); letter-spacing:.08em; pointer-events:none; animation:bob 1s infinite; white-space:nowrap; }
       #field-prompt[hidden] { display:none; }
+      #btn-world { position:absolute; right:max(8px,env(safe-area-inset-right)); top:calc(max(8px,env(safe-area-inset-top)) + clamp(96px,17vmin,150px)*2.25); pointer-events:auto; background:rgba(10,12,28,.85); color:#f4e8c8; border:1px solid var(--brass); border-radius:6px; padding:6px 10px; font-size:13px; cursor:pointer; z-index:3; }
+      #world-panel { position:absolute; left:50%; top:50%; transform:translate(-50%,-50%); width:min(420px,92vw); max-height:78vh; overflow:auto; background:rgba(12,10,26,.95); border:2px solid var(--brass); border-radius:8px; padding:12px 14px; pointer-events:auto; z-index:20; color:#f4e8c8; font-size:14px; }
+      #world-panel[hidden], #world-req[hidden] { display:none; }
+      #world-panel h4 { margin:12px 0 6px; color:var(--brass); font-size:13px; letter-spacing:.1em; }
+      .wp-head { display:flex; align-items:center; gap:10px; }
+      .wp-head small { flex:1; opacity:.75; }
+      .wp-head button, .wp-row button, #world-req button { background:#2a2040; color:#f4e8c8; border:1px solid var(--brass); border-radius:4px; padding:4px 8px; cursor:pointer; font-size:12px; }
+      .wp-namebox { display:block; margin-top:8px; font-size:12px; }
+      .wp-namebox input { margin-left:6px; background:#1a1430; color:#fff; border:1px solid #6a5a8a; padding:3px 6px; width:10em; }
+      .wp-row { display:flex; flex-wrap:wrap; align-items:center; gap:6px; padding:6px 0; border-bottom:1px solid rgba(201,166,90,.2); }
+      .wp-name { font-weight:bold; }
+      .wp-name.on { color:#70ff9a; }
+      .wp-name.off { color:#8a8a9a; }
+      .wp-row small { flex:1; opacity:.75; font-size:11px; }
+      .wp-empty { opacity:.6; font-size:12px; margin:4px 0; }
+      #world-req { position:absolute; left:50%; top:16%; transform:translateX(-50%); background:rgba(12,10,26,.95); border:2px solid #ff9a50; border-radius:8px; padding:10px 16px; pointer-events:auto; z-index:21; color:#fff; text-align:center; }
+      #world-req div { display:flex; gap:10px; justify-content:center; }
       #skillname { --sc:#ffd060; position:absolute; top:clamp(54px,9vh,84px); left:50%; transform:translateX(-50%); min-width:min(80vw,280px); max-width:92vw; padding:6px 22px 7px; text-align:center; pointer-events:none; opacity:0; border-radius:6px; background:linear-gradient(90deg,transparent,rgba(10,8,20,.82) 15%,rgba(10,8,20,.82) 85%,transparent); border-top:2px solid var(--sc); border-bottom:1px solid color-mix(in srgb,var(--sc) 50%,transparent); }
       #skillname .sn-who { display:block; font-size:clamp(10px,1.6vmin,13px); letter-spacing:.3em; color:#d8cfb8; }
       #skillname .sn-name { display:block; font-size:clamp(16px,3.6vmin,30px); letter-spacing:.06em; color:#fff; text-shadow:0 0 14px var(--sc), 0 2px 0 #000; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
@@ -423,6 +440,19 @@
           <div id="field-info"><b id="field-region"></b><span id="field-obj"></span><small>WASD／スティックで移動・Shiftで駆け足・赤い輪の魔物に触れると戦闘</small></div>
           <canvas id="field-map" width="104" height="228" aria-label="地図"></canvas>
           <div id="field-prompt" hidden></div>
+          <button id="btn-world" type="button" aria-label="世界の旅人とフレンド">👥 旅人</button>
+          <div id="world-panel" hidden>
+            <div class="wp-head"><b>世界の旅人</b><small id="world-status"></small><button id="world-close" type="button" aria-label="閉じる">✕</button></div>
+            <label class="wp-namebox">あなたの名前 <input id="world-name" maxlength="12" autocomplete="off"></label>
+            <h4>近くの旅人（同じ章）</h4>
+            <div id="world-near"></div>
+            <h4>フレンド</h4>
+            <div id="world-friends"></div>
+          </div>
+          <div id="world-req" hidden>
+            <p id="world-req-text"></p>
+            <div><button id="world-req-yes" type="button">受ける</button><button id="world-req-no" type="button">断る</button></div>
+          </div>
         </div>
       </div>
       <div id="pops"></div>

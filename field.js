@@ -115,6 +115,7 @@ export class Field {
     this.boxes = [];
     this.npcs = [];
     this.syms = [];
+    this.remotes = new Map(); // 世界中の旅人（同じ章を歩いている他のプレイヤー）
     this.chests = [];
     this.frozen = false;
     this.inv = 0;
@@ -1312,6 +1313,11 @@ export class Field {
       ctx.arc(a, b, 2, 0, Math.PI * 2);
       ctx.fill();
     }
+    for (const a of this.remotes.values()) {
+      const [rx, rz] = this.toMap(a.pos.x, a.pos.z);
+      ctx.fillStyle = a.friend ? '#70ff9a' : '#7fd3ff';
+      ctx.fillRect(rx - 2, rz - 2, 4, 4);
+    }
     let [gx, gz] = this.toMap(this.goal.x, this.goal.z);
     // 画面外の目的地は地図の端に表示
     gx = Math.max(ox + 6, Math.min(ox + W - 6, gx));
@@ -1566,12 +1572,108 @@ export class Field {
       a.root.position.copy(a.pos);
       a.root.rotation.y = a.facing;
     }
+    this.updateRemotes(dt);
     p.root.visible = this.inv <= 0 || Math.floor(this.t * 12) % 2 === 0;
     // カメラ：後ろ上から追従
     if (camera) {
       const want = new THREE.Vector3(p.pos.x, 12, p.pos.z + 13);
       camera.position.lerp(want, 1 - Math.exp(-6 * dt));
       camera.lookAt(p.pos.x, 1, p.pos.z - 2);
+    }
+  }
+
+  // ---- 他のプレイヤー（リアルタイム反映） ----
+  nameTag(name, friend) {
+    const c = document.createElement('canvas');
+    c.width = 256;
+    c.height = 64;
+    const g = c.getContext('2d');
+    g.fillStyle = 'rgba(10,10,28,0.7)';
+    g.fillRect(8, 10, 240, 44);
+    g.strokeStyle = friend ? '#70ff9a' : '#7fd3ff';
+    g.lineWidth = 3;
+    g.strokeRect(8, 10, 240, 44);
+    g.font = 'bold 28px sans-serif';
+    g.textAlign = 'center';
+    g.textBaseline = 'middle';
+    g.fillStyle = friend ? '#a8ffc0' : '#ffffff';
+    g.fillText((friend ? '★ ' : '') + name, 128, 33);
+    const tex = new THREE.CanvasTexture(c);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, depthTest: false, transparent: true }));
+    sp.scale.set(2.6, 0.65, 1);
+    sp.renderOrder = 10;
+    return sp;
+  }
+  setRemotes(list) {
+    const seen = new Set();
+    for (const p of list.slice(0, 30)) {
+      seen.add(p.id);
+      let a = this.remotes.get(p.id);
+      if (a && a.fk !== p.fk) {
+        this.removeRemote(p.id);
+        a = null;
+      }
+      if (!a) {
+        const d = FIGHTERS[p.fk] || FIGHTERS[this.o.mainKey];
+        const h = d?.height || 1.75;
+        a = makeActor(this.o.assets[p.fk] || null, h, d?.color, d?.tint, this.own);
+        a.fk = p.fk;
+        a.h = h;
+        a.pos = new THREE.Vector3(p.x, 0, p.z);
+        a.facing = p.ry;
+        this.group.add(a.root);
+        this.remotes.set(p.id, a);
+      }
+      if (a.label !== p.name + p.friend) {
+        if (a.tag) {
+          a.root.remove(a.tag);
+          a.tag.material.map.dispose();
+          a.tag.material.dispose();
+        }
+        a.tag = this.nameTag(p.name, p.friend);
+        a.tag.position.y = a.h + 0.55;
+        a.root.add(a.tag);
+        a.label = p.name + p.friend;
+      }
+      Object.assign(a, { id: p.id, name: p.name, friend: p.friend, tx: p.x, tz: p.z, tr: p.ry, mv: p.mv });
+    }
+    for (const id of [...this.remotes.keys()]) if (!seen.has(id)) this.removeRemote(id);
+  }
+  removeRemote(id) {
+    const a = this.remotes.get(id);
+    if (!a) return;
+    a.mixer?.stopAllAction();
+    this.group.remove(a.root);
+    a.tag?.material.map.dispose();
+    a.tag?.material.dispose();
+    this.remotes.delete(id);
+  }
+  // 近くにいる旅人（近い順）
+  nearbyRemotes(range = 30) {
+    const p = this.player.pos;
+    return [...this.remotes.values()]
+      .map((a) => ({ id: a.id, name: a.name, fk: a.fk, friend: a.friend, d: Math.hypot(a.pos.x - p.x, a.pos.z - p.z) }))
+      .filter((a) => a.d < range)
+      .sort((u, v) => u.d - v.d);
+  }
+  updateRemotes(dt) {
+    const p = this.player.pos;
+    for (const a of this.remotes.values()) {
+      const k = 1 - Math.exp(-10 * dt);
+      if (Math.hypot(a.tx - a.pos.x, a.tz - a.pos.z) > 20) a.pos.set(a.tx, 0, a.tz);
+      a.pos.x += (a.tx - a.pos.x) * k;
+      a.pos.z += (a.tz - a.pos.z) * k;
+      let df = a.tr - a.facing;
+      df = Math.atan2(Math.sin(df), Math.cos(df));
+      a.facing += df * k;
+      a.far = Math.hypot(a.pos.x - p.x, a.pos.z - p.z) > 90;
+      a.root.visible = !a.far;
+      if (a.far) continue;
+      a.play(a.mv ? 'run' : 'idle');
+      a.mixer?.update(dt);
+      a.root.position.copy(a.pos);
+      a.root.rotation.y = a.facing;
     }
   }
 
@@ -1591,6 +1693,7 @@ export class Field {
   }
 
   dispose() {
+    for (const id of [...this.remotes.keys()]) this.removeRemote(id);
     this.scene.remove(this.group);
     for (const a of [this.player, ...this.followers, ...this.npcs, ...this.syms, this.boss]) a?.mixer?.stopAllAction();
     for (const x of this.own) x.dispose?.();

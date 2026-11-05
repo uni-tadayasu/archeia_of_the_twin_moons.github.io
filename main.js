@@ -184,9 +184,17 @@ function loadSave() {
   s.chars = Array.isArray(raw.chars) ? raw.chars.filter((k) => FIGHTERS[k]?.shop) : [];
   s.party = Array.isArray(raw.party) ? raw.party.filter((k) => FIGHTERS[k]).slice(0, 4) : [];
   s.main = FIGHTERS[raw.main] ? raw.main : null;
+  s.pid = raw.pid;
+  s.friends = raw.friends;
+  s.uname = raw.uname;
   return s;
 }
 const save = loadSave();
+// 世界でのあなたの印（端末ごとに固定）とフレンド
+if (typeof save.pid !== 'string' || !/^[a-z0-9]{8,24}$/.test(save.pid)) save.pid = (Math.random().toString(36).slice(2) + Date.now().toString(36)).slice(0, 16);
+if (!Array.isArray(save.friends)) save.friends = [];
+save.friends = save.friends.filter((f) => f && typeof f.pid === 'string').slice(0, 100).map((f) => ({ pid: String(f.pid).slice(0, 24), name: String(f.name || '旅人').replace(/[<>&"']/g, '').slice(0, 12) }));
+if (typeof save.uname !== 'string') save.uname = '';
 const lvOf = (k, id) => save.upg[k]?.[id] || 0;
 // 100種の強化を戦闘用の5能力（段換算）にまとめる
 function upgFor(k) {
@@ -205,6 +213,7 @@ function persist() {
     console.warn(err);
   }
 }
+persist(); // 世界の印（pid）を確定させる
 
 // ---------- Audio ----------
 const audio = {
@@ -922,6 +931,10 @@ function goTitle() {
     state.net = null;
   }
   state.online = null;
+  state.duel = null;
+  state.duelWait = null;
+  $('#world-panel').hidden = true;
+  $('#world-req').hidden = true;
   state.paused = false;
   state.dialogue = null;
   $('#pause').hidden = true;
@@ -1101,6 +1114,16 @@ function onBattleEnd(won) {
     return;
   }
   if (state.mode === 'story') {
+    // 旅人との決闘
+    if (state.duel) {
+      const d = state.duel;
+      state.duel = null;
+      const r = grant(won ? 40 : 10);
+      endBattle();
+      returnToField(null, true);
+      ui.banner({ name: won ? `— ${d.name}に勝った！ —` : `— ${d.name}に敗れた —` }, `灯晶 +${r}`);
+      return;
+    }
     // フィールドの魔物シンボルとの戦闘
     if (state.encounter) {
       const sym = state.encounter;
@@ -1348,6 +1371,8 @@ async function enterField() {
   state.fieldHud = '';
   show(null);
   playTrack('field:' + state.chapter);
+  // 世界中の旅人とつながる
+  ensureWorld().then(() => refreshFieldRemotes());
 }
 function returnToField(sym, won) {
   const f = state.field;
@@ -1640,7 +1665,7 @@ function allowInvade() {
   return true;
 }
 function isLive() {
-  return !!state.online || state.invaded || state.mode === 'invade';
+  return !!state.online || state.invaded || state.mode === 'invade' || !!state.duel;
 }
 function handleCast(e) {
   const f = state.battle?.fighters.find((x) => x.netId === e.id && x.remoteAuth);
@@ -1657,6 +1682,8 @@ function ensureWorld() {
       onPeers: (p) => {
         state.worldPeers = p;
         syncWorldRemotes(p);
+        refreshFieldRemotes();
+        if (!$('#world-panel').hidden) renderWorldPanel();
         if (isScreen('scr-invade')) {
           renderInvadeList();
         }
@@ -1664,7 +1691,8 @@ function ensureWorld() {
       onCast: handleCast,
       onHit: (e) => state.battle?.receiveNetHit(e),
       onBoss: () => {},
-      onInvade: (e) => onInvaded(e)
+      onInvade: (e) => onInvaded(e),
+      onReq: (e) => onWorldReq(e)
     }).then((n) => {
       state.world = n;
       return n;
@@ -1796,9 +1824,12 @@ function worldTick(dt) {
   worldTimer = 0;
   const b = state.battle;
   const me = b?.fighters.find((f) => f.isPlayer);
-  const base = { name: ($('#lobby-name').value || '旅人').replace(/[<>&"']/g, '').slice(0, 12), mode: 'world', ready: false };
-  if (state.mode === 'story' && me && allowInvade()) {
-    w.publish({ ...base, role: 'story', fk: me.key, ch: state.chapter, ib: !b.ended && !state.invaded, x: me.pos.x, z: me.pos.z, ry: me.facing, hp: me.hp, mv: !!me.moving });
+  const base = { name: myName(), pid: save.pid, mode: 'world', ready: false };
+  if (state.mode === 'story' && state.field && !b) {
+    const fp = state.field.player;
+    w.publish({ ...base, role: 'field', fk: state.myKey, ch: state.chapter, ib: false, x: 0, z: 0, fx: fp.pos.x, fz: fp.pos.z, ry: fp.facing, hp: 1, mv: fp.cur === 'run' });
+  } else if (state.mode === 'story' && me && allowInvade()) {
+    w.publish({ ...base, role: 'story', fk: me.key, ch: state.chapter, ib: !b.ended && !state.invaded && !state.duel, x: me.pos.x, z: me.pos.z, ry: me.facing, hp: me.hp, mv: !!me.moving });
   } else if (state.mode === 'invade' && me) {
     w.publish({ ...base, name: '運営', role: 'op', fk: me.key, ch: 0, ib: true, x: me.pos.x, z: me.pos.z, ry: me.facing, hp: me.hp, mv: !!me.moving });
   } else {
@@ -1806,12 +1837,204 @@ function worldTick(dt) {
   }
 }
 
+// ---------- World（旅人どうしの交流：姿の反映・決闘・フレンド） ----------
+function myName() {
+  return (save.uname || $('#lobby-name').value || '旅人').replace(/[<>&"']/g, '').trim().slice(0, 12) || '旅人';
+}
+const isFriend = (pid) => !!pid && save.friends.some((f) => f.pid === pid);
+function refreshFieldRemotes() {
+  const f = state.field;
+  const w = state.world;
+  if (!f || !w) return;
+  const list = Object.values(state.worldPeers || {})
+    .filter((p) => p.role === 'field' && p.ch === state.chapter && p.id !== w.myId && p.pid !== save.pid)
+    .map((p) => ({ id: p.id, name: p.name, fk: FIGHTERS[p.fk] ? p.fk : 'rowen', x: p.fx, z: p.fz, ry: p.ry, mv: p.mv, friend: isFriend(p.pid) }));
+  f.setRemotes(list);
+}
+function peerStatus(p) {
+  if (p.role === 'field') return `${STORY[p.ch]?.title || '旅'}を探索中`;
+  if (p.role === 'story') return `${STORY[p.ch]?.title || '旅'}で戦闘中`;
+  if (p.role === 'op') return '運営の務め中';
+  return 'オンライン';
+}
+function renderWorldPanel() {
+  const near = $('#world-near');
+  const fr = $('#world-friends');
+  near.replaceChildren();
+  fr.replaceChildren();
+  const w = state.world;
+  $('#world-status').textContent = w ? `世界の旅人 ${Math.max(0, Object.keys(state.worldPeers || {}).length - 1)} 人` : '世界とつながっています…';
+  const peers = state.worldPeers || {};
+  const mk = (tag, text, cls) => {
+    const e = document.createElement(tag);
+    e.textContent = text;
+    if (cls) e.className = cls;
+    return e;
+  };
+  const list = state.field ? state.field.nearbyRemotes(40) : [];
+  if (!list.length) near.append(mk('p', '近くに旅人はいません。同じ章を旅する人が現れると、ここに映ります。', 'wp-empty'));
+  for (const r of list) {
+    const p = peers[r.id];
+    if (!p) continue;
+    const row = mk('div', '', 'wp-row');
+    row.append(mk('span', `${r.friend ? '★' : ''}${r.name}`, 'wp-name'), mk('small', `${FIGHTERS[r.fk]?.name || ''}・${Math.round(r.d)}m`));
+    const duel = mk('button', '決闘を申し込む');
+    duel.addEventListener('click', () => sendReq(p, 'duel'));
+    row.append(duel);
+    if (!isFriend(p.pid)) {
+      const fb = mk('button', 'フレンド申請');
+      fb.addEventListener('click', () => sendReq(p, 'friend'));
+      row.append(fb);
+    }
+    near.append(row);
+  }
+  if (!save.friends.length) fr.append(mk('p', 'まだフレンドはいません。', 'wp-empty'));
+  const online = Object.values(peers);
+  for (const f of save.friends) {
+    const p = online.find((x) => x.pid === f.pid);
+    const row = mk('div', '', 'wp-row');
+    row.append(mk('span', (p ? '● ' : '○ ') + (p?.name || f.name), 'wp-name ' + (p ? 'on' : 'off')), mk('small', p ? peerStatus(p) : 'オフライン'));
+    const del = mk('button', '解除');
+    del.addEventListener('click', () => {
+      save.friends = save.friends.filter((x) => x.pid !== f.pid);
+      persist();
+      refreshFieldRemotes();
+      renderWorldPanel();
+    });
+    row.append(del);
+    fr.append(row);
+  }
+}
+function sendReq(p, kind) {
+  const w = state.world;
+  if (!w || !p) return;
+  sfx('ui');
+  if (kind === 'duel') {
+    if (state.battle || !state.field || state.field.frozen) return;
+    state.duelWait = { id: p.id, at: performance.now() };
+  }
+  w.req({ kind, to: p.id, pid: save.pid, name: myName(), fk: state.myKey || '' });
+  ui.banner({ name: '— 申請を送った —' }, `${p.name}の返事を待っています`);
+}
+function addFriend(pid, name) {
+  if (!pid || pid === save.pid || isFriend(pid)) return;
+  save.friends.push({ pid, name });
+  persist();
+  refreshFieldRemotes();
+}
+function canDuelNow() {
+  return state.mode === 'story' && state.field && !state.battle && !state.field.frozen && !state.paused && !document.querySelector('.screen.on');
+}
+function onWorldReq(e) {
+  const w = state.world;
+  if (!w || e.to !== w.myId) return;
+  const peer = state.worldPeers?.[e.from];
+  if (e.kind === 'duel' || e.kind === 'friend') {
+    if (e.kind === 'duel' && !canDuelNow()) {
+      w.req({ kind: 'dueldeny', to: e.from, pid: save.pid, name: myName() });
+      return;
+    }
+    if (e.kind === 'friend' && isFriend(e.pid)) {
+      w.req({ kind: 'friendok', to: e.from, pid: save.pid, name: myName() });
+      return;
+    }
+    state.incoming = { ...e, at: performance.now() };
+    $('#world-req-text').textContent = e.kind === 'duel'
+      ? `${e.name}（${FIGHTERS[e.fk]?.name || '旅人'}）から決闘を申し込まれた！`
+      : `${e.name}からフレンド申請が届いた。`;
+    $('#world-req').hidden = false;
+    sfx('ui');
+    return;
+  }
+  if (e.kind === 'friendok') {
+    addFriend(e.pid, e.name);
+    ui.banner({ name: '— フレンドになった —' }, e.name);
+  } else if (e.kind === 'frienddeny') {
+    ui.banner({ name: '— フレンド申請 —' }, `${e.name}は今回は見送った`);
+  } else if (e.kind === 'dueldeny') {
+    state.duelWait = null;
+    ui.banner({ name: '— 決闘 —' }, `${e.name}は申し込みを断った`);
+  } else if (e.kind === 'duelok') {
+    const wait = state.duelWait;
+    state.duelWait = null;
+    if (wait && wait.id === e.from && performance.now() - wait.at < 30000 && canDuelNow()) {
+      startDuel({ id: e.from, name: e.name, fk: e.fk || peer?.fk }, true);
+    }
+  }
+  if (!$('#world-panel').hidden) renderWorldPanel();
+}
+function answerReq(yes) {
+  const e = state.incoming;
+  state.incoming = null;
+  $('#world-req').hidden = true;
+  const w = state.world;
+  if (!e || !w) return;
+  sfx('ui');
+  const stale = performance.now() - e.at > 30000;
+  if (e.kind === 'friend') {
+    w.req({ kind: yes ? 'friendok' : 'frienddeny', to: e.from, pid: save.pid, name: myName() });
+    if (yes) {
+      addFriend(e.pid, e.name);
+      ui.banner({ name: '— フレンドになった —' }, e.name);
+    }
+  } else if (e.kind === 'duel') {
+    const ok = yes && !stale && canDuelNow() && state.worldPeers?.[e.from];
+    w.req({ kind: ok ? 'duelok' : 'dueldeny', to: e.from, pid: save.pid, name: myName(), fk: state.myKey || '' });
+    if (ok) startDuel({ id: e.from, name: e.name, fk: e.fk }, false);
+  }
+}
+// 決闘：世界ルームの回線で 1対1（申し込んだ側が左手前）
+function startDuel(peer, challenger) {
+  const w = state.world;
+  if (!w || !canDuelNow()) return;
+  $('#world-panel').hidden = true;
+  const ch = STORY[state.chapter];
+  setStage(stageById(ch.stage));
+  if (arena) arena.visible = true;
+  state.field.group.visible = false;
+  state.field.frozen = true;
+  document.body.classList.remove('field-mode');
+  resetFieldLight();
+  state.duel = { id: peer.id, name: peer.name };
+  state.encounter = null;
+  const b = makeBattle(w);
+  const myPos = challenger ? [-4, 3] : [4, -3];
+  const peerPos = challenger ? [4, -3] : [-4, 3];
+  b.add(state.myKey, { team: 0, player: true, netId: w.myId, pos: myPos, facing: challenger ? 0 : Math.PI, name: myName() + '（あなた）', upg: upgFor(state.myKey) });
+  b.add(FIGHTERS[peer.fk] ? peer.fk : 'rowen', { team: 1, remote: true, netId: peer.id, pos: peerPos, facing: challenger ? Math.PI : 0, name: peer.name });
+  beginBattle(false);
+  ui.flash();
+  sfx('burst');
+  ui.banner({ name: '— 決闘 —' }, `${myName()} vs ${peer.name}`);
+}
+$('#btn-world').addEventListener('click', async () => {
+  sfx('ui');
+  const pnl = $('#world-panel');
+  pnl.hidden = !pnl.hidden;
+  if (!pnl.hidden) {
+    $('#world-name').value = myName();
+    renderWorldPanel();
+    await ensureWorld();
+    renderWorldPanel();
+  }
+});
+$('#world-close').addEventListener('click', () => {
+  sfx('ui');
+  $('#world-panel').hidden = true;
+});
+$('#world-name').addEventListener('change', () => {
+  save.uname = $('#world-name').value.replace(/[<>&"']/g, '').trim().slice(0, 12);
+  persist();
+});
+$('#world-req-yes').addEventListener('click', () => answerReq(true));
+$('#world-req-no').addEventListener('click', () => answerReq(false));
+
 // ---------- Pause ----------
 function togglePause() {
   if ((!state.battle && !state.field) || document.querySelector('.screen.on')) {
     return;
   }
-  if (state.invaded || state.mode === 'invade') {
+  if (state.invaded || state.mode === 'invade' || state.duel) {
     ui.banner({ name: '— いまは止まれない —' }, '乱入中');
     return;
   }

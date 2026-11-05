@@ -21,7 +21,8 @@ export function sanitizePresence(p) {
   return {
     id: str(p.id, 40), name: str(p.name, 12) || '旅人', fk: str(p.fk, 12), mode: str(p.mode, 12),
     x: num(p.x, 50), z: num(p.z, 50), ry: num(p.ry, 10), hp: num(p.hp, 99999), mv: !!p.mv, ready: !!p.ready,
-    role: str(p.role, 8), ch: Math.floor(num(p.ch, 99)), ib: !!p.ib
+    role: str(p.role, 8), ch: Math.floor(num(p.ch, 99)), ib: !!p.ib,
+    pid: str(p.pid, 24), fx: num(p.fx, 700), fz: num(p.fz, 700)
   };
 }
 
@@ -94,8 +95,16 @@ export async function connect(mode, roomCode, handlers) {
       handlers.onInvade?.({ to: str(e.to, 40), from: str(e.from, 40), name: str(e.name, 12) || '運営' });
     }
   });
+  // 旅人どうしの申請（決闘・フレンド）
+  const REQ = ['duel', 'duelok', 'dueldeny', 'friend', 'friendok', 'frienddeny'];
+  room.subscribeTopic('req', (e) => {
+    if (e && typeof e === 'object' && REQ.includes(e.kind)) {
+      handlers.onReq?.({ kind: e.kind, to: str(e.to, 40), from: str(e.from, 40), pid: str(e.pid, 24), name: str(e.name, 12) || '旅人', fk: str(e.fk, 12) });
+    }
+  });
   return {
     myId,
+    req: (e) => room.publishTopic('req', { ...e, from: myId }),
     invade: (e) => room.publishTopic('invade', e),
     publish: (s) => room.publishPresence({ ...s, id: myId }),
     cast: (e) => room.publishTopic('cast', e),
