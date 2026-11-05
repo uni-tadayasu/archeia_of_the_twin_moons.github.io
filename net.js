@@ -75,7 +75,7 @@ export async function connectSocial(handlers) {
     const peers = {};
     for (const p of Object.values(data.peers || {})) {
       if (!p || typeof p !== 'object') continue;
-      const s = { id: str(p.id, 40), pid: str(p.pid, 24), name: str(p.name, 12) || '旅人', gid: /^[A-Za-z0-9]{8}$/.test(p.gid) ? p.gid : '', gname: txt(p.gname, 16) };
+      const s = { id: str(p.id, 40), pid: str(p.pid, 24), name: str(p.name, 12) || '旅人', gid: /^[A-Za-z0-9]{8}$/.test(p.gid) ? p.gid : '', gname: txt(p.gname, 16), grole: ['master', 'sub', 'officer', 'member'].includes(p.grole) ? p.grole : 'member', gm: str(p.gm, 24) };
       if (s.id) peers[s.id] = s;
     }
     handlers.onPeers?.(peers);
@@ -88,14 +88,28 @@ export async function connectSocial(handlers) {
   });
   room.subscribeTopic('news', (e) => {
     if (!e || typeof e !== 'object') return;
+    if (e.kind === 'chief') {
+      // 運営長のお知らせ一覧（最大10件）
+      const list = Array.isArray(e.list) ? e.list.slice(0, 10).map((x) => txt(x, 80).trim()).filter(Boolean) : [];
+      handlers.onChiefNews?.({ list, tk: typeof e.tk === 'string' && e.tk.length < 1500 ? e.tk : '', at: num(e.at, 1e13), from: str(e.from, 40) });
+      return;
+    }
     const t = txt(e.t, 80).trim();
     if (t) handlers.onNews?.({ t, from: str(e.from, 40) });
+  });
+  // ギルドの役職変更（ギルドマスターのみ有効。受信側で検証）
+  room.subscribeTopic('grole', (e) => {
+    if (!e || typeof e !== 'object' || !/^[A-Za-z0-9]{8}$/.test(e.gid)) return;
+    const role = ['master', 'sub', 'officer', 'member', 'kick'].includes(e.role) ? e.role : null;
+    if (role) handlers.onGuildRole?.({ gid: e.gid, pid: str(e.pid, 24), role, by: str(e.by, 24), name: txt(e.name, 16) });
   });
   return {
     myId,
     publish: (s) => room.publishPresence({ ...s, id: myId }),
     chat: (e) => room.publishTopic('chat', { ...e, from: myId }),
     news: (t) => room.publishTopic('news', { t, from: myId }),
+    chiefNews: (list, tk) => room.publishTopic('news', { kind: 'chief', list, tk, at: Date.now(), from: myId }),
+    guildRole: (e) => room.publishTopic('grole', e),
     leave: () => {
       try {
         room.leaveRoom?.();

@@ -200,7 +200,7 @@ function loadSave() {
   s.buyId = raw.buyId;
   // 週替わりイベントの進行：{ week, lv=クリア済み最高段階(0-8) }
   s.evProg = raw.evProg && typeof raw.evProg === 'object' ? { week: clampInt(raw.evProg.week, 0, 1e7), lv: clampInt(raw.evProg.lv, 0, 8) } : { week: 0, lv: 0 };
-  s.guild = raw.guild && /^[A-Za-z0-9]{8}$/.test(raw.guild.id) ? { id: raw.guild.id, name: String(raw.guild.name || 'ギルド').replace(/[<>\u0000-\u001f]/g, '').slice(0, 16) } : null;
+  s.guild = raw.guild && /^[A-Za-z0-9]{8}$/.test(raw.guild.id) ? { id: raw.guild.id, name: String(raw.guild.name || 'ギルド').replace(/[<>\u0000-\u001f]/g, '').slice(0, 16), role: ['master', 'sub', 'officer', 'member'].includes(raw.guild.role) ? raw.guild.role : 'member', master: /^[a-z0-9]{1,24}$/i.test(raw.guild.master || '') ? raw.guild.master : '' } : null;
   return s;
 }
 const save = loadSave();
@@ -1366,7 +1366,7 @@ function beginBattle(boss) {
   const bgmIdx = (state.mode === 'story' ? state.chapter : currentStage?.bgm ?? 0) % BGM.length;
   // 敵側（運営の乱入時は両方）にヴェスペラ／運営長がいる時だけ
   const ks = state.battle.fighters.filter((f) => f.team === 1 || state.mode === 'invade').map((f) => f.key);
-  const apex = ks.some((k) => k === 'sovereign' || k === 'sovereign2') ? 2 : ks.includes('chief') ? 1 : 0;
+  const apex = ks.some((k) => k === 'sovereign' || k === 'sovereign2') ? 2 : ks.includes('chief') || ks.includes('bloodfiend') ? 1 : 0;
   if (apex) {
     playTrack('apex:' + apex);
     ui.banner({ name: `— ♪ ${APEX_BGM[apex].name} —` }, '頂上決戦');
@@ -1467,6 +1467,7 @@ function onBattleEnd(won) {
       endBattle();
       returnToField(null, true);
       ui.banner({ name: won ? `— ${d.name}に勝った！ —` : `— ${d.name}に敗れた —` }, `灯晶 +${r}`);
+      if (won) social?.news(`${myName()} が決闘で ${d.name} に勝利！`);
       return;
     }
     // フィールドの魔物シンボルとの戦闘
@@ -1484,6 +1485,7 @@ function onBattleEnd(won) {
       if (state.invaded) {
         grant(100);
         ui.banner({ name: '— 乱入者を退けた —' }, '灯晶 +100');
+        social?.news(`${myName()} が運営の乱入者を退けた！`);
       }
       const ch = STORY[state.chapter];
       // 章の中の次の話（最大3話）
@@ -1878,6 +1880,7 @@ function renderForge() {
           save.shards -= w.price;
           save.owned.push(w.id);
           slot[forgeSel] = w.id;
+          if (w.price >= 1000) social?.news(`${myName()} が逸品「${w.name}」を手に入れた！`);
         }
         persist();
         sfx('skill');
@@ -1911,6 +1914,7 @@ function renderForge() {
       save.shards -= cost;
       (save.upg[forgeSel] ||= {})[u.id] = lv + 1;
       persist();
+      if (lv + 1 >= MAX_LV) social?.news(`${myName()} が${FIGHTERS[forgeSel]?.name || '戦士'}の「${u.name || '能力'}」を極めた！`);
       sfx('skill');
       renderForge();
     });
@@ -2150,14 +2154,14 @@ async function onInvaded(e) {
   $('#pause').hidden = true;
   const p = state.worldPeers?.[e.from];
   const apexOk = !apiEnabled() || tr === 'chief';
-  const ik = apexOk && ['chief', 'sovereign', 'sovereign2'].includes(p?.fk) ? p.fk : 'seraphel';
+  const ik = apexOk && ['chief', 'sovereign', 'sovereign2', 'bloodfiend'].includes(p?.fk) ? p.fk : 'seraphel';
   b.add(ik, { team: 1, remote: true, netId: e.from, pos: p ? [p.x, p.z] : [0, -9], facing: Math.PI, name: `乱入者・${e.name}`, ...peerOpts(e.from, ik) });
   b.net = w;
   b.strictNet = apiEnabled();
   buildHud();
   ui.flash();
   sfx('burst');
-  const apex = ik === 'sovereign' || ik === 'sovereign2' ? 2 : ik === 'chief' ? 1 : 0;
+  const apex = ik === 'sovereign' || ik === 'sovereign2' ? 2 : ik === 'chief' || ik === 'bloodfiend' ? 1 : 0;
   playTrack(apex ? 'apex:' + apex : 'boss');
   if (apex) ui.cutin(b.fighters[b.fighters.length - 1], FIGHTERS[ik].name, '運営長、降臨');
   ui.banner({ name: '— 空が裂けた —' }, apex ? '運営長が降りてきた！' : '裁定者が降りてきた！');
@@ -2185,7 +2189,7 @@ function renderInvadeList() {
 
 $('#invade-who').addEventListener('click', () => {
   sfx('ui');
-  const order = chiefUnlocked() ? ['seraphel', 'chief', 'sovereign'] : ['seraphel'];
+  const order = chiefUnlocked() ? ['seraphel', 'chief', 'sovereign', 'bloodfiend'] : ['seraphel'];
   state.invadeKey = order[(order.indexOf(state.invadeKey) + 1) % order.length];
   $('#invade-who').textContent = `乱入する姿：${FIGHTERS[state.invadeKey].name}`;
 });
@@ -2220,7 +2224,7 @@ async function startInvade(p) {
   w.invade({ to: p.id, from: w.myId, name: '運営', tk });
   setStage(stageById(STORY[p.ch]?.stage));
   const b = makeBattle(w);
-  const ik = (state.invadeKey === 'chief' || state.invadeKey === 'sovereign') && chiefUnlocked() ? state.invadeKey : 'seraphel';
+  const ik = ['chief', 'sovereign', 'bloodfiend'].includes(state.invadeKey) && chiefUnlocked() ? state.invadeKey : 'seraphel';
   b.add(ik, { team: 0, player: true, awk: save.awk, netId: w.myId, pos: [0, -9], name: FIGHTERS[ik].name + '（運営）', upg: upgFor(ik), gear: gearFor(ik) });
   b.add(FIGHTERS[p.fk] ? p.fk : 'rowen', { team: 1, remote: true, netId: p.id, pos: [p.x, p.z], name: p.name, gear: { w: p.gw, a: p.ga }, ...peerOpts(p.id, FIGHTERS[p.fk] ? p.fk : 'rowen') });
   b.strictNet = apiEnabled();
@@ -2610,6 +2614,14 @@ syncEntitlements();
 // ---- 交流（お知らせテロップ・チャット・ギルド） ----
 var social = initSocial({
   save, persist, myName, sfx,
+  isChief: () => chiefUnlocked(),
+  roleToken: () => roleState.tok,
+  // 運営長のお知らせはサーバー署名の役職トークンで確認（サーバー未設定時は受け入れる）
+  verifyChief: async (tk) => {
+    if (!apiEnabled()) return true;
+    const d = await verifyToken(tk, 'role').catch(() => null);
+    return d?.r === 'chief';
+  },
   baseNews: () => {
     const { ev, ends } = currentEvent();
     const days = Math.max(0, Math.ceil((ends - Date.now()) / 86400000));
