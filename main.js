@@ -4,7 +4,7 @@ import { Battle, ARENA_R } from './game.js';
 import { FIGHTERS, STORY, ROSTER, UPGRADES, MAX_LV, STAGES, BGM, APEX_BGM, ENEMY_ROSTER, UPG_CAP, LB_MAX, lbMaxLv, lbMul, lbCost, WEAPONS, ARMORS, SUMMONS, STAT_LABEL, SPECIAL_KEYS, BOSS_ROSTER, currentEvent, sanitizeEvent, EV_FOE_KINDS } from './data.js';
 import { ProcMusic } from './music.js';
 import { sayBattle, setVoiceMuted, stopVoices } from './voice.js';
-import { initSocial } from './social.js';
+import { initSocial, uiConfirm } from './social.js';
 import { OPERATOR_KEY_SHA256, CHIEF_KEY_SHA256, MAX_KEY_ATTEMPTS, LOCKOUT_MS, SHOP_ITEMS } from './config.js';
 import { connect, issueInvite, redeemInvite, syncPush, syncPullV } from './net.js';
 import { apiEnabled, api, verifyToken } from './api.js';
@@ -268,6 +268,7 @@ async function sendVersioned(code, json, base) {
     const r = await api('/sync/push', { code, data: json, base });
     if (r.status === 409) return { conflict: true, data: r.data, ver: r.ver };
     if (r.status === 422) return { rejected: true };
+    if (r.status === 403 && r.error === 'pid') throw new Error('pid');
     if (!r.ok) throw new Error('push');
     return { ok: true, ver: r.ver };
   }
@@ -320,6 +321,7 @@ function markSynced(ver, at, shards) {
   localStorage.setItem('arkeia-sync-base', String(shards));
   localStorage.removeItem('arkeia-sync-dirty');
 }
+let syncErr = ''; // 直近の同期失敗の理由（'wealth' / 'pid' / 'net'）
 async function autoPush() {
   const code = syncCodeNow();
   if (code.length !== 12 || autoBusy) return;
@@ -344,12 +346,16 @@ async function autoPush() {
     }
     if (r.rejected) {
       console.warn('同期：資産の増え方が不自然なため、サーバーが受け付けませんでした');
+      syncErr = 'wealth';
       localStorage.removeItem('arkeia-sync-dirty');
       return;
     }
     if (!r.ok) throw new Error('push');
+    syncErr = '';
     markSynced(r.ver, at, save.shards);
-  } catch {
+  } catch (e) {
+    syncErr = e?.message === 'pid' ? 'pid' : 'net';
+    if (syncErr === 'pid') return; // 別の同期コードに登録済み：再送しても通らない
     autoPushTimer = setTimeout(autoPush, 30000); // 通信失敗時は後で再送
   } finally {
     autoBusy = false;
@@ -2733,6 +2739,10 @@ function safeEqual(a, b) {
 window.ArkeiaOps = Object.freeze({ hash: sha256 });
 const opState = { tries: 0, lockUntil: 0 };
 function refreshOptions() {
+  // 今この端末で使っている同期コードを表示（どのコードか分かるように）
+  const sc = syncCodeNow();
+  if (sc.length === 12 && !$('#sync-code').value) $('#sync-code').value = sc.match(/.{4}/g).join('-');
+  if (sc.length === 12 && !$('#sync-msg').textContent) $('#sync-msg').textContent = `この端末の同期コード：${sc.match(/.{4}/g).join('-')}（自動で同期中）`;
   $('#opt-mute').textContent = audio.muted ? '音：黙らせる' : '音：鳴らす';
   $('#opt-diff').textContent = `CPUの強さ：${DIFFS[save.diff].n}`;
   $('#op-state').textContent = chiefUnlocked()
@@ -2777,9 +2787,18 @@ $('#sync-push').addEventListener('click', async () => {
     localStorage.setItem('arkeia-sync', code);
     localStorage.setItem('arkeia-sync-dirty', '1');
     while (autoBusy) await new Promise((r) => setTimeout(r, 100));
+    syncErr = '';
     await autoPush(); // 版番号・競合解決つきで送る
-    if (localStorage.getItem('arkeia-sync-dirty')) throw new Error('push');
     $('#sync-code').value = code;
+    if (syncErr === 'pid') {
+      m.textContent = 'このプレイヤーの記録は、すでに別の同期コードで預けられています。元の同期コードを入力して「同期コードで記録を受け取る」を押してください。';
+      return;
+    }
+    if (syncErr === 'wealth') {
+      m.textContent = '灯晶や強化の増え方が不自然なため、サーバーが記録を受け付けませんでした。';
+      return;
+    }
+    if (localStorage.getItem('arkeia-sync-dirty')) throw new Error('push');
     m.textContent = `預けました。別の端末で同期コード「${code}」を入力してください（他人には教えないでください）。`;
   } catch {
     m.textContent = '預けられませんでした（通信を確認してください）。';
@@ -2790,14 +2809,30 @@ $('#sync-pull').addEventListener('click', async () => {
   const m = $('#sync-msg');
   const n = normSync($('#sync-code').value);
   if (n.length !== 12) {
-    m.textContent = '同期コードは12文字です。';
+    m.textContent = '同期コードは12文字です（ハイフンは省略可）。';
+    return;
+  }
+  const cur = syncCodeNow();
+  if (cur.length === 12 && cur === n) {
+    m.textContent = 'これはこの端末ですでに使っている同期コードです（自動で同期されています）。';
     return;
   }
   m.textContent = '受け取っています…';
   try {
     const { data: json, ver } = await fetchVersioned(n);
     if (!json) {
-      m.textContent = 'その同期コードの記録は見つかりませんでした。';
+      m.textContent = 'その同期コードの記録は見つかりませんでした。入力ミス（0とO、1とIなど）がないか確認してください。サーバー設定前に作ったコードの場合は、元の端末で「この端末の記録を預ける」をもう一度押してください。';
+      return;
+    }
+    // この端末の記録は置き換わるので、必ず確認する
+    const ok = await uiConfirm(
+      cur.length === 12
+        ? `この端末は別の同期コード（${cur.match(/.{4}/g).join('-')}）を使っています。\n入力したコードの記録で、この端末の記録を置き換えますか？\n（この端末だけの進み具合は失われます）`
+        : '入力した同期コードの記録で、この端末の記録を置き換えますか？\n（この端末だけの進み具合は失われます）',
+      '置き換える', true
+    );
+    if (!ok) {
+      m.textContent = '受け取りを取りやめました。';
       return;
     }
     const parsed = JSON.parse(json); // 壊れたデータは弾く（中身は読み込み時に検証される）
