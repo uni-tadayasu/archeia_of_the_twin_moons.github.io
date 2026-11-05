@@ -174,6 +174,17 @@ export default {
         case '/sync/pull': return await syncPull(req, env, H, body);
         case '/entitlements': return await entitlements(req, env, H, body);
         case '/profile': return await profile(req, env, H, body);
+        case '/guild/create': return await guildRoute(req, env, H, body, 'create');
+        case '/guild/get': return await guildRoute(req, env, H, body, 'get');
+        case '/guild/join': return await guildRoute(req, env, H, body, 'join');
+        case '/guild/leave': return await guildRoute(req, env, H, body, 'leave');
+        case '/guild/role': return await guildRoute(req, env, H, body, 'role');
+        case '/guild/unban': return await guildRoute(req, env, H, body, 'unban');
+        case '/guild/donate': return await guildDonate(req, env, H, body);
+        case '/guild/board': return await guildBoardRoute(req, env, H);
+        case '/chat/room': return await chatRoom(req, env, H, body);
+        case '/chief/sign': return await chiefSign(req, env, H, body);
+        case '/chief/event': return await chiefEvent(req, env, H, body);
         default: return json(H, { error: 'not found' }, 404);
       }
     } catch (err) {
@@ -249,6 +260,9 @@ async function syncPush(req, env, H, { code, data, base }) {
   }
   if (!validateSaveShape(parsed)) return json(H, { error: 'bad' }, 400);
   delete parsed.chars; // 購入キャラは決済記録からのみ復元する
+  // プレイヤーID(pid)は最初に使った同期コードに固定（他人のpidを名乗るセーブは拒否）
+  const ppid = String(parsed.pid || '');
+  if (PID_RE.test(ppid) && !(await bindPid(env, ppid, h))) return json(H, { error: 'pid' }, 403);
   const stub = env.SYNC_LOCK.get(env.SYNC_LOCK.idFromName(h));
   const r = await stub.fetch('https://sync/', { method: 'POST', body: JSON.stringify({ h, data: parsed, base: Math.floor(+base || 0) }) });
   return json(H, await r.json(), r.status);
@@ -327,7 +341,265 @@ async function profile(req, env, H, { code, key, role, buyer }) {
   return json(H, { token: await sign(env, { t: 'prof', k: key, u, exp: Date.now() + 2 * 3600000 }) });
 }
 
+// ---------- 本人確認（同期コード → サーバー保管セーブの pid。pid は同期コードに固定） ----------
+const PID_RE = /^[A-Za-z0-9]{1,24}$/;
+const GID_RE = /^[A-Za-z0-9]{8}$/;
+const cleanTxt = (v, n) => [...String(v ?? '').replace(/[\u0000-\u001f<>]/g, '').trim()].slice(0, n).join('');
+async function bindPid(env, pid, h) {
+  const stub = env.PID_BIND.get(env.PID_BIND.idFromName(pid));
+  const r = await stub.fetch('https://bind/', { method: 'POST', body: JSON.stringify({ h }) });
+  return r.status === 200;
+}
+async function whoAmI(env, code, name) {
+  const h = await syncKey(env, code);
+  if (!h) return null;
+  const row = await syncRow(env, h);
+  let s = null;
+  try { s = row?.data ? JSON.parse(row.data) : null; } catch { s = null; }
+  const pid = String(s?.pid || '');
+  if (!PID_RE.test(pid) || !(await bindPid(env, pid, h))) return null;
+  return { pid, h, name: cleanTxt(name, 12) || '旅人' };
+}
+const guildStub = (env, gid) => env.GUILD.get(env.GUILD.idFromName('g:' + gid));
+const boardStub = (env) => env.GUILD_BOARD.get(env.GUILD_BOARD.idFromName('board'));
+async function doCall(stub, body) {
+  const r = await stub.fetch('https://do/', { method: 'POST', body: JSON.stringify(body) });
+  return { status: r.status, data: await r.json().catch(() => ({})) };
+}
+
+// ギルド操作：権限・存在・除名履歴はすべてギルドごとの Durable Object（直列実行）で判定
+async function guildRoute(req, env, H, body, op) {
+  if (await limited(env, req, 'guild', 90, 600000)) return json(H, { error: 'limit' }, 429);
+  const me = await whoAmI(env, body.code, body.name);
+  if (!me) return json(H, { error: 'nosync' }, 403);
+  let gid = String(body.gid || '');
+  if (op === 'create') {
+    const A = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789';
+    gid = [...crypto.getRandomValues(new Uint8Array(8))].map((x) => A[x % A.length]).join('');
+  } else if (!GID_RE.test(gid)) return json(H, { error: 'bad' }, 400);
+  const r = await doCall(guildStub(env, gid), {
+    op, gid, me: { pid: me.pid, name: me.name },
+    name: cleanTxt(body.gname, 16), target: String(body.target || ''), role: String(body.role || ''),
+    heir: String(body.heir || ''), reason: cleanTxt(body.reason, 60)
+  });
+  if (r.data?.dissolved) await doCall(boardStub(env), { op: 'remove', gid });
+  else if (op === 'create' && r.status === 200) await doCall(boardStub(env), { op: 'name', gid, gname: r.data.state?.name });
+  return json(H, r.data, r.status);
+}
+
+// 寄付：同期セーブの灯晶を原子的に減らし、ギルドの累計に加算（失敗時は返金）
+async function guildDonate(req, env, H, body) {
+  if (await limited(env, req, 'donate', 20, 600000)) return json(H, { error: 'limit' }, 429);
+  const me = await whoAmI(env, body.code, body.name);
+  if (!me) return json(H, { error: 'nosync' }, 403);
+  const gid = String(body.gid || '');
+  const amt = Math.floor(+body.amount);
+  if (!GID_RE.test(gid) || !(amt > 0 && amt <= 1e7)) return json(H, { error: 'bad' }, 400);
+  const g = guildStub(env, gid);
+  const chk = await doCall(g, { op: 'get', gid, me: { pid: me.pid, name: me.name } });
+  if (chk.status !== 200 || !chk.data?.state?.member) return json(H, { error: 'denied' }, 403);
+  const sync = env.SYNC_LOCK.get(env.SYNC_LOCK.idFromName(me.h));
+  const sp = await sync.fetch('https://sync/', { method: 'POST', body: JSON.stringify({ op: 'spend', h: me.h, amt }) });
+  const spent = await sp.json().catch(() => ({}));
+  if (sp.status !== 200) return json(H, { error: spent.error || 'shards' }, sp.status === 402 ? 402 : 409);
+  const d = await doCall(g, { op: 'donate', gid, me: { pid: me.pid, name: me.name }, amt });
+  if (d.status !== 200) {
+    await sync.fetch('https://sync/', { method: 'POST', body: JSON.stringify({ op: 'spend', h: me.h, amt: -amt }) });
+    return json(H, { error: d.data?.error || 'denied' }, d.status);
+  }
+  await doCall(boardStub(env), { op: 'add', gid, gname: d.data.state.name, amt, members: d.data.state.donors.length });
+  return json(H, { ok: true, ver: spent.ver, shards: spent.shards, total: d.data.mine, state: d.data.state });
+}
+async function guildBoardRoute(req, env, H) {
+  if (await limited(env, req, 'board', 60, 600000)) return json(H, { error: 'limit' }, 429);
+  const r = await doCall(boardStub(env), { op: 'top' });
+  return json(H, r.data, r.status);
+}
+
+// チャンネル別ルーム：参加資格を確認した人にだけ、推測できないルーム名を渡す
+async function chatRoom(req, env, H, { code, ch, token, name }) {
+  if (await limited(env, req, 'room', 60, 600000)) return json(H, { error: 'limit' }, 429);
+  const c = String(ch || '');
+  if (c === 'staff') {
+    const role = await verify(env, token, 'role');
+    if (role?.r !== 'chief' && role?.r !== 'op') return json(H, { error: 'denied' }, 403);
+  } else {
+    const me = await whoAmI(env, code, name);
+    if (!me) return json(H, { error: 'nosync' }, 403);
+    if (c.startsWith('g:')) {
+      const gid = c.slice(2);
+      if (!GID_RE.test(gid)) return json(H, { error: 'bad' }, 400);
+      const r = await doCall(guildStub(env, gid), { op: 'get', gid, me: { pid: me.pid, name: me.name } });
+      if (!r.data?.state?.member) return json(H, { error: 'denied' }, 403);
+    } else if (/^dm:[A-Za-z0-9]{1,24}:[A-Za-z0-9]{1,24}$/.test(c)) {
+      const [, a, b] = c.split(':');
+      if (me.pid !== a && me.pid !== b) return json(H, { error: 'denied' }, 403);
+    } else return json(H, { error: 'bad' }, 400);
+  }
+  return json(H, { room: (await hmacHex(env.PEPPER, 'room:' + c)).slice(0, 40) });
+}
+
+// 運営長の公開署名：役職トークンそのものは配らず、内容(ハッシュ)に結びついた再利用不可の署名だけ渡す
+async function chiefSign(req, env, H, { token, kind, h, at }) {
+  if ((await verify(env, token, 'role'))?.r !== 'chief') return json(H, { error: 'denied' }, 403);
+  if (await limited(env, req, 'csign', 60, 600000)) return json(H, { error: 'limit' }, 429);
+  if (!['news', 'event'].includes(kind) || !HEX64.test(String(h)) || !(+at > 0 && +at <= Date.now() + 60000)) return json(H, { error: 'bad' }, 400);
+  return json(H, { sig: await sign(env, { t: 'cpub', k: kind, h, at: +at, exp: Date.now() + 30 * DAY }) });
+}
+async function chiefEvent(req, env, H, { token, body, at }) {
+  if ((await verify(env, token, 'role'))?.r !== 'chief') return json(H, { error: 'denied' }, 403);
+  if (await limited(env, req, 'cevent', 20, 600000)) return json(H, { error: 'limit' }, 429);
+  if (typeof body !== 'string' || body.length > 20000 || !(+at > 0 && +at <= Date.now() + 60000)) return json(H, { error: 'bad' }, 400);
+  const sig = await sign(env, { t: 'cpub', k: 'event', h: await sha256(body), at: +at, exp: Date.now() + 30 * DAY });
+  const db = dbOf(env);
+  const res = await db.query({ chiefevents: { $: { where: { h: 'current' } } } });
+  const row = res?.chiefevents?.[0];
+  if (row && +row.at >= +at) return json(H, { ok: false, sig });
+  await db.transact(db.tx.chiefevents[row?.id || id()].update({ h: 'current', ev: body, sig, at: +at }));
+  return json(H, { ok: true, sig });
+}
+
 // ---------- Durable Objects ----------
+// pid ↔ 同期コードの固定（最初の1件だけ）
+export class PidBind {
+  constructor(state) {
+    this.state = state;
+  }
+  async fetch(req) {
+    const { h } = await req.json();
+    return this.state.blockConcurrencyWhile(async () => {
+      const cur = await this.state.storage.get('h');
+      if (!cur) await this.state.storage.put('h', h);
+      else if (cur !== h) return new Response('bound', { status: 409 });
+      return new Response('ok');
+    });
+  }
+}
+// ギルド1つ分の状態（メンバー・役職・除名履歴・寄付）
+const G_RANK = { master: 3, sub: 2, officer: 1, member: 0 };
+export class GuildLock {
+  constructor(state) {
+    this.state = state;
+  }
+  async fetch(req) {
+    const b = await req.json();
+    return this.state.blockConcurrencyWhile(() => this.run(b));
+  }
+  view(g, pid) {
+    const member = !!g.members[pid];
+    const myRank = member ? G_RANK[g.members[pid].role] : -1;
+    const ban = g.bans[pid];
+    return {
+      gid: g.gid, name: g.name, master: g.master, ver: g.ver, member,
+      members: member ? Object.entries(g.members).map(([p, m]) => ({ pid: p, name: m.name, role: m.role })) : [],
+      bans: myRank >= 2 ? Object.entries(g.bans).map(([p, x]) => ({ pid: p, name: x.name, by: x.by, reason: x.reason, at: x.at })) : [],
+      donors: Object.entries(g.donors).map(([p, x]) => ({ pid: p, name: x.name, total: x.total })).filter((x) => x.total > 0).sort((a, c) => c.total - a.total).slice(0, 100),
+      kicked: !member && ban ? { by: ban.by, reason: ban.reason, at: ban.at } : null
+    };
+  }
+  async run(b) {
+    const S = this.state.storage;
+    const out = (body, status = 200) => new Response(JSON.stringify(body), { status });
+    let g = await S.get('g');
+    const me = b.me;
+    const save = async () => { g.ver = (g.ver || 0) + 1; await S.put('g', g); };
+    if (b.op === 'create') {
+      if (g) return out({ error: 'exists' }, 409);
+      if (!b.name) return out({ error: 'bad' }, 400);
+      g = { gid: b.gid, name: b.name, master: me.pid, members: { [me.pid]: { name: me.name, role: 'master', at: Date.now() } }, bans: {}, donors: {}, ver: 0 };
+      await save();
+      return out({ state: this.view(g, me.pid) });
+    }
+    if (!g) return out({ error: 'notfound' }, 404);
+    const mine = g.members[me.pid];
+    if (mine && mine.name !== me.name) mine.name = me.name;
+    switch (b.op) {
+      case 'get':
+        return out({ state: this.view(g, me.pid) });
+      case 'join': {
+        if (g.bans[me.pid]) return out({ error: 'banned', state: this.view(g, me.pid) }, 403);
+        if (!mine) {
+          if (Object.keys(g.members).length >= 100) return out({ error: 'full' }, 409);
+          g.members[me.pid] = { name: me.name, role: 'member', at: Date.now() };
+          await save();
+        }
+        return out({ state: this.view(g, me.pid) });
+      }
+      case 'leave': {
+        if (!mine) return out({ state: this.view(g, me.pid) });
+        const others = Object.keys(g.members).filter((p) => p !== me.pid);
+        if (g.master === me.pid) {
+          if (!others.length) {
+            await S.deleteAll();
+            return out({ dissolved: true });
+          }
+          if (!others.includes(b.heir)) return out({ error: 'heir' }, 400);
+          g.master = b.heir;
+          g.members[b.heir].role = 'master';
+        }
+        delete g.members[me.pid];
+        await save();
+        return out({ state: this.view(g, me.pid), heir: g.master });
+      }
+      case 'role': {
+        const tgt = g.members[b.target];
+        const role = b.role;
+        if (!mine || !tgt || b.target === me.pid || !['master', 'sub', 'officer', 'member', 'kick'].includes(role)) return out({ error: 'denied' }, 403);
+        const r = G_RANK[mine.role];
+        const tr = G_RANK[tgt.role];
+        const ok = r === 3 || (r === 2 && tr < 2 && ['officer', 'member', 'kick'].includes(role));
+        if (!ok) return out({ error: 'denied' }, 403);
+        if (role === 'kick') {
+          g.bans[b.target] = { name: tgt.name, by: me.name, reason: b.reason || '', at: Date.now() };
+          delete g.members[b.target];
+        } else if (role === 'master') {
+          mine.role = 'sub';
+          tgt.role = 'master';
+          g.master = b.target;
+        } else tgt.role = role;
+        await save();
+        return out({ state: this.view(g, me.pid) });
+      }
+      case 'unban': {
+        if (!mine || G_RANK[mine.role] < 2 || !g.bans[b.target]) return out({ error: 'denied' }, 403);
+        delete g.bans[b.target];
+        await save();
+        return out({ state: this.view(g, me.pid) });
+      }
+      case 'donate': {
+        if (!mine) return out({ error: 'denied' }, 403);
+        const d = (g.donors[me.pid] ||= { name: me.name, total: 0 });
+        d.name = me.name;
+        d.total += Math.floor(+b.amt) || 0;
+        await save();
+        return out({ state: this.view(g, me.pid), mine: d.total });
+      }
+      default:
+        return out({ error: 'bad' }, 400);
+    }
+  }
+}
+// 全ギルドの寄付総額（サーバー側で集計し、上位だけ返す）
+export class GuildBoard {
+  constructor(state) {
+    this.state = state;
+  }
+  async fetch(req) {
+    const b = await req.json();
+    return this.state.blockConcurrencyWhile(async () => {
+      const m = (await this.state.storage.get('b')) || {};
+      if (b.op === 'top') {
+        const list = Object.entries(m).map(([gid, x]) => ({ gid, gname: x.gname, total: x.total, members: x.members })).filter((x) => x.total > 0).sort((a, c) => c.total - a.total).slice(0, 50);
+        return new Response(JSON.stringify({ list }));
+      }
+      if (b.op === 'add') m[b.gid] = { gname: b.gname, total: (m[b.gid]?.total || 0) + b.amt, members: b.members };
+      else if (b.op === 'name' && m[b.gid]) m[b.gid].gname = b.gname;
+      else if (b.op === 'remove') delete m[b.gid];
+      await this.state.storage.put('b', m);
+      return new Response(JSON.stringify({ ok: true }));
+    });
+  }
+}
 export class InviteLock {
   constructor(state, env) {
     this.state = state;
@@ -358,10 +630,23 @@ export class SyncLock {
     this.env = env;
   }
   async fetch(req) {
-    const { h, data, base } = await req.json();
+    const { h, data, base, op, amt } = await req.json();
     return this.state.blockConcurrencyWhile(async () => {
       const db = dbOf(this.env);
       const row = await syncRow(this.env, h);
+      if (op === 'spend') {
+        // サーバー側の通貨消費（寄付など）：残高確認と減算を同じ直列処理内で行う
+        let s;
+        try { s = JSON.parse(row?.data || 'null'); } catch { s = null; }
+        if (!s) return new Response(JSON.stringify({ error: 'nosync' }), { status: 404 });
+        const cur = Math.max(0, Math.floor(+s.shards || 0));
+        const a = Math.floor(+amt) || 0;
+        if (a > 0 && cur < a) return new Response(JSON.stringify({ error: 'shards' }), { status: 402 });
+        s.shards = cur - a;
+        const nv = (row.ver || 0) + 1;
+        await db.transact(db.tx.syncsaves[row.id].update({ data: JSON.stringify(s), ver: nv, wealth: wealthOf(s) }));
+        return new Response(JSON.stringify({ ok: true, ver: nv, shards: s.shards }), { status: 200 });
+      }
       const ver = row?.ver || 0;
       if (row && base !== ver) {
         // 競合：別の端末が先に更新した → 最新を返し、端末側で合流させる

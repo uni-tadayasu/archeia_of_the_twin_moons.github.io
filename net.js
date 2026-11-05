@@ -69,35 +69,22 @@ export async function syncPullV(h) {
 }
 
 // ---- 運営長の特別イベント（DBに保存し、後から来た人・他端末も読めるようにする） ----
-export async function saveChiefEvent(ev, tk, at) {
+// サーバー未設定時のみ端末から書き込む（役職トークンは保存しない。sig は内容に結びついた公開署名）
+export async function saveChiefEvent(body, sig, at) {
   const { db, id } = await getDb();
   const row = await findOne('chiefevents', 'current');
   if (row && +row.at >= at) return false;
-  await db.transact(db.tx.chiefevents[row?.id || id()].update({ h: 'current', ev: JSON.stringify(ev), tk: String(tk || ''), at }));
+  await db.transact(db.tx.chiefevents[row?.id || id()].update({ h: 'current', ev: String(body), sig: String(sig || ''), at }));
   return true;
 }
 export async function loadChiefEvent() {
   const row = await findOne('chiefevents', 'current');
   if (!row || typeof row.ev !== 'string' || row.ev.length > 20000) return null;
-  let ev;
-  try { ev = JSON.parse(row.ev); } catch { return null; }
-  if (!(ev === null || (ev && typeof ev === 'object'))) return null;
-  return { ev, tk: typeof row.tk === 'string' && row.tk.length < 1500 ? row.tk : '', at: num(row.at, 1e13), from: '' };
+  return { body: row.ev, sig: typeof row.sig === 'string' && row.sig.length < 1500 ? row.sig : '', at: num(row.at, 1e13), from: '' };
 }
 
-// ---- ギルド寄付（灯晶）：メンバーごとの累計をDBに保存し、ランキングに使う ----
+// ---- ギルド寄付ランキング（サーバー未設定時の読み取り専用。書き込みはサーバーのみ） ----
 const GID_RE = /^[A-Za-z0-9]{8}$/;
-export async function donateGuild(gid, gname, pid, name, amount) {
-  if (!GID_RE.test(gid) || !/^[a-z0-9]{1,24}$/i.test(pid)) throw new Error('bad id');
-  const amt = Math.floor(+amount);
-  if (!(amt > 0 && amt <= 1e7)) throw new Error('bad amount');
-  const { db, id } = await getDb();
-  const h = gid + ':' + pid;
-  const row = await findOne('guilddonations', h);
-  const total = (+row?.total || 0) + amt;
-  await db.transact(db.tx.guilddonations[row?.id || id()].update({ h, gid, gname: txt(gname, 16), pid, name: txt(name, 12), total, at: Date.now() }));
-  return total;
-}
 const donRow = (r) => ({ gid: String(r.gid || ''), gname: txt(r.gname, 16) || 'ギルド', pid: str(r.pid, 24), name: txt(r.name, 12) || '旅人', total: Math.max(0, Math.min(1e12, Math.floor(+r.total || 0))) });
 // ギルド内のメンバー寄付ランキング
 export async function guildDonors(gid) {
@@ -123,8 +110,34 @@ export async function guildBoard() {
 }
 
 // ---- 交流用の常設ルーム（チャット・お知らせ・ギルド） ----
-const CH_RE = /^(world|staff|g:[A-Za-z0-9]{8}|dm:[A-Za-z0-9]{1,24}:[A-Za-z0-9]{1,24})$/;
 const txt = (v, n) => String(v ?? '').replace(/[\u0000-\u001f<>]/g, '').slice(0, n);
+function chatMsg(e, ch) {
+  const t = txt(e.t, 120).trim();
+  if (!t) return null;
+  return { ch, t, from: str(e.from, 40), pid: str(e.pid, 24), name: str(e.name, 12) || '旅人', gname: txt(e.gname, 16), at: Date.now() };
+}
+// チャンネル専用ルーム：ルーム名は参加資格を確認したサーバーが渡す（サーバー未設定時は端末で導出）
+// 受信メッセージのチャンネルは、送信者の申告ではなく「どのルームで受けたか」で決める
+export async function joinChannel(roomKey, ch, myId, onChat) {
+  if (!/^[0-9a-f]{16,64}$/.test(roomKey)) throw new Error('bad room');
+  const { db } = await getDb();
+  const room = db.joinRoom('arkeia', 'ch-' + roomKey);
+  room.subscribeTopic('chat', (e) => {
+    if (!e || typeof e !== 'object') return;
+    const m = chatMsg(e, ch);
+    if (m) onChat(m);
+  });
+  return {
+    send: (e) => room.publishTopic('chat', { t: e.t, pid: e.pid, name: e.name, gname: e.gname, from: myId }),
+    leave: () => {
+      try {
+        room.leaveRoom?.();
+      } catch (err) {
+        console.warn(err);
+      }
+    }
+  };
+}
 export async function connectSocial(handlers) {
   const { db, id } = await getDb();
   const myId = id();
@@ -138,41 +151,41 @@ export async function connectSocial(handlers) {
     }
     handlers.onPeers?.(peers);
   });
+  // 共有ルームで扱うのは世界チャットだけ（ギルド・フレンド・運営会議は joinChannel の専用ルーム）
   room.subscribeTopic('chat', (e) => {
-    if (!e || typeof e !== 'object' || !CH_RE.test(e.ch)) return;
-    const t = txt(e.t, 120).trim();
-    if (!t) return;
-    handlers.onChat?.({ ch: e.ch, t, from: str(e.from, 40), pid: str(e.pid, 24), name: str(e.name, 12) || '旅人', gname: txt(e.gname, 16), tk: e.ch === 'staff' && typeof e.tk === 'string' && e.tk.length < 1500 ? e.tk : '', at: Date.now() });
+    if (!e || typeof e !== 'object' || e.ch !== 'world') return;
+    const m = chatMsg(e, 'world');
+    if (m) handlers.onChat?.(m);
   });
+  const sigOf = (v) => (typeof v === 'string' && v.length < 1500 ? v : '');
+  const bodyOf = (v, n) => (typeof v === 'string' && v.length <= n ? v : null);
   room.subscribeTopic('news', (e) => {
     if (!e || typeof e !== 'object') return;
-    if (e.kind === 'chief') {
-      // 運営長のお知らせ一覧（最大10件）
-      const list = Array.isArray(e.list) ? e.list.slice(0, 10).map((x) => txt(x, 80).trim()).filter(Boolean) : [];
-      handlers.onChiefNews?.({ list, tk: typeof e.tk === 'string' && e.tk.length < 1500 ? e.tk : '', at: num(e.at, 1e13), from: str(e.from, 40) });
-      return;
-    }
-    if (e.kind === 'cevent') {
-      // 運営長の特別イベント（中身は受信側で sanitizeEvent・役職トークンで検証）
-      if (e.ev === null || (e.ev && typeof e.ev === 'object')) handlers.onChiefEvent?.({ ev: e.ev, tk: typeof e.tk === 'string' && e.tk.length < 1500 ? e.tk : '', at: num(e.at, 1e13), from: str(e.from, 40) });
+    if (e.kind === 'chief' || e.kind === 'cevent') {
+      // 運営長のお知らせ／特別イベント：本文(JSON文字列)と、その内容に結びついた公開署名
+      const body = bodyOf(e.body, e.kind === 'chief' ? 2000 : 20000);
+      if (body == null) return;
+      const n = { body, sig: sigOf(e.sig), at: num(e.at, 1e13), from: str(e.from, 40) };
+      if (e.kind === 'chief') handlers.onChiefNews?.(n);
+      else handlers.onChiefEvent?.(n);
       return;
     }
     const t = txt(e.t, 80).trim();
     if (t) handlers.onNews?.({ t, from: str(e.from, 40) });
   });
-  // ギルドの役職変更（ギルドマスターのみ有効。受信側で検証）
+  // ギルドの変更通知。サーバー利用時は「再取得の合図」だけで、中身は信用しない
   room.subscribeTopic('grole', (e) => {
     if (!e || typeof e !== 'object' || !/^[A-Za-z0-9]{8}$/.test(e.gid)) return;
     const role = ['master', 'sub', 'officer', 'member', 'kick'].includes(e.role) ? e.role : null;
-    if (role) handlers.onGuildRole?.({ gid: e.gid, pid: str(e.pid, 24), role, by: str(e.by, 24), name: txt(e.name, 16) });
+    handlers.onGuildRole?.({ gid: e.gid, pid: str(e.pid, 24), role, by: str(e.by, 24), name: txt(e.name, 16), hint: !role });
   });
   return {
     myId,
     publish: (s) => room.publishPresence({ ...s, id: myId }),
-    chat: (e) => room.publishTopic('chat', { ...e, from: myId }),
+    chat: (e) => room.publishTopic('chat', { ...e, ch: 'world', from: myId }),
     news: (t) => room.publishTopic('news', { t, from: myId }),
-    chiefNews: (list, tk) => room.publishTopic('news', { kind: 'chief', list, tk, at: Date.now(), from: myId }),
-    chiefEvent: (ev, tk, at) => room.publishTopic('news', { kind: 'cevent', ev, tk, at, from: myId }),
+    chiefNews: (body, sig, at) => room.publishTopic('news', { kind: 'chief', body, sig, at, from: myId }),
+    chiefEvent: (body, sig, at) => room.publishTopic('news', { kind: 'cevent', body, sig, at, from: myId }),
     guildRole: (e) => room.publishTopic('grole', e),
     leave: () => {
       try {

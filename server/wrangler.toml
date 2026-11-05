@@ -25,6 +25,18 @@ class_name = "Limiter"
 name = "SYNC_LOCK"
 class_name = "SyncLock"
 
+[[durable_objects.bindings]]
+name = "PID_BIND"
+class_name = "PidBind"
+
+[[durable_objects.bindings]]
+name = "GUILD"
+class_name = "GuildLock"
+
+[[durable_objects.bindings]]
+name = "GUILD_BOARD"
+class_name = "GuildBoard"
+
 [[migrations]]
 tag = "v1"
 new_sqlite_classes = ["InviteLock", "Limiter"]
@@ -32,3 +44,7 @@ new_sqlite_classes = ["InviteLock", "Limiter"]
 [[migrations]]
 tag = "v2"
 new_sqlite_classes = ["SyncLock"]
+
+[[migrations]]
+tag = "v3"
+new_sqlite_classes = ["PidBind", "GuildLock", "GuildBoard"]

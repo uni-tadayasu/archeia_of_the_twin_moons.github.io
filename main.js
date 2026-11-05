@@ -305,7 +305,11 @@ function mergeSaves(local, remote, baseShards) {
   const newer = (a, b) => (!a ? b || null : !b ? a : (+a.at >= +b.at ? a : b));
   out.cevent = newer(remote.cevent, local.cevent);
   out.ceventOwn = newer(remote.ceventOwn, local.ceventOwn);
-  out.guild = local.guild ?? remote.guild ?? null;
+  // ギルドは更新日時(guildAt)の新しい方を採用（脱退・除名の null も古い所属情報で上書きしない）
+  const gla = +local.guildAt || 0, gra = +remote.guildAt || 0;
+  out.guild = gla >= gra ? local.guild ?? null : remote.guild ?? null;
+  out.guildAt = Math.max(gla, gra);
+  out.guildNote = gla >= gra ? local.guildNote ?? null : remote.guildNote ?? null;
   out.shards = Math.max(0, (+remote.shards || 0) + ((+local.shards || 0) - baseShards));
   out.syncAt = Date.now();
   return out;
@@ -2965,6 +2969,20 @@ var social = initSocial({
   isChief: () => chiefUnlocked(),
   isOperator: () => operatorUnlocked(),
   roleToken: () => roleState.tok,
+  // サーバーでの本人確認に使う同期コード
+  syncCode: () => syncCodeNow(),
+  // サーバー側で灯晶を消費した（寄付など）：手元にも反映し、同期の基準値を合わせる
+  onServerSpend: (amt, ver) => {
+    save.shards = Math.max(0, (+save.shards || 0) - amt);
+    if (!localStorage.getItem('arkeia-sync-dirty') && ver && syncVer() === ver - 1) {
+      markSynced(ver, Date.now(), save.shards);
+      localStorage.setItem(SAVE_KEY, JSON.stringify(save));
+    } else {
+      const b = localStorage.getItem('arkeia-sync-base');
+      if (b != null && Number.isFinite(+b)) localStorage.setItem('arkeia-sync-base', String(+b - amt));
+      persist();
+    }
+  },
   // 運営会議：送信者が運営長か運営であることを役職トークンで確認（サーバー未設定時は受け入れる）
   verifyStaff: async (tk) => {
     if (!apiEnabled()) return true;

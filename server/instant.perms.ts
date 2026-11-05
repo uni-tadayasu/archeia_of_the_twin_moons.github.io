@@ -8,10 +8,11 @@ const rules = {
   opinvites: { allow: deny },
   syncsaves: { allow: deny },
   entitlements: { allow: deny },
-  // 運営長の特別イベント：誰でも読める。書き込みは可能だが、受信側が運営長の署名トークンを検証する
-  chiefevents: { allow: { view: 'true', create: 'true', update: 'true', delete: 'false' } },
-  // ギルド寄付ランキング：誰でも読める・追加更新できる（サーバー未設定時は端末の申告を信頼）
-  guilddonations: { allow: { view: 'true', create: 'true', update: 'true', delete: 'false' } },
+  // 運営長の特別イベント：誰でも読める。書き込みはサーバー（管理トークン）のみ。
+  // 中身には内容ハッシュに結びついた公開署名(sig)だけを置き、役職トークンは保存しない
+  chiefevents: { allow: { view: 'true', create: 'false', update: 'false', delete: 'false' } },
+  // 旧ギルド寄付記録：書き込み禁止（寄付・ランキングはサーバーの Durable Object で管理）
+  guilddonations: { allow: { view: 'true', create: 'false', update: 'false', delete: 'false' } },
   $default: { allow: { $default: 'false' } }
 };
 
