@@ -6,6 +6,12 @@ export const OPERATOR_KEY_SHA256 = '57834f33d11dfc0ca32c502c3effdff3c6a56988ca57
 // 変更済み（変更手順は運営キーと同じ）
 export const CHIEF_KEY_SHA256 = 'c7fafbd5970dc6041fe595c690f8469e7413a21ce2104df3adbf081258ddcbdd';
 export const MAX_KEY_ATTEMPTS = 5;
+
+// サーバー（/server を Cloudflare Workers にデプロイ）。設定すると認証・招待・同期・購入・戦闘値の検証がサーバー側になる。
+// 空のままだと従来の端末内判定（安全性は低い）で動作します。
+export const API_BASE = '';
+// サーバーの署名公開鍵（/server/README.md の手順1で作成）
+export const SERVER_PUBKEY_JWK = null;
 export const LOCKOUT_MS = 30000;
 
 // ショップ（課金）設定。url に購入ページのリンクを入れると「購入する」ボタンが開きます。

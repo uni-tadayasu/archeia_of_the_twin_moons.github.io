@@ -1,0 +1,26 @@
+name = "arkeia-api"
+main = "worker.js"
+compatibility_date = "2024-11-01"
+compatibility_flags = ["nodejs_compat"]
+
+[vars]
+# ゲームを公開しているURL（カンマ区切り）
+ALLOWED_ORIGINS = "https://your-game.example.com"
+INSTANT_APP_ID = "ここにInstantDBのApp ID"
+# Stripeの支払いリンクID → 解放するキャラ
+STRIPE_LINKS = '{"plink_XXXXXXXX":"crimson"}'
+
+# 以下は `wrangler secret put 名前` で登録（ファイルには書かない）
+# INSTANT_ADMIN_TOKEN / SIGN_PRIVATE_JWK / PEPPER / OP_KEY_SHA256 / CHIEF_KEY_SHA256 / STRIPE_WEBHOOK_SECRET
+
+[[durable_objects.bindings]]
+name = "INVITE_LOCK"
+class_name = "InviteLock"
+
+[[durable_objects.bindings]]
+name = "LIMITER"
+class_name = "Limiter"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["InviteLock", "Limiter"]

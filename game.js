@@ -48,6 +48,14 @@ export function hiSpec(def) {
   HI_CACHE.set(def, s);
   return s;
 }
+// オンラインで受け取る1撃ダメージの上限（技・奥義の最大威力×検証済み攻撃強化×秘奥義/追加技の倍率に余裕を持たせる）
+function netHitCap(f) {
+  const d = f.def;
+  let base = 60;
+  for (const s of [d.light, d.over, ...(d.skills || [])]) if (s && +s.dmg > base) base = +s.dmg;
+  const atk = f.verified ? f.upg.atk || 0 : 0;
+  return Math.round(base * (1 + 0.06 * atk) * (d.power || 1) * 1.8 * 1.35 * 1.25);
+}
 const AWAKEN_TIME = 15; // 覚醒の持続（秒）
 const AWAKEN_RED = new THREE.Color(0xff1a28);
 
@@ -336,6 +344,7 @@ export class Fighter {
     this.team = o.team;
     this.cpu = o.cpu ? { level: o.cpu, t: 0, strafe: 0, wantGuard: false } : null;
     this.remoteAuth = !!o.remote;
+    this.verified = !!o.verified; // サーバー署名済みの強化値か
     this.netId = o.netId || null;
     this.isPlayer = !!o.player;
     this.name = o.name || this.def.name;
@@ -1096,7 +1105,14 @@ export class Battle {
   receiveNetHit(e) {
     const t = this.fighters.find((f) => f.netId === e.to && !f.remoteAuth);
     if (t) {
-      const real = t.receive(e.dmg, e.stun, e.kx, e.kz);
+      // サーバー検証モード：攻撃者の検証済み強化値から1撃の上限を出し、超える値は切り詰める
+      let dmg = e.dmg;
+      if (this.strictNet) {
+        const a = this.fighters.find((f) => f.netId === e.from && f.remoteAuth);
+        if (!a) return;
+        dmg = Math.min(dmg, netHitCap(a));
+      }
+      const real = t.receive(dmg, e.stun, e.kx, e.kz);
       this.ui.popup(t.pos, real, '#ff8f7a');
       if (e.st) t.applyStatus(e.st);
       this.ui.sfx('hit');

@@ -23,7 +23,9 @@ export function sanitizePresence(p) {
     x: num(p.x, 50), z: num(p.z, 50), ry: num(p.ry, 10), hp: num(p.hp, 99999), mv: !!p.mv, ready: !!p.ready,
     role: str(p.role, 8), ch: Math.floor(num(p.ch, 99)), ib: !!p.ib,
     pid: str(p.pid, 24), fx: num(p.fx, 700), fz: num(p.fz, 700),
-    gw: /^w\d{1,2}$/.test(p.gw) ? p.gw : '', ga: /^a\d{1,2}$/.test(p.ga) ? p.ga : ''
+    gw: /^w\d{1,2}$/.test(p.gw) ? p.gw : '', ga: /^a\d{1,2}$/.test(p.ga) ? p.ga : '',
+    // サーバー署名の戦闘プロフィール（受信側で検証）
+    prof: typeof p.prof === 'string' && /^[A-Za-z0-9_\-.]{20,1500}$/.test(p.prof) ? p.prof : ''
   };
 }
 
@@ -83,7 +85,7 @@ export async function connect(mode, roomCode, handlers) {
   });
   room.subscribeTopic('hit', (e) => {
     if (e && typeof e === 'object') {
-      handlers.onHit({ to: str(e.to, 40), dmg: Math.min(400, Math.abs(num(e.dmg))), stun: Math.min(1, Math.abs(num(e.stun))), kx: num(e.kx, 12), kz: num(e.kz, 12), st: ['burn', 'freeze', 'para', 'slow', 'petrify', 'blind', 'curse', 'silence', 'poison', 'bleed'].includes(e.st) ? e.st : null });
+      handlers.onHit({ from: str(e.from, 40), to: str(e.to, 40), dmg: Math.min(400, Math.abs(num(e.dmg))), stun: Math.min(1, Math.abs(num(e.stun))), kx: num(e.kx, 12), kz: num(e.kz, 12), st: ['burn', 'freeze', 'para', 'slow', 'petrify', 'blind', 'curse', 'silence', 'poison', 'bleed'].includes(e.st) ? e.st : null });
     }
   });
   room.subscribeTopic('boss', (e) => {
@@ -93,7 +95,7 @@ export async function connect(mode, roomCode, handlers) {
   });
   room.subscribeTopic('invade', (e) => {
     if (e && typeof e === 'object') {
-      handlers.onInvade?.({ to: str(e.to, 40), from: str(e.from, 40), name: str(e.name, 12) || '運営' });
+      handlers.onInvade?.({ to: str(e.to, 40), from: str(e.from, 40), name: str(e.name, 12) || '運営', tk: typeof e.tk === 'string' && e.tk.length < 1500 ? e.tk : '' });
     }
   });
   // 旅人どうしの申請（決闘・フレンド）
@@ -109,7 +111,7 @@ export async function connect(mode, roomCode, handlers) {
     invade: (e) => room.publishTopic('invade', e),
     publish: (s) => room.publishPresence({ ...s, id: myId }),
     cast: (e) => room.publishTopic('cast', e),
-    hit: (e) => room.publishTopic('hit', e),
+    hit: (e) => room.publishTopic('hit', { ...e, from: myId }),
     boss: (e) => room.publishTopic('boss', e),
     leave: () => {
       try {

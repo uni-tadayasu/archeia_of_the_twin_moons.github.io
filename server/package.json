@@ -1,0 +1,12 @@
+{
+  "name": "arkeia-api",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "deploy": "wrangler deploy",
+    "perms": "npx instant-cli push perms"
+  },
+  "devDependencies": {
+    "wrangler": "^3.90.0"
+  }
+}

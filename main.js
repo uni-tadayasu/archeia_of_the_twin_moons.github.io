@@ -5,6 +5,7 @@ import { FIGHTERS, STORY, ROSTER, UPGRADES, MAX_LV, STAGES, BGM, APEX_BGM, ENEMY
 import { ProcMusic } from './music.js';
 import { OPERATOR_KEY_SHA256, CHIEF_KEY_SHA256, MAX_KEY_ATTEMPTS, LOCKOUT_MS, SHOP_ITEMS } from './config.js';
 import { connect, issueInvite, redeemInvite, syncPush, syncPull } from './net.js';
+import { apiEnabled, api, verifyToken } from './api.js';
 
 const $ = (s) => document.querySelector(s);
 const isTouch = matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window;
@@ -193,9 +194,15 @@ function loadSave() {
   s.uname = raw.uname;
   s.noHero = !!raw.noHero;
   s.awk = clampInt(raw.awk, 0, 99);
+  s.buyId = raw.buyId;
   return s;
 }
 const save = loadSave();
+// 購入ID：Stripeの client_reference_id に使う秘密の値（presence には載せない）
+if (typeof save.buyId !== 'string' || !/^[A-Za-z0-9]{24}$/.test(save.buyId)) {
+  const A = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789';
+  save.buyId = [...crypto.getRandomValues(new Uint8Array(24))].map((x) => A[x % A.length]).join('');
+}
 // 世界でのあなたの印（端末ごとに固定）とフレンド
 if (typeof save.pid !== 'string' || !/^[a-z0-9]{8,24}$/.test(save.pid)) save.pid = (Math.random().toString(36).slice(2) + Date.now().toString(36)).slice(0, 16);
 if (!Array.isArray(save.friends)) save.friends = [];
@@ -791,12 +798,57 @@ function goBackCurrent() {
   scr.querySelector('.back')?.click();
 }
 // 運営長：運営長キーでのみ（このタブの間だけ）
+// サーバー設定時は、サーバー署名の役割トークンでのみ判定（端末内のフラグは無視）
+const roleState = { r: null, tok: '' };
+async function refreshRole() {
+  if (!apiEnabled()) return;
+  const tok = localStorage.getItem('arkeia-role') || '';
+  const d = await verifyToken(tok, 'role');
+  roleState.r = d?.r || null;
+  roleState.tok = d ? tok : '';
+  if (!d) localStorage.removeItem('arkeia-role');
+  refreshOptions();
+}
 function chiefUnlocked() {
+  if (apiEnabled()) return roleState.r === 'chief';
   return localStorage.getItem('arkeia-chief') === '1' || sessionStorage.getItem('arkeia-chief') === '1';
 }
 // 運営：運営キー（このタブの間）／招待コードで登録済み（この端末）／運営長
 function operatorUnlocked() {
+  if (apiEnabled()) return !!roleState.r;
   return localStorage.getItem('arkeia-op') === '1' || sessionStorage.getItem('arkeia-op') === '1' || localStorage.getItem('arkeia-op-reg') === '1' || chiefUnlocked();
+}
+// ---- サーバー検証の戦闘プロフィール（強化・装備・キャラ使用権） ----
+const profState = { key: '', tok: '', at: 0, busy: false };
+async function refreshProfile(key) {
+  if (!apiEnabled() || !FIGHTERS[key] || profState.busy) return;
+  if (profState.key === key && Date.now() - profState.at < (profState.tok ? 30 * 60000 : 60000)) return;
+  profState.busy = true;
+  Object.assign(profState, { key, tok: '', at: Date.now() }); // 失敗時は1分おいて再試行
+  try {
+    const r = await api('/profile', { save, key, role: roleState.tok, buyer: save.buyId });
+    if (r.ok && (await verifyToken(r.token, 'prof'))) Object.assign(profState, { key, tok: r.token, at: Date.now() });
+  } catch (err) {
+    console.warn(err);
+  } finally {
+    profState.busy = false;
+  }
+}
+const profOk = {}; // peerId → 検証済みプロフィール
+function verifyPeerProfs(peers) {
+  if (!apiEnabled()) return;
+  for (const p of Object.values(peers)) {
+    if (p.prof && profOk[p.id]?.tok !== p.prof) {
+      verifyToken(p.prof, 'prof').then((d) => {
+        if (d) profOk[p.id] = { tok: p.prof, d };
+      });
+    }
+  }
+}
+// 相手の戦士を出すときの強化値（署名が合っていて、キャラも一致する時だけ反映）
+function peerOpts(peerId, key) {
+  const v = profOk[peerId]?.d;
+  return v && v.k === key && v.exp > Date.now() ? { upg: v.u, verified: true } : {};
 }
 // CPUの強さ：敵の頭の良さ(cpu)と体力を倍率で変える
 const DIFFS = [
@@ -1894,6 +1946,7 @@ function ensureWorld() {
     state.worldPending = connect('world', 'global', {
       onPeers: (p) => {
         state.worldPeers = p;
+        verifyPeerProfs(p);
         syncWorldRemotes(p);
         refreshFieldRemotes();
         if (!$('#world-panel').hidden) renderWorldPanel();
@@ -1949,19 +2002,29 @@ function syncWorldRemotes(peers) {
   }
 }
 
-function onInvaded(e) {
+async function onInvaded(e) {
   const w = state.world;
+  if (!w || e.to !== w.myId) return;
+  // サーバー設定時：サーバー署名の乱入許可証（宛先・送り主・60秒の期限）がなければ拒否
+  let tr = null;
+  if (apiEnabled()) {
+    const t = await verifyToken(e.tk, 'inv');
+    if (!t || t.to !== w.myId || t.from !== e.from) return;
+    tr = t.r;
+  }
   const b = state.battle;
-  if (!w || e.to !== w.myId || state.mode !== 'story' || !b || b.ended || state.invaded || !allowInvade() || document.querySelector('.screen.on')) {
+  if (state.mode !== 'story' || !b || b.ended || state.invaded || !allowInvade() || document.querySelector('.screen.on')) {
     return;
   }
   state.invaded = true;
   state.paused = false;
   $('#pause').hidden = true;
   const p = state.worldPeers?.[e.from];
-  const ik = ['chief', 'sovereign', 'sovereign2'].includes(p?.fk) ? p.fk : 'seraphel';
-  b.add(ik, { team: 1, remote: true, netId: e.from, pos: p ? [p.x, p.z] : [0, -9], facing: Math.PI, name: `乱入者・${e.name}` });
+  const apexOk = !apiEnabled() || tr === 'chief';
+  const ik = apexOk && ['chief', 'sovereign', 'sovereign2'].includes(p?.fk) ? p.fk : 'seraphel';
+  b.add(ik, { team: 1, remote: true, netId: e.from, pos: p ? [p.x, p.z] : [0, -9], facing: Math.PI, name: `乱入者・${e.name}`, ...peerOpts(e.from, ik) });
   b.net = w;
+  b.strictNet = apiEnabled();
   buildHud();
   ui.flash();
   sfx('burst');
@@ -2014,13 +2077,24 @@ async function startInvade(p) {
     return;
   }
   await loadPromise;
+  // サーバー設定時：乱入の許可をサーバーで判定し、署名付き許可証を相手に渡す
+  let tk = '';
+  if (apiEnabled()) {
+    const r = await api('/invade/ticket', { token: roleState.tok, from: w.myId, to: p.id }).catch(() => ({}));
+    if (!r.ok || !r.ticket) {
+      ui.banner({ name: '— 乱入できません —' }, r.status === 429 ? '少し時間をおいてください' : 'サーバーが許可しませんでした');
+      return;
+    }
+    tk = r.ticket;
+  }
   state.mode = 'invade';
-  w.invade({ to: p.id, from: w.myId, name: '運営' });
+  w.invade({ to: p.id, from: w.myId, name: '運営', tk });
   setStage(stageById(STORY[p.ch]?.stage));
   const b = makeBattle(w);
   const ik = (state.invadeKey === 'chief' || state.invadeKey === 'sovereign') && chiefUnlocked() ? state.invadeKey : 'seraphel';
   b.add(ik, { team: 0, player: true, awk: save.awk, netId: w.myId, pos: [0, -9], name: FIGHTERS[ik].name + '（運営）', upg: upgFor(ik), gear: gearFor(ik) });
-  b.add(FIGHTERS[p.fk] ? p.fk : 'rowen', { team: 1, remote: true, netId: p.id, pos: [p.x, p.z], name: p.name, gear: { w: p.gw, a: p.ga } });
+  b.add(FIGHTERS[p.fk] ? p.fk : 'rowen', { team: 1, remote: true, netId: p.id, pos: [p.x, p.z], name: p.name, gear: { w: p.gw, a: p.ga }, ...peerOpts(p.id, FIGHTERS[p.fk] ? p.fk : 'rowen') });
+  b.strictNet = apiEnabled();
   beginBattle(true);
   ui.flash();
   ui.banner({ name: `— ${STORY[p.ch]?.title || '旅の途中'} —` }, '裁きの時間だ');
@@ -2040,7 +2114,8 @@ function worldTick(dt) {
   const b = state.battle;
   const me = b?.fighters.find((f) => f.isPlayer);
   const gk = state.myKey || '';
-  const base = { name: myName(), pid: save.pid, mode: 'world', ready: false, gw: save.equip[gk] || '', ga: save.armor[gk] || '' };
+  if (gk) refreshProfile(gk);
+  const base = { name: myName(), pid: save.pid, mode: 'world', ready: false, gw: save.equip[gk] || '', ga: save.armor[gk] || '', prof: profState.key === gk ? profState.tok : '' };
   if (state.mode === 'story' && state.field && !b) {
     const fp = state.field.player;
     w.publish({ ...base, role: 'field', fk: state.myKey, ch: state.chapter, ib: false, x: 0, z: 0, fx: fp.pos.x, fz: fp.pos.z, ry: fp.facing, hp: 1, mv: fp.cur === 'run' });
@@ -2226,7 +2301,8 @@ function startDuel(peer, challenger) {
   const myPos = challenger ? [-4, 3] : [4, -3];
   const peerPos = challenger ? [4, -3] : [-4, 3];
   b.add(state.myKey, { team: 0, player: true, awk: save.awk, netId: w.myId, pos: myPos, facing: challenger ? 0 : Math.PI, name: myName() + '（あなた）', upg: upgFor(state.myKey), gear: gearFor(state.myKey) });
-  b.add(FIGHTERS[peer.fk] ? peer.fk : 'rowen', { team: 1, remote: true, netId: peer.id, pos: peerPos, facing: challenger ? Math.PI : 0, name: peer.name, gear: { w: peer.gw, a: peer.ga } });
+  b.add(FIGHTERS[peer.fk] ? peer.fk : 'rowen', { team: 1, remote: true, netId: peer.id, pos: peerPos, facing: challenger ? Math.PI : 0, name: peer.name, gear: { w: peer.gw, a: peer.ga }, ...peerOpts(peer.id, FIGHTERS[peer.fk] ? peer.fk : 'rowen') });
+  b.strictNet = apiEnabled();
   beginBattle(false);
   ui.flash();
   sfx('burst');
@@ -2310,10 +2386,15 @@ function randomCode(groups) {
 $('#chief-issue').addEventListener('click', async () => {
   if (!chiefUnlocked()) return;
   sfx('ui');
-  const code = 'OP-' + randomCode(3);
+  let code = 'OP-' + randomCode(3);
   $('#chief-code').value = '発行中…';
   try {
-    await issueInvite(await sha256('arkeia-invite:' + code));
+    if (apiEnabled()) {
+      // サーバーが運営長トークンを確認してコードを生成（ハッシュのみ保存）
+      const r = await api('/invite/issue', { token: roleState.tok });
+      if (!r.ok || !r.code) throw new Error('denied');
+      code = r.code;
+    } else await issueInvite(await sha256('arkeia-invite:' + code));
     $('#chief-code').value = code;
     $('#chief-code').select();
   } catch {
@@ -2329,7 +2410,10 @@ $('#sync-push').addEventListener('click', async () => {
   if (normSync(code).length !== 12) code = randomCode(3);
   m.textContent = '預けています…';
   try {
-    await syncPush(await sha256('arkeia-sync:' + normSync(code)), JSON.stringify(save));
+    if (apiEnabled()) {
+      const r = await api('/sync/push', { code: normSync(code), data: JSON.stringify(save) });
+      if (!r.ok) throw new Error('push');
+    } else await syncPush(await sha256('arkeia-sync:' + normSync(code)), JSON.stringify(save));
     localStorage.setItem('arkeia-sync', code);
     $('#sync-code').value = code;
     m.textContent = `預けました。別の端末で同期コード「${code}」を入力してください（他人には教えないでください）。`;
@@ -2347,7 +2431,7 @@ $('#sync-pull').addEventListener('click', async () => {
   }
   m.textContent = '受け取っています…';
   try {
-    const json = await syncPull(await sha256('arkeia-sync:' + n));
+    const json = apiEnabled() ? (await api('/sync/pull', { code: n })).data || null : await syncPull(await sha256('arkeia-sync:' + n));
     if (!json) {
       m.textContent = 'その同期コードの記録は見つかりませんでした。';
       return;
@@ -2379,6 +2463,21 @@ $('#opt-diff').addEventListener('click', () => {
 });
 
 // ---------- Shop ----------
+// サーバー設定時：購入キャラはサーバー署名の購入記録とだけ一致させる（端末内の改変は消える）
+async function syncEntitlements() {
+  if (!apiEnabled()) return null;
+  try {
+    const r = await api('/entitlements', { buyer: save.buyId });
+    const d = r.ok ? await verifyToken(r.token, 'ent') : null;
+    if (!d || !Array.isArray(d.keys)) return null;
+    save.chars = d.keys.filter((k) => FIGHTERS[k]?.shop);
+    persist();
+    return save.chars;
+  } catch {
+    return null;
+  }
+}
+syncEntitlements();
 function renderShop() {
   const list = $('#shop-list');
   list.replaceChildren();
@@ -2412,9 +2511,34 @@ function renderShop() {
       buy.textContent = '購入する';
       buy.addEventListener('click', () => {
         sfx('ui');
-        if (it.url) window.open(it.url, '_blank', 'noopener');
+        if (it.url) {
+          // 決済をこの端末の購入IDに結びつける（Stripe 支払いリンクの client_reference_id）
+          const u = new URL(it.url);
+          if (apiEnabled()) u.searchParams.set('client_reference_id', save.buyId);
+          window.open(u.toString(), '_blank', 'noopener');
+        }
         else $('#shop-msg').textContent = '購入ページは準備中です。もう少しお待ちください。';
       });
+      if (apiEnabled()) {
+        // サーバーが Stripe の決済成功通知を確認した購入だけを解放
+        const chk = document.createElement('button');
+        chk.className = 'btn mini';
+        chk.textContent = '購入を確認';
+        chk.addEventListener('click', async () => {
+          sfx('ui');
+          $('#shop-msg').textContent = '決済を確かめています…';
+          const got = await syncEntitlements();
+          if (got == null) $('#shop-msg').textContent = 'サーバーに届きませんでした。少し待ってからもう一度。';
+          else if (got.includes(it.key)) {
+            sfx('burst');
+            $('#shop-msg').textContent = `${d.name} が仲間になった！`;
+            renderShop();
+          } else $('#shop-msg').textContent = 'まだ決済が確認できません（反映まで数十秒かかることがあります）。';
+        });
+        row.append(buy, chk);
+        list.append(row);
+        continue;
+      }
       const form = document.createElement('form');
       form.className = 'field';
       const inp = document.createElement('input');
@@ -2467,14 +2591,35 @@ $('#op-form').addEventListener('submit', async (e) => {
   // 全角文字・前後の空白・改行を正規化（スマホやIMEの全角ハイフン対策）
   const val = $('#op-key').value.normalize('NFKC').replace(/[‐‑‒–—―ー−]/g, '-').trim().slice(0, 128);
   $('#op-key').value = '';
+  const ok = (text) => {
+    msg.textContent = text;
+    opState.tries = 0;
+    sfx('burst');
+    refreshOptions();
+  };
+  // サーバー設定時：判定はすべてサーバー（招待コードはサーバーで原子的に一回だけ使用）
+  if (apiEnabled()) {
+    const up = val.toUpperCase();
+    const isInvite = /^OP-[A-Z0-9-]{8,20}$/.test(up);
+    msg.textContent = '確かめています…';
+    try {
+      const r = isInvite ? await api('/invite/redeem', { code: up }) : await api('/auth/key', { key: val });
+      const d = r.ok ? await verifyToken(r.token, 'role') : null;
+      if (d) {
+        localStorage.setItem('arkeia-role', r.token);
+        roleState.r = d.r;
+        roleState.tok = r.token;
+        ok(d.r === 'chief' ? '運営長として認められた。白耀の天后ルミナリアが目を覚ます。' : isInvite ? '招待が受理された。あなたは運営として登録された（このキーはもう使えない）。' : 'かちり、と音がした。裁定者セラフェルが目を覚ます。');
+      } else {
+        msg.textContent = r.status === 429 ? '鍵穴が熱を持っています。少し待ってから。' : '鍵は回らなかった。';
+      }
+    } catch {
+      msg.textContent = 'サーバーに届きませんでした（通信を確認してください）。';
+    }
+    return;
+  }
   try {
     const h = await sha256(val);
-    const ok = (text) => {
-      msg.textContent = text;
-      opState.tries = 0;
-      sfx('burst');
-      refreshOptions();
-    };
     if (safeEqual(h, CHIEF_KEY_SHA256)) {
       localStorage.setItem('arkeia-chief', '1');
       ok('運営長として認められた。白耀の天后ルミナリアが目を覚ます。');
@@ -2496,6 +2641,8 @@ $('#op-form').addEventListener('submit', async (e) => {
     msg.textContent = 'この環境では照合できません（HTTPSで開いてください）。';
   }
 });
+
+refreshRole();
 
 // ---------- Gamepad (Standard mapping: Xbox / PlayStation / Switch Pro / 汎用) ----------
 const pad = { prev: [], navT: 0 };
