@@ -2,6 +2,19 @@ import * as THREE from 'three';
 import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js';
 import { FIGHTERS, ELEMS } from './data.js';
 import { makeGear, animGear } from './gear.js';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+
+// 召喚獣の見た目と性能（HPは使い手の最大HPに比例）
+const SUMMON_DEFS = {
+  s0: { name: 'ヤマタノオロチ', model: 'assets/models/summon-orochi.glb', height: 3.6, hpMul: 0.6, dist: 2.4, range: 4.4, mul: 1.5, color: 0xd01030, color2: 0xff6020 },
+  s1: { name: 'スサノオ', model: 'assets/models/summon-susanoo.glb', height: 3.4, hpMul: 0.6, dist: 2.2, range: 4.4, mul: 1.5, color: 0x30ff70, color2: 0xa0ffc0 }
+};
+const SUMMON_CACHE = new Map();
+const summonLoader = new GLTFLoader();
+function loadSummonModel(url) {
+  if (!SUMMON_CACHE.has(url)) SUMMON_CACHE.set(url, summonLoader.loadAsync(url).catch((err) => { console.warn(err); return null; }));
+  return SUMMON_CACHE.get(url);
+}
 
 // 状態異常：持続秒数・継続ダメージ(毎秒)
 const ST_INFO = {
@@ -389,7 +402,10 @@ export class Fighter {
     this.visual = new THREE.Group();
     this.root.add(this.visual);
     this.gearIds = o.gear || null;
-    this.hydra = !!o.gear?.h; // 召喚獣（通常攻撃の代わり）
+    // 召喚獣（通常攻撃の代わり）。gear.h に召喚獣ID
+    this.summonId = typeof o.gear?.h === 'string' && SUMMON_DEFS[o.gear.h] ? o.gear.h : '';
+    this.summon = null;
+    this.summonCd = 0;
     this.buildModel(battle.assets[key]);
     battle.scene.add(this.root);
   }
@@ -485,6 +501,7 @@ export class Fighter {
       this.mixer.update(dt);
     }
     if (this.gear) animGear(this.gear, dt, !!this.action, this.vel.lengthSq() > 0.5);
+    if (this.summonCd > 0) this.summonCd -= dt;
     this.inv = Math.max(0, this.inv - dt);
     this.comboWindow = Math.max(0, this.comboWindow - dt);
     if (this.dead) {
@@ -760,8 +777,8 @@ export class Fighter {
       if (!a.hit && a.t >= a.hitAt) {
         a.hit = true;
         const big = a.step === 2;
-        if (this.hydra) {
-          this.battle.hydraStrike(this, big);
+        if (this.summonId && this.battle.summonStrike(this, big)) {
+          // 召喚獣が通常攻撃の代わりに攻撃
         } else if (L.shots) {
           this.battle.laserVolley(this, L, big ? L.shots + 2 : L.shots);
         } else {
@@ -1173,6 +1190,7 @@ export class Battle {
     if (tgt.inv > 0) {
       return;
     }
+    if (this.summonBlock(tgt, from, dmg)) return;
     const real = tgt.receive(dmg, stun, dir.x, dir.z);
     if (st && real > 0) {
       tgt.applyStatus(st);
@@ -1718,97 +1736,166 @@ export class Battle {
     }
   }
 
-  // 召喚獣《ヤマタノオロチ》：背後に八つ首の竜が現れ、周囲の敵へ一斉に噛みつく
-  buildHydra(f) {
+  // ---- 召喚獣：HPを持ち、倒されるまで使い手の前方に居続ける。通常攻撃の代わりに攻撃する ----
+  spawnSummon(f) {
+    const d = SUMMON_DEFS[f.summonId];
+    if (!d) return null;
+    const k = (f.def.height / 1.8) * f.scale;
     const g = new THREE.Group();
-    const scale = (f.def.height / 1.8) * f.scale;
-    const skin = new THREE.MeshStandardMaterial({ color: 0x2a1a3a, roughness: 0.55, metalness: 0.25, emissive: 0x300010, emissiveIntensity: 0.6 });
-    const belly = new THREE.MeshStandardMaterial({ color: 0x7a2030, roughness: 0.6, emissive: 0x400010, emissiveIntensity: 0.5 });
-    const horn = new THREE.MeshStandardMaterial({ color: 0xd8d0c0, roughness: 0.4 });
-    const eye = new THREE.MeshBasicMaterial({ color: 0xff3020 });
-    const mats = [skin, belly, horn, eye];
-    const body = new THREE.Mesh(new THREE.SphereGeometry(1.1, 16, 12), skin);
-    body.scale.set(1.4, 0.8, 1.1);
-    body.position.y = 0.9;
+    const body = new THREE.Group();
     g.add(body);
-    const heads = [];
-    for (let i = 0; i < 8; i++) {
-      const a = -Math.PI * 0.85 + (i / 7) * Math.PI * 1.7;
-      const neckLen = 2.4 + (i % 3) * 0.5;
-      const base = new THREE.Vector3(Math.sin(a) * 0.9, 1.2, -0.3 + Math.cos(a) * 0.4);
-      const tip = new THREE.Vector3(Math.sin(a) * 2.2, 1.2 + neckLen, Math.cos(a) * 0.6 - 0.6);
-      const mid = base.clone().lerp(tip, 0.5).add(new THREE.Vector3(Math.sin(a) * 0.8, 0, 0.4));
-      const curve = new THREE.QuadraticBezierCurve3(base, mid, tip);
-      const neck = new THREE.Mesh(new THREE.TubeGeometry(curve, 12, 0.28, 8, false), i % 2 ? skin : belly);
-      g.add(neck);
-      const head = new THREE.Group();
-      const skull = new THREE.Mesh(new THREE.ConeGeometry(0.34, 1.1, 8), skin);
-      skull.rotation.x = Math.PI / 2;
-      skull.position.z = 0.4;
-      const jaw = new THREE.Mesh(new THREE.ConeGeometry(0.22, 0.9, 6), belly);
-      jaw.rotation.x = Math.PI / 2 + 0.35;
-      jaw.position.set(0, -0.18, 0.35);
-      head.add(skull, jaw);
-      for (const s of [1, -1]) {
-        const h = new THREE.Mesh(new THREE.ConeGeometry(0.07, 0.6, 5), horn);
-        h.position.set(s * 0.18, 0.25, -0.05);
-        h.rotation.set(-0.9, 0, s * 0.3);
-        const e = new THREE.Mesh(new THREE.SphereGeometry(0.06, 6, 4), eye);
-        e.position.set(s * 0.17, 0.1, 0.35);
-        head.add(h, e);
+    // 読み込み中の仮の姿（霊気の柱）
+    const ghost = new THREE.Mesh(new THREE.CylinderGeometry(0.6 * k, 1.2 * k, d.height * k, 12, 1, true), glow(d.color, 0.35));
+    ghost.position.y = (d.height * k) / 2;
+    body.add(ghost);
+    // HPバー（カメラへ向ける）
+    const bar = new THREE.Group();
+    const bg = new THREE.Mesh(new THREE.PlaneGeometry(1.6, 0.14), new THREE.MeshBasicMaterial({ color: 0x111111, transparent: true, opacity: 0.75, depthTest: false }));
+    const fill = new THREE.Mesh(new THREE.PlaneGeometry(1.56, 0.1), new THREE.MeshBasicMaterial({ color: d.color, depthTest: false }));
+    fill.position.z = 0.001;
+    bg.renderOrder = fill.renderOrder = 999;
+    bar.add(bg, fill);
+    bar.position.y = d.height * k + 0.5;
+    g.add(bar);
+    const s = { def: d, f, g, body, bar, fill, k, maxHp: Math.round(f.maxHp * d.hpMul), hp: 0, t: 0, atk: 0, dying: 0, mixer: null, acts: {} };
+    s.hp = s.maxHp;
+    const fw = f.forward();
+    g.position.set(f.pos.x + fw.x * d.dist * k, 0, f.pos.z + fw.z * d.dist * k);
+    g.rotation.y = f.facing;
+    this.scene.add(g);
+    f.summon = s;
+    loadSummonModel(d.model).then((gltf) => {
+      if (!gltf || s.dying) return;
+      const m = SkeletonUtils.clone(gltf.scene);
+      m.updateMatrixWorld(true);
+      const box = new THREE.Box3().setFromObject(m);
+      const size = box.getSize(new THREE.Vector3());
+      const sc = (d.height * k) / Math.max(size.y, 0.001);
+      m.scale.setScalar(sc);
+      m.position.y = -box.min.y * sc;
+      m.traverse((c) => {
+        if (c.isMesh) {
+          c.castShadow = true;
+          if (c.material?.emissive) {
+            c.material = c.material.clone();
+            c.material.emissive.setHex(d.color);
+            c.material.emissiveIntensity = 0.12;
+          }
+        }
+      });
+      body.remove(ghost);
+      ghost.geometry.dispose();
+      body.add(m);
+      if (gltf.animations?.length) {
+        s.mixer = new THREE.AnimationMixer(m);
+        const find = (re) => gltf.animations.find((a) => re.test(a.name));
+        for (const [key, re] of [['idle', /^idle$/i], ['walk', /^walk$/i], ['atk', /heavy_combo|sword_attack|punch/i], ['die', /death/i]]) {
+          const c = find(re);
+          if (c) s.acts[key] = s.mixer.clipAction(c);
+        }
+        s.acts.idle?.play();
+        if (s.acts.atk) s.acts.atk.setLoop(THREE.LoopOnce, 1);
+        if (s.acts.die) { s.acts.die.setLoop(THREE.LoopOnce, 1); s.acts.die.clampWhenFinished = true; }
       }
-      head.position.copy(tip);
-      head.userData = { tip: tip.clone(), jaw, a };
-      g.add(head);
-      heads.push(head);
-    }
-    g.scale.setScalar(scale * 0.75);
-    g.traverse((c) => { if (c.isMesh) c.castShadow = true; });
-    g.userData = { heads, mats, t: 0, show: 0 };
-    g.visible = false;
-    f.root.add(g);
-    f.hydraObj = g;
-    // 毎フレーム：出現・首のうねり・時間で退場
-    this.addEffect((dt) => {
-      if (!f.hydraObj || f.dead) {
-        g.visible = false;
-        return !!f.hydraObj && !f.dead;
-      }
-      const u = g.userData;
-      u.t += dt;
-      u.show = Math.max(0, u.show - dt);
-      const s = Math.min(1, u.show / 0.3);
-      g.visible = s > 0.01;
-      if (!g.visible) return true;
-      g.position.set(0, -1.6 * (1 - s), -1.3); // root は向きに合わせて回転済み（ローカルの背後）
-      const lunge = Math.max(0, u.lunge || 0);
-      u.lunge = lunge - dt * 3;
-      for (const hd of u.heads) {
-        const d = hd.userData;
-        const w = Math.sin(u.t * 3 + d.a * 2) * 0.15;
-        hd.position.set(d.tip.x * (1 - lunge * 0.3), d.tip.y - lunge * 1.4 + w, d.tip.z + lunge * 2.6);
-        hd.rotation.set(0.3 + lunge * 0.8, d.a * 0.2, 0);
-        d.jaw.rotation.x = Math.PI / 2 + 0.35 + lunge * 0.6;
-      }
-      return true;
     });
-    return g;
+    // 出現演出
+    this.burstFx ? this.burstFx(g.position.clone().setY(1.2), d.color, elOf(f.def.skills[0])) : this.spark(g.position.clone().setY(1.2), d.color, 2);
+    this.ui.popup?.(g.position, `召喚！${d.name}`, '#' + d.color.toString(16).padStart(6, '0'));
+    this.shake = Math.max(this.shake || 0, 0.4);
+    this.addEffect((dt) => this.tickSummon(s, dt));
+    return s;
   }
 
-  hydraStrike(f, big) {
-    const g = f.hydraObj || this.buildHydra(f);
-    g.userData.show = 1.6;
-    g.userData.lunge = 1;
-    const L = f.def.light;
-    // 全方位に噛みつく（範囲は通常攻撃の約1.6倍）
-    this.meleeHit(f, 4.2, L.dmg * 1.5, big ? 0.5 : 0.3, big ? 8 : 3.5, null, null, true);
-    const c = 0xb01030;
-    for (let i = 0; i < 8; i++) {
-      const a = f.facing + (i / 8) * Math.PI * 2;
-      this.spark(new THREE.Vector3(f.pos.x + Math.sin(a) * 3, 1 + Math.random() * 0.6, f.pos.z + Math.cos(a) * 3), i % 2 ? 0xff4020 : c, 0.9);
+  tickSummon(s, dt) {
+    const f = s.f, d = s.def;
+    s.t += dt;
+    s.mixer?.update(dt);
+    if (f.dead && !s.dying) this.killSummon(s);
+    if (s.dying) {
+      s.dying += dt;
+      s.body.position.y = -Math.max(0, s.dying - 0.6) * 3;
+      s.bar.visible = false;
+      if (s.dying > 1.8) {
+        this.scene.remove(s.g);
+        for (const c of s.bar.children) { c.geometry.dispose(); c.material.dispose(); }
+        return false;
+      }
+      return true;
     }
-    this.fxPop(new THREE.Vector3(f.pos.x, 0.6, f.pos.z), 9, 8, 4.4, 0.35, { flat: true, grow: 1.5, spin: 6 });
-    if (big) this.shake = Math.max(this.shake || 0, 0.25);
+    // 使い手の前方へ追従
+    const fw = f.forward();
+    const tx = f.pos.x + fw.x * d.dist * s.k, tz = f.pos.z + fw.z * d.dist * s.k;
+    const dx = tx - s.g.position.x, dz = tz - s.g.position.z;
+    const moving = Math.hypot(dx, dz) > 0.25;
+    s.g.position.x += dx * (1 - Math.exp(-6 * dt));
+    s.g.position.z += dz * (1 - Math.exp(-6 * dt));
+    let ang = f.facing - s.g.rotation.y;
+    ang = Math.atan2(Math.sin(ang), Math.cos(ang));
+    s.g.rotation.y += ang * (1 - Math.exp(-8 * dt));
+    if (s.mixer && s.atk <= 0) {
+      const want = moving && s.acts.walk ? s.acts.walk : s.acts.idle;
+      if (want && s.cur !== want) { want.reset().fadeIn(0.2).play(); s.cur?.fadeOut(0.2); s.cur = want; }
+    }
+    // 攻撃の踏み込み（アニメの無い竜は体ごと前へ）
+    s.atk = Math.max(0, s.atk - dt);
+    const lunge = Math.sin(Math.min(1, 1 - s.atk / 0.6) * Math.PI) * (s.atk > 0 ? 1 : 0);
+    s.body.position.z = lunge * 0.8 * s.k;
+    s.body.position.y = Math.sin(s.t * 2) * 0.05;
+    if (!s.mixer) s.body.rotation.x = -lunge * 0.15;
+    s.bar.quaternion.copy(this.camera.quaternion);
+    s.bar.quaternion.premultiply(new THREE.Quaternion().setFromEuler(new THREE.Euler(0, -s.g.rotation.y, 0)));
+    s.fill.scale.x = Math.max(0.001, s.hp / s.maxHp);
+    s.fill.position.x = -0.78 * (1 - s.fill.scale.x);
+    return true;
+  }
+
+  summonStrike(f, big) {
+    let s = f.summon;
+    if (!s || s.dying) {
+      if (f.summonCd > 0) return false;
+      s = this.spawnSummon(f);
+      if (!s) return false;
+    }
+    const d = s.def;
+    s.atk = 0.6;
+    if (s.acts.atk) { s.acts.atk.reset().play(); s.cur?.fadeOut(0.1); s.cur = s.acts.atk; }
+    const L = f.def.light;
+    // 召喚獣の前方を薙ぎ払う（判定は使い手基準で前方 4.4m）
+    this.meleeHit(f, d.range, L.dmg * d.mul, big ? 0.5 : 0.3, big ? 8 : 3.5, null, null, false);
+    const p = s.g.position;
+    const fw = f.forward();
+    for (let i = 0; i < 6; i++) {
+      const a = f.facing + (i - 2.5) * 0.3;
+      this.spark(new THREE.Vector3(p.x + Math.sin(a) * 2 * s.k, 1 + Math.random(), p.z + Math.cos(a) * 2 * s.k), i % 2 ? d.color2 : d.color, 0.9);
+    }
+    this.fxPop(new THREE.Vector3(p.x + fw.x, 0.8, p.z + fw.z), elOf(f.def.skills[0]), 6, d.range, 0.3, { flat: true, rot: f.facing + Math.PI / 2, grow: 1.4 });
+    if (big) this.shake = Math.max(this.shake || 0, 0.3);
+    return true;
+  }
+
+  // 前方からの攻撃は召喚獣が受け止める
+  summonBlock(tgt, from, dmg) {
+    const s = tgt.summon;
+    if (!s || s.dying || s.hp <= 0) return false;
+    const fw = tgt.forward();
+    const vx = from.x - tgt.pos.x, vz = from.z - tgt.pos.z;
+    if (vx * fw.x + vz * fw.z <= 0) return false;
+    s.hp -= dmg;
+    this.ui.popup(s.g.position, Math.round(dmg), '#c8b8ff');
+    this.spark(s.g.position.clone().setY(1.5 * s.k), s.def.color, 0.8);
+    if (s.hp <= 0) this.killSummon(s);
+    return true;
+  }
+
+  killSummon(s) {
+    if (s.dying) return;
+    s.dying = 0.001;
+    s.hp = 0;
+    s.f.summonCd = 15; // 倒されたら15秒後に再召喚できる
+    if (s.acts.die) { s.cur?.fadeOut(0.1); s.acts.die.reset().play(); }
+    this.spark(s.g.position.clone().setY(1.5), s.def.color, 2.4);
+    this.ui.popup?.(s.g.position, `${s.def.name} 消滅`, '#bbbbbb');
+    if (s.f.summon === s) s.f.summon = null;
   }
 
   swingFx(f) {

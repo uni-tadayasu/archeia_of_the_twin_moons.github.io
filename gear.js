@@ -151,13 +151,24 @@ function relicShield(M) {
   }
   sh.add(part(G.cone, gold, R * 0.3, R * 0.5, 0.02 * k, 0, 0.02 * k, R * 1.35)); // 下の尖り
   sh.children.forEach((c) => (c.castShadow = true));
-  // 円盤の面を外向き（左腕の外側・やや前）へ
-  sh.rotation.set(0, 0, -Math.PI / 2);
+  // 盾面を外向き（下の尖りは下）
+  sh.rotation.set(Math.PI / 2, 0, 0);
   const holder = new THREE.Group();
   holder.add(sh);
-  holder.position.set(M.shL.x + 0.12 * k * Math.sign(M.shL.x || 1), M.shY - 0.28 * h, 0.06 * k);
-  holder.rotation.y = 0.5 * Math.sign(M.shL.x || 1);
-  holder.userData.bone = 'lf';
+  // 左手の甲（外側）に装着：手の位置から体の外側へ十分離し、腕を振っても胴に当たらないように
+  const side = Math.sign(M.shL.x || 1);
+  const hand = M.lh || new THREE.Vector3(M.shL.x * 1.25, M.hipY + 0.05 * h, 0.05 * k);
+  const fore = M.lf || new THREE.Vector3(M.shL.x * 1.15, (M.shY + M.hipY) / 2, 0);
+  // 前腕と手の間（手の甲寄り）を中心に、外側へ盾の半径分＋余白だけずらす
+  const c = fore.clone().lerp(hand, 0.7);
+  const C = M.chest;
+  const minX = Math.abs(C.cx) + C.rx * 1.2 + R * 1.15; // 胴の外形＋盾の半径
+  c.x = side * Math.max(Math.abs(c.x) + 0.1 * k, minX);
+  c.z += 0.04 * k;
+  holder.position.copy(c);
+  holder.rotation.y = side * 1.15; // 面を外側やや前へ（体側に裏面）
+  holder.userData.bone = M.lh ? 'lh' : 'lf'; // 手に追従
+  void h;
   out.push(holder);
   // 神気の輪
   if (!MATS.has('relicRing')) MATS.set('relicRing', new THREE.MeshBasicMaterial({ color: 0xffd040, transparent: true, opacity: 0.35, side: THREE.DoubleSide, depthWrite: false }));
@@ -391,6 +402,8 @@ export function makeGear(h, wid, aid, model = null, parent = null) {
   const inv = parent ? new THREE.Matrix4().copy(parent.matrixWorld).invert() : null;
 
   const pieces = [];
+  M.lh = B.lh && inv ? localPos(B.lh, inv) : null; // 盾用：左手の位置（バインド姿勢）
+  M.lf = B.lf && inv ? localPos(B.lf, inv) : null;
   if (hasA) pieces.push(...(ai === 100 ? relicShield(M) : armorParts(ai % 10, Math.floor(ai / 10), M)));
 
   if (hasW) {
