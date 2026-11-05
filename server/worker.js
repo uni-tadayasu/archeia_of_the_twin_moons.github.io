@@ -234,7 +234,7 @@ async function syncKey(env, code) {
 // 書き込みは同期コードごとの Durable Object で直列化し、版番号(ver)で競合を検出する
 // 初回はサーバー導入前の進行分を含むため上限を大きく取る
 const FIRST_WEALTH_CAP = 100000000;
-async function syncPush(req, env, H, { code, data, base }) {
+async function syncPush(req, env, H, { code, data, base, wid }) {
   if (await limited(env, req, 'syncw', 120, 600000)) return json(H, { error: 'limit' }, 429);
   const h = await syncKey(env, code);
   if (!h || typeof data !== 'string' || data.length > 200000) return json(H, { error: 'bad' }, 400);
@@ -250,7 +250,7 @@ async function syncPush(req, env, H, { code, data, base }) {
   const ppid = String(parsed.pid || '');
   if (PID_RE.test(ppid) && !(await bindPid(env, ppid, h))) return json(H, { error: 'pid' }, 403);
   const stub = env.SYNC_LOCK.get(env.SYNC_LOCK.idFromName(h));
-  const r = await stub.fetch('https://sync/', { method: 'POST', body: JSON.stringify({ h, data: parsed, base: Math.floor(+base || 0) }) });
+  const r = await stub.fetch('https://sync/', { method: 'POST', body: JSON.stringify({ h, data: parsed, base: Math.floor(+base || 0), wid: String(wid || '') }) });
   return json(H, await r.json(), r.status);
 }
 async function syncPull(req, env, H, { code }) {
@@ -283,11 +283,13 @@ async function stripeWebhook(req, env) {
     const key = links[s.payment_link];
     const buyer = String(s.client_reference_id || '');
     if (s.payment_status === 'paid' && key && FIGHTERS[key] && /^[A-Za-z0-9_-]{16,64}$/.test(buyer)) {
-      const first = await storeCall(env, 'sid:' + s.id, { op: 'once' });
-      if (first.status === 200) {
-        const b = await hmacHex(env.PEPPER, 'buyer:' + buyer);
-        await storeCall(env, 'ent:' + b, { op: 'add', item: key });
-      }
+      // 先に購入権限を保存（追加は重複しても1件のまま＝再実行しても安全）。
+      // 保存に失敗したら 500 を返し、Stripe の再送で同じ通知を最初からやり直す。
+      const b = await hmacHex(env.PEPPER, 'buyer:' + buyer);
+      const add = await storeCall(env, 'ent:' + b, { op: 'add', item: key });
+      if (add.status !== 200) return new Response('retry', { status: 500 });
+      // 権限保存が終わってから「処理済み」を記録
+      await storeCall(env, 'sid:' + s.id, { op: 'once' });
     }
   }
   return new Response('ok');
@@ -323,7 +325,10 @@ async function profile(req, env, H, { code, key, role, buyer }) {
   if (OP_ONLY.has(key) && !r) return json(H, { error: 'denied' }, 403);
   if (FIGHTERS[key].shop && !(await ownedKeys(env, buyer)).includes(key)) return json(H, { error: 'not purchased' }, 403);
   const u = statsFor(save, key);
-  return json(H, { token: await sign(env, { t: 'prof', k: key, u, exp: Date.now() + 2 * 3600000 }) });
+  // 証明をプレイヤー(pid)に結びつける：同期コードに固定された pid だけを入れる
+  const pid = String(save.pid || '');
+  if (!PID_RE.test(pid) || !(await bindPid(env, pid, h))) return json(H, { error: 'nosync' }, 403);
+  return json(H, { token: await sign(env, { t: 'prof', k: key, u, p: pid, exp: Date.now() + 2 * 3600000 }) });
 }
 
 // ---------- 本人確認（同期コード → サーバー保管セーブの pid。pid は同期コードに固定） ----------
@@ -379,20 +384,24 @@ async function guildDonate(req, env, H, body) {
   if (!me) return json(H, { error: 'nosync' }, 403);
   const gid = String(body.gid || '');
   const amt = Math.floor(+body.amount);
-  if (!GID_RE.test(gid) || !(amt > 0 && amt <= 1e7)) return json(H, { error: 'bad' }, 400);
+  // 寄付ごとの操作ID：端末が再送しても、各段階（減算・ギルド加算・ランキング）は一度しか反映しない
+  const did = String(body.did || '');
+  if (!GID_RE.test(gid) || !(amt > 0 && amt <= 1e7) || !/^[A-Za-z0-9_-]{12,40}$/.test(did)) return json(H, { error: 'bad' }, 400);
+  const opKey = `don:${me.pid}:${did}`;
   const g = guildStub(env, gid);
   const chk = await doCall(g, { op: 'get', gid, me: { pid: me.pid, name: me.name } });
   if (chk.status !== 200 || !chk.data?.state?.member) return json(H, { error: 'denied' }, 403);
   const sync = env.SYNC_LOCK.get(env.SYNC_LOCK.idFromName(me.h));
-  const sp = await sync.fetch('https://sync/', { method: 'POST', body: JSON.stringify({ op: 'spend', h: me.h, amt }) });
+  const sp = await sync.fetch('https://sync/', { method: 'POST', body: JSON.stringify({ op: 'spend', h: me.h, amt, opId: opKey }) });
   const spent = await sp.json().catch(() => ({}));
   if (sp.status !== 200) return json(H, { error: spent.error || 'shards' }, sp.status === 402 ? 402 : 409);
-  const d = await doCall(g, { op: 'donate', gid, me: { pid: me.pid, name: me.name }, amt });
+  const d = await doCall(g, { op: 'donate', gid, me: { pid: me.pid, name: me.name }, amt, opId: opKey });
   if (d.status !== 200) {
-    await sync.fetch('https://sync/', { method: 'POST', body: JSON.stringify({ op: 'spend', h: me.h, amt: -amt }) });
+    // ギルド側で確定的に拒否された時だけ返金（返金も一度だけ）
+    await sync.fetch('https://sync/', { method: 'POST', body: JSON.stringify({ op: 'spend', h: me.h, amt: -amt, opId: 'r:' + opKey }) });
     return json(H, { error: d.data?.error || 'denied' }, d.status);
   }
-  await doCall(boardStub(env), { op: 'add', gid, gname: d.data.state.name, amt, members: d.data.state.donors.length });
+  await doCall(boardStub(env), { op: 'add', gid, gname: d.data.state.name, amt, members: d.data.state.donors.length, opId: opKey });
   return json(H, { ok: true, ver: spent.ver, shards: spent.shards, total: d.data.mine, state: d.data.state });
 }
 async function guildBoardRoute(req, env, H) {
@@ -405,6 +414,7 @@ async function guildBoardRoute(req, env, H) {
 async function chatRoom(req, env, H, { code, ch, token, name }) {
   if (await limited(env, req, 'room', 60, 600000)) return json(H, { error: 'limit' }, 429);
   const c = String(ch || '');
+  let epoch = 0;
   if (c === 'staff') {
     const role = await verify(env, token, 'role');
     if (role?.r !== 'chief' && role?.r !== 'op') return json(H, { error: 'denied' }, 403);
@@ -416,12 +426,15 @@ async function chatRoom(req, env, H, { code, ch, token, name }) {
       if (!GID_RE.test(gid)) return json(H, { error: 'bad' }, 400);
       const r = await doCall(guildStub(env, gid), { op: 'get', gid, me: { pid: me.pid, name: me.name } });
       if (!r.data?.state?.member) return json(H, { error: 'denied' }, 403);
+      epoch = Math.max(0, Math.floor(+r.data.state.epoch || 0));
     } else if (/^dm:[A-Za-z0-9]{1,24}:[A-Za-z0-9]{1,24}$/.test(c)) {
       const [, a, b] = c.split(':');
       if (me.pid !== a && me.pid !== b) return json(H, { error: 'denied' }, 403);
     } else return json(H, { error: 'bad' }, 400);
   }
-  return json(H, { room: (await hmacHex(env.PEPPER, 'room:' + c)).slice(0, 40) });
+  // 運営会議は STAFF_EPOCH（秘密の環境変数）を変えると、全員のルーム名が切り替わる
+  const salt = c === 'staff' ? String(env.STAFF_EPOCH || '0') : String(epoch);
+  return json(H, { room: (await hmacHex(env.PEPPER, 'room:' + c + ':' + salt)).slice(0, 40), epoch });
 }
 
 // 運営長の公開署名：役職トークンそのものは配らず、内容(ハッシュ)に結びついた再利用不可の署名だけ渡す
@@ -478,6 +491,8 @@ export class GuildLock {
     const ban = g.bans[pid];
     return {
       gid: g.gid, name: g.name, master: g.master, ver: g.ver, member,
+      // チャット鍵の世代：脱退・除名のたびに進み、抜けた人が持つ古いルーム名を無効にする
+      epoch: member ? g.epoch || 0 : undefined,
       members: member ? Object.entries(g.members).map(([p, m]) => ({ pid: p, name: m.name, role: m.role })) : [],
       bans: myRank >= 2 ? Object.entries(g.bans).map(([p, x]) => ({ pid: p, name: x.name, by: x.by, reason: x.reason, at: x.at })) : [],
       donors: Object.entries(g.donors).map(([p, x]) => ({ pid: p, name: x.name, total: x.total })).filter((x) => x.total > 0).sort((a, c) => c.total - a.total).slice(0, 100),
@@ -525,6 +540,7 @@ export class GuildLock {
           g.members[b.heir].role = 'master';
         }
         delete g.members[me.pid];
+        g.epoch = (g.epoch || 0) + 1;
         await save();
         return out({ state: this.view(g, me.pid), heir: g.master });
       }
@@ -539,6 +555,7 @@ export class GuildLock {
         if (role === 'kick') {
           g.bans[b.target] = { name: tgt.name, by: me.name, reason: b.reason || '', at: Date.now() };
           delete g.members[b.target];
+          g.epoch = (g.epoch || 0) + 1;
         } else if (role === 'master') {
           mine.role = 'sub';
           tgt.role = 'master';
@@ -554,10 +571,17 @@ export class GuildLock {
         return out({ state: this.view(g, me.pid) });
       }
       case 'donate': {
+        const ops = (g.ops ||= []);
+        // 同じ寄付の再送：加算済みなら結果だけ返す
+        if (b.opId && ops.includes(b.opId)) return out({ state: this.view(g, me.pid), mine: g.donors[me.pid]?.total || 0 });
         if (!mine) return out({ error: 'denied' }, 403);
         const d = (g.donors[me.pid] ||= { name: me.name, total: 0 });
         d.name = me.name;
         d.total += Math.floor(+b.amt) || 0;
+        if (b.opId) {
+          ops.push(b.opId);
+          if (ops.length > 500) ops.splice(0, ops.length - 500);
+        }
         await save();
         return out({ state: this.view(g, me.pid), mine: d.total });
       }
@@ -579,7 +603,17 @@ export class GuildBoard {
         const list = Object.entries(m).map(([gid, x]) => ({ gid, gname: x.gname, total: x.total, members: x.members })).filter((x) => x.total > 0).sort((a, c) => c.total - a.total).slice(0, 50);
         return new Response(JSON.stringify({ list }));
       }
-      if (b.op === 'add') m[b.gid] = { gname: b.gname, total: (m[b.gid]?.total || 0) + b.amt, members: b.members };
+      if (b.op === 'add') {
+        // 同じ寄付の再送は一度だけ集計
+        const ops = (await this.state.storage.get('ops')) || [];
+        if (b.opId && ops.includes(b.opId)) return new Response(JSON.stringify({ ok: true, dup: true }));
+        m[b.gid] = { gname: b.gname, total: (m[b.gid]?.total || 0) + b.amt, members: b.members };
+        if (b.opId) {
+          ops.push(b.opId);
+          if (ops.length > 2000) ops.splice(0, ops.length - 2000);
+          await this.state.storage.put('ops', ops);
+        }
+      }
       else if (b.op === 'name' && m[b.gid]) m[b.gid].gname = b.gname;
       else if (b.op === 'remove') delete m[b.gid];
       await this.state.storage.put('b', m);
@@ -650,39 +684,57 @@ export class SyncLock {
     this.state = state;
   }
   async fetch(req) {
-    const { data, base, op, amt } = await req.json();
+    const { data, base, op, amt, opId, wid } = await req.json();
     return this.state.blockConcurrencyWhile(async () => {
       const store = this.state.storage;
       const row = (await store.get('row')) || null;
-      if (op === 'get') return new Response(JSON.stringify({ row }), { status: 200 });
+      const res = (x, status = 200) => new Response(JSON.stringify(x), { status });
+      if (op === 'get') return res({ row });
       if (op === 'spend') {
         // サーバー側の通貨消費（寄付など）：残高確認と減算を同じ直列処理内で行う
+        // 操作ID(opId)ごとに一度だけ実行（再送されても二重に減らさない）
+        const okId = typeof opId === 'string' && /^[A-Za-z0-9:_-]{8,80}$/.test(opId);
+        if (okId) {
+          const done = await store.get('op:' + opId);
+          if (done) return res(done);
+        }
         let s;
         try { s = JSON.parse(row?.data || 'null'); } catch { s = null; }
-        if (!s) return new Response(JSON.stringify({ error: 'nosync' }), { status: 404 });
+        if (!s) return res({ error: 'nosync' }, 404);
         const cur = Math.max(0, Math.floor(+s.shards || 0));
         const a = Math.floor(+amt) || 0;
-        if (a > 0 && cur < a) return new Response(JSON.stringify({ error: 'shards' }), { status: 402 });
+        if (a > 0 && cur < a) return res({ error: 'shards' }, 402);
         s.shards = cur - a;
         const nv = (row.ver || 0) + 1;
-        await store.put('row', { ...row, data: JSON.stringify(s), ver: nv, wealth: wealthOf(s) });
-        return new Response(JSON.stringify({ ok: true, ver: nv, shards: s.shards }), { status: 200 });
+        const result = { ok: true, ver: nv, shards: s.shards };
+        await store.put('row', { ...row, data: JSON.stringify(s), ver: nv, wealth: wealthOf(s), wid: '' });
+        if (okId) await store.put('op:' + opId, result);
+        return res(result);
       }
       const ver = row?.ver || 0;
+      const myWid = typeof wid === 'string' && /^[A-Za-z0-9_-]{8,64}$/.test(wid) ? wid : '';
+      // 同じ書き込みの再送（成功応答だけが届かなかった）→ 反映済みとして同じ結果を返す
+      if (row && myWid && row.wid === myWid) return res({ ok: true, ver, dup: true });
       if (row && base !== ver) {
         // 競合：別の端末が先に更新した → 最新を返し、端末側で合流させる
-        return new Response(JSON.stringify({ conflict: true, data: row.data, ver }), { status: 409 });
+        return res({ conflict: true, data: row.data, ver, wid: row.wid || '' }, 409);
       }
       const now = Date.now();
       const wealth = wealthOf(data);
-      const prevW = row ? (row.wealth ?? wealth) : 0;
-      const hours = row ? Math.max(0, (now - (row.at || now)) / 3600000) : 0;
-      // 時間あたりの上限＋資産に比例した余裕（後半の章ほど報酬が大きいため）
-      const allowed = row ? prevW + (EARN_PER_HOUR + prevW * 0.1) * Math.max(hours, 0.25) + EARN_SLACK : FIRST_WEALTH_CAP;
-      if (wealth > allowed) return new Response(JSON.stringify({ error: 'wealth' }), { status: 422 });
+      let allow = FIRST_WEALTH_CAP;
+      if (row) {
+        // 許容量は「実際に経過した時間」だけ回復し、使った分は保存して持ち越す
+        const prevW = row.wealth ?? wealth;
+        const rate = EARN_PER_HOUR + prevW * 0.1; // 1時間あたりの回復量
+        const hours = Math.max(0, (now - (row.at || now)) / 3600000);
+        const credit = Math.min(rate * 6 + EARN_SLACK, (row.allow ?? EARN_SLACK) + rate * hours);
+        const growth = wealth - prevW;
+        if (growth > credit) return res({ error: 'wealth' }, 422);
+        allow = credit - Math.max(0, growth);
+      }
       const nv = ver + 1;
-      await store.put('row', { data: JSON.stringify(data), at: now, ver: nv, wealth });
-      return new Response(JSON.stringify({ ok: true, ver: nv }), { status: 200 });
+      await store.put('row', { data: JSON.stringify(data), at: now, ver: nv, wealth, allow: row ? allow : EARN_SLACK, wid: myWid });
+      return res({ ok: true, ver: nv });
     });
   }
 }
