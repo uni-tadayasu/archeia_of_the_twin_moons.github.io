@@ -15,7 +15,7 @@ export const ARENA_R = 13;
 // ---- 追加技：技を出した直後にタイミングよく同じ技を押すと派生する（全戦士×各技＝数百種） ----
 const FOLLOW_NAMES = ['追の型', '連閃', '返し刃', '裂破', '重ね撃ち', '穿ち', '狂い咲き', '終の型', '翻り', '轟連', '双牙', '残光', '烈衝', '螺旋', '天翔'];
 const FOLLOW_CACHE = new WeakMap();
-const FOLLOW_MIN = 0.4, FOLLOW_MAX = 1.5; // 押す猶予（秒）
+const FOLLOW_HOLD = 0.45, FOLLOW_MAX = 1.5; // 長押しで派生するまでの秒数
 export function followSpec(def, i) {
   const base = def?.skills?.[i];
   if (!base) return null;
@@ -65,7 +65,7 @@ const GEO = {
 function glow(color, opacity = 0.85) {
   const op = opacity >= 0.6 ? Math.min(1, opacity + 0.15) : opacity;
   const m = new THREE.MeshStandardMaterial({
-    color, emissive: color, emissiveIntensity: 0.3, roughness: 0.45, metalness: 0.15, flatShading: true,
+    color, emissive: color, emissiveIntensity: 0.1, roughness: 0.55, metalness: 0.1, flatShading: true,
     transparent: true, opacity: op, depthWrite: op >= 0.9, side: THREE.DoubleSide
   });
   m.userData.base = op;
@@ -133,7 +133,7 @@ for (let e = 0; e < 10; e++) for (let s = 0; s < 10; s++) fxTex(e, s);
 const elOf = (spec, fallback = 5) => (spec && spec.elem != null ? spec.elem : fallback);
 const PLANE = new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2);
 function fxSprite(elem, slot, size, opacity = 1) {
-  opacity *= 0.45; // 光のにじみは控えめに
+  opacity *= 0.25; // 光のにじみは控えめに
   const m = new THREE.SpriteMaterial({ map: fxTex(elem, slot), transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, opacity });
   m.userData.base = opacity;
   m.rotation = Math.random() * Math.PI * 2;
@@ -142,7 +142,7 @@ function fxSprite(elem, slot, size, opacity = 1) {
   return s;
 }
 function fxFlat(elem, slot, size, opacity = 1) {
-  opacity *= 0.6;
+  opacity *= 0.35;
   const m = new THREE.MeshBasicMaterial({ map: fxTex(elem, slot), transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, opacity, side: THREE.DoubleSide });
   m.userData.base = opacity;
   const p = new THREE.Mesh(PLANE, m);
@@ -514,6 +514,18 @@ export class Fighter {
     this.flux = Math.min(100, this.flux + (st.para ? 0 : this.fluxRate) * dt);
     this.guard = false;
     let moving = false;
+    // 追加技：技を出した後、同じボタンを長押しし続けると発動（全モード共通）
+    const fa = this.followArm;
+    if (fa && inp && !this.dead) {
+      fa.t += dt;
+      const held = fa.cpu != null ? fa.cpu : !!inp[fa.hold];
+      if (!held || fa.t > FOLLOW_MAX + 1) {
+        this.followArm = null;
+      } else if (fa.t >= FOLLOW_HOLD && this.stun <= 0) {
+        this.followArm = null;
+        this.startSkill(fa.i, null, true);
+      }
+    }
     if (this.stun > 0) {
       this.stun -= dt;
     } else if (this.action) {
@@ -536,11 +548,11 @@ export class Fighter {
       if (inp.attack) {
         this.startLight();
       } else if (inp.skill) {
-        this.startSkill(mv ? 1 : 0);
+        this.startSkill(mv ? 1 : 0, 'holdSkill');
       } else if (inp.skill2) {
-        this.startSkill(mv ? 3 : 2);
+        this.startSkill(mv ? 3 : 2, 'holdSkill2');
       } else if (inp.skillIdx != null) {
-        this.startSkill(inp.skillIdx);
+        this.startSkill(inp.skillIdx, 'cpu');
       } else if (inp.over) {
         this.startOver();
       }
@@ -633,10 +645,8 @@ export class Fighter {
     this.vel.copy(this.forward().multiplyScalar(3));
   }
 
-  startSkill(i) {
+  startSkill(i, hold = null, follow = false) {
     const now = performance.now() / 1000;
-    const ls = this.lastSkill;
-    const follow = !!ls && ls.i === i && !ls.followed && now - ls.t >= FOLLOW_MIN && now - ls.t <= FOLLOW_MAX;
     const spec = follow ? followSpec(this.def, i) : this.def.skills[i];
     if (!spec || this.flux < spec.cost) {
       return;
@@ -651,7 +661,10 @@ export class Fighter {
     this.flux -= spec.cost;
     this.faceNearest(14);
     this.lastSkill = { i, t: now, followed: follow };
+    // 長押し待ち（CPUは確率で派生）
+    this.followArm = follow || !hold ? null : { i, t: 0, hold, cpu: hold === 'cpu' ? Math.random() < 0.45 : null };
     this.battle.cast(this, (follow ? 'f' : 's') + i);
+    if (follow) this.battle.ui.popup?.(this.pos, '追加技！', '#ffd36a');
   }
 
   startOver() {
@@ -860,7 +873,7 @@ export class Battle {
     L.color.setHex(color);
     L.userData.t = life;
     L.userData.life = life;
-    L.userData.p = 12 * power; // 閃光は弱めに
+    L.userData.p = 4 * power; // 閃光は弱めに
   }
 
   // 豪華化レイヤー：多重魔法陣・螺旋に昇る光粒・光柱・衝撃環・飛散する光条・閃光

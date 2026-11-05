@@ -349,7 +349,7 @@ function skillSfx(id, elem) {
   const bus = sfxBus(ctx);
   const out = ctx.createGain();
   out.gain.setValueAtTime(0.0001, t0);
-  out.gain.exponentialRampToValueAtTime(0.3, t0 + 0.006 + p(4) * 0.03);
+  out.gain.exponentialRampToValueAtTime(0.16, t0 + 0.006 + p(4) * 0.03); // 合成音は控えめにし、属性の実音を主役に
   out.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
   const pan = ctx.createStereoPanner();
   pan.pan.value = (p(12) - 0.5) * 0.5;
@@ -432,13 +432,117 @@ function skillSfx(id, elem) {
     n.start(t0, Math.random() * 0.5);
     n.stop(t0 + dur + 0.02);
   }
+  elemSfx(elem % 10, pan);
+}
+// ---- 属性ごとの“本物らしい”効果音（自然音を合成で再現） ----
+function elemSfx(e, dest) {
+  const ctx = audio.ctx;
+  const bus = sfxBus(ctx);
+  const t0 = ctx.currentTime;
+  const R = Math.random;
+  // ノイズ：フィルタ種・周波数の推移・音量包絡
+  const nz = (t, dur, type, f0, f1, q, gain, atk = 0.005, wet = 0.3) => {
+    const n = noiseSrc(ctx), f = ctx.createBiquadFilter(), g = ctx.createGain();
+    f.type = type;
+    f.Q.value = q;
+    f.frequency.setValueAtTime(f0, t);
+    f.frequency.exponentialRampToValueAtTime(Math.max(20, f1), t + dur);
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(gain, t + atk);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    n.connect(f).connect(g).connect(dest);
+    if (wet) {
+      const wg = ctx.createGain();
+      wg.gain.value = wet;
+      g.connect(wg).connect(bus.wet);
+    }
+    n.start(t, R() * 0.5);
+    n.stop(t + dur + 0.02);
+  };
+  const tone = (t, type, f0, f1, dur, gain, atk = 0.004, wet = 0.4) => {
+    const o = ctx.createOscillator(), g = ctx.createGain();
+    o.type = type;
+    o.frequency.setValueAtTime(f0, t);
+    o.frequency.exponentialRampToValueAtTime(Math.max(20, f1), t + dur);
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(gain, t + atk);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    o.connect(g).connect(dest);
+    if (wet) {
+      const wg = ctx.createGain();
+      wg.gain.value = wet;
+      g.connect(wg).connect(bus.wet);
+    }
+    o.start(t);
+    o.stop(t + dur + 0.02);
+  };
+  switch (e) {
+    case 0: // 炎：ゴォッと燃え上がる轟音＋パチパチ弾ける火の粉
+      nz(t0, 0.9, 'lowpass', 300, 1800, 0.8, 0.5, 0.06);
+      nz(t0 + 0.05, 0.7, 'bandpass', 900, 400, 1.2, 0.25, 0.08);
+      for (let i = 0; i < 9; i++) nz(t0 + 0.1 + R() * 0.7, 0.02, 'highpass', 2500 + R() * 3000, 2000, 1, 0.25 * R() + 0.08, 0.001, 0.1);
+      break;
+    case 1: // 氷：ピキッと凍りつき、結晶が砕け散る
+      tone(t0, 'sine', 3200, 2400, 0.08, 0.12, 0.002);
+      for (let i = 0; i < 10; i++) {
+        const t = t0 + 0.05 + R() * 0.35;
+        nz(t, 0.05 + R() * 0.06, 'bandpass', 4000 + R() * 5000, 3000, 8, 0.2, 0.001, 0.4);
+        tone(t, 'sine', 2500 + R() * 4000, 2400 + R() * 3000, 0.25 + R() * 0.3, 0.04, 0.001, 0.6);
+      }
+      break;
+    case 2: // 雷：バリッという鋭い破裂音のあと、ゴロゴロと遠雷
+      nz(t0, 0.12, 'highpass', 1500, 800, 0.7, 0.7, 0.001, 0.2);
+      for (let i = 0; i < 5; i++) nz(t0 + R() * 0.1, 0.03, 'highpass', 3000, 2000, 1, 0.4, 0.001, 0.1);
+      nz(t0 + 0.08, 1.4, 'lowpass', 400, 60, 1, 0.55, 0.1, 0.5);
+      tone(t0 + 0.05, 'sine', 70, 35, 1.0, 0.3, 0.05, 0.2);
+      break;
+    case 3: // 風：ヒュオォと吹き抜ける突風
+      nz(t0, 1.0, 'bandpass', 400, 2400, 4, 0.45, 0.2, 0.4);
+      nz(t0 + 0.15, 0.8, 'bandpass', 1800, 500, 6, 0.25, 0.15, 0.4);
+      break;
+    case 4: // 大地：ズドンと地を割る衝撃＋岩の転がる音
+      tone(t0, 'sine', 90, 28, 0.6, 0.7, 0.003, 0.1);
+      nz(t0, 1.0, 'lowpass', 500, 80, 1, 0.55, 0.01, 0.3);
+      for (let i = 0; i < 12; i++) nz(t0 + 0.08 + R() * 0.7, 0.04 + R() * 0.05, 'bandpass', 300 + R() * 900, 200, 3, 0.2 + R() * 0.15, 0.002, 0.1);
+      break;
+    case 5: { // 光：澄んだ鐘のような響き（非整数倍音）と煌めき
+      const f = 660 + R() * 220;
+      for (const [r, g] of [[1, 0.12], [2.76, 0.06], [5.4, 0.04], [8.9, 0.025]]) tone(t0, 'sine', f * r, f * r * 0.998, 1.4, g, 0.003, 0.8);
+      nz(t0, 0.5, 'highpass', 6000, 9000, 0.7, 0.08, 0.05, 0.6);
+      break;
+    }
+    case 6: // 闇：低くうねる唸り＋吸い込むような逆再生風のうねり
+      tone(t0, 'sawtooth', 70, 45, 1.1, 0.12, 0.25, 0.4);
+      tone(t0, 'sawtooth', 72.5, 44, 1.1, 0.1, 0.25, 0.4);
+      nz(t0, 0.8, 'lowpass', 200, 1200, 3, 0.3, 0.6, 0.5);
+      break;
+    case 7: // 水：バシャッと弾ける水しぶき＋泡
+      nz(t0, 0.4, 'bandpass', 2500, 700, 1.2, 0.55, 0.003, 0.3);
+      nz(t0 + 0.03, 0.6, 'lowpass', 1200, 200, 1, 0.3, 0.01, 0.3);
+      for (let i = 0; i < 8; i++) {
+        const f = 300 + R() * 700;
+        tone(t0 + 0.1 + R() * 0.5, 'sine', f, f * 2.2, 0.05 + R() * 0.04, 0.12, 0.002, 0.3);
+      }
+      break;
+    case 8: // 毒：ジュワッと溶かす泡立ちとシューッという煙
+      nz(t0, 0.9, 'highpass', 3000, 5000, 0.7, 0.25, 0.05, 0.3);
+      for (let i = 0; i < 14; i++) {
+        const f = 150 + R() * 300;
+        tone(t0 + R() * 0.8, 'sine', f, f * 1.8, 0.07, 0.12, 0.003, 0.2);
+      }
+      break;
+    default: // 血：ザシュッと裂く斬撃＋鈍い衝撃
+      nz(t0, 0.18, 'bandpass', 5000, 900, 2, 0.5, 0.002, 0.2);
+      nz(t0 + 0.06, 0.3, 'lowpass', 900, 200, 2, 0.35, 0.005, 0.2);
+      tone(t0 + 0.04, 'sine', 120, 45, 0.25, 0.4, 0.003, 0.1);
+  }
 }
 function sfx(name, spec) {
   if (audio.muted) {
     return;
   }
-  if (name === 'skill' && spec && spec.snd != null) {
-    skillSfx(spec.snd, spec.elem ?? 0);
+  if (name === 'skill' && spec && (spec.snd != null || spec.elem != null)) {
+    skillSfx(spec.snd ?? spec.elem * 7, spec.elem ?? 0);
     return;
   }
   if (name === 'laser') {
@@ -513,8 +617,12 @@ setMuted(audio.muted);
 // ---------- Input ----------
 const keys = new Set();
 const edges = { attack: false, skill: false, skill2: false, over: false, jump: false };
-const touchState = { mx: 0, mz: 0, guard: false };
-const padState = { mx: 0, mz: 0, guard: false };
+const touchState = { mx: 0, mz: 0, guard: false, skill: false, skill2: false };
+const padState = { mx: 0, mz: 0, guard: false, skill: false, skill2: false };
+let mouseSkillHeld = false; // 右クリック長押し（追加技）
+window.addEventListener('mouseup', (e) => {
+  if (e.button === 2) mouseSkillHeld = false;
+});
 const KEYMAP = { KeyJ: 'attack', KeyZ: 'attack', KeyK: 'skill', KeyX: 'skill', KeyU: 'skill2', KeyV: 'skill2', KeyL: 'over', KeyC: 'over', Space: 'jump' };
 
 function inBattleView() {
@@ -558,6 +666,7 @@ renderer.domElement.addEventListener('mousedown', (e) => {
   }
   if (e.button === 2) {
     edges.skill = true;
+    mouseSkillHeld = true;
   }
 });
 renderer.domElement.addEventListener('contextmenu', (e) => e.preventDefault());
@@ -572,6 +681,9 @@ function readInput() {
   const inp = {
     mx, mz,
     guard: touchState.guard || padState.guard || keys.has('ShiftLeft') || keys.has('ShiftRight') || keys.has('KeyI'),
+    // 技ボタンの長押し状態（技の後に押し続けると追加技）
+    holdSkill: touchState.skill || padState.skill || mouseSkillHeld || keys.has('KeyK') || keys.has('KeyX'),
+    holdSkill2: touchState.skill2 || padState.skill2 || keys.has('KeyU') || keys.has('KeyV'),
     ...edges
   };
   for (const k in edges) {
@@ -633,12 +745,14 @@ function setupTouch() {
         touchState.guard = true;
       } else {
         edges[act] = true;
+        if (act === 'skill' || act === 'skill2') touchState[act] = true;
       }
     });
     const up = () => {
       if (act === 'guard') {
         touchState.guard = false;
       }
+      if (act === 'skill' || act === 'skill2') touchState[act] = false;
     };
     b.addEventListener('pointerup', up);
     b.addEventListener('pointercancel', up);
@@ -2403,6 +2517,7 @@ function activePad() {
 function pollPad(dt) {
   padState.mx = padState.mz = 0;
   padState.guard = false;
+  padState.skill = padState.skill2 = false;
   const g = activePad();
   if (!g) {
     return;
@@ -2424,6 +2539,8 @@ function pollPad(dt) {
     padState.mx = mx;
     padState.mz = mz;
     padState.guard = btn(4) || btn(6) || btn(7);
+    padState.skill = btn(2);
+    padState.skill2 = btn(5);
     if (down(0)) edges.attack = true;
     if (down(2)) edges.skill = true;
     if (down(5)) edges.skill2 = true;
