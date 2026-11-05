@@ -2795,7 +2795,7 @@ $('#sync-push').addEventListener('click', async () => {
       return;
     }
     if (syncErr === 'wealth') {
-      m.textContent = '灯晶や強化の増え方が不自然なため、サーバーが記録を受け付けませんでした。';
+      m.textContent = '前回預けてから灯晶や強化が短時間に増えすぎたため、サーバーが記録を受け付けませんでした。少し時間をおいてから、もう一度「預ける」を押してください。';
       return;
     }
     if (localStorage.getItem('arkeia-sync-dirty')) throw new Error('push');
