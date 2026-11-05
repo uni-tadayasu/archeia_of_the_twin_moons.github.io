@@ -624,6 +624,11 @@ export class Fighter {
     if (!info || this.dead || this.remoteAuth) {
       return;
     }
+    // 覚醒中は状態異常を受けない
+    if (this.awakened > 0) {
+      this.battle.ui.popup(this.pos, '無効', '#ff8090');
+      return;
+    }
     this.status[key] = Math.max(this.status[key] || 0, info.dur);
     if (key === 'freeze' || key === 'petrify') {
       this.stun = Math.max(this.stun, info.dur);
@@ -730,6 +735,9 @@ export class Fighter {
     if (this.awakened > 0 || this.dead) return;
     this.awakened = AWAKEN_TIME;
     this.awk = 0;
+    // 覚醒した瞬間に状態異常を解除（凍結・石化の硬直も解く）
+    if (this.status.freeze || this.status.petrify) this.stun = 0;
+    for (const k in this.status) delete this.status[k];
     this.applyRed();
     this.battle.awakenFx(this);
   }
@@ -828,12 +836,18 @@ export class Fighter {
       this.awk = Math.min(100, this.awk + (dmg / this.maxHp) * 100 / 1.2);
       if (this.awk >= 100) this.awaken();
     }
+    // 覚醒中はスーパーアーマー：ひるみ・吹き飛ばしを受けない（ダメージ半減はそのまま）
+    if (this.awakened > 0) {
+      stun = 0;
+      kx = kz = 0;
+      this.battle.spark(this.pos.clone().setY(1.1), 0xff4060, 0.5);
+    }
     this.stun = Math.max(this.stun, stun);
     if (stun > 0.2) {
       this.action = null;
       this.visual.rotation.y = 0;
     }
-    this.vel.set(kx, 0, kz);
+    if (this.awakened <= 0) this.vel.set(kx, 0, kz);
     this.inv = 0.04;
     this.hitFlash = 0.15;
     this.over = Math.min(100, this.over + dmg * 0.06 * this.og);
