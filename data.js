@@ -893,6 +893,29 @@ export const STORY = [];
   bf.power = c.power * 1.05; bf.armor = c.armor; bf.fluxMul = 2;
 }
 
+// ---- 週替わりイベント（ボーナスステージ）：日本時間の月曜0時に切り替わる ----
+// foes: 'mob'=魔物 / 'boss'=ボス / 'roster'=戦士 / 'mirror'=自分の写し / キー名
+export const EVENTS = [
+  { name: '魔物の大行進', desc: '弱めの魔物が6体押し寄せる。まとめて薙ぎ払え！', foes: [['mob', 6]], hp: 0.45, atk: 0.7, ally: 0, first: 600, reward: 120, stage: 2 },
+  { name: '巨影の襲来', desc: '巨大化したボスが1体。体力3倍の大物を討て！', foes: [['boss', 1]], hp: 3, atk: 1, scale: 1.6, ally: 1, first: 800, reward: 150, stage: 4 },
+  { name: '灯晶の雨', desc: '相棒と二人で魔物3体に挑む。報酬がいつもの3倍！', foes: [['mob', 3]], hp: 0.8, atk: 0.8, ally: 1, first: 500, reward: 180, stage: 1 },
+  { name: '天秤の試練', desc: '最強格セラフェルとの一騎打ち。勝てば大量の灯晶！', foes: [['seraphel', 1]], hp: 1, atk: 1, ally: 0, first: 1200, reward: 200, stage: 5 },
+  { name: '双月の鏡', desc: '自分と同じ戦士の写しが2体。己を越えよ！', foes: [['mirror', 2]], hp: 0.9, atk: 0.9, ally: 0, first: 700, reward: 140, stage: 3 },
+  { name: '包囲突破', desc: 'たった一人で戦士4体に囲まれる。生き残れ！', foes: [['roster', 4]], hp: 0.6, atk: 0.75, ally: 0, first: 900, reward: 170, stage: 0 },
+  { name: '連合討伐戦', desc: '相棒2人とボス2体の大乱戦！', foes: [['boss', 2]], hp: 1.4, atk: 0.9, scale: 1.25, ally: 2, first: 1000, reward: 180, stage: 6 },
+  { name: '血月の夜', desc: '血に飢えた戦士3体。攻撃は激しいが体力は低い。', foes: [['roster', 3]], hp: 0.5, atk: 1.4, ally: 0, first: 800, reward: 160, stage: 7 }
+];
+const WEEK_MS = 7 * 24 * 3600 * 1000;
+// 1970-01-05(月) 0:00 JST を起点にした週番号
+export function eventWeek(now = Date.now()) {
+  return Math.floor((now + 9 * 3600 * 1000 - 4 * 24 * 3600 * 1000) / WEEK_MS);
+}
+export function currentEvent(now = Date.now()) {
+  const w = eventWeek(now);
+  const ends = (w + 1) * WEEK_MS - 9 * 3600 * 1000 + 4 * 24 * 3600 * 1000;
+  return { week: w, ev: EVENTS[((w % EVENTS.length) + EVENTS.length) % EVENTS.length], ends };
+}
+
 // ---- 全戦士共通の回復技（skills[4]。H キー／「癒」ボタン） ----
 export const HEAL_SLOT = 4;
 for (const [k, f] of Object.entries(FIGHTERS)) {

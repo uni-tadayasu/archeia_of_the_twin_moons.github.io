@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { Battle, ARENA_R } from './game.js';
-import { FIGHTERS, STORY, ROSTER, UPGRADES, MAX_LV, STAGES, BGM, APEX_BGM, ENEMY_ROSTER, UPG_CAP, WEAPONS, ARMORS, STAT_LABEL, SPECIAL_KEYS } from './data.js';
+import { FIGHTERS, STORY, ROSTER, UPGRADES, MAX_LV, STAGES, BGM, APEX_BGM, ENEMY_ROSTER, UPG_CAP, WEAPONS, ARMORS, STAT_LABEL, SPECIAL_KEYS, BOSS_ROSTER, currentEvent } from './data.js';
 import { ProcMusic } from './music.js';
 import { sayBattle, setVoiceMuted, stopVoices } from './voice.js';
 import { OPERATOR_KEY_SHA256, CHIEF_KEY_SHA256, MAX_KEY_ATTEMPTS, LOCKOUT_MS, SHOP_ITEMS } from './config.js';
@@ -197,6 +197,7 @@ function loadSave() {
   s.noHero = !!raw.noHero;
   s.awk = clampInt(raw.awk, 0, 99);
   s.buyId = raw.buyId;
+  s.evClear = clampInt(raw.evClear, 0, 1e7); // 初回クリア報酬を受け取った週
   return s;
 }
 const save = loadSave();
@@ -874,6 +875,11 @@ const SELECT_KEYS = () => [...ROSTER, 'seraphel', 'chief', 'sovereign', 'bloodfi
 function refreshTitle() {
   $('#btn-invade').hidden = !operatorUnlocked();
   $('#title-shards').textContent = `灯晶　${save.shards}`;
+  {
+    const { week, ev, ends } = currentEvent();
+    const days = Math.max(0, Math.ceil((ends - Date.now()) / 86400000));
+    $('#event-sub').textContent = `今週：${ev.name} — ${ev.desc}（残り${days}日${save.evClear === week ? '・初回報酬受取済' : `・初回 灯晶+${ev.first}`}）`;
+  }
   const ch = save.chapter % STORY.length;
   $('#story-sub').textContent = save.chapter >= STORY.length ? '旅は終わった。もう一度、最初の灯から' : `続きから：${STORY[ch].title}`;
 }
@@ -906,6 +912,15 @@ document.querySelectorAll('[data-go]').forEach((b) => b.addEventListener('click'
   if (state.mode === 'story') {
     state.chapter = save.chapter % STORY.length;
     openPartySelect(() => runStoryChapter());
+    return;
+  }
+  if (state.mode === 'event') {
+    const { ev } = currentEvent();
+    openSelect('あなたが握る剣は？', `週替わりイベント › ${ev.name}`, (k) => {
+      state.myKey = k;
+      state.eventRun = currentEvent();
+      startOffline();
+    }, { onBack: goTitle });
     return;
   }
   const crumbs = { cpu: 'ひとりで手合わせ', duo: '背中をあずける', 'online-vs': 'オンライン対戦', 'online-coop': 'オンライン協力' };
@@ -1246,9 +1261,36 @@ function endBattle() {
 
 async function startOffline() {
   await loadPromise;
-  setStage(state.stage || STAGES[0]);
+  const evRun = state.mode === 'event' ? (state.eventRun ||= currentEvent()) : null;
+  setStage(evRun ? STAGES[evRun.ev.stage % STAGES.length] : state.stage || STAGES[0]);
   const b = makeBattle(null);
   b.add(state.myKey, { team: 0, player: true, awk: save.awk, pos: [-4, 3], name: FIGHTERS[state.myKey].name + '（あなた）', upg: upgFor(state.myKey), gear: gearFor(state.myKey) });
+  if (evRun) {
+    // ---- 週替わりイベント ----
+    const ev = evRun.ev;
+    const rnd = (a) => a[Math.floor(Math.random() * a.length)];
+    for (let i = 0; i < ev.ally; i++) {
+      const ak = rnd(ROSTER);
+      b.add(ak, { team: 0, cpu: 0.75, pos: [-6, -1 - i * 3], name: FIGHTERS[ak].name + '（相棒）' });
+    }
+    const list = [];
+    for (const [kind, n] of ev.foes) {
+      for (let i = 0; i < n; i++) {
+        list.push(kind === 'mob' ? rnd(ENEMY_ROSTER) : kind === 'boss' ? rnd(BOSS_ROSTER) : kind === 'roster' ? rnd(ROSTER) : kind === 'mirror' ? state.myKey : kind);
+      }
+    }
+    list.forEach((k, i) => {
+      const a = (i / list.length) * Math.PI * 2;
+      b.add(k, {
+        team: 1, cpu: foeCpu(0.8), hpMul: foeHp(ev.hp), atkMul: ev.atk, scale: ev.scale || 1, facing: Math.PI,
+        pos: list.length === 1 ? [4, -3] : [4 + Math.cos(a) * 3, -2 + Math.sin(a) * 3],
+        name: k === state.myKey ? FIGHTERS[k].name + '（写し）' : FIGHTERS[k].name
+      });
+    });
+    beginBattle(false);
+    ui.banner({ name: `— 週替わりイベント —` }, ev.name);
+    return;
+  }
   if (state.mode === 'cpu') {
     b.add(state.oppKey, { team: 1, cpu: foeCpu(0.8), hpMul: foeHp(1), pos: [4, -3], facing: Math.PI });
   } else {
@@ -1418,6 +1460,25 @@ function onBattleEnd(won) {
     } else {
       showResult('膝をついた', 'けれど、灯はまだ消えていない。もう一度立とう。', '', true, false);
     }
+    return;
+  }
+  if (state.mode === 'event') {
+    const { week, ev } = state.eventRun || currentEvent();
+    let r = 5, note = '';
+    if (won) {
+      r = ev.reward;
+      if (save.evClear !== week) {
+        r += ev.first;
+        save.evClear = week;
+        note = '（今週の初回クリアボーナス込み）';
+      }
+    }
+    grant(r);
+    showResult(
+      won ? `イベント「${ev.name}」制覇！` : 'イベント失敗',
+      won ? `見事な戦いぶりだった${note}。来週は別のイベントが待っている。` : '何度でも挑戦できる。装備を整えて再挑戦だ！',
+      `灯晶 +${r}`, true, false
+    );
     return;
   }
   const r = won ? grant(REWARD[state.mode] || 30) : grant(5);
