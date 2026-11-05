@@ -17,7 +17,21 @@ function rng(seed) {
 
 export const BOUNDS = { minX: -62, maxX: 62, minZ: -238, maxZ: 36 };
 const TOWN = { x: 0, z: 10, r: 15 };
-const DUN = { x0: -40, z0: -176, cols: 8, rows: 6, cell: 10 };
+// 迷宮の大きさは章ごとに変わる（Field生成時に設定）
+let DUN = { x0: -40, z0: -176, cols: 8, rows: 6, cell: 10 };
+// ---- 10種の風土 × 10種の地形配置 = 100通りの世界 ----
+const BIOMES = [
+  { name: '若草', ground: 'tex-grass', tint: 0xffffff, sky: 0xcfe8ff, gnd: 0x5a8a3a, hue: 0.28, crowns: [0x4ab040, 0x6ac848, 0x3a9a50, 0x58c070, 0xffc838], flowers: [0xff5a8a, 0xffd23a, 0xffffff, 0xb070ff, 0x5ab0ff], trees: 1, conifer: 0.5, wall: 0xffffff, rune: 0x4ad8ff, water: 0x3aa8ff, glow: 0xd8ff70, roof: 0xffffff, field: ['の野', '平原', '草原'], dun: ['遺跡', '古城'] },
+  { name: '桜', ground: 'tex-grass', tint: 0xfff0f4, sky: 0xffe0f0, gnd: 0x7a9a5a, hue: 0.3, crowns: [0xffb0d0, 0xffc0e0, 0xff98c0, 0xffe0f0, 0x6ac848], flowers: [0xffb0d0, 0xffffff, 0xff7aa8, 0xf0a0ff], trees: 1.1, conifer: 0.2, wall: 0xfff0f4, rune: 0xff8ad8, water: 0x7ac8ff, glow: 0xffc0e0, roof: 0xffd0e0, field: ['の花園', '桜並木', 'の丘'], dun: ['大祠', '社'] },
+  { name: '紅葉', ground: 'tex-grass', tint: 0xffd8a0, sky: 0xffe0c0, gnd: 0x8a6a3a, hue: 0.12, crowns: [0xff8a30, 0xe04a3a, 0xffc838, 0xd06a20, 0xb03a2a], flowers: [0xffa020, 0xff5030, 0xffe060, 0xffffff], trees: 1.2, conifer: 0.35, wall: 0xffe8d0, rune: 0xffa040, water: 0x4a98d0, glow: 0xffb050, roof: 0xffb890, field: ['の森', '紅葉谷', '街道'], dun: ['古城', '地下迷宮'] },
+  { name: '雪原', ground: 'tex-cobble', tint: 0xf0f6ff, sky: 0xe0f0ff, gnd: 0xc0d0e0, hue: 0.45, crowns: [0xf4f8ff, 0xd8e8f8, 0xe8f0ff, 0xb8d8f0], flowers: [0xbfe8ff, 0xffffff, 0x9ad0ff], trees: 0.9, conifer: 0.85, wall: 0xe0f0ff, rune: 0x8ae8ff, water: 0x9ad8ff, glow: 0xffffff, roof: 0x9ab8ff, field: ['雪原', 'の氷野', '凍土'], dun: ['氷窟', '氷の神殿'] },
+  { name: '砂漠', ground: 'tex-dirt-road', tint: 0xffe0b0, sky: 0xfff0d0, gnd: 0xc09050, hue: 0.18, crowns: [0x8ab040, 0xa0b850, 0x6a9a40], flowers: [0xff7030, 0xffd040, 0xff4080], trees: 0.35, conifer: 0.1, wall: 0xffe0b0, rune: 0xffd040, water: 0x30c0d0, glow: 0xffe090, roof: 0xffe0a0, field: ['砂海', 'の砂丘', '荒野'], dun: ['王墓', '砂の神殿'] },
+  { name: '沼地', ground: 'tex-grass', tint: 0xa8c090, sky: 0xb0c8b0, gnd: 0x3a4a30, hue: 0.22, crowns: [0x4a6a30, 0x5a7a40, 0x3a5a3a, 0x6a8a50], flowers: [0xb070ff, 0x80ff80, 0x40f0ff], trees: 1.3, conifer: 0.3, wall: 0xb0c8a0, rune: 0x80ff60, water: 0x5a8a50, glow: 0x9aff50, roof: 0xb0e090, field: ['の湿原', '霧の沼', '泥濘'], dun: ['沈没神殿', '朽ちた祠'] },
+  { name: '火山', ground: 'tex-dirt-road', tint: 0x8a6a60, sky: 0xffb090, gnd: 0x4a2010, hue: 0.05, crowns: [0x5a3a30, 0x7a4a30, 0x3a2a2a, 0xff6a30], flowers: [0xff4020, 0xffa020, 0xffe040], trees: 0.45, conifer: 0.6, wall: 0xc08070, rune: 0xff5020, water: 0xff6020, glow: 0xff8030, roof: 0xa08080, field: ['の焦土', '灰の原', '溶岩原'], dun: ['火口神殿', '炎の砦'] },
+  { name: '水晶', ground: 'tex-cobble', tint: 0xc8d8ff, sky: 0xd8e0ff, gnd: 0x6a6aa0, hue: 0.6, crowns: [0x8ac8ff, 0xb08aff, 0x8affe8, 0xe0b0ff], flowers: [0x8ac8ff, 0xb070ff, 0xffffff, 0x60ffe0], trees: 0.8, conifer: 0.4, wall: 0xd0d8ff, rune: 0xb080ff, water: 0x60e0ff, glow: 0xa0e0ff, roof: 0xc0b0ff, field: ['晶野', 'の水晶原', '輝き野'], dun: ['水晶宮', '星の祠'] },
+  { name: '夜光', ground: 'tex-grass', tint: 0x7a90c0, sky: 0x8090d0, gnd: 0x203050, hue: 0.5, crowns: [0x30d0b0, 0x4080ff, 0x8050ff, 0x20a0a0], flowers: [0x40f0ff, 0xff60e0, 0x80ff80, 0xfff080], trees: 1.2, conifer: 0.4, wall: 0x9aa8e0, rune: 0x40ffd0, water: 0x2060c0, glow: 0x80fff0, roof: 0x9ab8ff, field: ['夜光の森', 'の幽林', '月影原'], dun: ['月の神殿', '影の迷宮'] },
+  { name: '天空', ground: 'tex-cobble', tint: 0xfff8e8, sky: 0xffffff, gnd: 0xd8c8a0, hue: 0.3, crowns: [0xffffff, 0xffe8a0, 0xa0e0a0, 0xfff0d0], flowers: [0xffffff, 0xffe060, 0x9ad8ff], trees: 0.7, conifer: 0.2, wall: 0xfff8e0, rune: 0xffe070, water: 0xa0e0ff, glow: 0xfff0a0, roof: 0x9ab8ff, field: ['の天原', '雲上の庭', '空中回廊'], dun: ['天の聖堂', '光の塔'] }
+];
 const SYL = ['アル', 'ベル', 'セラ', 'ミナ', 'ロウ', 'カナ', 'ティ', 'ノル', 'エス', 'リム', 'ヴァ', 'ソラ', 'クオ', 'ハル', 'ネイ', 'ユラ'];
 
 // ---- 地面や壁のテクスチャ（一度だけ読み込んで共有） ----
@@ -107,9 +121,17 @@ export class Field {
     this.t = 0;
     const r = (this.r = rng(o.chapter * 7717 + 99));
     const pick = (arr) => arr[Math.floor(r() * arr.length)];
+    // 章ごとの風土（10種）と地形配置（10種）
+    const B = (this.B = BIOMES[o.chapter % BIOMES.length]);
+    const L = (this.L = Math.floor(o.chapter / BIOMES.length) % 10);
+    const cols = 6 + ((L * 3 + o.chapter) % 5), rows = 4 + ((L + o.chapter) % 3);
+    DUN = { x0: -(cols * 10) / 2 + ((L % 3) - 1) * 6, z0: -176, cols, rows, cell: 10 };
+    this.houseN = 6 + ((L * 7 + o.chapter) % 5);
+    this.treeMul = B.trees * (0.75 + (L % 4) * 0.15);
+    this.pondN = 1 + ((L + o.chapter) % 5);
     this.townName = pick(SYL) + pick(SYL) + pick(['の町', '村', 'の宿場', 'の里', '港']);
-    this.fieldName = pick(SYL) + pick(SYL) + pick(['の野', '平原', 'の森', '街道', '高原']);
-    this.dunName = pick(SYL) + pick(SYL) + pick(['遺跡', '神殿', '地下迷宮', '古城', '大祠']);
+    this.fieldName = pick(SYL) + pick(SYL) + pick(B.field);
+    this.dunName = pick(SYL) + pick(SYL) + pick(B.dun);
     this.st = o.stage;
     this.buildGround();
     this.buildRoad();
@@ -134,13 +156,14 @@ export class Field {
   buildGround() {
     const st = this.st;
     const w = BOUNDS.maxX - BOUNDS.minX + 40, d = BOUNDS.maxZ - BOUNDS.minZ + 40;
-    const g = new THREE.Mesh(this.geo(new THREE.PlaneGeometry(w, d)), this.std(new THREE.Color(0xffffff).lerp(new THREE.Color(st.floor), 0.12), { map: this.tex('tex-grass', w / 7, d / 7), roughness: 0.95 }));
+    const B = this.B;
+    const g = new THREE.Mesh(this.geo(new THREE.PlaneGeometry(w, d)), this.std(new THREE.Color(B.tint).lerp(new THREE.Color(st.floor), 0.1), { map: this.tex(B.ground, w / 7, d / 7), roughness: 0.95 }));
     g.rotation.x = -Math.PI / 2;
     g.position.set(0, 0, (BOUNDS.maxZ + BOUNDS.minZ) / 2);
     g.receiveShadow = true;
     this.group.add(g);
     // 空と大地の照り返しで色を鮮やかに
-    this.group.add(new THREE.HemisphereLight(0xcfe8ff, 0x5a8a3a, 1.1));
+    this.group.add(new THREE.HemisphereLight(B.sky, B.gnd, 1.1));
     this.lights = [];
     this.anims = [];
   }
@@ -239,7 +262,13 @@ export class Field {
     const roofCols = [0xffffff, 0x9ab8ff, 0xb0e090, 0xffe0a0, 0xe0a8ff, 0xffb890];
     const wallCols = [0xffffff, 0xfff0e0, 0xf0f8ff, 0xfff8d0, 0xffe8f0];
     const flowerBox = [];
-    const spots = [[-22, 0], [-22, 16], [22, 0], [22, 16], [-12, 30], [12, 30], [-26, -10], [26, -10], [-30, 26], [30, 26]];
+    const allSpots = [[-22, 0], [-22, 16], [22, 0], [22, 16], [-12, 30], [12, 30], [-26, -10], [26, -10], [-30, 26], [30, 26]];
+    for (let i = allSpots.length - 1; i > 0; i--) {
+      const j = Math.floor(r() * (i + 1));
+      [allSpots[i], allSpots[j]] = [allSpots[j], allSpots[i]];
+    }
+    const spots = allSpots.slice(0, this.houseN);
+    const roofTint = new THREE.Color(this.B.roof);
     this.houses = [];
     for (const [hx, hz] of spots) {
       const w = 6 + r() * 2.5, d = 5 + r() * 2, h = 3.2 + r() * 1.6;
@@ -247,7 +276,7 @@ export class Field {
       const g = new THREE.Group();
       const body = new THREE.Mesh(this.geo(new THREE.BoxGeometry(w, h, d)), this.std(wallCols[Math.floor(r() * wallCols.length)], { map: this.tex('tex-house-wall', w / 4, h / 4) }));
       body.position.y = h / 2;
-      const roof = new THREE.Mesh(this.geo(new THREE.ConeGeometry(Math.max(w, d) * 0.78, 2.6, 4)), this.std(roofCols[Math.floor(r() * roofCols.length)], { map: this.tex('tex-roof', 4, 2) }));
+      const roof = new THREE.Mesh(this.geo(new THREE.ConeGeometry(Math.max(w, d) * 0.78, 2.6, 4)), this.std(new THREE.Color(roofCols[Math.floor(r() * roofCols.length)]).multiply(roofTint), { map: this.tex('tex-roof', 4, 2) }));
       // 窓辺の花箱
       for (const sx of [-w / 3, w / 3]) {
         const lx = sx, lz = d / 2 + 0.25;
@@ -420,7 +449,7 @@ export class Field {
   }
 
   // ---- ダンジョン：外壁と迷路、最奥に祭壇 ----
-  entranceCol() { return 3 + (this.o.chapter % 2); }
+  entranceCol() { return Math.floor(DUN.cols / 2) - (this.o.chapter % 2); }
   buildDungeon() {
     const r = this.r;
     const { x0, z0, cols, rows, cell } = DUN;
@@ -474,7 +503,7 @@ export class Field {
     const walls = [];
     for (let rr = 0; rr <= rows; rr++) for (let c = 0; c < cols; c++) if (H[rr][c]) walls.push([x0 + c * cell + cell / 2, z0 - rr * cell, cell + 0.8, 0.8, rr === 0 || rr === rows]);
     for (let rr = 0; rr < rows; rr++) for (let c = 0; c <= cols; c++) if (V[rr][c]) walls.push([x0 + c * cell, z0 - rr * cell - cell / 2, 0.8, cell + 0.8, c === 0 || c === cols]);
-    const wm = new THREE.InstancedMesh(this.geo(new THREE.BoxGeometry(1, 1, 1)), this.std(new THREE.Color(0xffffff).lerp(new THREE.Color(this.st.pillar), 0.2), { map: this.tex('tex-dungeon-wall', 3, 1), emissive: 0x4ad8ff, emissiveMap: this.tex('tex-dungeon-wall', 3, 1), emissiveIntensity: 0.18 }), walls.length);
+    const wm = new THREE.InstancedMesh(this.geo(new THREE.BoxGeometry(1, 1, 1)), this.std(new THREE.Color(this.B.wall).lerp(new THREE.Color(this.st.pillar), 0.2), { map: this.tex('tex-dungeon-wall', 3, 1), emissive: this.B.rune, emissiveMap: this.tex('tex-dungeon-wall', 3, 1), emissiveIntensity: 0.18 }), walls.length);
     const mtx = new THREE.Matrix4(), q4 = new THREE.Quaternion(), sc = new THREE.Vector3(), ps = new THREE.Vector3();
     walls.forEach(([x, z, w, d, outer], i) => {
       const h = outer ? 4 : 2.4;
@@ -582,7 +611,9 @@ export class Field {
     const rnd = () => [BOUNDS.minX + r() * (BOUNDS.maxX - BOUNDS.minX), BOUNDS.minZ + r() * (BOUNDS.maxZ - BOUNDS.minZ)];
     // 木
     const trees = [];
-    for (let i = 0; i < 2200 && trees.length < 340; i++) {
+    const B = this.B;
+    const nCon = Math.round(340 * this.treeMul * (0.4 + B.conifer));
+    for (let i = 0; i < 2600 && trees.length < nCon; i++) {
       const [x, z] = rnd();
       const edge = Math.min(x - BOUNDS.minX, BOUNDS.maxX - x) < 8;
       if (!free(x, z, 4.5) || (!edge && r() < 0.35)) continue;
@@ -598,18 +629,19 @@ export class Field {
       trunkM.setMatrixAt(i, m.compose(p.set(x, 0.9 * k, z), q, s.set(k, k, k)));
       leafA.setMatrixAt(i, m.compose(p.set(x, 2.8 * k, z), q, s.set(k, k, k)));
       leafB.setMatrixAt(i, m.compose(p.set(x, 4.1 * k, z), q, s.set(k, k, k)));
-      tc.setHSL(0.25 + r() * 0.12, 0.45 + r() * 0.3, 0.55 + r() * 0.25);
+      tc.setHSL(B.hue + (r() - 0.5) * 0.1, 0.45 + r() * 0.3, 0.55 + r() * 0.25);
       leafA.setColorAt(i, tc);
       leafB.setColorAt(i, tc.offsetHSL(0.02, 0, 0.08));
       this.circles.push({ x, z, r: 0.55 * k });
     });
     // 広葉樹（緑・桜・紅葉・黄金）
     const rounds = [];
-    for (let i = 0; i < 1500 && rounds.length < 150; i++) {
+    const nRound = Math.round(200 * this.treeMul * (1.1 - B.conifer));
+    for (let i = 0; i < 2000 && rounds.length < nRound; i++) {
       const [x, z] = rnd();
       if (free(x, z, 5)) rounds.push([x, z, 0.8 + r() * 0.8]);
     }
-    const crownCols = [0x4ab040, 0x6ac848, 0x3a9a50, 0xffa8cc, 0xff8a30, 0xffc838, 0xe04a3a, 0x58c070];
+    const crownCols = B.crowns;
     const rTrunk = new THREE.InstancedMesh(this.geo(new THREE.CylinderGeometry(0.2, 0.34, 2.4, 6)), this.std(0x6a4630), rounds.length);
     const rCrown = new THREE.InstancedMesh(this.geo(new THREE.IcosahedronGeometry(1.7, 1)), this.std(0xffffff, { roughness: 0.8 }), rounds.length);
     const rCrown2 = new THREE.InstancedMesh(this.geo(new THREE.IcosahedronGeometry(1.1, 1)), this.std(0xffffff, { roughness: 0.8 }), rounds.length);
@@ -637,7 +669,7 @@ export class Field {
       // 小さな群れにする
       for (let k = 0; k < 4; k++) flowers.push([x + (r() - 0.5) * 1.4, 0.15 + r() * 0.15, z + (r() - 0.5) * 1.4, 0.09 + r() * 0.07]);
     }
-    this.dots(flowers, 1, FLOWER_COLS, 0.25);
+    this.dots(flowers, 1, B.flowers, 0.25);
     // 茂みと実
     const bushes = [], berries = [];
     for (let i = 0; i < 1200 && bushes.length < 160; i++) {
@@ -657,10 +689,10 @@ export class Field {
     }
     this.dots(shrooms, 1, [0x40f0ff, 0xff60e0, 0x80ff80], 1.2);
     // 池（睡蓮つき）
-    const waterMat = this.mat(new THREE.MeshStandardMaterial({ color: 0x3aa8ff, emissive: 0x1050a0, emissiveIntensity: 0.45, roughness: 0.05, metalness: 0.3, transparent: true, opacity: 0.88 }));
+    const waterMat = this.mat(new THREE.MeshStandardMaterial({ color: B.water, emissive: new THREE.Color(B.water).multiplyScalar(0.4), emissiveIntensity: 0.45, roughness: 0.05, metalness: 0.3, transparent: true, opacity: 0.88 }));
     this.ponds = [];
     const pads = [];
-    for (let i = 0, made = 0; i < 300 && made < 4; i++) {
+    for (let i = 0, made = 0; i < 300 && made < this.pondN; i++) {
       const [x, z] = rnd();
       const pr = 3 + r() * 3;
       if (!free(x, z, pr + 4) || Math.abs(x) > 52) continue;
@@ -691,7 +723,7 @@ export class Field {
     this.group.add(padM);
     if (bloom.length) this.dots(bloom, 1, [0xffb0d8, 0xffffff], 0.4);
     // 蛍
-    this.fireflies = this.particles(320, 0xd8ff70, 0.2, () => {
+    this.fireflies = this.particles(320, B.glow, 0.2, () => {
       let x, z;
       do [x, z] = rnd(); while (inDun(x, z));
       return [x, 0.6 + r() * 2.5, z];
@@ -723,7 +755,7 @@ export class Field {
     for (let i = 0; i < NG; i++) {
       const [x, z] = rnd();
       grass.setMatrixAt(i, m.compose(p.set(x, 0.3, z), q, s.set(1, 0.6 + r(), 1)));
-      grass.setColorAt(i, tc.setHSL(0.22 + r() * 0.1, 0.6, 0.35 + r() * 0.2));
+      grass.setColorAt(i, tc.setHSL(B.hue + (r() - 0.5) * 0.1, 0.6, 0.35 + r() * 0.2));
     }
     this.group.add(grass);
     // 水晶と廃墟の柱
