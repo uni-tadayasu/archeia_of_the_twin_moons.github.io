@@ -1,4 +1,4 @@
-// 武器・防具の見た目（手続き生成）。戦闘とワールドの両方でキャラに装着する
+// 武器・防具の見た目（手続き生成）。キャラモデルの骨格と体形を測ってフィットさせる
 import * as THREE from 'three';
 
 const TIER_COL = [0x8a5a2b, 0x8f969e, 0xc3ccd8, 0xeef3fa, 0x8fe6ff, 0xe6d6b4, 0xcfe0ff, 0xffd970, 0xff8a3a, 0xc98aff];
@@ -7,11 +7,12 @@ const CLOTH = [0x6b4a2e, 0x3a4a6a, 0x5a2a3a, 0x2a5a4a, 0x7a2a2a, 0x2a2a5a, 0x4a2
 
 const MATS = new Map();
 function mat(color, emissive = 0, ei = 0, opts = {}) {
-  const k = `${color}|${emissive}|${ei}|${opts.side || 0}|${opts.rough ?? 0.35}`;
+  const k = `${color}|${emissive}|${ei}|${opts.side || 0}|${opts.rough ?? 0.35}|${opts.metal ?? 0.75}|${opts.op ?? 1}`;
   if (!MATS.has(k)) {
     MATS.set(k, new THREE.MeshStandardMaterial({
       color, metalness: opts.metal ?? 0.75, roughness: opts.rough ?? 0.35,
-      emissive, emissiveIntensity: ei, side: opts.side || THREE.FrontSide
+      emissive, emissiveIntensity: ei, side: opts.side || THREE.FrontSide,
+      transparent: (opts.op ?? 1) < 1, opacity: opts.op ?? 1, depthWrite: (opts.op ?? 1) >= 1
     }));
   }
   return MATS.get(k);
@@ -22,12 +23,16 @@ const G = {
   cone: new THREE.ConeGeometry(1, 1, 10),
   bell: new THREE.CylinderGeometry(0.35, 1, 1, 14, 1, true),
   sph: new THREE.SphereGeometry(1, 14, 10),
-  half: new THREE.SphereGeometry(1, 14, 8, 0, Math.PI * 2, 0, Math.PI / 2),
-  torus: new THREE.TorusGeometry(1, 0.08, 8, 28),
+  half: new THREE.SphereGeometry(1, 16, 8, 0, Math.PI * 2, 0, Math.PI / 2),
+  torus: new THREE.TorusGeometry(1, 0.08, 8, 32),
   bow: new THREE.TorusGeometry(1, 0.05, 6, 24, Math.PI),
   fan: new THREE.CircleGeometry(1, 18, Math.PI * 0.15, Math.PI * 0.7),
-  plane: new THREE.PlaneGeometry(1, 1, 1, 4),
-  skirt: new THREE.CylinderGeometry(0.66, 1, 1, 14, 1, true),
+  // 胴に沿う曲面（+Z が正面。CylinderGeometry は θ=0 が +Z）
+  plate: new THREE.CylinderGeometry(1, 1, 1, 24, 1, true, -1.15, 2.3),
+  plateFull: new THREE.CylinderGeometry(1, 0.92, 1, 28, 1, true),
+  backPlate: new THREE.CylinderGeometry(1, 1, 1, 18, 1, true, Math.PI - 1.0, 2.0),
+  skirt: new THREE.CylinderGeometry(1, 1.35, 1, 24, 1, true),
+  cape: new THREE.CylinderGeometry(1, 1.25, 1, 16, 6, true, Math.PI - 0.95, 1.9).translate(0, -0.5, 0), // 原点＝肩の高さ
   ring: new THREE.RingGeometry(0.8, 1, 40)
 };
 function part(geo, m, sx, sy, sz, x = 0, y = 0, z = 0) {
@@ -38,186 +43,352 @@ function part(geo, m, sx, sy, sz, x = 0, y = 0, z = 0) {
   return p;
 }
 
-// ---- 武器（type 0-9 × tier 0-9）----
+// ---- 武器（type 0-9 × tier 0-9）。原点＝握り、+Y＝刃先 ----
 function weaponMesh(type, tier) {
   const g = new THREE.Group();
-  const metal = mat(TIER_COL[tier], TIER_GLOW[tier], tier >= 4 ? 0.35 + tier * 0.06 : 0);
-  const glowM = mat(TIER_GLOW[tier] || TIER_COL[tier], TIER_GLOW[tier] || 0x88ccff, tier >= 4 ? 1.4 : 0.5, { metal: 0.2 });
+  const metal = mat(TIER_COL[tier], TIER_GLOW[tier], tier >= 4 ? 0.2 + tier * 0.03 : 0);
+  const glowM = mat(TIER_GLOW[tier] || TIER_COL[tier], TIER_GLOW[tier] || 0x88ccff, tier >= 4 ? 0.8 : 0.3, { metal: 0.2 });
   const grip = mat(0x3a2414, 0, 0, { metal: 0.1, rough: 0.8 });
   const L = 1 + tier * 0.035;
   switch (type) {
     case 0: // 剣
-      g.add(part(G.cyl, grip, 0.025, 0.2, 0.025, 0, -0.05, 0));
-      g.add(part(G.box, metal, 0.26, 0.05, 0.07, 0, 0.07, 0));
-      g.add(part(G.box, metal, 0.07, 0.85 * L, 0.018, 0, 0.1 + 0.425 * L, 0));
-      g.add(part(G.cone, metal, 0.05, 0.12, 0.012, 0, 0.16 + 0.85 * L, 0));
-      if (tier >= 4) g.add(part(G.sph, glowM, 0.04, 0.04, 0.04, 0, 0.07, 0.04));
+      g.add(part(G.cyl, grip, 0.025, 0.2, 0.025, 0, -0.02, 0));
+      g.add(part(G.box, metal, 0.26, 0.05, 0.07, 0, 0.1, 0));
+      g.add(part(G.box, metal, 0.07, 0.85 * L, 0.018, 0, 0.13 + 0.425 * L, 0));
+      g.add(part(G.cone, metal, 0.05, 0.12, 0.012, 0, 0.19 + 0.85 * L, 0));
+      if (tier >= 4) g.add(part(G.sph, glowM, 0.04, 0.04, 0.04, 0, 0.1, 0.04));
       break;
-    case 1: // 杖
-      g.add(part(G.cyl, grip, 0.022, 1.5 * L, 0.022, 0, 0.3, 0));
-      g.add(part(G.torus, metal, 0.11, 0.11, 0.11, 0, 0.3 + 0.75 * L, 0));
-      g.add(part(G.sph, glowM, 0.08, 0.08, 0.08, 0, 0.3 + 0.75 * L, 0));
+    case 1: // 杖（中ほどを握る）
+      g.add(part(G.cyl, grip, 0.022, 1.5 * L, 0.022, 0, 0.25, 0));
+      g.add(part(G.torus, metal, 0.11, 0.11, 0.11, 0, 0.25 + 0.75 * L, 0));
+      g.add(part(G.sph, glowM, 0.08, 0.08, 0.08, 0, 0.25 + 0.75 * L, 0));
       break;
     case 2: // 大斧
-      g.add(part(G.cyl, grip, 0.03, 1.15 * L, 0.03, 0, 0.35, 0));
-      g.add(part(G.box, metal, 0.42 * L, 0.32 * L, 0.04, 0.16, 0.78 * L, 0));
-      g.add(part(G.box, metal, 0.16, 0.12, 0.04, -0.09, 0.78 * L, 0));
+      g.add(part(G.cyl, grip, 0.03, 1.15 * L, 0.03, 0, 0.3, 0));
+      g.add(part(G.box, metal, 0.42 * L, 0.32 * L, 0.04, 0.16, 0.75 * L, 0));
+      g.add(part(G.box, metal, 0.16, 0.12, 0.04, -0.09, 0.75 * L, 0));
       break;
-    case 3: // 双刃（片手分。左手にもう一本付ける）
-      g.add(part(G.cyl, grip, 0.022, 0.16, 0.022, 0, -0.03, 0));
-      g.add(part(G.box, metal, 0.05, 0.55 * L, 0.014, 0.02, 0.32 * L, 0));
-      g.add(part(G.cone, metal, 0.035, 0.1, 0.01, 0.02, 0.36 + 0.55 * L, 0));
+    case 3: // 双刃（片手分）
+      g.add(part(G.cyl, grip, 0.022, 0.16, 0.022, 0, 0, 0));
+      g.add(part(G.box, metal, 0.05, 0.55 * L, 0.014, 0.02, 0.08 + 0.275 * L, 0));
+      g.add(part(G.cone, metal, 0.035, 0.1, 0.01, 0.02, 0.13 + 0.55 * L, 0));
       break;
-    case 4: // 槍
-      g.add(part(G.cyl, grip, 0.022, 1.9 * L, 0.022, 0, 0.5, 0));
-      g.add(part(G.cone, metal, 0.06, 0.32, 0.06, 0, 0.6 + 0.95 * L, 0));
-      g.add(part(G.torus, glowM, 0.05, 0.05, 0.05, 0, 0.42 + 0.95 * L, 0));
+    case 4: // 槍（中ほどを握る）
+      g.add(part(G.cyl, grip, 0.022, 1.9 * L, 0.022, 0, 0.45, 0));
+      g.add(part(G.cone, metal, 0.06, 0.32, 0.06, 0, 0.55 + 0.95 * L, 0));
+      g.add(part(G.torus, glowM, 0.05, 0.05, 0.05, 0, 0.37 + 0.95 * L, 0));
       break;
-    case 5: { // 弓
-      const b = part(G.bow, metal, 0.55 * L, 0.55 * L, 0.55 * L, 0, 0.1, 0);
+    case 5: { // 弓（握りが原点）
+      const b = part(G.bow, metal, 0.55 * L, 0.55 * L, 0.55 * L, 0.55 * L, 0, 0);
       b.rotation.z = -Math.PI / 2;
       g.add(b);
-      g.add(part(G.cyl, glowM, 0.004, 1.1 * L, 0.004, 0, 0.1, 0));
-      g.add(part(G.cyl, grip, 0.03, 0.18, 0.03, -0.55 * L, 0.1, 0));
+      g.add(part(G.cyl, glowM, 0.004, 1.1 * L, 0.004, 0.55 * L, 0, 0));
+      g.add(part(G.cyl, grip, 0.03, 0.18, 0.03, 0, 0, 0));
       break;
     }
     case 6: // 錬金瓶
-      g.add(part(G.sph, mat(0xddeeff, 0, 0, { metal: 0.1, rough: 0.1 }), 0.11, 0.11, 0.11, 0, 0.12, 0));
-      g.add(part(G.sph, glowM, 0.085, 0.085, 0.085, 0, 0.12, 0));
-      g.add(part(G.cyl, metal, 0.035, 0.12, 0.035, 0, 0.27, 0));
+      g.add(part(G.sph, mat(0xddeeff, 0, 0, { metal: 0.1, rough: 0.1 }), 0.11, 0.11, 0.11, 0, 0.06, 0));
+      g.add(part(G.sph, glowM, 0.085, 0.085, 0.085, 0, 0.06, 0));
+      g.add(part(G.cyl, metal, 0.035, 0.12, 0.035, 0, 0.21, 0));
       break;
-    case 7: // 拳甲（片手分）
-      g.add(part(G.box, metal, 0.13, 0.2, 0.14, 0, 0.02, 0));
-      g.add(part(G.cone, glowM, 0.03, 0.08, 0.03, 0, 0.02, 0.1));
-      g.children[1].rotation.x = Math.PI / 2;
-      break;
-    case 8: // 聖鈴
-      g.add(part(G.cyl, grip, 0.02, 0.45, 0.02, 0, 0.12, 0));
-      g.add(part(G.bell, mat(TIER_COL[tier], TIER_GLOW[tier], 0.3, { side: THREE.DoubleSide }), 0.13, 0.2, 0.13, 0, 0.42, 0));
-      g.add(part(G.sph, glowM, 0.04, 0.04, 0.04, 0, 0.33, 0));
-      break;
-    case 9: { // 雅扇
-      g.add(part(G.cyl, grip, 0.02, 0.14, 0.02, 0, 0, 0));
-      const f = part(G.fan, mat(CLOTH[tier], TIER_GLOW[tier], tier >= 4 ? 0.4 : 0, { side: THREE.DoubleSide, metal: 0.1, rough: 0.6 }), 0.45 * L, 0.45 * L, 1, 0, 0.05, 0);
-      g.add(f);
+    case 7: { // 拳甲（片手分：手を包む）
+      g.add(part(G.box, metal, 0.12, 0.16, 0.13, 0, 0.02, 0));
+      const sp = part(G.cone, glowM, 0.025, 0.07, 0.025, 0, 0.02, 0.09);
+      sp.rotation.x = Math.PI / 2;
+      g.add(sp);
       break;
     }
+    case 8: // 聖鈴
+      g.add(part(G.cyl, grip, 0.02, 0.45, 0.02, 0, 0.12, 0));
+      g.add(part(G.bell, mat(TIER_COL[tier], TIER_GLOW[tier], 0.2, { side: THREE.DoubleSide }), 0.13, 0.2, 0.13, 0, 0.42, 0));
+      g.add(part(G.sph, glowM, 0.04, 0.04, 0.04, 0, 0.33, 0));
+      break;
+    case 9: // 雅扇
+      g.add(part(G.cyl, grip, 0.02, 0.14, 0.02, 0, 0, 0));
+      g.add(part(G.fan, mat(CLOTH[tier], TIER_GLOW[tier], tier >= 4 ? 0.25 : 0, { side: THREE.DoubleSide, metal: 0.1, rough: 0.6 }), 0.45 * L, 0.45 * L, 1, 0, 0.05, 0));
+      break;
   }
   return g;
 }
 
-// ---- 防具（type 0-9 × tier 0-9）----
+// ---------- 体形と骨格の計測 ----------
+function findBones(model) {
+  const B = {};
+  const chest = [];
+  model.traverse((o) => {
+    if (!o.isBone) return;
+    const n = o.name.toLowerCase().replace(/^mixamorig[:_]?/, '').replace(/^(def|bip\d*|armature)[-_ .]?/, '');
+    const side = /left|(^|[_.\s-])l($|[_.\s-])/.test(n) ? 'l' : /right|(^|[_.\s-])r($|[_.\s-])/.test(n) ? 'r' : '';
+    if (/thumb|index|middle|ring|pinky|finger|end|top|twist|ik|pole|target/.test(n)) return;
+    if (/hand|wrist/.test(n)) {
+      if (side === 'r') B.rh ||= o;
+      else if (side === 'l') B.lh ||= o;
+    } else if (/forearm|lowerarm|elbow/.test(n)) {
+      if (side === 'r') B.rf ||= o;
+      else if (side === 'l') B.lf ||= o;
+    } else if (/upperarm|(^|[^a-z])arm/.test(n)) {
+      if (side === 'r') B.ra ||= o;
+      else if (side === 'l') B.la ||= o;
+    } else if (/shoulder|clavicle/.test(n)) {
+      if (side === 'r') B.rs ||= o;
+      else if (side === 'l') B.ls ||= o;
+    } else if (/head/.test(n)) B.head ||= o;
+    else if (/neck/.test(n)) B.neck ||= o;
+    else if (/hips|pelvis|root/.test(n) && !side) B.hips ||= o;
+    else if (/spine|chest/.test(n) && !side) chest.push(o);
+  });
+  const pick = (re) => chest.find((o) => re.test(o.name.toLowerCase()));
+  B.chest = pick(/upperchest|spine2|spine_02|chest/) || pick(/spine1|spine_01/) || chest[chest.length - 1] || null;
+  B.spine = pick(/spine$|spine_?0?$|spine\b/) || chest[0] || null;
+  return B;
+}
+
+// 親(キャラ空間)から見た位置
+const _v = new THREE.Vector3();
+function localPos(o, inv) {
+  return o.getWorldPosition(new THREE.Vector3()).applyMatrix4(inv);
+}
+
+// 胴の高さ帯ごとの幅・奥行きを頂点から測る（腕は除外）
+const MEASURE = new WeakMap();
+function measure(model, parent, h, B) {
+  const inv = new THREE.Matrix4().copy(parent.matrixWorld).invert();
+  const geoKey = (() => {
+    let g = null;
+    model.traverse((o) => {
+      if (!g && o.isMesh) g = o.geometry;
+    });
+    return g;
+  })();
+  const ck = geoKey && MEASURE.get(geoKey);
+  const bonesKey = `${h.toFixed(3)}|${B.chest ? 1 : 0}`;
+  if (ck && ck[bonesKey]) return ck[bonesKey];
+
+  const k = h / 1.8;
+  const M = { h, k };
+  M.hipY = B.hips ? localPos(B.hips, inv).y : 0.5 * h;
+  M.chestY = B.chest ? localPos(B.chest, inv).y : 0.7 * h;
+  M.headY = B.head ? localPos(B.head, inv).y : 0.88 * h;
+  M.neckY = B.neck ? localPos(B.neck, inv).y : (M.chestY + M.headY) / 2;
+  const armR = B.ra || B.rs, armL = B.la || B.ls;
+  M.shR = armR ? localPos(armR, inv) : new THREE.Vector3(-0.2 * k, 0.8 * h, 0);
+  M.shL = armL ? localPos(armL, inv) : new THREE.Vector3(0.2 * k, 0.8 * h, 0);
+  M.shY = (M.shR.y + M.shL.y) / 2;
+  const armX = Math.max(0.12 * k, Math.min(Math.abs(M.shR.x), Math.abs(M.shL.x)) * 0.9);
+
+  // 帯ごとの外形
+  const bands = { chest: [M.chestY - 0.05 * h, M.shY - 0.02 * h], waist: [M.hipY + 0.02 * h, M.hipY + 0.09 * h], head: [M.headY, h * 1.05], hip: [M.hipY - 0.08 * h, M.hipY] };
+  const ext = {};
+  for (const b in bands) ext[b] = { x0: Infinity, x1: -Infinity, z0: Infinity, z1: -Infinity, top: -Infinity, n: 0 };
+  const m4 = new THREE.Matrix4();
+  model.traverse((o) => {
+    if (!o.isMesh || !o.geometry?.attributes?.position) return;
+    const pos = o.geometry.attributes.position;
+    m4.multiplyMatrices(inv, o.matrixWorld);
+    const step = Math.max(1, Math.floor(pos.count / 8000));
+    for (let i = 0; i < pos.count; i += step) {
+      _v.fromBufferAttribute(pos, i).applyMatrix4(m4);
+      for (const b in bands) {
+        const [y0, y1] = bands[b];
+        if (_v.y < y0 || _v.y > y1) continue;
+        const lim = b === 'head' ? 0.22 * k : armX; // 腕・手の頂点は胴の幅に入れない
+        if (Math.abs(_v.x) > lim) continue;
+        const e = ext[b];
+        e.n++;
+        if (_v.x < e.x0) e.x0 = _v.x;
+        if (_v.x > e.x1) e.x1 = _v.x;
+        if (_v.z < e.z0) e.z0 = _v.z;
+        if (_v.z > e.z1) e.z1 = _v.z;
+        if (_v.y > e.top) e.top = _v.y;
+      }
+    }
+  });
+  const fit = (e, w, d) => (e.n > 10 ? { cx: (e.x0 + e.x1) / 2, cz: (e.z0 + e.z1) / 2, rx: Math.max(0.05 * k, (e.x1 - e.x0) / 2), rz: Math.max(0.04 * k, (e.z1 - e.z0) / 2), top: e.top } : { cx: 0, cz: 0, rx: w * k, rz: d * k, top: h });
+  M.chest = fit(ext.chest, 0.17, 0.11);
+  M.waist = fit(ext.waist, 0.15, 0.1);
+  M.hip = fit(ext.hip, 0.16, 0.11);
+  M.head = fit(ext.head, 0.1, 0.1);
+  if (geoKey) {
+    const o = MEASURE.get(geoKey) || {};
+    o[bonesKey] = M;
+    MEASURE.set(geoKey, o);
+  }
+  return M;
+}
+
+// ---- 防具（type 0-9 × tier 0-9）を体形に合わせて作る。各部位は付ける骨の名前を持つ ----
 const ARMOR_PARTS = [
-  { chest: 0.8, belt: 1 }, // 軽鎧
-  { chest: 1.15, sh: 1.2, belt: 1 }, // 重鎧
+  { chest: 0.85, belt: 1 }, // 軽鎧
+  { chest: 1, full: 1, sh: 1.2, belt: 1 }, // 重鎧
   { skirt: 1, belt: 1 }, // 法衣
   { cape: 1, sh: 0.8 }, // 外套
   { chest: 1 }, // 胸当て
   { sh: 1.35 }, // 肩鎧
-  { chest: 1, sh: 1, spike: 1 }, // 竜鱗鎧
+  { chest: 1, full: 1, sh: 1, spike: 1 }, // 竜鱗鎧
   { skirt: 1, halo: 1 }, // 聖衣
   { cape: 1, belt: 1 }, // 影装束
-  { chest: 1.1, sh: 1.1, cape: 1, crown: 1 } // 王冠鎧
+  { chest: 1, sh: 1.1, cape: 1, crown: 1 } // 王冠鎧
 ];
-function armorMesh(type, tier, h, k) {
-  const g = new THREE.Group();
+function armorParts(type, tier, M) {
   const P = ARMOR_PARTS[type];
-  const metal = mat(TIER_COL[tier], TIER_GLOW[tier], tier >= 4 ? 0.25 + tier * 0.04 : 0);
-  const glowM = mat(TIER_GLOW[tier] || 0xffe08a, TIER_GLOW[tier] || 0xffe08a, 1.3, { metal: 0.2 });
+  const { h, k } = M;
+  const out = [];
+  const metal = mat(TIER_COL[tier], TIER_GLOW[tier], tier >= 4 ? 0.15 + tier * 0.02 : 0);
+  const metalD = mat(TIER_COL[tier], TIER_GLOW[tier], tier >= 4 ? 0.15 + tier * 0.02 : 0, { side: THREE.DoubleSide });
+  const glowM = mat(TIER_GLOW[tier] || 0xffe08a, TIER_GLOW[tier] || 0xffe08a, 0.8, { metal: 0.2 });
   const cloth = mat(CLOTH[(type + tier) % 10], 0, 0, { side: THREE.DoubleSide, metal: 0, rough: 0.85 });
+  const add = (mesh, bone) => {
+    mesh.userData.bone = bone;
+    out.push(mesh);
+    return mesh;
+  };
+  const pad = 1.1; // 体表から少し浮かせて食い込みを防ぐ
+  const C = M.chest;
   if (P.chest) {
-    const c = P.chest;
-    g.add(part(G.box, metal, 0.36 * k * c, 0.28 * h * 0.55 * c, 0.07 * k, 0, 0.68 * h, 0.13 * k));
-    if (tier >= 4) g.add(part(G.sph, glowM, 0.04 * k, 0.04 * k, 0.02 * k, 0, 0.7 * h, 0.17 * k));
+    const top = M.shY - 0.01 * h;
+    const bot = Math.max(M.hipY + 0.06 * h, M.chestY - (M.shY - M.chestY) * 1.6);
+    const hh = Math.max(0.1 * h, top - bot);
+    add(part(P.full ? G.plateFull : G.plate, metalD, C.rx * pad, hh * P.chest, C.rz * pad * 1.05, C.cx, (top + bot) / 2, C.cz), 'chest');
+    if (P.full) add(part(G.backPlate, metalD, C.rx * pad * 1.02, hh * 0.9, C.rz * pad * 1.1, C.cx, (top + bot) / 2, C.cz), 'chest');
+    if (tier >= 4) add(part(G.sph, glowM, 0.035 * k, 0.035 * k, 0.02 * k, C.cx, (top + bot) / 2 + hh * 0.15, C.cz + C.rz * pad * 1.05), 'chest');
   }
   if (P.sh) {
-    for (const s of [-1, 1]) {
-      const sp = part(G.half, metal, 0.12 * k * P.sh, 0.08 * k * P.sh, 0.12 * k * P.sh, s * 0.22 * k, 0.8 * h, 0);
-      sp.rotation.z = -s * 0.5;
-      g.add(sp);
+    for (const [s, p] of [['r', M.shR], ['l', M.shL]]) {
+      const r = Math.max(0.07 * k, Math.min(0.14 * k, C.rz * 0.95)) * P.sh;
+      const sp = add(part(G.half, metal, r, r * 0.7, r * 1.05, p.x, p.y + r * 0.15, p.z), s === 'r' ? 'ra' : 'la');
+      sp.rotation.z = (s === 'r' ? 1 : -1) * 0.45;
       if (P.spike) {
-        const sk = part(G.cone, metal, 0.03 * k, 0.14 * k, 0.03 * k, s * 0.27 * k, 0.85 * h, 0);
-        sk.rotation.z = -s * 0.6;
-        g.add(sk);
+        const sk = add(part(G.cone, metal, 0.025 * k, 0.12 * k, 0.025 * k, p.x * 1.15, p.y + r * 0.6, p.z), s === 'r' ? 'ra' : 'la');
+        sk.rotation.z = (s === 'r' ? 1 : -1) * 0.6;
       }
     }
   }
+  const W = M.waist;
   if (P.belt) {
-    const b = part(G.torus, metal, 0.2 * k, 0.2 * k, 0.5 * k, 0, 0.52 * h, 0);
+    const b = add(part(G.torus, metal, W.rx * pad, W.rz * pad, 0.45 * k, W.cx, M.hipY + 0.05 * h, W.cz), 'hips');
     b.rotation.x = Math.PI / 2;
-    g.add(b);
+    b.scale.set(W.rx * pad, W.rz * pad, 0.5);
   }
-  if (P.skirt) g.add(part(G.skirt, cloth, 0.24 * k, 0.24 * h, 0.22 * k, 0, 0.4 * h, 0));
+  if (P.skirt) {
+    const Hh = M.hip;
+    const len = Math.max(0.15 * h, (M.hipY + 0.05 * h) * 0.55);
+    add(part(G.skirt, cloth, Math.max(W.rx, Hh.rx) * pad, len, Math.max(W.rz, Hh.rz) * pad, W.cx, M.hipY + 0.05 * h - len / 2, W.cz), 'hips');
+  }
   if (P.cape) {
-    const c = part(G.plane, cloth, 0.5 * k, 0.6 * h, 1, 0, 0.5 * h, -0.17 * k);
-    c.rotation.x = 0.12;
-    c.rotation.y = Math.PI;
+    const top = M.shY;
+    const len = top * 0.82;
+    const c = add(part(G.cape, cloth, C.rx * 1.12, len, C.rz * 1.35, C.cx, top, C.cz), 'chest');
     c.userData.cape = true;
-    g.add(c);
   }
+  const Hd = M.head;
   if (P.halo) {
-    const r = part(G.torus, glowM, 0.15 * k, 0.15 * k, 0.15 * k, 0, h + 0.12 * k, 0);
+    const r = add(part(G.torus, glowM, Hd.rx * 1.2, Hd.rz * 1.2, Hd.rx * 1.2, Hd.cx, Hd.top + 0.08 * k, Hd.cz), 'head');
     r.rotation.x = Math.PI / 2;
-    g.add(r);
   }
   if (P.crown) {
-    const r = part(G.torus, mat(0xffd970, 0xffaa30, 0.4), 0.1 * k, 0.1 * k, 0.25 * k, 0, h * 0.97, 0);
+    const r = add(part(G.torus, mat(0xffd970, 0xffaa30, 0.25), Hd.rx * 0.95, Hd.rz * 0.95, 0.9, Hd.cx, Hd.top - 0.035 * k, Hd.cz), 'head');
     r.rotation.x = Math.PI / 2;
-    g.add(r);
+    r.scale.set(Hd.rx * 0.95, Hd.rz * 0.95, 0.9);
   }
-  // 上位の防具は足元に光の紋
   if (tier >= 7) {
-    const ring = new THREE.Mesh(G.ring, new THREE.MeshBasicMaterial({ color: TIER_GLOW[tier], transparent: true, opacity: 0.45, side: THREE.DoubleSide, depthWrite: false }));
+    const key = `ring${tier}`;
+    if (!MATS.has(key)) MATS.set(key, new THREE.MeshBasicMaterial({ color: TIER_GLOW[tier], transparent: true, opacity: 0.35, side: THREE.DoubleSide, depthWrite: false }));
+    const ring = add(new THREE.Mesh(G.ring, MATS.get(key)), null);
     ring.rotation.x = -Math.PI / 2;
     ring.position.y = 0.05;
-    ring.scale.setScalar(0.65 * k);
+    ring.scale.setScalar(Math.max(C.rx, 0.15 * k) * 3.2);
     ring.userData.spin = true;
-    g.add(ring);
   }
-  return g;
+  return out;
 }
 
 const idx = (id, p) => (typeof id === 'string' && id[0] === p ? +id.slice(1) : -1);
+const Q_FWD = new THREE.Quaternion().setFromEuler(new THREE.Euler(Math.PI / 2 - 0.35, 0, 0)); // 刃先を正面やや上へ
 
-/** キャラ（高さh）の装備見た目を作る。wid='w0'..'w99', aid='a0'..'a99' */
-export function makeGear(h, wid, aid) {
+/**
+ * キャラ（高さh）に装備を付ける。model と parent を渡すと骨格・体形に合わせてフィットする。
+ * 戻り値の group は parent に追加済み。外すときは removeGear(group)。
+ */
+export function makeGear(h, wid, aid, model = null, parent = null) {
   const wi = idx(wid, 'w');
   const ai = idx(aid, 'a');
-  if (!(wi >= 0 && wi < 100) && !(ai >= 0 && ai < 100)) return null;
+  const hasW = wi >= 0 && wi < 100, hasA = ai >= 0 && ai < 100;
+  if (!hasW && !hasA) return null;
   const k = h / 1.8;
   const root = new THREE.Group();
-  root.userData.t = 0;
-  if (ai >= 0 && ai < 100) root.add(armorMesh(ai % 10, Math.floor(ai / 10), h, k));
-  if (wi >= 0 && wi < 100) {
+  root.userData = { t: 0, parts: [], hands: [] };
+  if (parent) parent.add(root);
+  parent?.updateMatrixWorld(true);
+  const B = model ? findBones(model) : {};
+  const M = model && parent ? measure(model, parent, h, B) : {
+    h, k, hipY: 0.5 * h, chestY: 0.7 * h, headY: 0.88 * h, shY: 0.8 * h,
+    shR: new THREE.Vector3(-0.2 * k, 0.8 * h, 0), shL: new THREE.Vector3(0.2 * k, 0.8 * h, 0),
+    chest: { cx: 0, cz: 0, rx: 0.17 * k, rz: 0.11 * k }, waist: { cx: 0, cz: 0, rx: 0.15 * k, rz: 0.1 * k },
+    hip: { cx: 0, cz: 0, rx: 0.16 * k, rz: 0.11 * k }, head: { cx: 0, cz: 0, rx: 0.1 * k, rz: 0.1 * k, top: h }
+  };
+  const inv = parent ? new THREE.Matrix4().copy(parent.matrixWorld).invert() : null;
+
+  const pieces = [];
+  if (hasA) pieces.push(...armorParts(ai % 10, Math.floor(ai / 10), M));
+
+  if (hasW) {
     const type = wi % 10, tier = Math.floor(wi / 10);
-    const hand = new THREE.Group(); // 右手（キャラは+Z向き → 右手は-X）
-    hand.position.set(-0.3 * k, 0.5 * h, 0.12 * k);
-    hand.rotation.x = 0.35;
-    const w = weaponMesh(type, tier);
-    w.scale.setScalar(k);
-    if (type === 5) { // 弓は左手に縦持ち
-      hand.position.x = 0.3 * k;
-      hand.rotation.set(0, Math.PI / 2, 0);
-    }
-    if (type === 6) hand.position.y = 0.48 * h;
-    hand.add(w);
-    root.add(hand);
-    root.userData.hand = hand;
-    root.userData.base = hand.rotation.x;
-    if (type === 3 || type === 7) { // 両手
-      const off = new THREE.Group();
-      off.position.set(0.3 * k, 0.5 * h, 0.12 * k);
-      off.rotation.x = 0.35;
-      const w2 = weaponMesh(type, tier);
-      w2.scale.setScalar(k);
-      off.add(w2);
-      root.add(off);
-    }
-    root.userData.swing = type !== 5;
+    const mkHand = (side) => {
+      const bone = side === 'r' ? B.rh : B.lh;
+      const holder = new THREE.Group();
+      if (bone && inv) {
+        holder.position.copy(localPos(bone, inv));
+        // 手の甲側へ少しずらし、拳の中に握る
+        const fore = side === 'r' ? B.rf : B.lf;
+        if (fore) {
+          const dir = holder.position.clone().sub(localPos(fore, inv)).normalize();
+          holder.position.addScaledVector(dir, 0.04 * k);
+        }
+      } else {
+        holder.position.set((side === 'r' ? -1 : 1) * Math.max(0.24 * k, Math.abs(M.shR.x) + 0.06 * k), 0.5 * h, 0.1 * k);
+      }
+      if (type === 5) holder.rotation.set(0, side === 'r' ? -Math.PI / 2 : Math.PI / 2, 0); // 弓は縦に構える
+      else if (type === 6 || type === 7) holder.rotation.set(0, 0, 0);
+      else holder.quaternion.copy(Q_FWD);
+      const swing = new THREE.Group();
+      const w = weaponMesh(type, tier);
+      w.scale.setScalar(k);
+      swing.add(w);
+      holder.add(swing);
+      holder.userData.bone = side === 'r' ? 'rh' : 'lh';
+      root.userData.hands.push({ swing, base: 0, swingOn: type !== 5 && type !== 7 });
+      pieces.push(holder);
+    };
+    mkHand(type === 5 ? 'l' : 'r');
+    if (type === 3 || type === 7) mkHand('l');
   }
+
+  // まずキャラ空間に置き、骨があれば見た目の位置を保ったまま骨へ付け替える（アニメに追従）
+  for (const p of pieces) {
+    root.add(p);
+    root.userData.parts.push(p);
+  }
+  if (parent) {
+    root.updateMatrixWorld(true);
+    for (const p of pieces) {
+      const bn = p.userData.bone;
+      const bone = bn && (B[bn] || (bn === 'ra' ? B.rs : bn === 'la' ? B.ls : bn === 'chest' ? B.spine : null));
+      if (bone) bone.attach(p);
+    }
+  }
+  for (const p of pieces) p.userData.q0 = p.quaternion.clone();
   return root;
 }
 
+/** 装備を外す（骨に付け替えた部位もまとめて外す） */
+export function removeGear(g) {
+  if (!g) return;
+  for (const p of g.userData.parts || []) p.parent?.remove(p);
+  g.parent?.remove(g);
+}
+
+const _q = new THREE.Quaternion();
+const _ax = new THREE.Vector3(1, 0, 0);
 /** 毎フレーム：攻撃中は武器を振り、マントや光の紋を揺らす */
 export function animGear(g, dt, attacking, moving) {
   if (!g) return;
@@ -225,12 +396,17 @@ export function animGear(g, dt, attacking, moving) {
   u.t += dt;
   u.sw = Math.max(0, (u.sw || 0) - dt * 3.2);
   if (attacking && u.sw <= 0) u.sw = 1;
-  if (u.hand && u.swing) {
+  for (const hnd of u.hands) {
+    if (!hnd.swingOn) continue;
     const s = u.sw;
-    u.hand.rotation.x = u.base + (s > 0 ? Math.sin((1 - s) * Math.PI) * 1.6 - 0.2 : Math.sin(u.t * 2) * 0.05);
+    hnd.swing.rotation.x = s > 0 ? -Math.sin((1 - s) * Math.PI) * 1.3 : Math.sin(u.t * 2) * 0.04;
   }
-  g.traverse((c) => {
-    if (c.userData.cape) c.rotation.x = (moving ? 0.45 : 0.1) + Math.sin(u.t * (moving ? 9 : 2)) * 0.06;
+  for (const c of u.parts) {
+    if (c.userData.cape && c.userData.q0) {
+      // 肩を支点に後ろへなびく（付け替え後の向きを基準に、キャラ空間の X 軸まわり）
+      _q.setFromAxisAngle(_ax, ((moving ? 0.35 : 0.05) + Math.sin(u.t * (moving ? 9 : 2)) * 0.04));
+      c.quaternion.copy(c.userData.q0).multiply(_q);
+    }
     else if (c.userData.spin) c.rotation.z += dt * 0.8;
-  });
+  }
 }

@@ -3,7 +3,7 @@
 import * as THREE from 'three';
 import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js';
 import { FIGHTERS } from './data.js';
-import { makeGear, animGear } from './gear.js';
+import { makeGear, animGear, removeGear } from './gear.js';
 
 function rng(seed) {
   let a = seed >>> 0;
@@ -76,6 +76,7 @@ function makeActor(gltf, height, color, tint, own) {
       }
     });
     root.add(m);
+    a.model = m;
     a.mixer = new THREE.AnimationMixer(m);
     for (const clip of gltf.animations) {
       const n = clip.name.toLowerCase();
@@ -1611,10 +1612,16 @@ export class Field {
   // 自分の頭上にも旅人名
   // 装備の見た目を付け替える
   setGear(a, h, g) {
-    if (a.gear) a.root.remove(a.gear);
+    removeGear(a.gear);
     a.gkey = `${g?.w}|${g?.a}`;
-    a.gear = g ? makeGear(h, g.w, g.a) : null;
-    if (a.gear) a.root.add(a.gear);
+    // 骨格・体形に合わせてフィット（測るときは向き・位置を初期化した状態で）
+    const rot = a.root.rotation.y;
+    const pos = a.root.position.clone();
+    a.root.rotation.y = 0;
+    a.root.position.set(0, 0, 0);
+    a.gear = g ? makeGear(h, g.w, g.a, a.model || null, a.root) : null;
+    a.root.rotation.y = rot;
+    a.root.position.copy(pos);
   }
   setOwnName(name) {
     const p = this.player;

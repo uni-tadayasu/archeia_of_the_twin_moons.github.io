@@ -433,8 +433,9 @@ export class Fighter {
       mesh.castShadow = true;
       this.visual.add(mesh);
     }
-    this.gear = this.gearIds ? makeGear(h, this.gearIds.w, this.gearIds.a) : null;
-    if (this.gear) this.visual.add(this.gear);
+    // 装備：骨格と体形を測ってフィット（骨に付けてアニメに追従）
+    const model = this.visual.children.find((c) => !c.isMesh || c.geometry?.type !== 'CapsuleGeometry') || null;
+    this.gear = this.gearIds ? makeGear(h, this.gearIds.w, this.gearIds.a, gltf ? model : null, this.visual) : null;
     const teamColor = this.team === 0 ? 0x7fd3ff : 0xff7a5a;
     this.ringMesh = new THREE.Mesh(GEO.ring, glow(teamColor, 0.7));
     this.ringMesh.scale.setScalar(0.8 * this.scale);
