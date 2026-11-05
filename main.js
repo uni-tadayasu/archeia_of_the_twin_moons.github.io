@@ -187,6 +187,7 @@ function loadSave() {
   }
   s.diff = raw.diff == null ? 1 : clampInt(raw.diff, 0, 3);
   s.chars = Array.isArray(raw.chars) ? raw.chars.filter((k) => FIGHTERS[k]?.shop) : [];
+  s.gemChars = Array.isArray(raw.gemChars) ? raw.gemChars.filter((k) => FIGHTERS[k]?.shardPrice) : [];
   s.party = Array.isArray(raw.party) ? raw.party.filter((k) => FIGHTERS[k]).slice(0, 4) : [];
   s.main = FIGHTERS[raw.main] ? raw.main : null;
   s.pid = raw.pid;
@@ -862,12 +863,12 @@ const foeHp = (m) => (m || 1) * DIFFS[save.diff].h;
 // その戦士を使えるか（運営専用・ショップ解放）
 function canUse(k) {
   const d = FIGHTERS[k];
-  if (d.special === 'chief') return chiefUnlocked();
+  if (d.special === 'chief') return chiefUnlocked() && (!d.shardPrice || save.gemChars.includes(k));
   if (d.shop) return save.chars.includes(k) || operatorUnlocked();
   if (d.locked) return operatorUnlocked();
   return true;
 }
-const SELECT_KEYS = () => [...ROSTER, 'seraphel', 'chief', 'sovereign', 'crimson'];
+const SELECT_KEYS = () => [...ROSTER, 'seraphel', 'chief', 'sovereign', 'bloodfiend', 'crimson'];
 function refreshTitle() {
   $('#btn-invade').hidden = !operatorUnlocked();
   $('#title-shards').textContent = `灯晶　${save.shards}`;
@@ -2481,6 +2482,49 @@ syncEntitlements();
 function renderShop() {
   const list = $('#shop-list');
   list.replaceChildren();
+  // 運営長限定：灯晶で買える特別キャラ（運営長の時だけ表示）
+  if (chiefUnlocked()) {
+    for (const [k, d] of Object.entries(FIGHTERS)) {
+      if (!d.shardPrice) continue;
+      const row = document.createElement('div');
+      row.className = 'card';
+      row.style.setProperty('--c', '#' + d.color.toString(16).padStart(6, '0'));
+      row.style.width = '100%';
+      const img = document.createElement('img');
+      img.className = 'face';
+      img.src = d.face;
+      img.alt = '';
+      img.style.maxWidth = '220px';
+      const t = document.createElement('em');
+      t.textContent = d.title;
+      const n = document.createElement('b');
+      n.textContent = d.name;
+      const s = document.createElement('small');
+      s.textContent = `${d.skills.map((x) => x.name).join('／')}\n奥義：${d.over.name}\n価格：灯晶 ${d.shardPrice}（手持ち ${save.shards}）`;
+      row.append(img, t, n, s);
+      if (save.gemChars.includes(k)) {
+        const ok = document.createElement('b');
+        ok.textContent = '— 迎え入れ済み —';
+        row.append(ok);
+      } else {
+        const buy = document.createElement('button');
+        buy.className = 'btn mini';
+        buy.textContent = `灯晶 ${d.shardPrice} で購入`;
+        buy.disabled = save.shards < d.shardPrice;
+        buy.addEventListener('click', () => {
+          if (!chiefUnlocked() || save.shards < d.shardPrice || save.gemChars.includes(k)) return;
+          save.shards -= d.shardPrice;
+          save.gemChars.push(k);
+          persist();
+          sfx('burst');
+          $('#shop-msg').textContent = `${d.name} が仲間になった！`;
+          renderShop();
+        });
+        row.append(buy);
+      }
+      list.append(row);
+    }
+  }
   for (const it of SHOP_ITEMS) {
     const d = FIGHTERS[it.key];
     if (!d) continue;

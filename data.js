@@ -245,8 +245,22 @@ FIGHTERS.sovereign2 = {
   ],
   over: { name: '深淵開闢・緋紫の終焉', kind: 'judgment', visual: 'pillar', finalVisual: 'bigsword', count: 24, spread: 8, radius: 2.8, dmg: 120, delay: 0.7, interval: 0.05, finalDmg: 650, finalRadius: 11, elem: 9, color: 0xff2050, vivid: true }
 };
+// 運営長だけが灯晶で購入できる特別キャラ：血魔ザルグレイヴ（血属性）
+export const BLOODFIEND_PRICE = 50000;
+FIGHTERS.bloodfiend = {
+  name: 'ザルグレイヴ', title: '紅翼の血魔（運営長・灯晶限定）', model: 'assets/models/blood-fiend-v2.glb', face: 'assets/face-bloodfiend-v2.webp',
+  color: 0xc8102e, height: 1.95, hp: 1500, speed: 6.6, overGain: 1.5, locked: true, special: 'chief', shardPrice: BLOODFIEND_PRICE,
+  light: { dmg: 30, range: 2.6, shots: 5, color: 0xe0103c },
+  skills: [
+    { name: '血爪閃《クリムゾン・クロウ》', cost: 18, kind: 'projectile', visual: 'crescent', count: 3, spreadAng: 0.2, dmg: 120, speed: 22, radius: 1, elem: 9, color: 0xe0103c, vivid: true },
+    { name: '紅翼急襲', cost: 20, kind: 'dash', dmg: 170, speed: 25, dur: 0.32, elem: 9, color: 0xff2040, vivid: true },
+    { name: '鮮血千本槍', cost: 24, kind: 'rain', visual: 'spear', count: 12, spread: 3.6, radius: 1.8, dmg: 90, delay: 0.3, interval: 0.05, elem: 9, color: 0xc8102e, vivid: true },
+    { name: '血界・吸命陣', cost: 26, kind: 'implode', dmg: 230, radius: 8, elem: 9, color: 0x9a0020, vivid: true }
+  ],
+  over: { name: '紅月葬送・血華の宴', kind: 'judgment', visual: 'pillar', finalVisual: 'bigsword', count: 18, spread: 7, radius: 2.6, dmg: 100, delay: 0.7, interval: 0.06, finalDmg: 480, finalRadius: 9.5, elem: 9, color: 0xe0103c, vivid: true }
+};
 // 通常プレイヤーがパーティーに入れられない特別枠
-export const SPECIAL_KEYS = ['seraphel', 'chief', 'crimson', 'sovereign'];
+export const SPECIAL_KEYS = ['seraphel', 'chief', 'crimson', 'sovereign', 'bloodfiend'];
 
 // ---------- 決定的な乱数（毎回同じ内容を生成する） ----------
 function rng(seed) {
@@ -839,7 +853,7 @@ export const STORY = [];
 
 // ---- 最強格：宇邇宮とセラフェルを全戦士（ボス含む）の頂点に据える ----
 {
-  const others = Object.entries(FIGHTERS).filter(([k]) => k !== 'uninomiya' && k !== 'seraphel' && k !== 'chief' && k !== 'sovereign' && k !== 'sovereign2').map(([, f]) => f);
+  const others = Object.entries(FIGHTERS).filter(([k]) => k !== 'uninomiya' && k !== 'seraphel' && k !== 'chief' && k !== 'sovereign' && k !== 'sovereign2' && k !== 'bloodfiend').map(([, f]) => f);
   const top = (fn) => Math.max(...others.map((f) => fn(f) || 0));
   const maxHp = top((f) => f.hp), maxSpd = top((f) => f.speed), maxOg = top((f) => f.overGain);
   const maxLight = top((f) => f.light?.dmg * (f.light?.shots || 1));
@@ -872,6 +886,11 @@ export const STORY = [];
   v2.hp = Math.round(c.hp * 1.6); v2.speed = +(c.speed * 1.12).toFixed(2); v2.overGain = +(c.overGain * 1.4).toFixed(2);
   v2.light.dmg = Math.ceil((c.light.dmg * c.light.shots * 1.7) / v2.light.shots);
   v2.power = c.power * 1.7; v2.armor = c.armor * 0.6; v2.fluxMul = 3;
+  // ザルグレイヴはルミナリアと同格
+  const bf = FIGHTERS.bloodfiend;
+  bf.hp = Math.round(c.hp * 1.05); bf.speed = +(c.speed * 1.04).toFixed(2); bf.overGain = c.overGain;
+  bf.light.dmg = Math.ceil((c.light.dmg * c.light.shots * 1.05) / bf.light.shots);
+  bf.power = c.power * 1.05; bf.armor = c.armor; bf.fluxMul = 2;
 }
 
 // ---- 全戦士共通の回復技（skills[4]。H キー／「癒」ボタン） ----
