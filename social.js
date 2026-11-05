@@ -298,9 +298,10 @@ function buildChat() {
     }
   });
   const tabs = el('div', 'cp-tabs');
-  for (const [k, n] of [['world', '世界'], ['guild', 'ギルド'], ['friend', 'フレンド'], ['staff', '運営会議'], ['chief', 'お知らせ管理']]) {
+  for (const [k, n] of [['world', '世界'], ['guild', 'ギルド'], ['friend', 'フレンド'], ['staff', '運営会議'], ['online', '接続一覧'], ['chief', 'お知らせ管理']]) {
     const b = el('button', k === S.tab ? 'on' : '', n);
     b.dataset.tab = k;
+    if (k === 'online') S.onlineTab = b;
     if (k === 'chief') S.chiefTab = b;
     if (k === 'staff') S.staffTab = b;
     b.addEventListener('click', () => {
@@ -411,10 +412,13 @@ function renderAll() {
   const staff = isStaff();
   S.staffTab.hidden = !staff;
   if (S.tab === 'staff' && !staff) S.tab = 'world';
+  S.onlineTab.hidden = !staff;
+  if (S.tab === 'online' && !staff) S.tab = 'world';
   S.panel.querySelectorAll('.cp-tabs button').forEach((x) => x.classList.toggle('on', x.dataset.tab === S.tab));
   const form = S.panel.querySelector('form');
-  form.hidden = S.tab === 'chief';
-  S.log.hidden = S.tab === 'chief';
+  const noChat = S.tab === 'chief' || S.tab === 'online';
+  form.hidden = noChat;
+  S.log.hidden = noChat;
   renderHead();
   renderGuild();
   renderLog();
@@ -483,6 +487,24 @@ function renderChief() {
   row.append(inp, add, clr);
   g.append(row);
 }
+// 運営長・運営：接続中のプレイヤー一覧
+function renderOnline() {
+  const g = S.guildBox;
+  g.hidden = false;
+  g.style.flex = '1';
+  g.style.maxHeight = '';
+  g.style.overflowY = 'auto';
+  const { save, myName } = S.opts;
+  const list = [{ name: myName(), pid: save.pid, gname: save.guild?.name || '', st: isStaff(), me: true }, ...Object.values(S.peers).filter((p) => p.id !== S.net?.myId)];
+  const seen = new Set();
+  const rows = list.filter((p) => { const k = p.pid || p.id; if (seen.has(k)) return false; seen.add(k); return true; });
+  rows.sort((a, b) => (b.me - a.me) || (b.st - a.st) || String(a.name).localeCompare(String(b.name), 'ja'));
+  g.append(el('div', 'cp-mem', `接続中 ${rows.length} 人（運営長・運営のみ閲覧可）`));
+  for (const p of rows) {
+    const r = el('div', 'cp-mem', `● ${p.name}${p.me ? '（あなた）' : ''}${p.st ? '【運営】' : ''}${p.gname ? `　[${p.gname}]` : ''}${p.pid ? `　#${String(p.pid).slice(0, 6)}` : ''}`);
+    g.append(r);
+  }
+}
 function onlineCount(filter) {
   return Object.values(S.peers).filter(filter).length;
 }
@@ -493,6 +515,8 @@ function renderHead() {
   h.replaceChildren();
   if (S.tab === 'chief') {
     h.append(el('span', null, 'お知らせ管理（運営長専用）'));
+  } else if (S.tab === 'online') {
+    h.append(el('span', null, '接続中のプレイヤー（運営長・運営専用）'));
   } else if (S.tab === 'staff') {
     h.append(el('span', null, `運営会議（運営長・運営専用） — 参加中 ${onlineCount((p) => p.st)} 人`));
   } else if (S.tab === 'world') {
@@ -530,6 +554,10 @@ function renderGuild() {
   if (S.tab === 'chief') {
     g.style.maxHeight = '';
     renderChief();
+    return;
+  }
+  if (S.tab === 'online') {
+    renderOnline();
     return;
   }
   g.hidden = S.tab !== 'guild';
