@@ -1,16 +1,16 @@
 import * as THREE from 'three';
 import { createModelLoader, modelAssetUrl } from './model-loader.js?v=20261106-model-ui3';
-import { Battle, ARENA_R } from './game.js?v=20261106-model-ui3';
+import { Battle, ARENA_R } from './game.js?v=20261106-complete-review1';
 import { FIGHTERS, STORY, ROSTER, UPGRADES, MAX_LV, STAGES, APEX_BGM, ENEMY_ROSTER, UPG_CAP, LB_MAX, lbMaxLv, lbMul, lbCost, WEAPONS, ARMORS, SUMMONS, STAT_LABEL, SPECIAL_KEYS, BOSS_ROSTER, currentEvent, sanitizeEvent, EV_FOE_KINDS } from './data.js';
-import { ProcMusic } from './music.js';
-import { sayBattle, setVoiceMuted, stopVoices } from './voice.js';
-import { initSocial, uiConfirm } from './social.js';
-import { initMailbox } from './mailbox.js';
+import { ProcMusic } from './music.js?v=20261106-complete-review1';
+import { sayBattle, setVoiceMuted, stopVoices } from './voice.js?v=20261106-complete-review1';
+import { initSocial, uiConfirm } from './social.js?v=20261106-complete-review1';
+import { initMailbox } from './mailbox.js?v=20261106-complete-review1';
 import { getStageArt } from './stage-art.js';
-import { configureSelection, filterSelection, renderStageBrowser, renderHubStatus, filterForge, activateUiDialog, installUiShell } from './ui-overhaul.js';
+import { configureSelection, filterSelection, renderStageBrowser, renderHubStatus, filterForge, activateUiDialog, installUiShell } from './ui-overhaul.js?v=20261106-complete-review1';
 import { OPERATOR_KEY_SHA256, CHIEF_KEY_SHA256, MAX_KEY_ATTEMPTS, LOCKOUT_MS, SHOP_ITEMS } from './config.js';
-import { connect, issueInvite, redeemInvite, syncPush, syncPullV } from './net.js';
-import { apiEnabled, api, verifyToken } from './api.js';
+import { connect, issueInvite, redeemInvite, syncPush, syncPullV } from './net.js?v=20261106-complete-review1';
+import { apiEnabled, api, verifyToken } from './api.js?v=20261106-complete-review1';
 
 const $ = (s) => document.querySelector(s);
 const isTouch = matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window;
@@ -131,6 +131,7 @@ function setStage(st) {
     if (i % (st.pshape === 'bamboo' ? 2 : 1) === 0) {
       const c = new THREE.Mesh(crystalGeo(st.cshape), cMat);
       c.position.set(p.position.x, ph + 0.9, p.position.z);
+      c.userData.floatY = c.position.y;
       arena.add(c);
       crystals.push(c);
     }
@@ -149,16 +150,49 @@ const assets = {};
 const gltfLoader = createModelLoader();
 const modelUrls = [...new Set(Object.values(FIGHTERS).map((d) => d.model))];
 const byUrl = {};
-const loadPromise = Promise.allSettled(modelUrls.map((url) =>
-  gltfLoader.loadAsync(modelAssetUrl(url)).then((g) => {
-    byUrl[url] = g;
-  })
-)).then(() => {
-  for (const [k, d] of Object.entries(FIGHTERS)) {
-    if (byUrl[d.model]) assets[k] = byUrl[d.model];
+let modelLoadPending = null;
+function showAssetLoadFailure(message, retryAction = () => loadModels()) {
+  let note = document.getElementById('asset-load-note');
+  if (!note) {
+    note = document.createElement('div');
+    note.id = 'asset-load-note';
+    note.setAttribute('role', 'alert');
+    note.style.cssText = 'position:fixed;left:50%;bottom:max(16px,env(safe-area-inset-bottom));transform:translateX(-50%);z-index:9998;width:min(560px,calc(100% - 24px));background:#211c30;border:1px solid #c9a65a;color:#f4ead2;padding:12px;border-radius:10px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;pointer-events:auto';
+    const text = document.createElement('span');
+    text.dataset.loadMessage = '';
+    const retry = document.createElement('button');
+    retry.type = 'button';
+    retry.className = 'btn mini';
+    retry.textContent = '読み込みを再試行';
+    retry.addEventListener('click', async () => {
+      retry.disabled = true;
+      try { await note.retryAction(); } finally { retry.disabled = false; }
+    });
+    note.append(text, retry);
+    document.body.append(note);
   }
-  $('#loading').textContent = '';
-});
+  note.retryAction = retryAction;
+  note.querySelector('[data-load-message]').textContent = message;
+}
+function loadModels() {
+  if (modelLoadPending) return modelLoadPending;
+  const missing = modelUrls.filter(url => !byUrl[url]);
+  if (!missing.length) return Promise.resolve(true);
+  $('#loading').textContent = `戦士を読み込んでいます… ${modelUrls.length - missing.length} / ${modelUrls.length}`;
+  modelLoadPending = Promise.allSettled(missing.map(async url => {
+    byUrl[url] = await gltfLoader.loadAsync(modelAssetUrl(url));
+    $('#loading').textContent = `戦士を読み込んでいます… ${Object.keys(byUrl).length} / ${modelUrls.length}`;
+  })).then(() => {
+    for (const [k, d] of Object.entries(FIGHTERS)) if (byUrl[d.model]) assets[k] = byUrl[d.model];
+    const failed = modelUrls.filter(url => !byUrl[url]).length;
+    $('#loading').textContent = failed ? `戦士 ${failed} 件の読み込みを再試行できます。` : '';
+    if (failed) showAssetLoadFailure(`一部の戦士を読み込めませんでした（${failed} 件）。接続を確認して再試行してください。`);
+    else document.getElementById('asset-load-note')?.remove();
+    return failed === 0;
+  }).finally(() => { modelLoadPending = null; });
+  return modelLoadPending;
+}
+const loadPromise = loadModels();
 
 // ---------- Save ----------
 const SAVE_KEY = 'arkeia-save-v1';
@@ -199,7 +233,7 @@ function loadSave() {
   s.diff = raw.diff == null ? 1 : clampInt(raw.diff, 0, 3);
   s.chars = Array.isArray(raw.chars) ? raw.chars.filter((k) => FIGHTERS[k]?.shop) : [];
   s.gemChars = Array.isArray(raw.gemChars) ? raw.gemChars.filter((k) => FIGHTERS[k]?.shardPrice) : [];
-  s.party = Array.isArray(raw.party) ? raw.party.filter((k) => FIGHTERS[k]).slice(0, 4) : [];
+  s.party = Array.isArray(raw.party) ? [...new Set(raw.party.filter((k) => FIGHTERS[k]))].slice(0, 4) : [];
   s.main = FIGHTERS[raw.main] ? raw.main : null;
   s.pid = raw.pid;
   s.friends = raw.friends;
@@ -1094,8 +1128,25 @@ function inBattleView() {
   return (!!state.battle || !!state.field) && !document.querySelector('.screen.on');
 }
 
+function inputIsBlocked() {
+  const active = document.activeElement;
+  return document.hidden || state.paused || mailbox?.isOpen()
+    || !!document.querySelector('.ui-overlay .ui-dialog')
+    || !!document.querySelector('#chat-panel:not([hidden])')
+    || active?.matches?.('input, textarea, select') || active?.isContentEditable;
+}
+
+function resetGameplayInput() {
+  keys.clear();
+  for (const k in edges) edges[k] = false;
+  mouseSkillHeld = false;
+  for (const input of [touchState, padState]) Object.assign(input, { mx: 0, mz: 0, guard: false, skill: false, skill2: false });
+  $('#knob').style.transform = '';
+  document.dispatchEvent(new Event('arkeia-input-reset'));
+}
+
 window.addEventListener('keydown', (e) => {
-  if (e.defaultPrevented) return;
+  if (e.defaultPrevented || e.isComposing || e.keyCode === 229) return;
   if (e.target?.matches?.('input, textarea, select') || e.target?.isContentEditable) {
     if (e.code === 'Escape') {
       e.target.blur();
@@ -1110,21 +1161,25 @@ window.addEventListener('keydown', (e) => {
     goBackCurrent();
     return;
   }
-  if (inBattleView() && !e.repeat && KEYMAP[e.code]) {
+  if (inBattleView() && !inputIsBlocked() && !e.repeat && KEYMAP[e.code]) {
     edges[KEYMAP[e.code]] = true;
   }
   if (isScreen('scr-story') && (e.code === 'Enter' || e.code === 'Space')) {
     advanceDialogue();
   }
-  keys.add(e.code);
+  if (!inputIsBlocked()) keys.add(e.code);
   if (e.code === 'Space' && inBattleView()) {
     e.preventDefault();
   }
 });
 window.addEventListener('keyup', (e) => keys.delete(e.code));
-window.addEventListener('blur', () => keys.clear());
+window.addEventListener('blur', resetGameplayInput);
+document.addEventListener('visibilitychange', () => { if (document.hidden) resetGameplayInput(); });
+document.addEventListener('focusin', (e) => {
+  if (e.target?.matches?.('input, textarea, select') || e.target?.isContentEditable || e.target?.closest?.('.ui-dialog, #mailbox-dialog, #chat-panel')) resetGameplayInput();
+});
 renderer.domElement.addEventListener('mousedown', (e) => {
-  if (!inBattleView()) {
+  if (!inBattleView() || inputIsBlocked()) {
     return;
   }
   if (e.button === 0) {
@@ -1138,8 +1193,8 @@ renderer.domElement.addEventListener('mousedown', (e) => {
 renderer.domElement.addEventListener('contextmenu', (e) => e.preventDefault());
 
 function readInput() {
-  if (mailbox?.isOpen()) {
-    for (const k in edges) edges[k] = false;
+  if (inputIsBlocked()) {
+    resetGameplayInput();
     return { mx: 0, mz: 0, guard: false, holdSkill: false, holdSkill2: false };
   }
   let mx = touchState.mx + padState.mx;
@@ -1175,6 +1230,7 @@ function setupTouch() {
   let ox = 0;
   let oy = 0;
   joy.addEventListener('pointerdown', (e) => {
+    if (jid !== null || inputIsBlocked()) return;
     jid = e.pointerId;
     const r = joy.getBoundingClientRect();
     ox = r.left + r.width / 2;
@@ -1207,10 +1263,17 @@ function setupTouch() {
   };
   joy.addEventListener('pointerup', endJoy);
   joy.addEventListener('pointercancel', endJoy);
+  joy.addEventListener('lostpointercapture', endJoy);
+  document.addEventListener('arkeia-input-reset', () => {
+    const id = jid;
+    jid = null;
+    if (id !== null && joy.hasPointerCapture?.(id)) joy.releasePointerCapture(id);
+  });
   for (const b of pad.querySelectorAll('[data-act]')) {
     const act = b.dataset.act;
     b.addEventListener('pointerdown', (e) => {
       e.preventDefault();
+      if (inputIsBlocked()) return;
       if (act === 'guard') {
         touchState.guard = true;
       } else {
@@ -1232,10 +1295,13 @@ function setupTouch() {
 
 // ---------- Screens ----------
 const state = { mode: null, myKey: null, oppKey: null, chapter: 0, battle: null, paused: false, net: null, online: null, dialogue: null, lastWin: false };
+let viewGeneration = 0;
 function isScreen(id) {
   return $('#' + id)?.classList.contains('on');
 }
 function show(id) {
+  viewGeneration++;
+  resetGameplayInput();
   for (const s of document.querySelectorAll('.screen')) {
     s.classList.toggle('on', s.id === id);
     s.setAttribute('aria-hidden', String(s.id !== id));
@@ -1253,9 +1319,10 @@ function show(id) {
   }
 }
 function goBackCurrent() {
-  const modal = document.querySelector('.ui-overlay .ui-dialog');
+  const modal = [...document.querySelectorAll('.ui-overlay .ui-dialog')].at(-1);
   if (modal) { modal.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', code: 'Escape', bubbles: true, cancelable: true })); return; }
   if (mailbox?.isOpen()) { mailbox.close(); return; }
+  if (social?.isOpen()) { social.close(); resetGameplayInput(); return; }
   if (!$('#pause').hidden) {
     togglePause();
     return;
@@ -1269,42 +1336,78 @@ function goBackCurrent() {
 }
 // 運営長：運営長キーでのみ（このタブの間だけ）
 // サーバー設定時は、サーバー署名の役割トークンでのみ判定（端末内のフラグは無視）
-const roleState = { r: null, tok: '' };
+const roleState = { r: null, tok: '', exp: 0 };
+let roleRefreshTimer = 0;
+function acceptRole(tok, data) {
+  clearTimeout(roleRefreshTimer);
+  const valid = data && ['op', 'chief'].includes(data.r) && data.exp > Date.now();
+  Object.assign(roleState, valid ? { r: data.r, tok, exp: data.exp } : { r: null, tok: '', exp: 0 });
+  if (valid) roleRefreshTimer = setTimeout(() => refreshRole(), Math.min(2147483647, Math.max(10, data.exp - Date.now() + 10)));
+}
+function activeRole() {
+  return roleState.exp > Date.now() && roleState.tok === (localStorage.getItem('arkeia-role') || '') ? roleState.r : null;
+}
 async function refreshRole() {
   if (!apiEnabled()) return;
   const tok = localStorage.getItem('arkeia-role') || '';
   const d = await verifyToken(tok, 'role');
-  roleState.r = d?.r || null;
-  roleState.tok = d ? tok : '';
-  if (!d) localStorage.removeItem('arkeia-role');
+  if ((localStorage.getItem('arkeia-role') || '') !== tok) return;
+  acceptRole(tok, d);
+  if (!roleState.r) localStorage.removeItem('arkeia-role');
   refreshOptions();
+  if (isScreen('scr-title')) refreshTitle();
 }
 function chiefUnlocked() {
-  if (apiEnabled()) return roleState.r === 'chief';
+  if (apiEnabled()) return activeRole() === 'chief';
   return localStorage.getItem('arkeia-chief') === '1' || sessionStorage.getItem('arkeia-chief') === '1';
 }
 // 運営：運営キー（このタブの間）／招待コードで登録済み（この端末）／運営長
 function operatorUnlocked() {
-  if (apiEnabled()) return !!roleState.r;
+  if (apiEnabled()) return !!activeRole();
   return localStorage.getItem('arkeia-op') === '1' || sessionStorage.getItem('arkeia-op') === '1' || localStorage.getItem('arkeia-op-reg') === '1' || chiefUnlocked();
 }
 // ---- サーバー検証の戦闘プロフィール（強化・装備・キャラ使用権） ----
-const profState = { key: '', tok: '', at: 0, busy: false };
+const profState = { key: '', tok: '', at: 0, exp: 0, stamp: '', pending: null, retryStamp: '', retryAt: 0 };
+function profileStamp(key) {
+  return JSON.stringify([key, save.pid, syncCodeNow(), syncVer(), save.buyId, activeRole() ? roleState.tok : '',
+    save.upg[key] || {}, save.lb[key] || 0, save.equip[key] || '', save.armor[key] || '', save.gemChars, save.chars]);
+}
+function profileToken(key) {
+  return profState.key === key && profState.exp > Date.now() && profState.stamp === profileStamp(key) ? profState.tok : '';
+}
 async function refreshProfile(key) {
-  if (!apiEnabled() || !FIGHTERS[key] || profState.busy) return;
-  if (profState.key === key && Date.now() - profState.at < (profState.tok ? 30 * 60000 : 60000)) return;
-  profState.busy = true;
-  Object.assign(profState, { key, tok: '', at: Date.now() }); // 失敗時は1分おいて再試行
-  try {
-    // 強化・装備はサーバーに預けた同期セーブから算出される（端末の申告は使わない）
-    if (hasSyncChanges()) await autoPush();
-    const r = await api('/profile', { code: syncCodeNow(), key, role: roleState.tok, buyer: save.buyId });
-    if (r.ok && (await verifyToken(r.token, 'prof'))) Object.assign(profState, { key, tok: r.token, at: Date.now() });
-  } catch (err) {
-    console.warn(err);
-  } finally {
-    profState.busy = false;
+  if (!apiEnabled() || !FIGHTERS[key] || syncCodeNow().length !== 12) return;
+  if (profState.pending) {
+    await profState.pending;
+    return refreshProfile(key);
   }
+  const stamp = profileStamp(key);
+  if (profState.retryStamp === stamp && Date.now() < profState.retryAt) return;
+  if ((hasSyncChanges() || getPends().length) && Date.now() < syncHoldUntil) return;
+  if (profState.key === key && profState.stamp === stamp && Date.now() - profState.at < (profState.tok ? 30 * 60000 : 60000) && (!profState.tok || profState.exp > Date.now())) return;
+  profState.pending = (async () => {
+    try {
+      // Wait for the actual saved equipment/upgrade version, without reloading
+      // a screen while an online connection is being prepared.
+      if (hasSyncChanges() || getPends().length) {
+        await autoPush({ reload: false });
+        if (hasSyncChanges() || getPends().length) {
+          profState.retryStamp = profileStamp(key);
+          profState.retryAt = Math.max(Date.now() + 60000, syncHoldUntil);
+          return;
+        }
+      }
+      profState.retryAt = 0;
+      const current = profileStamp(key), pid = save.pid;
+      Object.assign(profState, { key, tok: '', exp: 0, stamp: current, at: Date.now() });
+      const r = await api('/profile', { code: syncCodeNow(), key, role: activeRole() ? roleState.tok : '', buyer: save.buyId });
+      const data = r.ok ? await verifyToken(r.token, 'prof') : null;
+      if (profileStamp(key) === current && data?.p === pid && data.k === key && data.exp > Date.now()) {
+        Object.assign(profState, { key, tok: r.token, exp: data.exp, stamp: current, at: Date.now() });
+      }
+    } catch (err) { console.warn(err); }
+  })().finally(() => { profState.pending = null; });
+  return profState.pending;
 }
 const profOk = Object.create(null); // peerId → 検証済みプロフィール
 const profSeen = new Map(); // 最新のpresence（pid・token）と、進行中の検証
@@ -1400,6 +1503,7 @@ const foeHp = (m) => (m || 1) * DIFFS[save.diff].h;
 // その戦士を使えるか（運営専用・ショップ解放）
 function canUse(k) {
   const d = FIGHTERS[k];
+  if (!d) return false;
   if (d.special === 'chief') return chiefUnlocked() && (!d.shardPrice || save.gemChars.includes(k));
   if (d.shop) return save.chars.includes(k) || operatorUnlocked();
   if (d.locked) return operatorUnlocked();
@@ -1660,7 +1764,7 @@ function openStageSelect(crumb, onBack) {
   renderStageBrowser({
     stages: STAGES, getArt: getStageArt, selected: state.stage?.id, sound: () => sfx('ui'),
     onConfirm: async (st) => {
-      await loadPromise;
+      if (!await loadModels()) throw new Error('models_unavailable');
       if (!active || !isScreen('scr-select') || $('#scr-select').dataset.kind !== 'stage') return;
       state.stage = st.sky ? st : STAGES[Math.floor(Math.random() * STAGES.length)];
       await startOffline();
@@ -1774,7 +1878,12 @@ const ui = {
     fl.classList.add('go');
   },
   end(winTeam) {
-    setTimeout(() => onBattleEnd(winTeam === 0), 1400);
+    const battle = state.battle;
+    if (!battle) return;
+    clearTimeout(battle.resultTimer);
+    battle.resultTimer = setTimeout(() => {
+      if (state.battle === battle) onBattleEnd(winTeam === 0);
+    }, 1400);
   }
 };
 
@@ -1799,6 +1908,9 @@ function makeBattle(net) {
 function endBattle() {
   stopVoices();
   if (state.battle) {
+    clearTimeout(state.battle.resultTimer);
+    clearTimeout($('#countdown')._t);
+    $('#countdown').hidden = true;
     state.battle.bgmStarted = false;
     state.battle.zarugureibuTheme = false;
     // 覚醒の蓄積ダメージは次の戦いへ持ち越す（覚醒中に終わったらリセット）
@@ -1863,7 +1975,8 @@ function openEventLevel(cb) {
 }
 
 async function startOffline() {
-  await loadPromise;
+  const generation = ++viewGeneration, mode = state.mode;
+  if (!await loadModels() || generation !== viewGeneration || state.mode !== mode || !['cpu', 'duo', 'event'].includes(mode)) return;
   const evRun = state.mode === 'event' ? (state.eventRun ||= activeEvent()) : null;
   setStage(evRun ? STAGES[evRun.ev.stage % STAGES.length] : state.stage || STAGES[0]);
   const b = makeBattle(null);
@@ -2238,7 +2351,8 @@ function buildStoryBattle(foes, boss) {
 }
 // 目的地の決戦：ボス章は決められた敵、通常の章は1〜6体
 async function startChapterBattle() {
-  await loadPromise;
+  const generation = ++viewGeneration, chapter = state.chapter;
+  if (!await loadModels() || generation !== viewGeneration || state.mode !== 'story' || state.chapter !== chapter) return;
   const ch = STORY[state.chapter];
   state.encounter = null;
   let foes = ch.enemies;
@@ -2270,14 +2384,24 @@ function resetFieldLight() {
 }
 async function enterField() {
   // フィールドは物語でしか使わないので必要になった時だけ読み込む（初回表示を軽く）
-  const [{ Field }] = await Promise.all([import('./field.js?v=20261106-model-ui3'), loadPromise]);
+  const generation = ++viewGeneration, chapter = state.chapter;
+  let Field, modelsReady;
+  try {
+    const result = await Promise.all([import('./field.js?v=20261106-complete-review1'), loadModels()]);
+    Field = result[0].Field;
+    modelsReady = result[1];
+  } catch {
+    if (generation === viewGeneration) showAssetLoadFailure('フィールドを読み込めませんでした。接続を確認して、ページを再読み込みしてください。', () => location.reload());
+    return;
+  }
+  if (!modelsReady || generation !== viewGeneration || state.mode !== 'story' || state.chapter !== chapter) return;
   leaveField();
   const ch = STORY[state.chapter];
   const st = stageById(ch.stage);
   setStage(st);
   const { party, mainKey } = storyParty();
   state.myKey = mainKey;
-  state.field = new Field(scene, {
+  const field = state.field = new Field(scene, {
     chapter: state.chapter, ch, stage: st, assets, floorTex,
     mainKey, gear: gearFor(mainKey), partyKeys: party, npcKeys: ROSTER, enemyPool: ENEMY_ROSTER,
     onTalk: (lines) => {
@@ -2298,14 +2422,14 @@ async function enterField() {
       ui.flash();
       ui.banner({ name: '— 魔物が現れた！ —' }, FIGHTERS[sym.key]?.name || '魔物');
       setTimeout(() => {
-        if (state.field && !state.battle) startEncounter(sym);
+        if (state.field === field && state.mode === 'story' && !state.battle) startEncounter(sym);
       }, 700);
     },
     onGoal: () => {
       sfx('burst');
       ui.flash();
       setTimeout(() => {
-        if (state.field && !state.battle) startChapterBattle();
+        if (state.field === field && state.mode === 'story' && !state.battle) startChapterBattle();
       }, 600);
     }
   });
@@ -2606,17 +2730,26 @@ $('#btn-join').addEventListener('click', async () => {
   $('#btn-join').disabled = true;
   $('#lobby-status').textContent = '回線を結んでいます…';
   history.replaceState({}, '', `?room=${encodeURIComponent(room)}`);
+  const generation = ++viewGeneration, mode = state.mode;
+  let connection = null, latestPeers = null;
+  const currentConnection = () => connection ? state.net === connection : generation === viewGeneration && state.mode === mode && isScreen('scr-lobby');
   try {
-    state.net = await connect(state.mode, room, {
-      onPeers: (p) => onPeers(p),
+    connection = await connect(mode, room, {
+      onPeers: (p) => {
+        if (!currentConnection()) return;
+        latestPeers = p;
+        if (connection) onPeers(p);
+      },
       onCast: (e) => {
+        if (!currentConnection()) return;
         const f = state.battle?.fighters.find((x) => x.netId === e.id && x.remoteAuth);
         if (f) {
           state.battle.cast(f, e.slot, e);
         }
       },
-      onHit: (e) => state.battle?.receiveNetHit(e),
+      onHit: (e) => { if (currentConnection()) state.battle?.receiveNetHit(e); },
       onBoss: (e) => {
+        if (!currentConnection()) return;
         const boss = state.battle?.fighters.find((x) => x.netId === 'boss' && x.remoteAuth);
         if (boss) {
           boss.netTarget.set(e.x, 0, e.z);
@@ -2627,13 +2760,25 @@ $('#btn-join').addEventListener('click', async () => {
         }
       }
     });
-    state.online = { name, started: false };
+    if (generation !== viewGeneration || state.mode !== mode || !isScreen('scr-lobby')) { connection.leave(); return; }
+    state.net = connection;
+    const online = state.online = { name, started: false, starting: false, connecting: true, peers: latestPeers || {} };
     $('#lobby-status').textContent = `焚き火を起こしました（合言葉: ${room}）。相手を待っています…`;
     if (apiEnabled()) await refreshProfile(state.myKey).catch(() => {});
-    state.net.publish({ name, pid: save.pid, prof: profState.key === state.myKey ? profState.tok : '', fk: state.myKey, mode: state.mode, x: 0, z: 0, ry: 0, hp: 1, mv: false, ready: true });
+    if (state.net !== connection || state.online !== online || generation !== viewGeneration || state.mode !== mode) { connection.leave(); return; }
+    if (apiEnabled() && restrictedKey(state.myKey) && !profileToken(state.myKey)) throw new Error('profile_unavailable');
+    connection.publish({ name, pid: save.pid, prof: profileToken(state.myKey), fk: state.myKey, mode, x: 0, z: 0, ry: 0, hp: 1, mv: false, ready: true });
+    online.connecting = false;
+    onPeers(online.peers);
   } catch (err) {
     console.error(err);
-    $('#lobby-status').textContent = 'つながりませんでした。少し置いてから、もう一度。';
+    if (generation !== viewGeneration || state.mode !== mode) { connection?.leave(); return; }
+    if (state.net === connection) state.net = null;
+    state.online = null;
+    connection?.leave();
+    $('#lobby-status').textContent = err?.message === 'profile_unavailable'
+      ? 'この戦士の使用権を確認できませんでした。旅支度で記録の同期と認証を確認し、もう一度参加してください。'
+      : 'つながりませんでした。少し置いてから、もう一度。';
     $('#btn-join').disabled = false;
   }
 });
@@ -2643,8 +2788,10 @@ function onPeers(peers) {
   if (!state.online) {
     return;
   }
+  state.online.peers = peers;
+  if (state.online.connecting) return;
   const peer = Object.values(peers).find((p) => p.mode === state.mode && p.ready);
-  if (!state.online.started && peer) {
+  if (!state.online.started && !state.online.starting && peer) {
     startOnline(peer);
     return;
   }
@@ -2661,6 +2808,7 @@ function onPeers(peers) {
     }
     return;
   }
+  if (!remote) return;
   remote.netTarget.set(p.x, 0, p.z);
   remote.netFacing = p.ry;
   remote.netMoving = p.mv;
@@ -2669,29 +2817,42 @@ function onPeers(peers) {
 }
 
 async function startOnline(peer) {
-  await loadPromise;
-  if (!state.online) {
-    return;
-  }
-  state.online.started = true;
-  state.online.peerId = peer.id;
-  const myId = state.net.myId;
-  const host = myId < peer.id;
-  await verifyPeer(peer); // サーバー運用時は相手の使用権を確認してから生成
-  if (!state.online) return;
-  const peerKey = peerKeyOf(peer.id, peer.fk);
-  const roomSeed = [...($('#lobby-room').value || 'a')].reduce((s, c) => s + c.charCodeAt(0), 0);
-  setStage(state.mode === 'online-coop' ? stageById('heaven') : STAGES[roomSeed % STAGES.length]);
-  const b = makeBattle(state.net);
-  const vs = state.mode === 'online-vs';
-  const mePos = host ? [-4, 3] : vs ? [4, -3] : [-6, -1];
-  const peerPos = host ? (vs ? [4, -3] : [-6, -1]) : [-4, 3];
-  b.add(state.myKey, { team: 0, player: true, awk: save.awk, netId: myId, pos: mePos, name: state.online.name, upg: upgFor(state.myKey), gear: gearFor(state.myKey) });
-  b.add(peerKey, { team: vs ? 1 : 0, remote: true, netId: peer.id, pos: peerPos, name: peer.name, hpMul: 1.15, ...peerOpts(peer.id, peerKey) });
-  if (!vs) {
-    b.add('seraphel', { team: 1, cpu: 0.9, remote: !host, netId: 'boss', pos: [5, -5], facing: Math.PI, hpMul: 2.2, name: '裁定者セラフェル' });
-  }
-  beginBattle(!vs || b.fighters.some((f) => f.key === 'seraphel'));
+  const online = state.online, connection = state.net, mode = state.mode;
+  if (!online || !connection || online.started || online.starting) return;
+  const generation = ++viewGeneration;
+  online.starting = true;
+  const current = () => state.online === online && state.net === connection && state.mode === mode && generation === viewGeneration;
+  try {
+    const ready = await loadModels();
+    if (!current()) return;
+    if (!ready) throw new Error('models_unavailable');
+    await verifyPeer(peer); // サーバー運用時は相手の使用権を確認してから生成
+    if (!current() || !online.peers[peer.id]?.ready) return;
+    const myId = connection.myId, host = myId < peer.id;
+    const peerKey = peerKeyOf(peer.id, peer.fk);
+    const roomSeed = [...($('#lobby-room').value || 'a')].reduce((s, c) => s + c.charCodeAt(0), 0);
+    setStage(mode === 'online-coop' ? stageById('heaven') : STAGES[roomSeed % STAGES.length]);
+    online.started = true;
+    online.peerId = peer.id;
+    const b = makeBattle(connection);
+    const vs = mode === 'online-vs';
+    const mePos = host ? [-4, 3] : vs ? [4, -3] : [-6, -1];
+    const peerPos = host ? (vs ? [4, -3] : [-6, -1]) : [-4, 3];
+    b.add(state.myKey, { team: 0, player: true, awk: save.awk, netId: myId, pos: mePos, name: online.name, upg: upgFor(state.myKey), gear: gearFor(state.myKey) });
+    b.add(peerKey, { team: vs ? 1 : 0, remote: true, netId: peer.id, pos: peerPos, name: peer.name, hpMul: 1.15, ...peerOpts(peer.id, peerKey) });
+    if (!vs) b.add('seraphel', { team: 1, cpu: 0.9, remote: !host, netId: 'boss', pos: [5, -5], facing: Math.PI, hpMul: 2.2, name: '裁定者セラフェル' });
+    beginBattle(!vs || b.fighters.some((f) => f.key === 'seraphel'));
+  } catch (error) {
+    if (state.online === online && state.net === connection) {
+      endBattle();
+      connection.leave();
+      state.net = null;
+      state.online = null;
+      $('#lobby-status').textContent = '対戦を準備できませんでした。読み込みと接続を確認して、もう一度参加してください。';
+      $('#btn-join').disabled = false;
+      show('scr-lobby');
+    }
+  } finally { online.starting = false; }
 }
 
 let netTimer = 0;
@@ -2706,7 +2867,7 @@ function netTick(dt) {
   }
   netTimer = 0;
   const me = b.fighters.find((f) => f.isPlayer);
-  state.net.publish({ name: state.online.name, pid: save.pid, prof: profState.key === state.myKey ? profState.tok : '', fk: state.myKey, mode: state.mode, x: me.pos.x, z: me.pos.z, ry: me.facing, hp: me.hp, mv: !!me.moving, ready: true });
+  state.net.publish({ name: state.online.name, pid: save.pid, prof: profileToken(state.myKey), fk: state.myKey, mode: state.mode, x: me.pos.x, z: me.pos.z, ry: me.facing, hp: me.hp, mv: !!me.moving, ready: true });
   const boss = b.fighters.find((f) => f.netId === 'boss' && !f.remoteAuth);
   if (boss) {
     state.net.boss({ x: boss.pos.x, z: boss.pos.z, ry: boss.facing, hp: boss.hp, mv: !!boss.moving });
@@ -2794,6 +2955,7 @@ function syncWorldRemotes(peers) {
 
 async function onInvaded(e) {
   const w = state.world;
+  const b = state.battle;
   if (!w || e.to !== w.myId) return;
   // サーバー設定時：サーバー署名の乱入許可証（宛先・送り主・60秒の期限）がなければ拒否
   let tr = null;
@@ -2802,8 +2964,7 @@ async function onInvaded(e) {
     if (!t || t.to !== w.myId || t.from !== e.from) return;
     tr = t.r;
   }
-  const b = state.battle;
-  if (state.mode !== 'story' || !b || b.ended || state.invaded || !allowInvade() || document.querySelector('.screen.on')) {
+  if (state.world !== w || state.battle !== b || state.mode !== 'story' || !b || b.ended || state.invaded || !allowInvade() || document.querySelector('.screen.on')) {
     return;
   }
   state.invaded = true;
@@ -2866,7 +3027,8 @@ async function startInvade(p) {
   if (!w || !operatorUnlocked()) {
     return;
   }
-  await loadPromise;
+  const generation = ++viewGeneration;
+  if (!await loadModels() || generation !== viewGeneration || state.world !== w || !isScreen('scr-invade') || !operatorUnlocked()) return;
   // サーバー設定時：乱入の許可をサーバーで判定し、署名付き許可証を相手に渡す
   let tk = '';
   if (apiEnabled()) {
@@ -2877,6 +3039,7 @@ async function startInvade(p) {
     }
     tk = r.ticket;
   }
+  if (generation !== viewGeneration || state.world !== w || !isScreen('scr-invade') || !operatorUnlocked()) return;
   state.mode = 'invade';
   w.invade({ to: p.id, from: w.myId, name: '運営', tk });
   setStage(stageById(STORY[p.ch]?.stage));
@@ -2905,7 +3068,7 @@ function worldTick(dt) {
   const me = b?.fighters.find((f) => f.isPlayer);
   const gk = state.myKey || '';
   if (gk) refreshProfile(gk);
-  const base = { name: myName(), pid: save.pid, mode: 'world', ready: false, gw: save.equip[gk] || '', ga: save.armor[gk] || '', prof: profState.key === gk ? profState.tok : '' };
+  const base = { name: myName(), pid: save.pid, mode: 'world', ready: false, gw: save.equip[gk] || '', ga: save.armor[gk] || '', prof: profileToken(gk) };
   if (state.mode === 'story' && state.field && !b) {
     const fp = state.field.player;
     w.publish({ ...base, role: 'field', fk: state.myKey, ch: state.chapter, ib: false, x: 0, z: 0, fx: fp.pos.x, fz: fp.pos.z, ry: fp.facing, hp: 1, mv: fp.cur === 'run' });
@@ -3133,6 +3296,7 @@ function togglePause() {
     return;
   }
   state.paused = !state.paused;
+  resetGameplayInput();
   $('#pause').hidden = !state.paused;
   $('#pause-note').textContent = state.online ? '遠い相手の時間は止まりません。' : '';
   if (state.paused && !isTouch) {
@@ -3300,10 +3464,11 @@ $('#opt-diff').addEventListener('click', () => {
 // サーバー設定時：購入キャラはサーバー署名の購入記録とだけ一致させる（端末内の改変は消える）
 async function syncEntitlements() {
   if (!apiEnabled()) return null;
+  const buyer = save.buyId, pid = save.pid;
   try {
-    const r = await api('/entitlements', { buyer: save.buyId });
+    const r = await api('/entitlements', { buyer });
     const d = r.ok ? await verifyToken(r.token, 'ent') : null;
-    if (!d || !Array.isArray(d.keys)) return null;
+    if (!d || !Array.isArray(d.keys) || save.buyId !== buyer || save.pid !== pid) return null;
     save.chars = d.keys.filter((k) => FIGHTERS[k]?.shop);
     persist(false); // 購入記録はサーバー管理。起動時の確認だけで古いセーブを再送しない。
     return save.chars;
@@ -3407,6 +3572,32 @@ function openEventMaker() {
   btns.append(pub, stop, close);
   const h = mk('h3', { textContent: '運営長専用　イベント作成' }); h.style.margin = '0';
   box.append(h, row('イベント名', fName), row('説明', fDesc), mk('b', { textContent: '出現する敵' }), foeBox, addB, grid2, btns, msg);
+  let publishing = false;
+  const commitEvent = async (ev) => {
+    if (publishing) return;
+    if (!chiefUnlocked()) { msg.textContent = '運営長の認証が必要です。旅支度から再認証してください。'; return; }
+    const record = { ev, at: Date.now() }, pid = save.pid;
+    publishing = true;
+    pub.disabled = stop.disabled = true;
+    msg.textContent = ev ? '公開を確認しています…' : '公開の終了を確認しています…';
+    try {
+      const result = await social?.sendEvent(record);
+      if (!result?.ok) throw new Error('publish');
+      if (save.pid !== pid) return;
+      setEventRec('arkeia-cevent-own', record);
+      social.refresh();
+      if (ev) social.news(`運営長の特別イベント「${ev.name}」が始まった！`);
+      msg.textContent = ev ? '公開しました。オンラインの全員に配信されます。' : '公開を終了しました。通常の週替わりイベントに戻ります。';
+      refreshTitle();
+    } catch (error) {
+      msg.textContent = error?.code === 'event_conflict'
+        ? '別の端末で新しいイベントが更新されています。一度閉じて、最新の内容を確認してください。'
+        : '変更を保存できませんでした。接続と運営長の認証を確認して、もう一度お試しください。';
+    } finally {
+      publishing = false;
+      pub.disabled = stop.disabled = false;
+    }
+  };
   box.addEventListener('submit', (e) => {
     e.preventDefault();
     const at = Date.now();
@@ -3417,18 +3608,9 @@ function openEventMaker() {
       stage: +fStage.value, at, ends: at + Math.round(+fDays.value || 7) * 86400000
     }, FIGHTERS);
     if (!ev) { msg.textContent = '内容を確認してください（名前必須・敵は合計10体まで）。'; return; }
-    setEventRec('arkeia-cevent-own', { ev, at });
-    social?.sendEvent();
-    social?.news(`運営長の特別イベント「${ev.name}」が始まった！`);
-    msg.textContent = '公開しました。オンラインの全員に配信され、30秒ごとに再配信されます。';
-    refreshTitle();
+    commitEvent(ev);
   });
-  stop.onclick = () => {
-    setEventRec('arkeia-cevent-own', { ev: null, at: Date.now() });
-    social?.sendEvent();
-    msg.textContent = '公開を終了しました。通常の週替わりイベントに戻ります。';
-    refreshTitle();
-  };
+  stop.onclick = () => commitEvent(null);
   let closeDialog = () => ov.remove();
   close.onclick = () => closeDialog();
   ov.append(box);
@@ -3673,8 +3855,7 @@ $('#op-form').addEventListener('submit', async (e) => {
       const d = r.ok ? await verifyToken(r.token, 'role') : null;
       if (d) {
         localStorage.setItem('arkeia-role', r.token);
-        roleState.r = d.r;
-        roleState.tok = r.token;
+        acceptRole(r.token, d);
         ok(d.r === 'chief' ? '運営長として認められた。白耀の天后ルミナリアが目を覚ます。' : isInvite ? '招待が受理された。あなたは運営として登録された（このキーはもう使えない）。' : 'かちり、と音がした。裁定者セラフェルが目を覚ます。');
       } else {
         msg.textContent = r.status === 429 ? '鍵穴が熱を持っています。少し待ってから。' : '鍵は回らなかった。';
@@ -3709,6 +3890,7 @@ $('#op-form').addEventListener('submit', async (e) => {
 });
 
 refreshRole();
+window.addEventListener('storage', (event) => { if (event.key === 'arkeia-role') refreshRole(); });
 
 // ---------- Gamepad (Standard mapping: Xbox / PlayStation / Switch Pro / 汎用) ----------
 const pad = { prev: [], navT: 0 };
@@ -3733,6 +3915,7 @@ function pollPad(dt) {
   padState.skill = padState.skill2 = false;
   const g = activePad();
   if (!g) {
+    pad.prev = [];
     return;
   }
   const btn = (i) => !!(g.buttons[i] && (g.buttons[i].pressed || g.buttons[i].value > 0.5));
@@ -3745,7 +3928,12 @@ function pollPad(dt) {
   if (btn(13)) mz = 1;
   const anyDown = g.buttons.some((_, i) => down(i));
   const mailDialog = mailbox?.isOpen() ? $('#mailbox-dialog') : null;
-  const uiDialog = document.querySelector('.ui-overlay .ui-dialog');
+  const uiDialog = [...document.querySelectorAll('.ui-overlay .ui-dialog')].at(-1);
+  if (document.hidden || (!mailDialog && !uiDialog && (social?.isOpen() || document.activeElement?.matches?.('input, textarea, select')) && inBattleView())) {
+    if (!document.hidden && (down(1) || down(8))) goBackCurrent();
+    pad.prev = g.buttons.map((b) => b.pressed || b.value > 0.5);
+    return;
+  }
   if (!mailDialog && !uiDialog && isScreen('scr-press')) {
     if (anyDown) {
       enterTitle();
@@ -3821,7 +4009,7 @@ renderer.setAnimationLoop((time) => {
   }
   pollPad(dt);
   crystals.forEach((c, i) => {
-    c.position.y += Math.sin(t * 1.5 + i) * 0.004;
+    c.position.y = c.userData.floatY + Math.sin(t * 1.5 + i) * 0.16;
     c.rotation.y += dt;
   });
   worldTick(dt);

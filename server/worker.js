@@ -143,10 +143,6 @@ function wealthOf(save) {
 const EARN_PER_HOUR = 30000;
 const EARN_SLACK = 5000;
 
-// キャラ使用の可否：運営/運営長専用・購入キャラはサーバーで確認
-const OP_ONLY = new Set(['seraphel']);
-const CHIEF_ONLY = new Set(['chief', 'sovereign', 'sovereign2', 'bloodfiend']);
-
 // ---------- ルート ----------
 export default {
   async fetch(req, env) {
@@ -329,7 +325,8 @@ async function entitlements(req, env, H, { buyer }) {
 async function profile(req, env, H, { code, key, role, buyer }) {
   if (await limited(env, req, 'prof', 60, 600000)) return json(H, { error: 'limit' }, 429);
   const h = await syncKey(env, code);
-  if (!ownValue(FIGHTERS, key) || !h) return json(H, { error: 'bad' }, 400);
+  const def = ownValue(FIGHTERS, key);
+  if (!def || !h) return json(H, { error: 'bad' }, 400);
   const row = await syncRow(env, h);
   let save = null;
   try {
@@ -339,9 +336,12 @@ async function profile(req, env, H, { code, key, role, buyer }) {
   }
   if (!save) save = {}; // 未登録なら強化なしとして署名
   const r = (await verify(env, role, 'role'))?.r || null;
-  if (CHIEF_ONLY.has(key) && r !== 'chief') return json(H, { error: 'denied' }, 403);
-  if (OP_ONLY.has(key) && !r) return json(H, { error: 'denied' }, 403);
-  if (FIGHTERS[key].shop && !(await ownedKeys(env, buyer)).includes(key)) return json(H, { error: 'not purchased' }, 403);
+  const operator = r === 'op' || r === 'chief';
+  // Use the same fighter flags as character selection. A separate hardcoded
+  // key list left newly added locked bosses eligible for player certificates.
+  if (def.enemy || (def.special === 'chief' && r !== 'chief') || (def.locked && !operator)) return json(H, { error: 'denied' }, 403);
+  if (def.shardPrice && !(Array.isArray(save.gemChars) && save.gemChars.includes(key))) return json(H, { error: 'denied' }, 403);
+  if (def.shop && !operator && !(await ownedKeys(env, buyer)).includes(key)) return json(H, { error: 'not purchased' }, 403);
   const u = statsFor(save, key);
   // 証明をプレイヤー(pid)に結びつける：同期コードに固定された pid だけを入れる
   const pid = String(save.pid || '');
@@ -679,7 +679,14 @@ export class GuildLock {
     }
     if (!g) return out({ error: 'notfound' }, 404);
     const mine = ownValue(g.members, me.pid);
-    if (mine && mine.name !== me.name) mine.name = me.name;
+    if (mine && mine.name !== me.name) {
+      mine.name = me.name;
+      // A regular refresh is the first request after a player renames themself.
+      // Persist it too, so the other members see the same name on their refresh.
+      const donor = ownValue(g.donors, me.pid);
+      if (donor) donor.name = me.name;
+      await save();
+    }
     switch (b.op) {
       case 'get':
         return out({ state: this.view(g, me.pid) });

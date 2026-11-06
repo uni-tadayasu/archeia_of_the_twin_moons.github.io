@@ -170,25 +170,47 @@ function keepFocus(event, box) {
   }
 }
 
+const activeDialogs = [];
+const dialogLocks = new WeakMap();
+
 export function activateUiDialog(overlay, box, label, cancel) {
-  const previous = document.activeElement, ui = $('#ui'), oldInert = ui.inert;
+  const previous = document.activeElement, ui = $('#ui');
+  const entry = { overlay, box };
+  activeDialogs.push(entry);
+  if (ui) {
+    const lock = dialogLocks.get(ui) || { count: 0, inert: ui.inert };
+    lock.count++;
+    dialogLocks.set(ui, lock);
+    ui.inert = true;
+  }
   let closed = false;
   overlay.classList.add('ui-overlay'); box.classList.add('ui-dialog');
   box.setAttribute('role', 'dialog'); box.setAttribute('aria-modal', 'true');
   box.setAttribute('aria-label', label); box.tabIndex = -1;
-  ui.inert = true;
   overlay.addEventListener('keydown', (event) => {
     event.stopPropagation();
+    if (activeDialogs.at(-1) !== entry || event.isComposing || event.keyCode === 229) return;
     if (event.key === 'Escape') { event.preventDefault(); cancel(); }
     else keepFocus(event, box);
   });
+  overlay.addEventListener('keyup', (event) => event.stopPropagation());
   queueMicrotask(() => {
-    if (!closed && box.isConnected) (box.querySelector('input:not([disabled]),button:not([disabled]),select:not([disabled])') || box).focus();
+    if (!closed && activeDialogs.at(-1) === entry && box.isConnected) (box.querySelector('input:not([disabled]),button:not([disabled]),select:not([disabled])') || box).focus();
   });
   return () => {
     if (closed) return;
-    closed = true; overlay.remove(); ui.inert = oldInert;
-    if (previous?.isConnected && !previous.closest('[hidden]')) previous.focus({ preventScroll: true });
+    const wasTop = activeDialogs.at(-1) === entry;
+    closed = true;
+    activeDialogs.splice(activeDialogs.indexOf(entry), 1);
+    overlay.remove();
+    if (ui) {
+      const lock = dialogLocks.get(ui);
+      if (lock && --lock.count === 0) { ui.inert = lock.inert; dialogLocks.delete(ui); }
+    }
+    if (!wasTop) return;
+    const current = activeDialogs.at(-1)?.box;
+    if (previous?.isConnected && !previous.closest('[hidden],[inert]') && (!current || current.contains(previous))) previous.focus({ preventScroll: true });
+    else if (current) (current.querySelector('input:not([disabled]),button:not([disabled]),select:not([disabled])') || current).focus({ preventScroll: true });
   };
 }
 
@@ -196,7 +218,7 @@ export function installUiShell() {
   $('#forge-search').oninput = filterForge;
   $('#pause').addEventListener('keydown', (event) => keepFocus(event, $('#pause')));
   document.addEventListener('keydown', (event) => {
-    if (event.key !== 'Escape' || document.querySelector('dialog[open],.ui-overlay')) return;
+    if (event.key !== 'Escape' || event.isComposing || event.keyCode === 229 || document.querySelector('dialog[open],.ui-overlay')) return;
     const chat = $('#chat-panel');
     if (chat && !chat.hidden) {
       event.preventDefault(); event.stopPropagation();

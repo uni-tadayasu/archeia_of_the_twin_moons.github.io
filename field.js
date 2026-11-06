@@ -56,7 +56,7 @@ const FLOWER_COLS = [0xff5a8a, 0xffd23a, 0xffffff, 0xb070ff, 0x5ab0ff, 0xff8a3a,
 // ---- モデル（GLB）を指定の高さで置く小さな役者 ----
 function makeActor(gltf, height, color, tint, own, def = null) {
   const root = new THREE.Group();
-  const a = { root, mixer: null, clips: {}, cur: null, act: null };
+  const a = { root, mixer: null, clips: {}, cur: null, act: null, resources: new Set(), disposed: false };
   if (gltf) {
     const m = SkeletonUtils.clone(gltf.scene);
     applyCharacterVariant(m, def);
@@ -70,10 +70,11 @@ function makeActor(gltf, height, color, tint, own, def = null) {
     m.traverse((c) => {
       if (c.isMesh) {
         c.castShadow = true;
+        if (c.isSkinnedMesh) a.resources.add(c.skeleton);
         if (tc && c.material) {
           c.material = c.material.clone();
           c.material.color?.lerp(tc, 0.6);
-          own.push(c.material);
+          a.resources.add(c.material);
         }
       }
     });
@@ -87,7 +88,8 @@ function makeActor(gltf, height, color, tint, own, def = null) {
   } else {
     const geo = new THREE.CapsuleGeometry(0.35, height - 0.7, 6, 12);
     const mat = new THREE.MeshStandardMaterial({ color: tint ?? color ?? 0xcccccc });
-    own.push(geo, mat);
+    a.resources.add(geo);
+    a.resources.add(mat);
     const mesh = new THREE.Mesh(geo, mat);
     mesh.position.y = height / 2;
     mesh.castShadow = true;
@@ -104,6 +106,25 @@ function makeActor(gltf, height, color, tint, own, def = null) {
     a.act?.fadeOut(0.2);
     a.act = act;
   };
+  a.dispose = () => {
+    if (a.disposed) return;
+    a.disposed = true;
+    if (a.mixer) {
+      a.mixer.stopAllAction();
+      a.mixer.uncacheRoot(a.mixer.getRoot());
+    }
+    removeGear(a.gear);
+    disposeCharacterVariant(root);
+    a.tag?.material.map?.dispose();
+    a.tag?.material.dispose();
+    for (const resource of a.resources) resource.dispose();
+    a.resources.clear();
+    root.removeFromParent();
+    root.clear();
+    a.model = a.mixer = a.act = a.gear = a.tag = a.aura = a.mark = null;
+    a.clips = {};
+  };
+  own.push(a);
   a.play('idle');
   return a;
 }
@@ -112,6 +133,7 @@ export class Field {
   constructor(scene, o) {
     this.scene = scene;
     this.o = o;
+    this.disposed = false;
     this.own = []; // このフィールドが作ったジオメトリ・マテリアル（破棄用）
     this.group = new THREE.Group();
     scene.add(this.group);
@@ -1187,7 +1209,8 @@ export class Field {
       const k = pick(o.enemyPool);
       const d = FIGHTERS[k];
       const a = makeActor(o.assets[k], 1.7, d?.color, d?.tint, this.own, d);
-      const aura = new THREE.Mesh(auraGeo, auraMat);
+      const aura = new THREE.Mesh(auraGeo, auraMat.clone());
+      a.resources.add(aura.material);
       aura.rotation.x = -Math.PI / 2;
       aura.position.y = 0.06;
       a.root.add(aura);
@@ -1361,9 +1384,9 @@ export class Field {
       const rr = c.r + rad;
       if (Math.abs(dx) > rr || Math.abs(dz) > rr) continue;
       const d = Math.hypot(dx, dz);
-      if (d < rr && d > 1e-4) {
-        pos.x = c.x + (dx / d) * rr;
-        pos.z = c.z + (dz / d) * rr;
+      if (d < rr) {
+        pos.x = c.x + (d > 1e-4 ? dx / d : 1) * rr;
+        pos.z = c.z + (d > 1e-4 ? dz / d : 0) * rr;
       }
     }
     for (const b of this.boxes) {
@@ -1404,6 +1427,7 @@ export class Field {
 
   // ---- 毎フレーム ----
   update(dt, inp, camera) {
+    if (this.disposed) return;
     this.t += dt;
     const p = this.player;
     this.inv = Math.max(0, this.inv - dt);
@@ -1505,10 +1529,13 @@ export class Field {
       s.root.visible = !s.far;
       if (s.far) continue;
       let mx = 0, mz = 0, sp = 0;
+      // 完全に重なった直後も有効な方向を保つ（0で割ると位置がNaNになる）。
+      const nx = d > 1e-4 ? dx / d : Math.sin(s.facing);
+      const nz = d > 1e-4 ? dz / d : Math.cos(s.facing);
       if (this.inv > 0 && d < 10) {
-        mx = -dx / d; mz = -dz / d; sp = 3; // 戦闘直後は逃げる
+        mx = -nx; mz = -nz; sp = 3; // 戦闘直後は逃げる
       } else if (d < 9 && !this.frozen) {
-        mx = dx / d; mz = dz / d; sp = 4.6;
+        mx = nx; mz = nz; sp = 4.6;
       } else {
         const w = s.wander;
         w.t -= dt;
@@ -1640,6 +1667,7 @@ export class Field {
     p.label = name;
   }
   setRemotes(list) {
+    if (this.disposed) return;
     const seen = new Set();
     const me = this.player.pos;
     const near = list.slice().sort((u, v) => Math.hypot(u.x - me.x, u.z - me.z) - Math.hypot(v.x - me.x, v.z - me.z));
@@ -1680,11 +1708,7 @@ export class Field {
   removeRemote(id) {
     const a = this.remotes.get(id);
     if (!a) return;
-    a.mixer?.stopAllAction();
-    disposeCharacterVariant(a.root);
-    this.group.remove(a.root);
-    a.tag?.material.map.dispose();
-    a.tag?.material.dispose();
+    a.dispose();
     this.remotes.delete(id);
   }
   // 近くにいる旅人（近い順）
@@ -1718,11 +1742,10 @@ export class Field {
 
   // 戦闘から戻る
   resume(sym, won) {
+    if (this.disposed) return;
     if (sym && won) {
       this.syms = this.syms.filter((s) => s !== sym);
-      sym.mixer?.stopAllAction();
-      disposeCharacterVariant(sym.root);
-      this.group.remove(sym.root);
+      sym.dispose();
     }
     if (!won && sym) {
       this.player.pos.set(0, 0, 22);
@@ -1734,13 +1757,13 @@ export class Field {
   }
 
   dispose() {
+    if (this.disposed) return;
+    this.disposed = true;
     for (const id of [...this.remotes.keys()]) this.removeRemote(id);
-    this.player?.tag?.material.map.dispose();
-    this.player?.tag?.material.dispose();
-    disposeCharacterVariant(this.group);
+    this.group.traverse((o) => { if (o.isInstancedMesh) o.dispose(); });
     this.scene.remove(this.group);
-    for (const a of [this.player, ...this.followers, ...this.npcs, ...this.syms, this.boss]) a?.mixer?.stopAllAction();
     for (const x of this.own) x.dispose?.();
     this.own = [];
+    this.group.clear();
   }
 }

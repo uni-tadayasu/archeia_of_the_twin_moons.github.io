@@ -1,5 +1,5 @@
 // 運営長の配信と受信箱。配信・既読・受け取りの確定は、常に認証済みサーバーの応答を待つ。
-import { apiEnabled, api } from './api.js';
+import { apiEnabled, api } from './api.js?v=20261106-complete-review1';
 import { WEAPONS, ARMORS } from './data.js';
 
 const ITEM_LIST = [...WEAPONS, ...ARMORS];
@@ -58,7 +58,9 @@ export function mailErrorMessage(error, chief = false) {
 }
 
 export function initMailbox(opts) {
-  const S = { tab: 'inbox', messages: [], nextCursor: null, history: [], historyCursor: null, loading: false, mutation: false, unsupported: false, selected: null, review: null, serverOffset: 0, lastFocus: null, draftKind: 'gift', recipient: '' };
+  const S = { tab: 'inbox', messages: [], nextCursor: null, history: [], historyCursor: null, loading: { inbox: false, history: false }, inboxRevision: 0, mutation: false, unsupported: false, selected: null, review: null, serverOffset: 0, lastFocus: null, draftKind: 'gift', recipient: '' };
+  let disposed = false;
+  let noticeVersion = 0;
   const dialog = el('dialog');
   dialog.id = 'mailbox-dialog';
   dialog.setAttribute('aria-labelledby', 'mailbox-heading');
@@ -107,6 +109,7 @@ export function initMailbox(opts) {
   });
 
   const chief = () => !!opts.isChief?.();
+  const visible = tab => !disposed && dialog.open && S.tab === tab;
   const now = () => Date.now() + S.serverOffset;
   const pendingIds = () => opts.pendingClaims?.() || [];
   const isExpired = m => !m.claimedAt && (+m.expiresAt || 0) <= now();
@@ -115,6 +118,7 @@ export function initMailbox(opts) {
   function note(text = '', bad = false) {
     status.textContent = text;
     status.classList.toggle('mb-error', bad);
+    return ++noticeVersion;
   }
   function requestFailure(result) {
     const code = result?.error || (result?.status === 404 ? 'unsupported' : result?.status === 429 ? 'limit' : 'net');
@@ -168,40 +172,49 @@ export function initMailbox(opts) {
     return [...values.values()].sort((a, b) => (+b.createdAt - +a.createdAt) || String(b.id).localeCompare(String(a.id)));
   }
   async function refresh(more = false, quiet = false) {
-    if (S.loading || S.mutation) return;
-    S.loading = true;
-    if (!quiet) note('受信箱を確認しています…');
+    if (disposed || S.loading.inbox || S.mutation) return;
+    S.loading.inbox = true;
+    const notice = !quiet && visible('inbox') ? note('受信箱を確認しています…') : null;
+    if (visible('inbox')) renderInbox();
     try {
       const code = requireCode();
       const pid = opts.save.pid;
+      const revision = S.inboxRevision;
       const r = await request('/mail/list', { code, ...(more && S.nextCursor ? { cursor: S.nextCursor } : {}) });
+      if (disposed) return;
       if (opts.save.pid !== pid || opts.syncCode() !== code || r.pid !== pid) throw err('identity');
+      // An older list response must not replace a newer read/claim receipt.
+      if (revision !== S.inboxRevision) return;
       if (!Array.isArray(r.messages)) throw err('invalid_response');
       S.messages = mergeMessages(r.messages, more, S.messages);
       S.nextCursor = r.nextCursor || null;
       S.unsupported = false;
       if (!S.messages.some(m => m.id === S.selected)) S.selected = null;
       refreshBadge();
-      if (!quiet) note('');
+      if (!quiet && visible('inbox')) note('');
     } catch (e) {
-      if (!quiet) note(mailErrorMessage(e, chief()), true);
+      if (!quiet && visible('inbox')) note(mailErrorMessage(e, chief()), true);
     } finally {
-      S.loading = false;
-      if (dialog.open && S.tab === 'inbox') renderInbox();
+      S.loading.inbox = false;
+      if (visible('inbox')) {
+        if (notice !== null && notice === noticeVersion) note('');
+        renderInbox();
+      }
     }
   }
   async function loadHistory(more = false) {
-    if (!chief() || S.loading || S.mutation) return;
-    S.loading = true;
-    note('送信履歴を確認しています…');
+    if (disposed || !chief() || S.loading.history || S.mutation) return;
+    S.loading.history = true;
+    if (visible('history')) { note('送信履歴を確認しています…'); renderHistory(); }
     try {
       const r = await request('/chief/mail/history', { token: opts.roleToken?.() || '', ...(more && S.historyCursor ? { cursor: S.historyCursor } : {}) });
+      if (disposed || !chief()) return;
       if (!Array.isArray(r.messages)) throw err('invalid_response');
       S.history = mergeMessages(r.messages, more, S.history);
       S.historyCursor = r.nextCursor || null;
-      note('');
-    } catch (e) { note(mailErrorMessage(e, true), true); }
-    finally { S.loading = false; if (dialog.open && S.tab === 'history') renderHistory(); }
+      if (visible('history')) note('');
+    } catch (e) { if (visible('history')) note(mailErrorMessage(e, true), true); }
+    finally { S.loading.history = false; if (visible('history')) renderHistory(); }
   }
   function saveDraft(payload) {
     try { localStorage.setItem(draftKey(), JSON.stringify(payload)); }
@@ -220,7 +233,7 @@ export function initMailbox(opts) {
     return true;
   }
   function open(tab = 'inbox', recipient = '') {
-    if (S.mutation) return;
+    if (disposed || S.mutation) return;
     S.tab = ['gift', 'system', 'history'].includes(tab) && chief() ? tab : 'inbox';
     S.selected = null;
     S.review = null;
@@ -287,7 +300,7 @@ export function initMailbox(opts) {
     const unread = S.messages.filter(m => !m.readAt).length;
     top.append(el('span', 'mb-muted', `未読 ${unread} 件 ／ 読み込み済み ${S.messages.length} 件${S.nextCursor ? '（続きがあります）' : ''}`));
     const reload = button('更新', () => { S.unsupported = false; S.selected = null; refresh(); });
-    reload.disabled = S.loading || S.mutation;
+    reload.disabled = S.loading.inbox || S.mutation;
     top.append(reload);
     content.append(top);
     if (S.selected) {
@@ -301,10 +314,10 @@ export function initMailbox(opts) {
       list.append(b);
     }
     content.append(list);
-    if (!S.messages.length) content.append(el('p', 'mb-empty', S.loading ? 'お便りを確認しています…' : 'まだお便りは届いていません。'));
+    if (!S.messages.length) content.append(el('p', 'mb-empty', S.loading.inbox ? 'お便りを確認しています…' : 'まだお便りは届いていません。'));
     if (S.nextCursor) {
       const more = button('次の50件を読み込む', () => refresh(true));
-      more.disabled = S.loading || S.mutation;
+      more.disabled = S.loading.inbox || S.mutation;
       content.append(more);
     }
   }
@@ -329,11 +342,15 @@ export function initMailbox(opts) {
     try {
       const code = requireCode();
       const r = await request('/mail/read', { code, id });
+      if (disposed) return;
       if (opts.syncCode() !== code) throw err('identity');
       m.readAt = +r.readAt || now();
+      const current = S.messages.find(x => x.id === id);
+      if (current) current.readAt = m.readAt;
+      S.inboxRevision++;
       refreshBadge();
-      if (S.selected === id && S.tab === 'inbox') renderInbox();
-    } catch (e) { note(mailErrorMessage(e, chief()), true); }
+      if (visible('inbox')) renderInbox();
+    } catch (e) { if (S.selected === id && visible('inbox')) note(mailErrorMessage(e, chief()), true); }
   }
   function renderGift(gift, host) {
     const box = el('div', 'mb-gift');
@@ -376,6 +393,7 @@ export function initMailbox(opts) {
     if (S.mutation) return;
     if (opts.inBattle?.()) { note(mailErrorMessage(err('busy')), true); return; }
     S.mutation = true;
+    S.inboxRevision++;
     refreshAccess();
     note('プレゼントの受け取りを確認しています…');
     renderInbox();
@@ -396,16 +414,16 @@ export function initMailbox(opts) {
     if (selected) { renderDetail(selected, true); return; }
     const top = el('div', 'mb-row mb-space');
     const reload = button('更新', () => { S.unsupported = false; loadHistory(); });
-    reload.disabled = S.loading;
+    reload.disabled = S.loading.history;
     top.append(el('span', 'mb-muted', `読み込み済み ${S.history.length} 件`), reload);
     content.append(top);
     const list = el('div', 'mb-list');
     for (const m of S.history) list.append(messageCard(m, () => { S.selected = m.id; renderHistory(); }, true));
     content.append(list);
-    if (!S.history.length) content.append(el('p', 'mb-empty', S.loading ? '履歴を確認しています…' : '送信履歴はありません。'));
+    if (!S.history.length) content.append(el('p', 'mb-empty', S.loading.history ? '履歴を確認しています…' : '送信履歴はありません。'));
     if (S.historyCursor) {
       const more = button('次の50件を読み込む', () => loadHistory(true));
-      more.disabled = S.loading;
+      more.disabled = S.loading.history;
       content.append(more);
     }
   }
@@ -561,8 +579,16 @@ export function initMailbox(opts) {
   inboxEntry?.addEventListener('click', () => open());
   for (const id of ['btn-chief-mail', 'chief-mail-center']) document.getElementById(id)?.addEventListener('click', () => open('gift'));
   const timer = setInterval(() => { if (!document.hidden && !dialog.open && !S.unsupported && apiEnabled() && (opts.syncCode?.() || '').length === 12) refresh(false, true); }, 75000);
-  document.addEventListener('visibilitychange', () => { if (!document.hidden && !dialog.open && !S.unsupported) refresh(false, true); });
-  setTimeout(() => { if (apiEnabled() && (opts.syncCode?.() || '').length === 12) refresh(false, true); }, 6500);
+  const onVisibility = () => { if (!document.hidden && !dialog.open && !S.unsupported) refresh(false, true); };
+  document.addEventListener('visibilitychange', onVisibility);
+  const initialRefresh = setTimeout(() => { if (apiEnabled() && (opts.syncCode?.() || '').length === 12) refresh(false, true); }, 6500);
   refreshAccess();
-  return { open, close, refresh: () => refresh(false, true), refreshAccess, isOpen: () => dialog.open, dispose: () => { clearInterval(timer); dialog.remove(); } };
+  return { open, close, refresh: () => refresh(false, true), refreshAccess, isOpen: () => dialog.open, dispose: () => {
+    if (disposed) return;
+    disposed = true;
+    clearInterval(timer); clearTimeout(initialRefresh);
+    document.removeEventListener('visibilitychange', onVisibility);
+    if (dialog.open) dialog.close();
+    dialog.remove();
+  } };
 }

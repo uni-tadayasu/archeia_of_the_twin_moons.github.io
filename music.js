@@ -225,6 +225,10 @@ export class ProcMusic {
       clearInterval(this.timer);
       this.timer = null;
     }
+    // 先に予約した音符と残響も、ミュート・曲切替の時点で止める。
+    const now = this.ctx.currentTime;
+    this.out.gain.cancelScheduledValues(now);
+    this.out.gain.setValueAtTime(0, now);
   }
 
   get playing() {
@@ -232,7 +236,15 @@ export class ProcMusic {
   }
 
   tick() {
-    while (this.next < this.ctx.currentTime + 0.15) {
+    if (!this.playing) return;
+    const now = this.ctx.currentTime;
+    // 非表示タブから戻ったとき、過去の音符を一度に鳴らさず拍だけ進める。
+    if (this.next < now) {
+      const missed = Math.ceil((now - this.next) / this.spb);
+      this.next += missed * this.spb;
+      this.step += missed;
+    }
+    while (this.next < now + 0.15) {
       const sw = this.step % 2 ? this.song.swing * this.spb : 0;
       this.playStep(this.step, this.next + sw);
       this.next += this.spb;

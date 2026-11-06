@@ -113,7 +113,7 @@ function spokenName(name) {
 }
 // 場面ごとの優先度と最小間隔
 const PRIO = { hi: 5, over: 4, awaken: 4, summon: 3, ko: 3, pinch: 2, skill: 1, kill: 1, hurt: 0 };
-let lastAt = 0, curPrio = -1;
+let lastAt = 0, curPrio = -1, generation = 0;
 
 /**
  * kind: 'skill' | 'over' | 'hi' | 'awaken' | 'summon' | 'hurt' | 'pinch' | 'ko' | 'kill'
@@ -132,6 +132,7 @@ export function sayBattle(f, kind, specName, important = false) {
   const p = profile(key, f.def);
   const pool = T[p.kind][kind] || T[p.kind].skill;
   const text = pick(key, kind, pool).replace('{n}', spokenName(specName));
+  const id = ++generation;
   if (important || (busy && pr > curPrio)) synth.cancel();
   lastAt = now;
   curPrio = pr;
@@ -144,14 +145,16 @@ export function sayBattle(f, kind, specName, important = false) {
   u.pitch = Math.max(0, Math.min(2, p.pitch + dp + (Math.random() - 0.5) * 0.08));
   u.rate = Math.max(0.5, Math.min(2, p.rate + dr + (Math.random() - 0.5) * 0.06));
   u.volume = Math.max(0, Math.min(1, vol * (f.team === 0 ? 1 : 0.8) * (kind === 'hurt' ? 0.8 : 1)));
-  u.onend = () => { curPrio = -1; };
+  // キャンセルされた古い声の完了通知で、新しい声の優先度を消さない。
+  u.onend = u.onerror = () => { if (id === generation) curPrio = -1; };
   synth.speak(u);
 }
 export function setVoiceMuted(m) {
   muted = !!m;
-  if (muted) synth?.cancel();
+  if (muted) stopVoices();
 }
 export function stopVoices() {
+  generation++;
   synth?.cancel();
   curPrio = -1;
 }
