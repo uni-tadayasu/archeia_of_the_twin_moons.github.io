@@ -12,7 +12,7 @@ let active = 0;
 let decoderPromise = null;
 let meshoptPromise = null;
 const BASE = new URL('./', import.meta.url);
-export const MODEL_VERSION = 'original3d-20261106';
+export const MODEL_VERSION = 'fix20-20261106a';
 
 export class ModelLoadError extends Error {
   constructor(url, detail, cause) {
@@ -29,7 +29,7 @@ function schedule(task) {
   });
 }
 function pump() {
-  while (active < 3 && queue.length) {
+  while (active < 2 && queue.length) {
     const job = queue.shift(); active++;
     Promise.resolve().then(job.task).then(job.resolve, job.reject).finally(() => { active--; pump(); });
   }
@@ -43,11 +43,16 @@ function deadline(promise, ms, label) {
 }
 async function fetchBytes(url) {
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 30000);
+  const timer = setTimeout(() => controller.abort(), 60000);
   try {
     const response = await fetch(url, { signal: controller.signal, cache: 'no-cache', credentials: 'same-origin' });
-    if (!response.ok) throw new Error(`HTTP ${response.status}。モデルと付属 .bin の配置を確認してください`);
-    return await response.arrayBuffer();
+    if (!response.ok) {
+      const status = `HTTP ${response.status}`;
+      throw new Error(`${status}：モデルが公開されていません（${new URL(url).pathname}）。GitHub/Rosebud の assets/models/ を確認してください`);
+    }
+    const result = await response.arrayBuffer();
+    if (result.byteLength < 32) throw new Error(`GLBが短すぎます (${result.byteLength} bytes)`);
+    return result;
   } finally { clearTimeout(timer); }
 }
 function documentOf(buffer) {
@@ -92,41 +97,52 @@ export function loadModel(url) {
   if (cache.has(key)) return Promise.resolve(cache.get(key));
   if (pending.has(key)) return pending.get(key);
   const task = schedule(async () => {
-    errors.delete(key); notify();
-    const request = new URL(key); request.searchParams.set('v', MODEL_VERSION);
+    errors.delete(key);
+    notify();
     try {
-      const { doc, payload } = documentOf(await fetchBytes(request));
-      const ext = new Set([...(doc.extensionsUsed || []), ...(doc.extensionsRequired || [])]);
+      // Keep the on-disk asset path unchanged. The previous ?v= suffix could be
+      // rejected by static hosts; HTTP cache validation refreshes stale files.
+      const payload = await fetchBytes(key);
+      const { doc } = documentOf(payload);
+      if (!doc.asset || doc.asset.version !== '2.0') throw new Error('glTF 2.0として認識できません');
+      const extensions = new Set([...(doc.extensionsUsed || []), ...(doc.extensionsRequired || [])]);
       const manager = new THREE.LoadingManager();
-      manager.setURLModifier((input) => {
-        if (/^(data:|blob:)/.test(input)) return input;
-        const resource = new URL(input, new URL('./', key));
-        if (resource.origin === BASE.origin && /\.(bin|webp|png|jpe?g)$/i.test(resource.pathname)) resource.searchParams.set('v', MODEL_VERSION);
-        return resource.href;
-      });
       const loader = new GLTFLoader(manager);
-      if (ext.has('KHR_draco_mesh_compression')) loader.setDRACOLoader(await getDraco());
-      if (ext.has('EXT_meshopt_compression') || ext.has('KHR_meshopt_compression')) loader.setMeshoptDecoder(await getMeshopt());
-      // Buffers (including animation-data.bin) are resolved relative to the GLB,
-      // never relative to the page or to an external CDN.
-      const result = await deadline(loader.parseAsync(payload, new URL('./', key).href), 45000, 'モデルの展開がタイムアウトしました');
-      let meshes = 0, colorMaps = 0;
-      result.scene?.traverse((object) => {
-        if (object.isMesh && object.geometry?.attributes?.position?.count) {
-          meshes++;
-          for (const material of (Array.isArray(object.material) ? object.material : [object.material])) if (material?.map) colorMaps++;
+      if (extensions.has('KHR_draco_mesh_compression')) loader.setDRACOLoader(await getDraco());
+      if (extensions.has('EXT_meshopt_compression') || extensions.has('KHR_meshopt_compression')) loader.setMeshoptDecoder(await getMeshopt());
+      // Embedded images and geometry are resolved by the official glTF parser.
+      const sourceDir = new URL('./', key).href;
+      let result;
+      try {
+        result = await deadline(loader.parseAsync(payload, sourceDir), 90000, 'GLBの解析に時間がかかりすぎました');
+      } catch (primary) {
+        // Allow the stock URL loader to recover when parseAsync behaves
+        // differently under an older browser/CDN implementation.
+        try {
+          result = await deadline(loader.loadAsync(key), 90000, 'モデルの再取得がタイムアウトしました');
+        } catch (secondary) {
+          throw new Error(`GLB解析失敗：${primary?.message || primary} / 再試行：${secondary?.message || secondary}`);
         }
+      }
+      let visibleMeshes = 0;
+      result.scene?.traverse((node) => {
+        if (node.isMesh && node.geometry?.attributes?.position?.count) visibleMeshes++;
       });
-      if (!meshes) throw new Error('モデルに表示可能なメッシュがありません');
-      if (doc.materials?.some((m) => m.pbrMetallicRoughness?.baseColorTexture) && !colorMaps) throw new Error('衣装・肌のテクスチャが読み込めませんでした');
+      if (!visibleMeshes) throw new Error('GLBには描画できる3D形状がありません');
+      // Do not reject valid meshes merely because an optional WebP texture
+      // is missing; the asset's geometry must remain usable.
       result.userData ||= {};
       result.userData.arkeiaSource = key;
-      cache.set(key, result); notify();
+      cache.set(key, result);
+      errors.delete(key);
+      notify();
       return result;
     } catch (error) {
-      const detail = error?.name === 'AbortError' ? 'ダウンロードがタイムアウトしました' : error?.message || String(error);
-      const problem = new ModelLoadError(url, detail, error);
-      errors.set(key, problem); notify(); throw problem;
+      const description = error?.name === 'AbortError' ? 'モデルの通信がタイムアウトしました' : error?.message || String(error);
+      const failure = new ModelLoadError(url, description, error);
+      errors.set(key, failure);
+      notify();
+      throw failure;
     }
   });
   pending.set(key, task);

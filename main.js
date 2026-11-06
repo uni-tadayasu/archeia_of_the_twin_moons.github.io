@@ -1,6 +1,6 @@
 import * as THREE from 'three';
-import { loadModel } from './model-runtime.js?v=20261106orig3d';
-import { Battle, ARENA_R } from './game.js?v=20261106startfix5';
+import { loadModel } from './model-runtime.js?v=fix20-20261106a';
+import { Battle, ARENA_R } from './game.js?v=fix20-20261106a';
 import { FIGHTERS, STORY, ROSTER, UPGRADES, MAX_LV, STAGES, BGM, APEX_BGM, ENEMY_ROSTER, UPG_CAP, LB_MAX, lbMaxLv, lbMul, lbCost, WEAPONS, ARMORS, SUMMONS, STAT_LABEL, SPECIAL_KEYS, BOSS_ROSTER, currentEvent, sanitizeEvent, EV_FOE_KINDS } from './data.js';
 import { sayBattle, setVoiceMuted, stopVoices } from './voice.js';
 import { initSocial, uiConfirm } from './social.js';
@@ -154,7 +154,7 @@ function updateModelStatus() {
   if (el) {
     el.textContent = modelErrors.size
       ? `3Dモデル読込失敗 ${modelErrors.size}件（準備済み ${progress}）。再試行できます。`
-      : loadedModels < modelUrls.length ? `戦士の3Dモデルを準備中 ${progress}` : '3Dモデルの準備が整いました';
+      : loadedModels ? `3Dモデル準備済み ${progress}（残りは必要時に読込）` : '3Dモデルの初期化中';
     el.title = [...modelErrors].map(([url, error]) => `${url}: ${error?.message || error}`).join('\n');
   }
 }
@@ -179,48 +179,57 @@ async function retrieveModel(url) {
     return false;
   }
 }
-function modelErrorDialog() {
+function modelErrorDialog(failedUrls = [...modelErrors.keys()]) {
   let panel = document.getElementById('arkeia-model-error');
   if (!panel) {
     panel = document.createElement('div');
     panel.id = 'arkeia-model-error';
     panel.setAttribute('role', 'alert');
-    panel.style.cssText = 'position:fixed;z-index:10003;bottom:12px;left:12px;right:12px;max-width:720px;margin:auto;padding:16px 18px;border:1px solid #debb75;background:rgba(9,13,28,.97);color:#fff0d5;box-shadow:0 12px 40px #000b;font:14px/1.7 system-ui,sans-serif;pointer-events:auto';
+    panel.style.cssText = 'position:fixed;z-index:10003;bottom:12px;left:12px;right:12px;max-width:760px;margin:auto;padding:16px 18px;border:1px solid #debb75;background:rgba(9,13,28,.97);color:#fff0d5;box-shadow:0 12px 40px #000b;font:14px/1.7 system-ui,sans-serif;pointer-events:auto;white-space:pre-wrap;max-height:60vh;overflow:auto';
     document.body.append(panel);
   }
-  const names = [...modelErrors.keys()].map((x) => x.split('/').pop());
   const caption = document.createElement('strong');
-  caption.textContent = '3Dモデルを読み込めませんでした（棒状の代用品は表示しません）';
+  caption.textContent = `必要な3Dモデル ${failedUrls.length}件を読み込めませんでした`;
   const detail = document.createElement('div');
-  detail.textContent = `${names.slice(0, 5).join('、')}${names.length > 5 ? ` ほか${names.length - 5}件` : ''}。公開先の assets/models/ の配置を確認してください。`;
+  detail.textContent = failedUrls.slice(0, 5).map((url) => {
+    const failure = modelErrors.get(url);
+    return `${url.split('/').pop()}：${failure?.message || '取得できませんでした'}`;
+  }).join('\n') + (failedUrls.length > 5 ? `\nほか ${failedUrls.length - 5}件` : '');
+  const note = document.createElement('p');
+  note.textContent = '特に HTTP 404 と表示された場合、公開先に assets/models/*.glb がありません。JSだけ更新しても直らないため、元のGLBも同じ階層にアップロードしてください。';
   const retry = document.createElement('button');
   retry.type = 'button';
-  retry.textContent = 'モデルを再読み込み';
+  retry.textContent = '失敗したモデルだけ再試行';
   retry.style.cssText = 'margin-top:8px;border:1px solid #c9a65a;background:#422519;color:#fff5d9;padding:8px 14px;cursor:pointer';
   retry.addEventListener('click', async () => {
     retry.disabled = true;
     retry.textContent = '再試行中…';
-    const ok = await ensureAllModelsReady();
-    if (ok) panel.remove();
-    retry.disabled = false;
-    retry.textContent = 'モデルを再読み込み';
+    await Promise.all(failedUrls.map(retrieveModel));
+    const stillFailed = failedUrls.filter((url) => !byUrl[url]);
+    if (stillFailed.length) modelErrorDialog(stillFailed);
+    else panel.remove();
   });
-  panel.replaceChildren(caption, detail, retry);
+  panel.replaceChildren(caption, detail, note, retry);
 }
-async function ensureAllModelsReady() {
-  await loadPromise;
-  if (modelErrors.size) {
-    await Promise.all([...modelErrors.keys()].map(retrieveModel));
-  }
-  if (modelErrors.size) {
-    modelErrorDialog();
+async function ensureAllModelsReady(requiredKeys = null) {
+  // 1 vs 1 doesn't depend on all 20 fighters. Never block it on unused GLBs.
+  const requested = requiredKeys && requiredKeys.length
+    ? [...new Set(requiredKeys.map((key) => FIGHTERS[key]?.model).filter(Boolean))]
+    : modelUrls;
+  if (!requested.length) return true;
+  await Promise.all(requested.map((url) => byUrl[url] ? true : retrieveModel(url)));
+  const failed = requested.filter((url) => !byUrl[url]);
+  if (failed.length) {
+    modelErrorDialog(failed);
     return false;
   }
   return true;
 }
-loadPromise = Promise.allSettled(modelUrls.map(retrieveModel)).then(() => {
-  updateModelStatus();
-});
+// Preload the first character for a responsive title, then load others only
+// when needed by the current field/battle. This avoids 20 simultaneous
+// downloads and expensive animation parses on mobile browsers.
+const firstModel = FIGHTERS.rowen?.model || modelUrls[0];
+loadPromise = firstModel ? retrieveModel(firstModel) : Promise.resolve(true);
 updateModelStatus();
 
 // ---------- Save ----------
@@ -1848,7 +1857,8 @@ function openEventLevel(cb) {
 }
 
 async function startOffline() {
-  if (!(await ensureAllModelsReady())) return;
+  const required = state.mode === 'cpu' ? [state.myKey, state.oppKey] : null;
+  if (!(await ensureAllModelsReady(required))) return;
   const evRun = state.mode === 'event' ? (state.eventRun ||= activeEvent()) : null;
   setStage(evRun ? STAGES[evRun.ev.stage % STAGES.length] : state.stage || STAGES[0]);
   const b = makeBattle(null);
@@ -2256,7 +2266,7 @@ function resetFieldLight() {
 async function enterField() {
   // フィールドは物語でしか使わないので必要になった時だけ読み込む（初回表示を軽く）
   if (!(await ensureAllModelsReady())) return;
-  const { Field } = await import('./field.js?v=20261106orig3d');
+  const { Field } = await import('./field.js?v=fix20-20261106a');
   leaveField();
   const ch = STORY[state.chapter];
   const st = stageById(ch.stage);
@@ -2632,7 +2642,8 @@ function onPeers(peers) {
 }
 
 async function startOnline(peer) {
-  if (!(await ensureAllModelsReady())) return;
+  const required = [state.myKey, peer?.fk, state.mode === 'online-coop' ? 'seraphel' : null].filter(Boolean);
+  if (!(await ensureAllModelsReady(required))) return;
   if (!state.online) {
     return;
   }
