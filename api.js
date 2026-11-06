@@ -4,19 +4,28 @@ import { API_BASE, SERVER_PUBKEY_JWK } from './config.js';
 export const apiEnabled = () => !!(API_BASE && SERVER_PUBKEY_JWK);
 
 export async function api(path, body) {
-  const r = await fetch(API_BASE.replace(/\/$/, '') + path, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body || {}),
-    credentials: 'omit'
-  });
-  let data = {};
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 20000);
   try {
-    data = await r.json();
-  } catch {
-    /* 空応答 */
+    const r = await fetch(API_BASE.replace(/\/$/, '') + path, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body || {}),
+      credentials: 'omit',
+      signal: controller.signal
+    });
+    let data = {};
+    try {
+      data = await r.json();
+    } catch (err) {
+      if (controller.signal.aborted || r.ok) throw err;
+      /* 空応答 */
+    }
+    if (r.ok && (!data || typeof data !== 'object' || Array.isArray(data))) throw new Error('Invalid server response');
+    return { ok: r.ok, status: r.status, ...data };
+  } finally {
+    clearTimeout(timeout);
   }
-  return { ok: r.ok, status: r.status, ...data };
 }
 
 let pubKey = null;

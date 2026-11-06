@@ -8,6 +8,15 @@ import { FIGHTERS, UPGRADES, UPG_CAP, WEAPONS, ARMORS, SUMMONS, LB_MAX, lbMaxLv,
 const enc = new TextEncoder();
 const HEX64 = /^[0-9a-f]{64}$/;
 const DAY = 86400000;
+const ownValue = (obj, key) => obj && Object.hasOwn(obj, key) ? obj[key] : undefined;
+
+// 残高や集計と操作記録は同じトランザクションで確定する。
+// 片方だけ保存して中断すると、再送時に二重反映するため分割しない。
+async function writeTogether(storage, entries) {
+  await storage.transaction(async (tx) => {
+    for (const [key, value] of entries) await tx.put(key, value);
+  });
+}
 
 // ---------- 共通 ----------
 const b64u = (buf) => {
@@ -108,7 +117,7 @@ function statsFor(save, key) {
   return out;
 }
 function validateSaveShape(save) {
-  if (!save || typeof save !== 'object') return false;
+  if (!save || typeof save !== 'object' || Array.isArray(save)) return false;
   const s = JSON.stringify(save);
   return s.length <= 200000;
 }
@@ -116,7 +125,7 @@ function validateSaveShape(save) {
 function wealthOf(save) {
   let w = Math.max(0, Math.floor(+save?.shards || 0));
   for (const key of Object.keys(save?.upg || {})) {
-    if (!FIGHTERS[key]) continue;
+    if (!ownValue(FIGHTERS, key)) continue;
     const lb = Math.max(0, Math.min(LB_MAX, Math.floor(+save?.lb?.[key] || 0)));
     for (const u of UPGRADES) {
       const lv = Math.max(0, Math.min(lbMaxLv(lb), Math.floor(+save.upg[key]?.[u.id] || 0)));
@@ -147,7 +156,9 @@ export default {
       if (req.method !== 'POST') return json(H, { error: 'method' }, 405);
       const raw = await req.text();
       if (raw.length > 220000) return json(H, { error: 'too large' }, 413);
-      const body = raw ? JSON.parse(raw) : {};
+      let body;
+      try { body = raw ? JSON.parse(raw) : {}; } catch { return json(H, { error: 'bad' }, 400); }
+      if (!body || typeof body !== 'object' || Array.isArray(body)) return json(H, { error: 'bad' }, 400);
       switch (url.pathname) {
         case '/auth/key': return await authKey(req, env, H, body);
         case '/invite/issue': return await inviteIssue(req, env, H, body);
@@ -282,7 +293,7 @@ async function stripeWebhook(req, env) {
     const links = JSON.parse(env.STRIPE_LINKS || '{}'); // { "plink_xxx": "crimson" }
     const key = links[s.payment_link];
     const buyer = String(s.client_reference_id || '');
-    if (s.payment_status === 'paid' && key && FIGHTERS[key] && /^[A-Za-z0-9_-]{16,64}$/.test(buyer)) {
+    if (s.payment_status === 'paid' && key && ownValue(FIGHTERS, key) && /^[A-Za-z0-9_-]{16,64}$/.test(buyer)) {
       // 先に購入権限を保存（追加は重複しても1件のまま＝再実行しても安全）。
       // 保存に失敗したら 500 を返し、Stripe の再送で同じ通知を最初からやり直す。
       const b = await hmacHex(env.PEPPER, 'buyer:' + buyer);
@@ -298,7 +309,7 @@ async function ownedKeys(env, buyer) {
   if (!/^[A-Za-z0-9_-]{16,64}$/.test(String(buyer || ''))) return [];
   const b = await hmacHex(env.PEPPER, 'buyer:' + buyer);
   const r = await storeCall(env, 'ent:' + b, { op: 'get' });
-  return [...new Set((Array.isArray(r.data?.v) ? r.data.v : []).filter((k) => FIGHTERS[k]))];
+  return [...new Set((Array.isArray(r.data?.v) ? r.data.v : []).filter((k) => ownValue(FIGHTERS, k)))];
 }
 async function entitlements(req, env, H, { buyer }) {
   if (await limited(env, req, 'ent', 30, 600000)) return json(H, { error: 'limit' }, 429);
@@ -311,7 +322,7 @@ async function entitlements(req, env, H, { buyer }) {
 async function profile(req, env, H, { code, key, role, buyer }) {
   if (await limited(env, req, 'prof', 60, 600000)) return json(H, { error: 'limit' }, 429);
   const h = await syncKey(env, code);
-  if (!FIGHTERS[key] || !h) return json(H, { error: 'bad' }, 400);
+  if (!ownValue(FIGHTERS, key) || !h) return json(H, { error: 'bad' }, 400);
   const row = await syncRow(env, h);
   let save = null;
   try {
@@ -389,20 +400,34 @@ async function guildDonate(req, env, H, body) {
   if (!GID_RE.test(gid) || !(amt > 0 && amt <= 1e7) || !/^[A-Za-z0-9_-]{12,40}$/.test(did)) return json(H, { error: 'bad' }, 400);
   const opKey = `don:${me.pid}:${did}`;
   const g = guildStub(env, gid);
-  const chk = await doCall(g, { op: 'get', gid, me: { pid: me.pid, name: me.name } });
-  if (chk.status !== 200 || !chk.data?.state?.member) return json(H, { error: 'denied' }, 403);
   const sync = env.SYNC_LOCK.get(env.SYNC_LOCK.idFromName(me.h));
-  const sp = await sync.fetch('https://sync/', { method: 'POST', body: JSON.stringify({ op: 'spend', h: me.h, amt, opId: opKey }) });
+  const chk = await doCall(g, { op: 'get', gid, me: { pid: me.pid, name: me.name } });
+  if (chk.status >= 500) return json(H, { error: 'server' }, 500);
+  if (chk.status !== 200 || !chk.data?.state?.member) {
+    // 減算後に脱退・除名されても、既存操作の結果確認・返金までは続ける。
+    const prior = await doCall(sync, { op: 'spend-status', opId: opKey });
+    if (prior.status !== 200) return json(H, { error: 'server' }, 500);
+    if (!prior.data?.exists) return json(H, { error: 'denied' }, 403);
+  }
+  const sp = await sync.fetch('https://sync/', { method: 'POST', body: JSON.stringify({ op: 'spend', h: me.h, amt, gid, opId: opKey }) });
   const spent = await sp.json().catch(() => ({}));
-  if (sp.status !== 200) return json(H, { error: spent.error || 'shards' }, sp.status === 402 ? 402 : 409);
-  const d = await doCall(g, { op: 'donate', gid, me: { pid: me.pid, name: me.name }, amt, opId: opKey });
+  if (sp.status !== 200) return json(H, { error: spent.error || (sp.status >= 500 ? 'server' : 'shards') }, sp.status);
+  const d = await doCall(g, { op: 'donate', gid, me: { pid: me.pid, name: me.name }, amt, opId: opKey, replayOnly: !!spent.legacy });
+  // 旧版の減算記録にはギルド・金額がない。既に加算済みの結果確認だけ許し、新たな加算には使わない。
+  if (spent.legacy) {
+    if (d.status !== 200) return json(H, { error: d.status >= 500 ? 'server' : 'donation_legacy' }, d.status >= 500 ? 500 : 409);
+    return json(H, { ok: true, dup: true, ver: spent.ver, shards: spent.shards, total: d.data.mine, state: d.data.state });
+  }
   if (d.status !== 200) {
-    // ギルド側で確定的に拒否された時だけ返金（返金も一度だけ）
-    await sync.fetch('https://sync/', { method: 'POST', body: JSON.stringify({ op: 'spend', h: me.h, amt: -amt, opId: 'r:' + opKey }) });
+    // 5xx は加算の成否が不明なので同じIDで再送する。確定的な拒否だけ元の操作を返金済みにする。
+    if (d.status >= 500) return json(H, { error: 'server' }, 500);
+    const refund = await doCall(sync, { op: 'refund', gid, amt, opId: opKey });
+    if (refund.status !== 200) return json(H, { error: 'server' }, 500);
     return json(H, { error: d.data?.error || 'denied' }, d.status);
   }
-  await doCall(boardStub(env), { op: 'add', gid, gname: d.data.state.name, amt, members: d.data.state.donors.length, opId: opKey });
-  return json(H, { ok: true, ver: spent.ver, shards: spent.shards, total: d.data.mine, state: d.data.state });
+  const ranked = await doCall(boardStub(env), { op: 'add', gid, gname: d.data.state.name, amt, members: d.data.state.donors.length, opId: opKey });
+  if (ranked.status !== 200) return json(H, { error: 'server' }, 500);
+  return json(H, { ok: true, dup: !!spent.dup, ver: spent.ver, shards: spent.shards, total: d.data.mine, state: d.data.state });
 }
 async function guildBoardRoute(req, env, H) {
   if (await limited(env, req, 'board', 60, 600000)) return json(H, { error: 'limit' }, 429);
@@ -486,9 +511,10 @@ export class GuildLock {
     return this.state.blockConcurrencyWhile(() => this.run(b));
   }
   view(g, pid) {
-    const member = !!g.members[pid];
-    const myRank = member ? G_RANK[g.members[pid].role] : -1;
-    const ban = g.bans[pid];
+    const mine = ownValue(g.members, pid);
+    const member = !!mine;
+    const myRank = member ? G_RANK[mine.role] : -1;
+    const ban = ownValue(g.bans, pid);
     return {
       gid: g.gid, name: g.name, master: g.master, ver: g.ver, member,
       // チャット鍵の世代：脱退・除名のたびに進み、抜けた人が持つ古いルーム名を無効にする
@@ -513,13 +539,13 @@ export class GuildLock {
       return out({ state: this.view(g, me.pid) });
     }
     if (!g) return out({ error: 'notfound' }, 404);
-    const mine = g.members[me.pid];
+    const mine = ownValue(g.members, me.pid);
     if (mine && mine.name !== me.name) mine.name = me.name;
     switch (b.op) {
       case 'get':
         return out({ state: this.view(g, me.pid) });
       case 'join': {
-        if (g.bans[me.pid]) return out({ error: 'banned', state: this.view(g, me.pid) }, 403);
+        if (ownValue(g.bans, me.pid)) return out({ error: 'banned', state: this.view(g, me.pid) }, 403);
         if (!mine) {
           if (Object.keys(g.members).length >= 100) return out({ error: 'full' }, 409);
           g.members[me.pid] = { name: me.name, role: 'member', at: Date.now() };
@@ -545,7 +571,7 @@ export class GuildLock {
         return out({ state: this.view(g, me.pid), heir: g.master });
       }
       case 'role': {
-        const tgt = g.members[b.target];
+        const tgt = ownValue(g.members, b.target);
         const role = b.role;
         if (!mine || !tgt || b.target === me.pid || !['master', 'sub', 'officer', 'member', 'kick'].includes(role)) return out({ error: 'denied' }, 403);
         const r = G_RANK[mine.role];
@@ -565,24 +591,31 @@ export class GuildLock {
         return out({ state: this.view(g, me.pid) });
       }
       case 'unban': {
-        if (!mine || G_RANK[mine.role] < 2 || !g.bans[b.target]) return out({ error: 'denied' }, 403);
+        if (!mine || G_RANK[mine.role] < 2 || !ownValue(g.bans, b.target)) return out({ error: 'denied' }, 403);
         delete g.bans[b.target];
         await save();
         return out({ state: this.view(g, me.pid) });
       }
       case 'donate': {
-        const ops = (g.ops ||= []);
-        // 同じ寄付の再送：加算済みなら結果だけ返す
-        if (b.opId && ops.includes(b.opId)) return out({ state: this.view(g, me.pid), mine: g.donors[me.pid]?.total || 0 });
-        if (!mine) return out({ error: 'denied' }, 403);
-        const d = (g.donors[me.pid] ||= { name: me.name, total: 0 });
+        const receiptKey = 'don:' + b.opId;
+        const done = b.opId ? await S.get(receiptKey) : null;
+        // 個別の操作記録は切り捨てない。古いIDでも再加算せず、旧版の記録も引き継ぐ。
+        if (done && (done.pid !== me.pid || done.amt !== b.amt)) return out({ error: 'donation_mismatch' }, 409);
+        if (done?.denied) return out({ error: 'denied' }, 403);
+        if (done || (b.opId && Array.isArray(g.ops) && g.ops.includes(b.opId))) {
+          return out({ state: this.view(g, me.pid), mine: ownValue(g.donors, me.pid)?.total || 0, dup: true });
+        }
+        if (b.replayOnly) return out({ error: 'donation_legacy' }, 409);
+        if (!mine) {
+          // 拒否も固定し、別の再送が返金と交差して後から加算されるのを防ぐ。
+          await S.put(receiptKey, { pid: me.pid, amt: b.amt, denied: true });
+          return out({ error: 'denied' }, 403);
+        }
+        const d = ownValue(g.donors, me.pid) || (g.donors[me.pid] = { name: me.name, total: 0 });
         d.name = me.name;
         d.total += Math.floor(+b.amt) || 0;
-        if (b.opId) {
-          ops.push(b.opId);
-          if (ops.length > 500) ops.splice(0, ops.length - 500);
-        }
-        await save();
+        g.ver = (g.ver || 0) + 1;
+        await writeTogether(S, [['g', g], [receiptKey, { pid: me.pid, amt: b.amt }]]);
         return out({ state: this.view(g, me.pid), mine: d.total });
       }
       default:
@@ -598,25 +631,25 @@ export class GuildBoard {
   async fetch(req) {
     const b = await req.json();
     return this.state.blockConcurrencyWhile(async () => {
-      const m = (await this.state.storage.get('b')) || {};
+      const storage = this.state.storage;
+      const m = (await storage.get('b')) || {};
       if (b.op === 'top') {
         const list = Object.entries(m).map(([gid, x]) => ({ gid, gname: x.gname, total: x.total, members: x.members })).filter((x) => x.total > 0).sort((a, c) => c.total - a.total).slice(0, 50);
         return new Response(JSON.stringify({ list }));
       }
       if (b.op === 'add') {
-        // 同じ寄付の再送は一度だけ集計
-        const ops = (await this.state.storage.get('ops')) || [];
-        if (b.opId && ops.includes(b.opId)) return new Response(JSON.stringify({ ok: true, dup: true }));
-        m[b.gid] = { gname: b.gname, total: (m[b.gid]?.total || 0) + b.amt, members: b.members };
-        if (b.opId) {
-          ops.push(b.opId);
-          if (ops.length > 2000) ops.splice(0, ops.length - 2000);
-          await this.state.storage.put('ops', ops);
-        }
+        const receiptKey = 'don:' + b.opId;
+        const done = b.opId ? await storage.get(receiptKey) : null;
+        const oldOps = (await storage.get('ops')) || [];
+        if (done && (done.gid !== b.gid || done.amt !== b.amt)) return new Response(JSON.stringify({ error: 'donation_mismatch' }), { status: 409 });
+        if (done || (b.opId && oldOps.includes(b.opId))) return new Response(JSON.stringify({ ok: true, dup: true }));
+        m[b.gid] = { gname: b.gname, total: (ownValue(m, b.gid)?.total || 0) + b.amt, members: b.members };
+        await writeTogether(storage, [['b', m], [receiptKey, { gid: b.gid, amt: b.amt }]]);
+        return new Response(JSON.stringify({ ok: true }));
       }
-      else if (b.op === 'name' && m[b.gid]) m[b.gid].gname = b.gname;
+      else if (b.op === 'name' && ownValue(m, b.gid)) m[b.gid].gname = b.gname;
       else if (b.op === 'remove') delete m[b.gid];
-      await this.state.storage.put('b', m);
+      await storage.put('b', m);
       return new Response(JSON.stringify({ ok: true }));
     });
   }
@@ -684,44 +717,79 @@ export class SyncLock {
     this.state = state;
   }
   async fetch(req) {
-    const { data, base, op, amt, opId, wid } = await req.json();
+    const { data, base, op, amt, gid, opId, wid } = await req.json();
     return this.state.blockConcurrencyWhile(async () => {
       const store = this.state.storage;
       const row = (await store.get('row')) || null;
       const res = (x, status = 200) => new Response(JSON.stringify(x), { status });
       if (op === 'get') return res({ row });
-      if (op === 'spend') {
-        // サーバー側の通貨消費（寄付など）：残高確認と減算を同じ直列処理内で行う
-        // 操作ID(opId)ごとに一度だけ実行（再送されても二重に減らさない）
+      if (op === 'spend-status') return res({ exists: typeof opId === 'string' && !!(await store.get('op:' + opId)) });
+      if (op === 'spend' || op === 'refund') {
+        // 操作IDは金額とギルドに固定し、返金も元の記録と一緒に確定する。
         const okId = typeof opId === 'string' && /^[A-Za-z0-9:_-]{8,80}$/.test(opId);
-        if (okId) {
-          const done = await store.get('op:' + opId);
-          if (done) return res(done);
+        const a = Math.floor(+amt);
+        if (!okId || !GID_RE.test(String(gid || '')) || !Number.isSafeInteger(a) || a <= 0 || a > 1e7) return res({ error: 'bad' }, 400);
+        const receiptKey = 'op:' + opId;
+        const done = await store.get(receiptKey);
+        if (done) {
+          if (done.gid === undefined || done.amt === undefined) {
+            // 旧版の返金記録も確認し、返金後の減算済み記録を再利用させない。
+            if (await store.get('op:r:' + opId)) return res({ error: 'donation_refunded' }, 409);
+            if (op === 'refund') return res({ error: 'donation_legacy' }, 409);
+            return res({ ...done, dup: true, legacy: true });
+          }
+          if (done.gid !== gid || done.amt !== a) return res({ error: 'donation_mismatch' }, 409);
+          if (op === 'spend') {
+            if (done.refunded) return res({ error: 'donation_refunded' }, 409);
+            return res({ ...done, dup: true });
+          }
+          if (done.refunded) return res({ ok: true, refunded: true, dup: true, ver: done.refundVer, shards: done.refundShards });
         }
+        if (op === 'refund' && !done) return res({ error: 'bad' }, 409);
         let s;
         try { s = JSON.parse(row?.data || 'null'); } catch { s = null; }
         if (!s) return res({ error: 'nosync' }, 404);
         const cur = Math.max(0, Math.floor(+s.shards || 0));
-        const a = Math.floor(+amt) || 0;
-        if (a > 0 && cur < a) return res({ error: 'shards' }, 402);
-        s.shards = cur - a;
+        if (!Number.isSafeInteger(cur)) return res({ error: 'wealth' }, 422);
+        if (op === 'spend' && cur < a) return res({ error: 'shards' }, 402);
+        s.shards = op === 'refund' ? cur + a : cur - a;
         const nv = (row.ver || 0) + 1;
-        const result = { ok: true, ver: nv, shards: s.shards };
-        await store.put('row', { ...row, data: JSON.stringify(s), ver: nv, wealth: wealthOf(s), wid: '' });
-        if (okId) await store.put('op:' + opId, result);
+        const result = { ok: true, ver: nv, shards: s.shards, gid, amt: a, ...(op === 'refund' ? { refunded: true } : {}) };
+        const receipt = op === 'refund' ? { ...done, refunded: true, refundVer: nv, refundShards: s.shards } : result;
+        await writeTogether(store, [
+          ['row', { ...row, data: JSON.stringify(s), ver: nv, wealth: wealthOf(s), wid: '' }],
+          [receiptKey, receipt]
+        ]);
         return res(result);
       }
+      if (!validateSaveShape(data) || !Number.isSafeInteger(base) || base < 0) return res({ error: 'bad' }, 400);
       const ver = row?.ver || 0;
       const myWid = typeof wid === 'string' && /^[A-Za-z0-9_-]{8,64}$/.test(wid) ? wid : '';
-      // 同じ書き込みの再送（成功応答だけが届かなかった）→ 反映済みとして同じ結果を返す
-      if (row && myWid && row.wid === myWid) return res({ ok: true, ver, dup: true });
+      const payload = JSON.stringify(data);
+      const digest = myWid ? await sha256(JSON.stringify([base, data])) : '';
+      const writeKey = 'write:' + myWid;
+      const applied = myWid ? await store.get(writeKey) : null;
+      if (applied) {
+        // 同じIDで内容を変えると、元の成功を別のデータへの成功と誤認するため拒否する。
+        if (applied.digest !== digest) return res({ error: 'wid' }, 400);
+        if (row && applied.ver === ver && row.wid === myWid) return res({ ok: true, ver, dup: true });
+        // 寄付・他端末の保存などが後続した場合も、元の保存が反映済みだと伝える。
+        return res({ conflict: true, data: row?.data || null, ver, wid: row?.wid || '', appliedWid: myWid }, 409);
+      }
+      if (row && myWid && row.wid === myWid) {
+        // 旧版の最新書き込みにも内容チェックを行い、操作記録を補う。
+        if (payload !== row.data || base !== ver - 1) return res({ error: 'wid' }, 400);
+        await store.put(writeKey, { digest, ver });
+        return res({ ok: true, ver, dup: true });
+      }
       if (row && base !== ver) {
         // 競合：別の端末が先に更新した → 最新を返し、端末側で合流させる
         return res({ conflict: true, data: row.data, ver, wid: row.wid || '' }, 409);
       }
       const now = Date.now();
       const wealth = wealthOf(data);
-      let allow = FIRST_WEALTH_CAP;
+      if (!Number.isFinite(wealth) || (!row && wealth > FIRST_WEALTH_CAP)) return res({ error: 'wealth' }, 422);
+      let allow = EARN_SLACK;
       if (row) {
         // 許容量は「実際に経過した時間」だけ回復し、使った分は保存して持ち越す
         const prevW = row.wealth ?? wealth;
@@ -733,7 +801,9 @@ export class SyncLock {
         allow = credit - Math.max(0, growth);
       }
       const nv = ver + 1;
-      await store.put('row', { data: JSON.stringify(data), at: now, ver: nv, wealth, allow: row ? allow : EARN_SLACK, wid: myWid });
+      const writes = [['row', { data: payload, at: now, ver: nv, wealth, allow, wid: myWid }]];
+      if (myWid) writes.push([writeKey, { digest, ver: nv }]);
+      await writeTogether(store, writes);
       return res({ ok: true, ver: nv });
     });
   }

@@ -921,6 +921,7 @@ export class Battle {
     this.ui = opts.ui;
     this.net = opts.net || null;
     this.fighters = [];
+    this.summons = new Set(); // 消滅演出中で使い手から離れた召喚獣も管理する
     this.effects = [];
     this.fx = new THREE.Group();
     scene.add(this.fx);
@@ -1782,12 +1783,13 @@ export class Battle {
     bar.add(bg, fill);
     bar.position.y = d.height * k + 0.5;
     g.add(bar);
-    const s = { def: d, f, g, body, bar, fill, k, maxHp: Math.round(f.maxHp * d.hpMul), hp: 0, t: 0, atk: 0, dying: 0, mixer: null, acts: {} };
+    const s = { def: d, f, g, body, bar, fill, k, maxHp: Math.round(f.maxHp * d.hpMul), hp: 0, t: 0, atk: 0, dying: 0, mixer: null, acts: {}, own: new Set([ghost.geometry, ghost.material, bg.geometry, bg.material, fill.geometry, fill.material]) };
     s.hp = s.maxHp;
     const fw = f.forward();
     g.position.set(f.pos.x + fw.x * d.dist * k, 0, f.pos.z + fw.z * d.dist * k);
     g.rotation.y = f.facing;
     this.scene.add(g);
+    this.summons.add(s);
     f.summon = s;
     loadSummonModel(d.model).then((gltf) => {
       if (!gltf || s.dying) return;
@@ -1803,6 +1805,7 @@ export class Battle {
           c.castShadow = true;
           if (c.material?.emissive) {
             c.material = c.material.clone();
+            s.own.add(c.material);
             c.material.emissive.setHex(d.color);
             c.material.emissiveIntensity = 0.12;
           }
@@ -1810,6 +1813,9 @@ export class Battle {
       });
       body.remove(ghost);
       ghost.geometry.dispose();
+      ghost.material.dispose();
+      s.own.delete(ghost.geometry);
+      s.own.delete(ghost.material);
       body.add(m);
       if (gltf.animations?.length) {
         s.mixer = new THREE.AnimationMixer(m);
@@ -1842,8 +1848,7 @@ export class Battle {
       s.body.position.y = -Math.max(0, s.dying - 0.6) * 3;
       s.bar.visible = false;
       if (s.dying > 1.8) {
-        this.scene.remove(s.g);
-        for (const c of s.bar.children) { c.geometry.dispose(); c.material.dispose(); }
+        this.removeSummon(s);
         return false;
       }
       return true;
@@ -1946,6 +1951,17 @@ export class Battle {
     if (s.acts.die) { s.cur?.fadeOut(0.1); s.acts.die.reset().play(); }
     this.spark(s.g.position.clone().setY(1.5), s.def.color, 2.4);
     this.ui.popup?.(s.g.position, `${s.def.name} 消滅`, '#bbbbbb');
+    if (s.f.summon === s) s.f.summon = null;
+  }
+
+  removeSummon(s) {
+    if (!this.summons.delete(s)) return;
+    s.dying = Math.max(s.dying, 1); // 読み込み完了が遅れてもモデルを追加させない
+    s.mixer?.stopAllAction();
+    this.scene.remove(s.g);
+    // GLBキャッシュの共有素材は残し、この召喚獣専用の素材だけを解放する
+    for (const resource of s.own) resource.dispose();
+    s.own.clear();
     if (s.f.summon === s) s.f.summon = null;
   }
 
@@ -2457,6 +2473,7 @@ export class Battle {
     this.fxClock = (this.fxClock || 0) + rawDt;
     for (let i = this.fx.children.length - 1; i >= 0; i--) {
       const o = this.fx.children[i];
+      if (o.isLight) continue; // 再利用する閃光ライトは一時エフェクトではない
       if (o.userData.born == null) {
         o.userData.born = this.fxClock;
       } else if (this.fxClock - o.userData.born > 6) {
@@ -2464,7 +2481,9 @@ export class Battle {
       }
     }
     if (this.effects.length === 0 && this.fx.children.length) {
-      for (let i = this.fx.children.length - 1; i >= 0; i--) kill(this.fx, this.fx.children[i]);
+      for (let i = this.fx.children.length - 1; i >= 0; i--) {
+        if (!this.fx.children[i].isLight) kill(this.fx, this.fx.children[i]);
+      }
     }
     this.updateCamera(rawDt);
     if (!this.ended) {
@@ -2512,15 +2531,9 @@ export class Battle {
     for (const f of this.fighters) {
       this.scene.remove(f.root);
       f.mixer?.stopAllAction();
-      // 召喚獣も戦闘終了時に必ず片付ける
-      const s = f.summon;
-      if (s) {
-        s.dying = 1;
-        s.mixer?.stopAllAction();
-        if (s.g) this.scene.remove(s.g);
-        f.summon = null;
-      }
     }
+    // 生存中・消滅演出中のどちらも戦闘終了時に片付ける
+    for (const s of this.summons) this.removeSummon(s);
     this.scene.remove(this.fx);
     this.fighters = [];
     this.effects = [];

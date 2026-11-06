@@ -119,6 +119,12 @@ const ERR = {
   transfer: '後継者側での譲渡完了を確認できませんでした。相手がオンラインか確認して再試行してください。',
   exists: '作成に失敗しました。もう一度お試しください。',
   pid: '本人確認に失敗しました。',
+  sync: '寄付の前に記録を同期できませんでした。通信を確認し、しばらくしてから再試行してください。',
+  storage: '寄付の確認情報を端末に保存できませんでした。ブラウザの保存設定や空き容量を確認してください。',
+  donation_pending: '前回の寄付の処理結果を先に確認してください。',
+  donation_mismatch: '前回の寄付と内容が一致しません。記録を同期し、残高を確認してから再試行してください。',
+  donation_refunded: '前回の寄付は取り消され、返金されています。記録を同期して残高を確認してください。',
+  donation_legacy: '以前の寄付結果を確認できません。記録を同期して残高を確認してください。',
   bad: '入力内容が正しくありません。',
   server: 'サーバーでエラーが発生しました。時間をおいて再試行してください。'
 };
@@ -175,6 +181,34 @@ async function gapi(path, body = {}) {
 }
 
 // ---------- ギルド寄付とランキング ----------
+// 結果不明の寄付は再読み込み後も同じ操作として確認する。
+// プレイヤーと同期コードで分け、別の記録の操作IDを再利用しない。
+const donationIdentity = () => ({ pid: String(S.opts.save.pid || ''), code: String(S.opts.syncCode?.() || '').toUpperCase().replace(/[^A-Z0-9]/g, '') });
+const donationStorageKey = (p) => `arkeia-guild-donation:${p.pid}:${p.code}`;
+function pendingDonation() {
+  const id = donationIdentity();
+  if (!/^[A-Za-z0-9]{8,24}$/.test(id.pid) || id.code.length !== 12) return null;
+  let p = S.pendingDon;
+  try {
+    p = JSON.parse(localStorage.getItem(donationStorageKey(id)) || 'null');
+  } catch {}
+  return p && p.pid === id.pid && p.code === id.code && /^[A-Za-z0-9]{8}$/.test(p.gid)
+    && /^[A-Za-z0-9_-]{12,40}$/.test(p.did) && Number.isSafeInteger(p.amt) && p.amt > 0 && p.amt <= 1e7
+    ? p : null;
+}
+function rememberDonation(p) {
+  try { localStorage.setItem(donationStorageKey(p), JSON.stringify(p)); }
+  catch { throw err('storage'); } // 保存できない時は送信しない
+  S.pendingDon = p;
+}
+function forgetDonation(p) {
+  if (S.pendingDon?.did === p.did) S.pendingDon = null;
+  try {
+    const key = donationStorageKey(p);
+    const stored = JSON.parse(localStorage.getItem(key) || 'null');
+    if (stored?.did === p.did) localStorage.removeItem(key);
+  } catch (e) { console.warn(e); }
+}
 function renderDonate(g) {
   const { save } = S.opts;
   const G = save.guild;
@@ -184,6 +218,8 @@ function renderDonate(g) {
   if (!serverMode()) {
     box.append(el('div', 'cp-mem', '寄付は不正防止のため、サーバー接続時のみ利用できます（現在はサーバー未設定）。'));
   } else {
+    const pending = pendingDonation();
+    if (pending) box.append(el('div', 'cp-note', `ギルド「${clean(pending.gname || pending.gid, 16)}」への灯晶 ${pending.amt.toLocaleString()} の寄付結果を確認してください。確認が済むまで、新しい寄付は行いません。`));
     const r = el('div', 'row');
     const inp = el('input');
     inp.type = 'number';
@@ -192,33 +228,48 @@ function renderDonate(g) {
     inp.placeholder = `寄付額（手持ち ${save.shards}）`;
     inp.setAttribute('aria-label', '寄付額');
     inp.style.flex = '1';
-    const b = btn('寄付', async () => {
-      const amt = Math.floor(+inp.value);
+    if (pending) { inp.value = String(pending.amt); inp.disabled = true; }
+    const b = btn(pending ? '前回の結果を確認' : '寄付', async () => {
+      const previous = pendingDonation();
+      const amt = previous ? previous.amt : Math.floor(+inp.value);
       if (!(amt > 0)) throw err('bad');
-      if (amt > save.shards) throw err('shards');
+      // 再送確認では、既に減算されている場合があるため現在の残高だけでは拒否しない。
+      if (!previous && amt > save.shards) throw err('shards');
       needOnline();
-      if (!(await uiConfirm(`ギルド「${G.name}」に灯晶 ${amt.toLocaleString()} を寄付しますか？\n（取り消しできません）`, '寄付する', true))) return;
-      // 寄付ごとの操作ID：通信失敗後に同じ額を再送した時は同じIDを使い、二重に減らさない
-      let pd = S.pendingDon;
-      if (!pd || pd.gid !== G.id || pd.amt !== amt) {
+      const gname = previous ? clean(previous.gname || previous.gid, 16) : G.name;
+      const question = previous
+        ? `ギルド「${gname}」への灯晶 ${amt.toLocaleString()} の寄付について、前回の処理結果を確認しますか？`
+        : `ギルド「${gname}」に灯晶 ${amt.toLocaleString()} を寄付しますか？\n（取り消しできません）`;
+      if (!(await uiConfirm(question, previous ? '結果を確認する' : '寄付する', !previous))) return;
+      // 確認画面を開いている間に別タブで操作が始まった時も、そのIDを捨てない。
+      const latest = pendingDonation();
+      if (latest?.did !== previous?.did) throw err('donation_pending');
+      let pd = previous;
+      if (!pd) {
         const A = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789';
-        pd = S.pendingDon = { gid: G.id, amt, did: [...crypto.getRandomValues(new Uint8Array(20))].map((x) => A[x % A.length]).join('') };
+        pd = { ...donationIdentity(), gid: G.id, gname: G.name, amt, did: [...crypto.getRandomValues(new Uint8Array(20))].map((x) => A[x % A.length]).join('') };
+        rememberDonation(pd);
       }
       let res;
       try {
-        res = await gapi('/guild/donate', { gid: G.id, amount: amt, did: pd.did });
+        const operation = () => gapi('/guild/donate', { gid: pd.gid, amount: pd.amt, did: pd.did });
+        // 同期・寄付・残高の反映をmain側の同じ排他処理で行う。
+        if (S.opts.runServerSpend) res = await S.opts.runServerSpend(amt, operation);
+        else {
+          res = await operation();
+          S.opts.onServerSpend?.(amt, res.ver);
+        }
       } catch (e) {
-        // 結果が不明な失敗（通信・混雑・サーバー）だけIDを残す。確定的な拒否なら次は新しい寄付として扱う
-        if (!['net', 'server', 'limit'].includes(e?.code)) S.pendingDon = null;
+        // 確定的な拒否だけ解除。通信・混雑・同期失敗など結果不明の時は同じIDを残す。
+        if (['bad', 'banned', 'denied', 'notfound', 'shards', 'nosync', 'pid', 'donation_mismatch', 'donation_refunded', 'donation_legacy'].includes(e?.code)) forgetDonation(pd);
         throw e;
       }
-      S.pendingDon = null;
-      S.opts.onServerSpend?.(amt, res.ver);
+      forgetDonation(pd);
       if (res.state) applyState(res.state, true);
       S.opts.sfx?.('burst');
-      if (amt >= 1000) S.api.news(`${S.opts.myName()} がギルド「${G.name}」に灯晶 ${amt} を寄付した！`);
+      if (amt >= 1000 && !previous) S.api.news(`${S.opts.myName()} がギルド「${gname}」に灯晶 ${amt} を寄付した！`);
       S.rankCache = null;
-      gnote(`寄付しました！あなたの累計：灯晶 ${(+res.total || 0).toLocaleString()}`);
+      gnote(`${previous ? '前回の寄付を確認しました。' : '寄付しました！'}あなたの累計：灯晶 ${(+res.total || 0).toLocaleString()}`);
     });
     r.append(inp, b);
     box.append(r);
@@ -373,7 +424,7 @@ const rid = () => {
 const dmCh = (a, b) => 'dm:' + [a, b].sort().join(':');
 
 /**
- * opts: { save, persist, myName, sfx, baseNews, syncCode, onServerSpend, roleToken, isChief, isOperator, onChiefEvent, ownEvent }
+ * opts: { save, persist, myName, sfx, baseNews, syncCode, runServerSpend, onServerSpend, roleToken, isChief, isOperator, onChiefEvent, ownEvent }
  */
 export function initSocial(opts) {
   if (S) return S.api;

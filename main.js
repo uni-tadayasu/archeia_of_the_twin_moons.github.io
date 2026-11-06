@@ -248,22 +248,23 @@ function upgFor(k) {
 // 装備の見た目（戦闘・ワールド用）
 const summonFor = (k) => SUMMONS.find((s) => s.fighter === k && save.owned.includes(s.id) && save.summonOn[s.id] && (!s.chief || chiefUnlocked())) || null;
 const gearFor = (k) => ({ w: save.equip[k] || '', a: save.armor[k] || '', h: summonFor(k)?.id || '' });
-function persist() {
+function persist(sync = true) {
   try {
     localStorage.setItem(SAVE_KEY, JSON.stringify(save));
   } catch (err) {
     console.warn(err);
   }
-  scheduleAutoSync();
+  if (sync) scheduleAutoSync();
 }
 // ---- 常時同期：同期コードがある端末は、変更を自動で預け、他端末の新しい記録を自動で受け取る ----
-var autoPushTimer = 0, autoBusy = false;
+var autoPushTimer = 0, autoBusy = false, syncSpendBusy = false, syncImportBusy = false;
 var syncReady = false; // 起動直後の保存では「変更あり」にしない（他端末の新しい記録を先に確認する）
 const syncCodeNow = () => String(localStorage.getItem('arkeia-sync') || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
 function scheduleAutoSync() {
-  if (!syncReady || syncCodeNow().length !== 12) return;
+  if (syncCodeNow().length !== 12) return;
   try { localStorage.setItem('arkeia-sync-dirty', '1'); } catch {}
   syncGen++; // 送信中に変化があったかを判定するための世代番号
+  if (!syncReady) return;
   clearTimeout(autoPushTimer);
   // 再送待ち（通信失敗・増え方の制限）の間は、その時刻まで待ってから送る
   autoPushTimer = setTimeout(autoPush, Math.max(8000, syncHoldUntil - Date.now()));
@@ -277,7 +278,7 @@ const newWid = () => {
 };
 const widList = (...ls) => [...new Set(ls.flatMap((l) => (Array.isArray(l) ? l : [])).filter((w) => typeof w === 'string' && /^[A-Za-z0-9_-]{8,64}$/.test(w)))].slice(-20);
 // 送信したが結果が分からない書き込み（応答前に通信が切れた等）
-// 結果不明の書き込みは複数たまり得るので、直近5件を古い順に保持する
+// 旧版の未確定記録も読めるよう配列を維持する。新しい書き込みは本文と開始時点を保存し、同じIDで再送する。
 const getPends = () => {
   try {
     const l = JSON.parse(localStorage.getItem('arkeia-sync-pend') || '[]');
@@ -288,14 +289,14 @@ const getPends = () => {
 };
 const setPend = (p) => {
   if (!p) return localStorage.removeItem('arkeia-sync-pend');
-  localStorage.setItem('arkeia-sync-pend', JSON.stringify([...getPends(), p].slice(-5)));
+  localStorage.setItem('arkeia-sync-pend', JSON.stringify([p]));
 };
 // 版番号つきの送受信（サーバー時は Durable Object で直列化、未設定時は InstantDB に直接）
 const syncVer = () => Number(localStorage.getItem('arkeia-sync-ver')) || 0;
 async function sendVersioned(code, json, base, wid = '') {
   if (apiEnabled()) {
     const r = await api('/sync/push', { code, data: json, base, wid });
-    if (r.status === 409) return { conflict: true, data: r.data, ver: r.ver, wid: r.wid || '' };
+    if (r.status === 409 && typeof r.data === 'string') return { conflict: true, data: r.data, ver: r.ver, wid: r.wid || '', appliedWid: r.appliedWid || '' };
     if (r.status === 422) return { rejected: true };
     if (r.status === 403 && r.error === 'pid') throw new Error('pid');
     if (!r.ok) throw new Error('push');
@@ -306,13 +307,15 @@ async function sendVersioned(code, json, base, wid = '') {
 async function fetchVersioned(code) {
   if (apiEnabled()) {
     const r = await api('/sync/pull', { code });
+    if (!r.ok) throw new Error('pull');
     return { data: r.data || null, ver: r.ver || 0 };
   }
   return syncPullV(await sha256('arkeia-sync:' + code));
 }
 // 競合解決：進み具合は「より進んだ方」を採用し、灯晶は両端末の増減を足し合わせる
 function mergeSaves(local, remote, baseShards) {
-  const out = { ...remote };
+  // 設定・編成などの端末で選んだ値も引き継ぐ。進行と所持品は下で個別に合流する。
+  const out = { ...remote, ...local };
   out.chapter = Math.max(+local.chapter || 0, +remote.chapter || 0);
   out.upg = { ...(remote.upg || {}) };
   for (const [k, m] of Object.entries(local.upg || {})) {
@@ -351,56 +354,94 @@ function markSynced(ver, at, shards) {
   localStorage.setItem('arkeia-sync-base', String(shards));
   localStorage.removeItem('arkeia-sync-dirty');
 }
+function preserveLocalChanges(target, before, after) {
+  for (const key of ['diff', 'uname', 'party', 'main', 'noHero', 'summonOn', 'equip', 'armor', 'friends', 'awk']) {
+    if (JSON.stringify(after[key]) !== JSON.stringify(before[key])) {
+      target[key] = JSON.parse(JSON.stringify(after[key] ?? null));
+    }
+  }
+  return target;
+}
 let syncErr = ''; // 直近の同期失敗の理由（'wealth' / 'pid' / 'net'）
-async function autoPush() {
+async function autoPush({ forSpend = false, reload = true } = {}) {
   const code = syncCodeNow();
-  if (code.length !== 12 || autoBusy) return;
+  if (code.length !== 12 || autoBusy || syncImportBusy || (syncSpendBusy && !forSpend)) return;
+  if (!localStorage.getItem('arkeia-sync-dirty') && !getPends().length) return;
   autoBusy = true;
-  // 送信開始時点の状態（この後に増えた変更は「未送信」として別扱い）
-  const gen0 = syncGen;
-  const snap = JSON.parse(JSON.stringify(save));
-  const snapShards = +snap.shards || 0;
+  // 応答が途切れた場合も、同じ本文・版・IDで結果を確定してから次の変更を送る。
+  let snap, preferenceBase, payload, wid, baseVer;
   // 送信後にローカルで起きた変化を、送った内容(sent)の上に重ねて手元へ反映する
-  const settle = (sent, ver, reload) => {
-    const changed = syncGen !== gen0;
+  const settle = (sent, ver, merged) => {
+    if (syncCodeNow() !== code) return;
+    const changed = JSON.stringify(save) !== JSON.stringify(snap);
+    const snapShards = +snap.shards || 0;
     const final = changed ? mergeSaves(save, sent, snapShards) : { ...sent };
-    if (changed) final.shards = Math.max(0, (+sent.shards || 0) + ((+save.shards || 0) - snapShards));
+    if (changed) {
+      // 送信待ちの間に変えた設定・編成・フレンド削除は、その変更を優先する。
+      for (const key of ['diff', 'uname', 'party', 'main', 'noHero', 'summonOn', 'equip', 'armor', 'friends', 'awk']) {
+        final[key] = sent[key] ?? null;
+      }
+      preserveLocalChanges(final, snap, save);
+    }
     localStorage.setItem(SAVE_KEY, JSON.stringify(final));
     Object.assign(save, final); // 戦闘中でも合流後の値で続ける（終了時の保存で巻き戻さない）
     setPend(null);
     markSynced(ver, sent.syncAt, +sent.shards || 0); // 同期済みにするのは「実際に送った内容」だけ
     syncErr = '';
     syncHoldUntil = 0;
-    if (changed || syncGen !== gen0) {
+    if (changed) {
       // 送信中に増えた変更は、改めて送る
       localStorage.setItem('arkeia-sync-dirty', '1');
       clearTimeout(autoPushTimer);
       autoPushTimer = setTimeout(autoPush, 3000);
     }
-    if (reload && !state.battle) location.reload();
+    if (reload && merged && !state.battle) location.reload();
   };
   try {
-    const at = Date.now();
-    let wid = newWid();
-    let payload = { ...snap, syncAt: at, wids: widList(snap.wids, [wid]) };
-    setPend({ wid, shards: +payload.shards || 0 });
-    let r = await sendVersioned(code, JSON.stringify(payload), syncVer(), wid);
+    const pending = getPends().findLast((p) => p.code === code && typeof p.payload === 'string' && p.snapshot?.pid === save.pid);
+    if (pending) {
+      snap = pending.snapshot;
+      preferenceBase = pending.preferenceBase || snap;
+      payload = JSON.parse(pending.payload);
+      wid = pending.wid;
+      baseVer = pending.base;
+    } else {
+      snap = JSON.parse(JSON.stringify(save));
+      preferenceBase = snap;
+      wid = newWid();
+      payload = { ...snap, syncAt: Date.now(), wids: widList(snap.wids, [wid]) };
+      baseVer = syncVer();
+    }
+    const remember = () => setPend({ code, wid, base: baseVer, shards: +payload.shards || 0,
+      localShards: +snap.shards || 0, snapshot: snap, preferenceBase, payload: JSON.stringify(payload) });
+    // 旧版の未確定IDは最初の競合応答を調べ終えるまで保持する。
+    const oldPends = getPends();
+    remember();
+    let r = await sendVersioned(code, JSON.stringify(payload), baseVer, wid);
+    if (syncCodeNow() !== code) return;
     if (r.conflict) {
       // 別の端末が先に更新、または前回の書き込みが実は反映済み → 合流させてから、その版の上に書き込む
       const remote = JSON.parse(r.data || '{}');
       const rw = Array.isArray(remote.wids) ? remote.wids : [];
       // 前回の書き込み（結果不明）が反映済みなら、その時に送った灯晶を基準にする（二重加算を防ぐ）
-      let base = Number(localStorage.getItem('arkeia-sync-base'));
+      const storedBase = localStorage.getItem('arkeia-sync-base');
+      let base = storedBase == null ? NaN : Number(storedBase);
       // 結果不明の書き込み（今回分を含む）のうち、最後に反映されていたものの灯晶を基準にする
-      for (const p of getPends()) if (r.wid === p.wid || rw.includes(p.wid)) base = +p.shards;
+      for (const p of [...oldPends, ...getPends()]) {
+        if (r.appliedWid === p.wid || r.wid === p.wid || rw.includes(p.wid)) base = +(p.localShards ?? p.shards);
+      }
       if (!Number.isFinite(base)) base = +remote.shards || 0;
       // 判明した基準をすぐ保存（この後の送信が失敗しても、次回に同じ増減を二重に足さない）
       localStorage.setItem('arkeia-sync-base', String(base));
+      snap = JSON.parse(JSON.stringify(save));
       wid = newWid();
       payload = mergeSaves(snap, remote, base);
+      // 競合が連続しても、最初の送信以降の削除・設定変更を保持する。
+      preserveLocalChanges(payload, preferenceBase, snap);
       payload.wids = widList(payload.wids, [wid]);
-      setPend({ wid, shards: +payload.shards || 0 });
-      r = await sendVersioned(code, JSON.stringify(payload), r.ver, wid);
+      baseVer = r.ver;
+      remember();
+      r = await sendVersioned(code, JSON.stringify(payload), baseVer, wid);
       if (r.ok) {
         settle(payload, r.ver, true);
         return;
@@ -431,8 +472,8 @@ async function autoPush() {
 }
 async function autoPull() {
   const code = syncCodeNow();
-  if (code.length !== 12 || autoBusy || document.hidden) return;
-  if (localStorage.getItem('arkeia-sync-dirty')) {
+  if (code.length !== 12 || autoBusy || syncSpendBusy || syncImportBusy || document.hidden) return;
+  if (localStorage.getItem('arkeia-sync-dirty') || getPends().length) {
     // 未送信の変更を優先（再送待ちの間は送らない）
     if (Date.now() >= syncHoldUntil) return autoPush();
     return;
@@ -440,7 +481,7 @@ async function autoPull() {
   autoBusy = true;
   try {
     let { data: json, ver } = await fetchVersioned(code);
-    if (!json) return;
+    if (!json || syncCodeNow() !== code) return;
     // 戦闘中は反映せず、次回の確認（戦闘外）で取り込む
     if (ver > syncVer() && !state.battle && !localStorage.getItem('arkeia-sync-dirty')) {
       const remote = JSON.parse(json);
@@ -458,6 +499,43 @@ async function autoPull() {
     /* 次回再試行 */
   } finally {
     autoBusy = false;
+  }
+}
+// 寄付は同期と同じ排他範囲で実行する。応答待ちの間に減算済みセーブを取り込まない。
+function applyServerSpend(amt, ver) {
+  if (Number.isFinite(+ver) && +ver > 0 && syncVer() >= +ver) return;
+  save.shards = Math.max(0, (+save.shards || 0) - amt);
+  if (!localStorage.getItem('arkeia-sync-dirty') && ver && syncVer() === ver - 1) {
+    markSynced(ver, Date.now(), save.shards);
+    localStorage.setItem(SAVE_KEY, JSON.stringify(save));
+  } else {
+    const b = localStorage.getItem('arkeia-sync-base');
+    if (b != null && Number.isFinite(+b)) localStorage.setItem('arkeia-sync-base', String(+b - amt));
+    // 未確定送信があるときは古い本文を変更せず、次回の競合解決で消費済み基準を使う。
+    const ps = getPends().map((p) => ({ ...p, localShards: +(p.localShards ?? p.shards) - amt }));
+    if (ps.length) localStorage.setItem('arkeia-sync-pend', JSON.stringify(ps));
+    persist();
+  }
+}
+async function runServerSpend(amt, operation) {
+  const code = syncCodeNow();
+  if (code.length !== 12) throw Object.assign(new Error('nosync'), { code: 'nosync' });
+  while (autoBusy || syncSpendBusy || syncImportBusy) await new Promise((resolve) => setTimeout(resolve, 100));
+  if (syncCodeNow() !== code) throw Object.assign(new Error('nosync'), { code: 'nosync' });
+  syncSpendBusy = true;
+  try {
+    if (localStorage.getItem('arkeia-sync-dirty') || getPends().length) {
+      await autoPush({ forSpend: true, reload: false });
+      if (localStorage.getItem('arkeia-sync-dirty') || getPends().length) {
+        throw Object.assign(new Error('sync'), { code: 'sync' });
+      }
+    }
+    const result = await operation();
+    applyServerSpend(amt, result.ver);
+    return result;
+  } finally {
+    syncSpendBusy = false;
+    if (localStorage.getItem('arkeia-sync-dirty')) scheduleAutoSync();
   }
 }
 setTimeout(() => {
@@ -487,7 +565,7 @@ window.addEventListener('arkeia-net-fail', (e) => {
   d.append(b, x);
   document.body.append(d);
 });
-persist(); // 世界の印（pid）を確定させる
+persist(false); // 起動時の整形だけでは同期の「変更あり」にしない
 {
   const cy = document.getElementById('copy-year');
   if (cy) cy.textContent = String(new Date().getFullYear());
@@ -1094,21 +1172,64 @@ async function refreshProfile(key) {
     profState.busy = false;
   }
 }
-const profOk = {}; // peerId → 検証済みプロフィール
+const profOk = Object.create(null); // peerId → 検証済みプロフィール
+const profSeen = new Map(); // 最新のpresence（pid・token）と、進行中の検証
+const profScopes = new Map(); // 世界ルームと対戦ルームの在席者を別々に管理する
 // 署名を検証し、その証明が「このプレイヤー(pid)」のものかも確認する
-async function verifyPeer(p) {
-  if (!apiEnabled() || !p?.prof) return null;
-  if (profOk[p.id]?.tok === p.prof) return profOk[p.id].d;
-  const d = await verifyToken(p.prof, 'prof');
-  if (d && d.p && d.p === p.pid) {
-    profOk[p.id] = { tok: p.prof, d };
-    return d;
+async function verifyPeer(p, fromPresence = false) {
+  if (!apiEnabled() || typeof p?.id !== 'string' || !p.id) return null;
+  const id = p.id, pid = typeof p.pid === 'string' ? p.pid : '', tok = typeof p.prof === 'string' ? p.prof : '';
+  let seen = profSeen.get(id);
+  // 在席通知を受け始めた後の開始要求は、現在も在席する最新情報にだけ結びつける
+  if (!fromPresence && profScopes.size && (![...profScopes.values()].some((ids) => ids.has(id)) || !seen || seen.pid !== pid || seen.tok !== tok)) return null;
+  if (!seen || seen.pid !== pid || seen.tok !== tok) {
+    seen = { pid, tok, checked: false, pending: null };
+    profSeen.set(id, seen);
+    delete profOk[id];
   }
-  return null;
+  if (!pid || !tok) { delete profOk[id]; return null; }
+  const hit = profOk[id];
+  if (hit && hit.pid === pid && hit.tok === tok && hit.d.p === pid && hit.d.exp > Date.now()) return hit.d;
+  delete profOk[id];
+  if (seen.checked) return null;
+  if (seen.pending) return seen.pending;
+  seen.pending = (async () => {
+    try {
+      const d = await verifyToken(tok, 'prof');
+      // 途中でpid・tokenが変わった、または退出した相手の古い結果は捨てる
+      if (profSeen.get(id) !== seen) return null;
+      seen.checked = true;
+      if (d && d.p === pid && d.exp > Date.now()) {
+        profOk[id] = { pid, tok, d };
+        return d;
+      }
+      delete profOk[id];
+      return null;
+    } catch {
+      if (profSeen.get(id) === seen) { seen.checked = true; delete profOk[id]; }
+      return null;
+    } finally {
+      seen.pending = null;
+    }
+  })();
+  return seen.pending;
 }
-function verifyPeerProfs(peers) {
+function verifyPeerProfs(peers, scope = 'world') {
   if (!apiEnabled()) return;
-  for (const p of Object.values(peers)) if (p.prof && profOk[p.id]?.tok !== p.prof) verifyPeer(p);
+  const previous = profScopes.get(scope) || new Set();
+  const current = new Set();
+  profScopes.set(scope, current);
+  for (const p of Object.values(peers || {})) {
+    if (typeof p?.id !== 'string' || !p.id) continue;
+    current.add(p.id);
+    verifyPeer(p, true); // 空・不正・期限切れの証明でも、以前の権限を失効させる
+  }
+  for (const id of previous) {
+    if (![...profScopes.values()].some((ids) => ids.has(id))) {
+      profSeen.delete(id);
+      delete profOk[id];
+    }
+  }
 }
 // 使用権が必要なキャラ（運営・運営長専用、購入・灯晶交換キャラ）
 const restrictedKey = (k) => {
@@ -1116,8 +1237,12 @@ const restrictedKey = (k) => {
   return !!(d && (d.locked || d.special || d.shop || d.shardPrice || d.hidden || k === 'seraphel'));
 };
 const peerVerified = (id, k) => {
-  const v = profOk[id]?.d;
-  return !!(v && v.k === k && v.exp > Date.now());
+  const hit = profOk[id], seen = profSeen.get(id), v = hit?.d;
+  if (!v || !seen || hit.pid !== seen.pid || hit.tok !== seen.tok || v.p !== seen.pid || !(v.exp > Date.now())) {
+    delete profOk[id];
+    return false;
+  }
+  return v.k === k;
 };
 // 相手キャラの決定：サーバー運用時、使用権の要るキャラは検証済みの時だけ出す（それ以外は標準キャラ）
 function peerKeyOf(id, fk) {
@@ -1127,8 +1252,7 @@ function peerKeyOf(id, fk) {
 }
 // 相手の戦士を出すときの強化値（署名が合っていて、キャラも一致する時だけ反映）
 function peerOpts(peerId, key) {
-  const v = profOk[peerId]?.d;
-  return v && v.k === key && v.exp > Date.now() ? { upg: v.u, verified: true } : {};
+  return peerVerified(peerId, key) ? { upg: profOk[peerId].d.u, verified: true } : {};
 }
 // CPUの強さ：敵の頭の良さ(cpu)と体力を倍率で変える
 const DIFFS = [
@@ -2341,6 +2465,7 @@ $('#btn-join').addEventListener('click', async () => {
 });
 
 function onPeers(peers) {
+  verifyPeerProfs(peers, 'online');
   if (!state.online) {
     return;
   }
@@ -2909,7 +3034,7 @@ $('#sync-push').addEventListener('click', async () => {
     if (localStorage.getItem('arkeia-sync') !== code) localStorage.setItem('arkeia-sync-ver', '0');
     localStorage.setItem('arkeia-sync', code);
     localStorage.setItem('arkeia-sync-dirty', '1');
-    while (autoBusy) await new Promise((r) => setTimeout(r, 100));
+    while (autoBusy || syncSpendBusy || syncImportBusy) await new Promise((r) => setTimeout(r, 100));
     syncErr = '';
     await autoPush(); // 版番号・競合解決つきで送る
     $('#sync-code').value = code;
@@ -2958,14 +3083,21 @@ $('#sync-pull').addEventListener('click', async () => {
       m.textContent = '受け取りを取りやめました。';
       return;
     }
+    while (autoBusy || syncSpendBusy || syncImportBusy) await new Promise((r) => setTimeout(r, 100));
+    syncImportBusy = true;
+    clearTimeout(autoPushTimer);
     const parsed = JSON.parse(json); // 壊れたデータは弾く（中身は読み込み時に検証される）
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) throw new Error('save');
     localStorage.setItem(SAVE_KEY, json);
     setPend(null);
     markSynced(ver, Number(parsed?.syncAt) || Date.now(), +parsed?.shards || 0);
     localStorage.setItem('arkeia-sync', n.match(/.{4}/g).join('-'));
+    Object.assign(save, parsed);
+    syncReady = false;
     m.textContent = '受け取りました。読み込み直します…';
     setTimeout(() => location.reload(), 600);
   } catch {
+    syncImportBusy = false;
     m.textContent = '受け取れませんでした（通信を確認してください）。';
   }
 });
@@ -2995,7 +3127,7 @@ async function syncEntitlements() {
     const d = r.ok ? await verifyToken(r.token, 'ent') : null;
     if (!d || !Array.isArray(d.keys)) return null;
     save.chars = d.keys.filter((k) => FIGHTERS[k]?.shop);
-    persist();
+    persist(false); // 購入記録はサーバー管理。起動時の確認だけで古いセーブを再送しない。
     return save.chars;
   } catch {
     return null;
@@ -3131,20 +3263,8 @@ var social = initSocial({
   // サーバーでの本人確認に使う同期コード
   syncCode: () => syncCodeNow(),
   // サーバー側で灯晶を消費した（寄付など）：手元にも反映し、同期の基準値を合わせる
-  onServerSpend: (amt, ver) => {
-    save.shards = Math.max(0, (+save.shards || 0) - amt);
-    if (!localStorage.getItem('arkeia-sync-dirty') && ver && syncVer() === ver - 1) {
-      markSynced(ver, Date.now(), save.shards);
-      localStorage.setItem(SAVE_KEY, JSON.stringify(save));
-    } else {
-      const b = localStorage.getItem('arkeia-sync-base');
-      if (b != null && Number.isFinite(+b)) localStorage.setItem('arkeia-sync-base', String(+b - amt));
-      // 結果不明の書き込みの基準も、サーバー側の消費分だけ下げる
-      const ps = getPends().map((p) => ({ ...p, shards: +p.shards - amt }));
-      if (ps.length) localStorage.setItem('arkeia-sync-pend', JSON.stringify(ps));
-      persist();
-    }
-  },
+  onServerSpend: applyServerSpend,
+  runServerSpend,
   // 運営会議：送信者が運営長か運営であることを役職トークンで確認（サーバー未設定時は受け入れる）
   verifyStaff: async (tk) => {
     if (!apiEnabled()) return true;
