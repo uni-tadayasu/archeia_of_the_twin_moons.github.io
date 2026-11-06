@@ -14,7 +14,7 @@ let active = 0;
 let decoderPromise = null;
 let meshoptPromise = null;
 const BASE = new URL('./', (typeof document !== 'undefined' && document.baseURI) || import.meta.url);
-export const MODEL_VERSION = 'model-fetch-v20261107';
+export const MODEL_VERSION = 'gaien-true-uv-20261107';
 
 export class ModelLoadError extends Error {
   constructor(url, detail, cause) {
@@ -83,11 +83,17 @@ async function getMeshopt() {
 // Decode the WebP bytes already contained in the GLB. No blob: or data:
 // resource is fetched, so restrictive connect-src policies cannot block
 // the texture like ImageBitmapLoader did.
-async function decodeInMemoryImage(image, i) {
+async function decodeInMemoryImage(image, i, preserveOrientation = false) {
   const blob = new Blob([image.bytes], { type: image.mime });
   if (typeof createImageBitmap === 'function') {
     try {
-      return await createImageBitmap(blob, { imageOrientation: 'flipY', premultiplyAlpha: 'none' });
+      return await createImageBitmap(blob, {
+        // Original GLB UV coordinates and Three.js Texture.flipY=false expect
+        // the bitmap's unmodified orientation, not a second vertical flip.
+        imageOrientation: preserveOrientation ? 'none' : 'flipY',
+        premultiplyAlpha: 'none',
+        colorSpaceConversion: 'none'
+      });
     } catch (cause) {
       // Older browsers may not support the options object.
       try { return await createImageBitmap(blob); }
@@ -120,9 +126,14 @@ function samplerSetting(THREE, sampler, texture) {
   texture.minFilter = filters[sampler?.minFilter ?? 9987];
   texture.magFilter = filters[sampler?.magFilter ?? 9729];
 }
-async function restoreInMemoryTextures(gltf, detached) {
+async function restoreInMemoryTextures(gltf, detached, sourceUrl = '') {
   if (!detached?.images.length || !detached.materials.length) return;
-  const decoded = await Promise.all(detached.images.map(decodeInMemoryImage));
+  // Gaien's face/body patterns came from flipping its 2048px texture atlas.
+  // Only correct Gaien here; do not alter the presentation of other fighters.
+  const preserveOrientation = /(?:^|\/)flame-shell-(?:king|titan)\.glb(?:[?#]|$)/i.test(sourceUrl);
+  const decoded = await Promise.all(detached.images.map((image, i) =>
+    decodeInMemoryImage(image, i, preserveOrientation)
+  ));
   const textureCache = new Map();
   const textureFor = (index, isColor) => {
     if (!Number.isInteger(index)) return null;
@@ -133,7 +144,7 @@ async function restoreInMemoryTextures(gltf, detached) {
     const bitmap = decoded[textureDef.source];
     if (!bitmap) return null;
     const texture = new THREE.Texture(bitmap);
-    texture.flipY = false; // createImageBitmap flips above, as GLTFLoader does.
+    texture.flipY = false; // glTF UVs: do not reverse image coordinates a second time.
     texture.colorSpace = isColor ? THREE.SRGBColorSpace : THREE.NoColorSpace;
     texture.needsUpdate = true;
     samplerSetting(THREE, detached.samplers[textureDef.sampler], texture);
@@ -201,7 +212,7 @@ export function loadModel(url) {
       const detached = hasEmbeddedImages ? separateEmbeddedTextures(payload, doc) : null;
       const loader = await newLoader();
       const result = await deadline(loader.parseAsync(detached ? detached.glb : payload, sourceDir), 50000, 'GLB解析タイムアウト');
-      if (detached) await deadline(restoreInMemoryTextures(result, detached), 35000, '内蔵WebPの直接デコードがタイムアウト');
+      if (detached) await deadline(restoreInMemoryTextures(result, detached, key), 35000, '内蔵WebPの直接デコードがタイムアウト');
       let visibleMeshes = 0;
       result.scene?.traverse((node) => {
         if (node.isMesh && node.geometry?.attributes?.position?.count) visibleMeshes++;
@@ -241,6 +252,7 @@ export function instantiateModel(gltf, height, tint = null) {
   const wrapper = new THREE.Group();
   const materials = new Set();
   const tintColor = tint == null ? null : new THREE.Color(tint);
+  const preserveGaienMaterial = /(?:^|\/)flame-shell-(?:king|titan)\.glb(?:[?#]|$)/i.test(gltf.userData?.arkeiaSource || '');
   model.traverse((o) => {
     if (!o.isMesh) return;
     o.castShadow = true;
@@ -250,12 +262,16 @@ export function instantiateModel(gltf, height, tint = null) {
       const material = source.clone();
       // The source avatars embed painted color textures, not polished metal skins.
       // Avoid the exported material's metallicFactor=1 turning faces into shiny polygons.
-      if (material.isMeshStandardMaterial || material.isMeshPhysicalMaterial) {
+      if (!preserveGaienMaterial && (material.isMeshStandardMaterial || material.isMeshPhysicalMaterial)) {
         material.metalness = Math.min(0.18, material.metalness ?? 0);
         material.roughness = Math.max(0.7, material.roughness ?? 0.8);
       }
-      if (tintColor && material.color) material.color.lerp(tintColor, 0.22);
-      if (material.map) material.map.anisotropy = Math.max(2, material.map.anisotropy || 1);
+      if (!preserveGaienMaterial && tintColor && material.color) material.color.lerp(tintColor, 0.22);
+      // Use the GLB's original base-color, metal/rough and normal textures.
+      // Anisotropic filtering changes sampling quality, not the painted pattern.
+      if (material.map) material.map.anisotropy = Math.max(preserveGaienMaterial ? 8 : 2, material.map.anisotropy || 1);
+      if (preserveGaienMaterial && material.metalnessMap) material.metalnessMap.anisotropy = Math.max(8, material.metalnessMap.anisotropy || 1);
+      if (preserveGaienMaterial && material.roughnessMap) material.roughnessMap.anisotropy = Math.max(8, material.roughnessMap.anisotropy || 1);
       materials.add(material); return material;
     };
     o.material = Array.isArray(o.material) ? o.material.map(cloneMaterial) : cloneMaterial(o.material);

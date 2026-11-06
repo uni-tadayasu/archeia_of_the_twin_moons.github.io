@@ -1,16 +1,25 @@
-DRACO loading repair - 2026-11-07
+ガイエン・元モデル忠実表示修正（進化前・進化後）
 
-Cause confirmed in the Chrome console:
-- HEAD /assets/vendor/draco/draco_decoder.js -> HTTP 404
-- Request to www.gstatic.com/draco/versioned/decoders/1.5.7/draco_decoder.js -> blocked by connect-src Content Security Policy
+変更ファイル:
+  index.html
+  main.js
+  game.js
+  field.js
+  model-runtime.js
+  gaien-motion.js
+  gaien-style.js
 
-Changes:
-- index.html: allow https://www.gstatic.com in connect-src only; keep wasm-unsafe-eval and all existing restrictions. Bump JS cache version.
-- model-runtime.js: skip nonexistent local decoder and use the pinned official JS decoder.
-- main.js, game.js, field.js: update import version to avoid reusing the stale loader in cache.
+修正内容:
+- GLBに収録された2048pxのWebPテクスチャを、ガイエンだけ上下反転せずに復元。
+- ガイエンの元GLBの色・金属度・粗さを優先し、他キャラクターの材質設定は維持。
+- マダラ模様の原因になり得る追加シェーダーや着色を撤去。
+- 歩行中も頂点変形は行わず、モデル全体の小さな歩行揺れだけを使用。
+- 変更したJavaScriptをブラウザーが確実に読み込むようキャッシュ識別子を更新。
 
-Usage:
-Unzip the five code files into the existing game website root, overwrite those exact files, and publish the changes. Do not delete assets/models/*.glb.
-Refresh Chrome with Ctrl+Shift+R. Do not click a retry button on an old page: the changed CSP is applied only when the page loads again.
+上書き先: GitHub Pages / Rosebud のゲームフォルダー直下
+既存の assets/models/flame-shell-king.glb / flame-shell-titan.glb は
+削除しないでください。本ZIPには元モデルのデータ変更はありません。
 
-This fixes the specific console diagnostics. End-to-end deployment on the live GitHub Pages site has not been verified.
+検査: JavaScript構文、ZIP整合性、GLB内蔵テクスチャ情報を確認。
+注意: 実際の公開サイトでの最終描画確認は未実施です。
+      元GLBの形状自体の解像度を増やす修正ではありません。

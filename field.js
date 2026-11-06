@@ -3,7 +3,7 @@
 import * as THREE from 'three';
 import { attachGaienWalk } from './gaien-motion.js';
 import { enhanceGaienModel } from './gaien-style.js';
-import { instantiateModel } from './model-runtime.js?v=draco-fix-v20261107';
+import { instantiateModel } from './model-runtime.js?v=gaien-true-uv-20261107';
 import { FIGHTERS } from './data.js?v=gaien-bgm-20261107b';
 import { makeGear, animGear, removeGear } from './gear.js';
 
