@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { attachGaienWalk } from './gaien-motion.js';
+import { attachGaienWalk } from './gaien-motion.js?v=gaien-evolve-20261107b';
 import { enhanceGaienModel } from './gaien-style.js';
 import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js';
 import { FIGHTERS, ELEMS } from './data.js?v=gaien-bgm-20261107b';
@@ -671,7 +671,7 @@ export class Fighter {
   }
 
   sync() {
-    this.gaienWalk?.update(this.motionDt ?? (1 / 60), this.dead ? false : (this.moving || this.netMoving ? 'run' : false));
+    this.gaienWalk?.update(this.motionDt ?? (1 / 60), this.dead ? false : (this.moving || this.netMoving ? 'run' : false), this.action);
     this.root.position.set(this.pos.x, this.y, this.pos.z);
     this.root.rotation.y = this.facing;
     this.guardMesh.visible = this.guard;
@@ -740,6 +740,9 @@ export class Fighter {
   }
 
   startLight() {
+    // ガイエンの最初の通常近接攻撃で第二形態へ移行する。
+    // 以降の連撃では第一形態へ戻さず、同一戦闘中は進化形態を保持する。
+    if (this.key === 'gaien' && !this.remoteAuth) this.requestGaienEvolution();
     this.combo = this.comboWindow > 0 ? (this.combo + 1) % 3 : 0;
     this.faceNearest(4);
     this.action = { type: 'light', t: 0, dur: this.combo === 2 ? 0.42 : 0.32, hitAt: 0.13, hit: false, step: this.combo };
@@ -851,9 +854,8 @@ export class Fighter {
       if (!a.hit && a.t >= a.hitAt) {
         a.hit = true;
         const big = a.step === 2;
-        if (this.def.manualFormSwap && this.manualFormSwap()) {
-          // 変身後の通常攻撃性能をそのまま使う
-        }
+        // ガイエンの進化判定は startLight() で1回だけ行う。
+        // ヒット時に再び呼ぶと連撃で進化前へ戻るため、ここでは切り替えない。
         const curL = this.def.light;
         if (this.summonId && this.battle.summonStrike(this, big)) {
           // 召喚獣が通常攻撃の代わりに攻撃
@@ -935,16 +937,45 @@ export class Fighter {
     return dmg;
   }
 
-  // 手動変身：通常近接攻撃を出すたびに、進化前/進化後を切り替える
+  // 通常近接攻撃で初回のみ進化。
+  // 第二形態のGLBがまだ準備できていなくても自動取得し、完了後に切り替える。
+  requestGaienEvolution() {
+    if (this.key !== 'gaien' || this.remoteAuth || this.dead || this.battle?.ended) return false;
+    if (this.battle.assets?.gaien2?.scene) return this.manualFormSwap();
+    if (this.gaienEvolutionPending) return false;
+    const form = FIGHTERS.gaien2;
+    if (!form?.model) return false;
+    const battle = this.battle;
+    this.battle.ui.popup?.(this.pos, '極焔覇皇へ進化準備中…', '#ffbf65');
+    this.gaienEvolutionPending = loadModel(form.model)
+      .then((gltf) => {
+        // 先に描画可能なモデルを確保し、それから形態を確定する。
+        if (!gltf?.scene) throw new Error('第二形態の3Dモデルがありません');
+        battle.assets.gaien2 = gltf;
+        if (this.battle === battle && !battle.ended && this.root?.parent && !this.dead && !this.remoteAuth && this.key === 'gaien') {
+          this.manualFormSwap();
+        }
+      })
+      .catch((error) => {
+        console.error('[GAIEN] evolution model load failed:', error);
+        if (this.battle === battle && this.root?.parent && !battle.ended) {
+          this.battle.ui.popup?.(this.pos, '進化モデルの読み込み失敗。もう一度近接攻撃', '#ff8282');
+        }
+      })
+      .finally(() => { this.gaienEvolutionPending = null; });
+    return false;
+  }
+
+  // 第二形態への一方向進化。進化後の通常攻撃は進化を解除しない。
   manualFormSwap() {
-    const nk = this.def.manualForm2 || this.def.manualBase;
-    if (!nk || this.remoteAuth || this.dead || this.formSwapCd > 0 || !FIGHTERS[nk]) return false;
+    const nk = this.key === 'gaien' ? 'gaien2' : null;
+    if (!nk || this.remoteAuth || this.dead || this.battle?.ended || this.formSwapCd > 0 || !FIGHTERS[nk]) return false;
     // 変身先を予め準備できていない場合は、形態だけ更新して棒状になることを防ぐ。
     if (!this.battle.assets?.[nk]?.scene) {
       if (this.isPlayer) this.battle.ui.popup?.(this.pos, '変身先の3Dモデルを読込中', '#ffc080');
       return false;
     }
-    this.formSwapCd = 0.22;
+    this.formSwapCd = 0.65;
     const hpRate = Math.max(0.08, Math.min(1, this.hp / Math.max(1, this.maxHp || 1)));
     const flux = this.flux;
     const over = this.over;
@@ -965,6 +996,13 @@ export class Fighter {
     this.stun = Math.min(stun, 0.12);
     this.inv = Math.max(this.inv, 0.18);
     this.dead = false;
+    if (this.redMats) {
+      for (const [part, original, temporary] of this.redMats) {
+        part.material = original;
+        temporary.dispose();
+      }
+      this.redMats = null;
+    }
     this.gaienWalk?.stop();
     this.gaienWalk = null;
     this.gaienStyle?.stop?.();
@@ -989,7 +1027,8 @@ export class Fighter {
       this.applyRed();
     }
     this.battle.transformFx(this);
-    this.battle.ui.popup?.(this.pos, nk === 'gaien2' ? '第二形態・極焔覇皇' : '第一形態・煉殻竜王', '#ff9a3a');
+    this.battle.shake = Math.max(this.battle.shake || 0, 0.8);
+    this.battle.ui.popup?.(this.pos, '進化完了！極焔覇皇', '#ff9a3a');
     return true;
   }
 

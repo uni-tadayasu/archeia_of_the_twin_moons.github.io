@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { loadModel } from './model-runtime.js?v=gaien-true-uv-20261107';
-import { Battle, ARENA_R } from './game.js?v=gaien-true-uv-20261107';
+import { Battle, ARENA_R } from './game.js?v=gaien-evolve-20261107b';
 import { FIGHTERS, STORY, ROSTER, UPGRADES, MAX_LV, STAGES, BGM, APEX_BGM, ENEMY_ROSTER, UPG_CAP, LB_MAX, lbMaxLv, lbMul, lbCost, WEAPONS, ARMORS, SUMMONS, STAT_LABEL, SPECIAL_KEYS, BOSS_ROSTER, currentEvent, sanitizeEvent, EV_FOE_KINDS } from './data.js?v=gaien-bgm-20261107b';
 import { sayBattle, setVoiceMuted, stopVoices } from './voice.js';
 import { initSocial, uiConfirm } from './social.js?v=gaien-bgm-20261107b';
