@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from './assets/vendor/meshopt_decoder.module.js';
 import { Battle, ARENA_R } from './game.js';
-import { FIGHTERS, STORY, ROSTER, UPGRADES, MAX_LV, STAGES, BGM, APEX_BGM, ENEMY_ROSTER, UPG_CAP, LB_MAX, lbMaxLv, lbMul, lbCost, WEAPONS, ARMORS, SUMMONS, STAT_LABEL, SPECIAL_KEYS, BOSS_ROSTER, currentEvent, sanitizeEvent, EV_FOE_KINDS } from './data.js';
+import { FIGHTERS, STORY, ROSTER, UPGRADES, MAX_LV, STAGES, APEX_BGM, ENEMY_ROSTER, UPG_CAP, LB_MAX, lbMaxLv, lbMul, lbCost, WEAPONS, ARMORS, SUMMONS, STAT_LABEL, SPECIAL_KEYS, BOSS_ROSTER, currentEvent, sanitizeEvent, EV_FOE_KINDS } from './data.js';
 import { ProcMusic } from './music.js';
 import { sayBattle, setVoiceMuted, stopVoices } from './voice.js';
 import { initSocial, uiConfirm } from './social.js';
@@ -695,8 +695,9 @@ const audio = {
   ctx: null,
   unlocked: false
 };
-for (const name of ['title', 'story', 'battle', 'boss']) {
-  const a = new Audio(`assets/audio/${name}-theme.mp3`);
+for (const name of ['title', 'story', 'battle', 'boss', 'field', 'event', 'zarugureibu']) {
+  const version = '?v=20261106-bgm2';
+  const a = new Audio(`assets/audio/${name}-theme.mp3${version}`);
   a.loop = true;
   a.preload = 'none';
   a.volume = 0.35;
@@ -709,18 +710,22 @@ pool('hit', 'assets/audio/hit-impact.mp3', 4);
 pool('burst', 'assets/audio/arte-burst.mp3', 2);
 let proc = null;
 function startProc() {
-  const m = /^(bgm|field|apex):(\d+)$/.exec(audio.current || '');
+  const m = /^apex:(\d+)$/.exec(audio.current || '');
   if (!m || !audio.ctx || audio.muted) return;
   proc ||= new ProcMusic(audio.ctx);
-  const n = +m[2];
-  if (m[1] === 'apex') {
-    proc.play(APEX_BGM[n] || APEX_BGM[1]);
-    return;
-  }
-  // フィールド用：壮大な冒険曲（金管・聖歌隊を必ず入れ、ゆったり力強いテンポ）
-  proc.play(m[1] === 'field' ? { seed: 50021 + n * 131, bpm: 104 + (n % 6) * 4, epic: true } : BGM[n % BGM.length]);
+  proc.play(APEX_BGM[+m[1]] || APEX_BGM[1]);
+}
+function hasZarugureibuTheme(b) {
+  if (!b) return false;
+  // どちらの陣営でも、一度参戦したらこの戦闘が終わるまで専用曲を優先する。
+  b.zarugureibuTheme ||= b.fighters.some((f) => f.key === 'bloodfiend');
+  return b.zarugureibuTheme;
 }
 function playTrack(name) {
+  const b = state.battle;
+  const combat = /^(battle|boss|event|zarugureibu|apex:\d+)$/.test(name);
+  if (combat && b?.bgmStarted && !b.ended && hasZarugureibuTheme(b)) name = 'zarugureibu';
+  if (b && !combat) b.bgmStarted = false;
   if (audio.current === name) {
     return;
   }
@@ -1645,7 +1650,7 @@ function openStageSelect(crumb, onBack) {
     card.append(thumb, t, n);
     if (st.bgm != null) {
       const s = document.createElement('small');
-      s.textContent = `♪ ${BGM[st.bgm % BGM.length].name}`;
+      s.textContent = '♪ 通常戦闘曲';
       card.append(s);
     }
     card.addEventListener('mouseenter', () => st.sky && setStage(st));
@@ -1772,12 +1777,26 @@ const ui = {
 function makeBattle(net) {
   endBattle();
   state.invaded = false;
-  state.battle = new Battle(scene, camera, { assets, ui, net });
-  return state.battle;
+  const b = state.battle = new Battle(scene, camera, { assets, ui, net });
+  b.bgmStarted = false;
+  b.zarugureibuTheme = false;
+  const add = b.add.bind(b);
+  b.add = (key, opts) => {
+    const f = add(key, opts);
+    if (f.key === 'bloodfiend') {
+      b.zarugureibuTheme = true;
+      // 開戦前は beginBattle に任せる。途中乱入は追加直後に切り替える。
+      if (state.battle === b && b.bgmStarted && !b.ended) playTrack('zarugureibu');
+    }
+    return f;
+  };
+  return b;
 }
 function endBattle() {
   stopVoices();
   if (state.battle) {
+    state.battle.bgmStarted = false;
+    state.battle.zarugureibuTheme = false;
     // 覚醒の蓄積ダメージは次の戦いへ持ち越す（覚醒中に終わったらリセット）
     const me = state.battle.fighters.find((f) => f.isPlayer && !f.remoteAuth);
     if (me) {
@@ -1884,22 +1903,27 @@ async function startOffline() {
 }
 
 function beginBattle(boss) {
+  const b = state.battle;
+  b.bgmStarted = true;
   buildHud();
   show(null);
-  // 物語は章ごとに100曲から、その他は舞台の曲。ヴェスペラ・運営長戦は専用曲
-  const bgmIdx = (state.mode === 'story' ? state.chapter : currentStage?.bgm ?? 0) % BGM.length;
+  // ザルグレイヴ参戦 > イベント > 特別な決戦 > 通常戦闘の順で曲を選ぶ。
   // 敵側（運営の乱入時は両方）にヴェスペラ／運営長がいる時だけ
-  const ks = state.battle.fighters.filter((f) => f.team === 1 || state.mode === 'invade').map((f) => f.key);
-  const apex = ks.some((k) => k === 'sovereign' || k === 'sovereign2') ? 2 : ks.includes('chief') || ks.includes('bloodfiend') ? 1 : 0;
-  if (apex) {
+  const ks = b.fighters.filter((f) => f.team === 1 || state.mode === 'invade').map((f) => f.key);
+  const apex = ks.some((k) => k === 'sovereign' || k === 'sovereign2') ? 2 : ks.includes('chief') ? 1 : 0;
+  if (hasZarugureibuTheme(b)) {
+    playTrack('zarugureibu');
+    ui.banner({ name: '— ♪ ザルグレイヴ専用曲 —' }, '紅翼の血魔');
+  } else if (state.mode === 'event') {
+    playTrack('event');
+  } else if (apex) {
     playTrack('apex:' + apex);
     ui.banner({ name: `— ♪ ${APEX_BGM[apex].name} —` }, '頂上決戦');
   } else {
-    playTrack(boss ? 'boss' : 'bgm:' + bgmIdx);
-    ui.banner({ name: boss ? '— 双月の下で —' : `— ♪ ${BGM[bgmIdx].name} —` }, '剣を抜け');
+    playTrack(boss ? 'boss' : 'battle');
+    ui.banner({ name: boss ? '— 双月の下で —' : '— ♪ 通常戦闘曲 —' }, '剣を抜け');
   }
   // 開戦の合図：構え → 3・2・1 → 戦闘開始！（その間は誰も動かない）
-  const b = state.battle;
   b.intro = 4.3;
   const cd = $('#countdown');
   clearTimeout(cd._t);
@@ -2287,7 +2311,7 @@ async function enterField() {
   $('#hud-right').replaceChildren();
   state.fieldHud = '';
   show(null);
-  playTrack('field:' + state.chapter);
+  playTrack('field');
   state.field.setOwnName(myName());
   // 世界中の旅人とつながる
   ensureWorld().then(() => refreshFieldRemotes());
@@ -2307,7 +2331,7 @@ function returnToField(sym, won) {
   $('#hud-left').replaceChildren();
   $('#hud-right').replaceChildren();
   show(null);
-  playTrack('field:' + state.chapter);
+  playTrack('field');
 }
 function leaveField() {
   if (state.field) {
