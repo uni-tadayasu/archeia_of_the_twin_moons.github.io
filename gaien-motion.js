@@ -7,6 +7,13 @@ const TAU = Math.PI * 2;
 export function attachGaienWalk(model, key) {
   if (!model || !GAIEN_KEYS.has(key)) return null;
 
+  // The updated Gaien GLBs contain real skinned arms/legs and Idle/Walk/Run clips.
+  // In that case, the AnimationMixer owns all movement. Do not apply an
+  // extra whole-body sway, which would distort the authored gait.
+  let hasSkeletalRig = false;
+  model.traverse?.((node) => { if (node.isSkinnedMesh && node.skeleton?.bones?.length) hasSkeletalRig = true; });
+  if (hasSkeletalRig) return null;
+
   const basePosition = model.position.clone();
   const baseRotation = model.rotation.clone();
   const evolved = key === 'gaien2';
