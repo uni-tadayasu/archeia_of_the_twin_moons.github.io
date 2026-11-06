@@ -10,51 +10,66 @@ const SUMMON_DEFS = {
   s1: { name: 'スサノオ', model: 'assets/models/summon-susanoo.glb', height: 3.4, hpMul: 0.6, dist: 2.2, range: 4.4, mul: 1.5, autoMul: 1.4, autoCd: 1.6, autoRange: 4.0, color: 0x30ff70, color2: 0xa0ffc0 }
 };
 const SUMMON_CACHE = new Map();
+
+function makePortraitFallback(fighter, h, scale, tint) {
+  const g = new THREE.Group();
+  const palette = tint ?? fighter.color;
+  const glowCol = fighter.color2 ?? fighter.color;
+  const cloak = new THREE.Mesh(
+    new THREE.CapsuleGeometry(0.34 * scale, Math.max(0.9, h - 0.9 * scale), 6, 14),
+    new THREE.MeshStandardMaterial({ color: palette, roughness: 0.72, metalness: 0.08 })
+  );
+  cloak.position.y = h * 0.44;
+  cloak.castShadow = true;
+  g.add(cloak);
+  const mantle = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.55 * scale, 0.18 * scale, 0.9 * scale, 6, 1, true),
+    new THREE.MeshStandardMaterial({ color: glowCol, roughness: 0.56, metalness: 0.15, side: THREE.DoubleSide })
+  );
+  mantle.position.y = h * 0.72;
+  mantle.rotation.y = Math.PI / 6;
+  mantle.castShadow = true;
+  g.add(mantle);
+  const sigil = new THREE.Mesh(
+    new THREE.CircleGeometry(0.18 * scale, 24),
+    new THREE.MeshBasicMaterial({ color: glowCol, transparent: true, opacity: 0.8 })
+  );
+  sigil.position.set(0, h * 0.58, 0.28 * scale);
+  g.add(sigil);
+  const plateGeo = new THREE.PlaneGeometry(0.95 * scale, 1.2 * scale);
+  const plateMat = new THREE.MeshStandardMaterial({ color: 0xffffff, transparent: true, alphaTest: 0.08, side: THREE.DoubleSide });
+  const plate = new THREE.Mesh(plateGeo, plateMat);
+  plate.position.set(0, h * 0.76, 0.3 * scale);
+  plate.castShadow = true;
+  g.add(plate);
+  if (fighter.face) {
+    loadFaceTex(fighter.face).then((tex) => {
+      if (!tex) return;
+      tex.colorSpace = THREE.SRGBColorSpace;
+      plateMat.map = tex;
+      plateMat.needsUpdate = true;
+    });
+  }
+  const crest = new THREE.Mesh(
+    new THREE.RingGeometry(0.34 * scale, 0.47 * scale, 24),
+    new THREE.MeshBasicMaterial({ color: glowCol, transparent: true, opacity: 0.72, side: THREE.DoubleSide })
+  );
+  crest.position.set(0, h * 0.98, -0.08 * scale);
+  g.add(crest);
+  return g;
+}
+
 const summonLoader = new GLTFLoader();
+const faceTexLoader = new THREE.TextureLoader();
+const FACE_TEX_CACHE = new Map();
+function loadFaceTex(url) {
+  if (!url) return Promise.resolve(null);
+  if (!FACE_TEX_CACHE.has(url)) FACE_TEX_CACHE.set(url, faceTexLoader.loadAsync(url).catch((err) => { console.warn(err); return null; }));
+  return FACE_TEX_CACHE.get(url);
+}
 function loadSummonModel(url) {
   if (!SUMMON_CACHE.has(url)) SUMMON_CACHE.set(url, summonLoader.loadAsync(url).catch((err) => { console.warn(err); return null; }));
   return SUMMON_CACHE.get(url);
-}
-
-function addOrochiNecks(root, d, k, sizeY) {
-  const necks = new THREE.Group();
-  necks.name = 'orochi-neck-fix';
-  const mainColor = new THREE.Color(d.color);
-  const edgeColor = new THREE.Color(d.color2);
-  const baseY = sizeY * 0.34;
-  const baseZ = sizeY * 0.06;
-  const headY = sizeY * 0.6;
-  const spread = sizeY * 0.12;
-  const bodyRadius = 0.11 * k;
-  for (let i = 0; i < 8; i++) {
-    const side = (i - 3.5) / 3.5;
-    const seg = new THREE.CylinderGeometry(bodyRadius * (0.92 - Math.abs(side) * 0.08), bodyRadius * 1.26, sizeY * 0.42, 8);
-    const mat = new THREE.MeshStandardMaterial({
-      color: mainColor,
-      roughness: 0.72,
-      metalness: 0.08,
-      emissive: edgeColor,
-      emissiveIntensity: 0.07
-    });
-    const mesh = new THREE.Mesh(seg, mat);
-    mesh.castShadow = true;
-    mesh.position.set(side * spread, (baseY + headY) * 0.5, baseZ + 0.32 * k + Math.abs(side) * 0.12 * k);
-    mesh.rotation.x = -0.82 + Math.abs(side) * 0.15;
-    mesh.rotation.z = -side * 0.24;
-    necks.add(mesh);
-    const collar = new THREE.Mesh(new THREE.TorusGeometry(bodyRadius * 0.92, bodyRadius * 0.16, 6, 14), new THREE.MeshStandardMaterial({
-      color: d.color2,
-      roughness: 0.28,
-      metalness: 0.2,
-      emissive: d.color2,
-      emissiveIntensity: 0.1
-    }));
-    collar.rotation.x = Math.PI / 2;
-    collar.position.copy(mesh.position).add(new THREE.Vector3(0, -sizeY * 0.14, -0.06 * k));
-    necks.add(collar);
-  }
-  root.add(necks);
-  return necks;
 }
 
 // 状態異常：持続秒数・継続ダメージ(毎秒)
@@ -483,13 +498,8 @@ export class Fighter {
         }
       }
     } else {
-      const mesh = new THREE.Mesh(
-        new THREE.CapsuleGeometry(0.35 * this.scale, h - 0.7 * this.scale, 6, 12),
-        new THREE.MeshStandardMaterial({ color: this.tint ?? this.def.color })
-      );
-      mesh.position.y = h / 2;
-      mesh.castShadow = true;
-      this.visual.add(mesh);
+      const fallback = makePortraitFallback(this.def, h, this.scale, this.tint);
+      this.visual.add(fallback);
     }
     // 装備：骨格と体形を測ってフィット（骨に付けてアニメに追従）
     const model = this.visual.children.find((c) => !c.isMesh || c.geometry?.type !== 'CapsuleGeometry') || null;
@@ -1858,15 +1868,6 @@ export class Battle {
       s.own.delete(ghost.geometry);
       s.own.delete(ghost.material);
       body.add(m);
-      if (f.summonId === 's0') {
-        const neckFix = addOrochiNecks(m, d, k, d.height * k);
-        neckFix.traverse((c) => {
-          if (c.isMesh) {
-            s.own.add(c.geometry);
-            s.own.add(c.material);
-          }
-        });
-      }
       if (gltf.animations?.length) {
         s.mixer = new THREE.AnimationMixer(m);
         const find = (re) => gltf.animations.find((a) => re.test(a.name));

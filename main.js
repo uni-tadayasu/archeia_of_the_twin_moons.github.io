@@ -146,15 +146,32 @@ const assets = {};
 const gltfLoader = new GLTFLoader();
 const modelUrls = [...new Set(Object.values(FIGHTERS).map((d) => d.model))];
 const byUrl = {};
+let loadedModelCount = 0;
+const updateLoadStatus = () => {
+  const loadingEl = $('#loading');
+  if (loadingEl) loadingEl.textContent = `戦士モデルを読み込んでいます… ${loadedModelCount}/${modelUrls.length}`;
+  const hc = $('#home-char-count');
+  if (hc) hc.textContent = `${loadedModelCount} / ${modelUrls.length}`;
+  const hs = $('#home-stage-count');
+  if (hs) hs.textContent = `${STAGES.filter((s) => !!s.sky).length} / ${STAGES.length}`;
+};
+updateLoadStatus();
 const loadPromise = Promise.allSettled(modelUrls.map((url) =>
   gltfLoader.loadAsync(url).then((g) => {
     byUrl[url] = g;
+    loadedModelCount++;
+    updateLoadStatus();
+  }).catch((err) => {
+    console.warn('model load failed', url, err);
+    updateLoadStatus();
+    return null;
   })
 )).then(() => {
   for (const [k, d] of Object.entries(FIGHTERS)) {
     if (byUrl[d.model]) assets[k] = byUrl[d.model];
   }
-  $('#loading').textContent = '';
+  if ($('#loading')) $('#loading').textContent = 'モデル読込完了。クリックまたはタップでトップページへ';
+  updateLoadStatus();
 });
 
 // ---------- Save ----------
@@ -1277,7 +1294,7 @@ function refreshTitle() {
   if ($('#btn-evmaker')) $('#btn-evmaker').hidden = !chiefUnlocked();
   $('#title-shards').textContent = `灯晶　${save.shards}`;
   const hc = $('#home-char-count');
-  if (hc) hc.textContent = `${SELECT_KEYS().filter((k) => canUse(k)).length} / ${SELECT_KEYS().length}`;
+  if (hc) hc.textContent = `${loadedModelCount} / ${modelUrls.length}`;
   const hs = $('#home-stage-count');
   if (hs) hs.textContent = `${STAGES.filter((s) => !!s.sky).length} / ${STAGES.length}`;
   {
