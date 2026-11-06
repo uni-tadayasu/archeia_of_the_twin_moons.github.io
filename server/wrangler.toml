@@ -42,6 +42,10 @@ class_name = "GuildBoard"
 name = "STORE"
 class_name = "Store"
 
+[[durable_objects.bindings]]
+name = "MAIL_STORE"
+class_name = "MailStore"
+
 [[migrations]]
 tag = "v1"
 new_sqlite_classes = ["InviteLock", "Limiter"]
@@ -53,3 +57,7 @@ new_sqlite_classes = ["SyncLock"]
 [[migrations]]
 tag = "v3"
 new_sqlite_classes = ["PidBind", "GuildLock", "GuildBoard", "Store"]
+
+[[migrations]]
+tag = "v4-mail"
+new_sqlite_classes = ["MailStore"]

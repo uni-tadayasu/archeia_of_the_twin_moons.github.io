@@ -59,7 +59,9 @@ async function sign(env, payload) {
 async function verify(env, tok, type) {
   try {
     if (typeof tok !== 'string' || tok.length > 4000) return null;
-    const [p, s] = tok.split('.');
+    const parts = tok.split('.');
+    if (parts.length !== 2 || !parts.every((part) => /^[A-Za-z0-9_-]+$/.test(part))) return null;
+    const [p, s] = parts;
     const ok = await crypto.subtle.verify({ name: 'ECDSA', hash: 'SHA-256' }, (await keys(env)).pub, unb64u(s), enc.encode(p));
     if (!ok) return null;
     const data = JSON.parse(new TextDecoder().decode(unb64u(p)));
@@ -180,6 +182,11 @@ export default {
         case '/chief/sign': return await chiefSign(req, env, H, body);
         case '/chief/event': return await chiefEvent(req, env, H, body);
         case '/chief/current': return await chiefCurrent(req, env, H);
+        case '/chief/mail/send': return await chiefMail(req, env, H, body, 'send');
+        case '/chief/mail/history': return await chiefMail(req, env, H, body, 'history');
+        case '/mail/list': return await playerMail(req, env, H, body, 'list');
+        case '/mail/read': return await playerMail(req, env, H, body, 'read');
+        case '/mail/claim': return await playerMail(req, env, H, body, 'claim');
         default: return json(H, { error: 'not found' }, 404);
       }
     } catch (err) {
@@ -484,6 +491,82 @@ async function chiefCurrent(req, env, H) {
   return json(H, { v: r.data?.v || null });
 }
 
+// ---------- 運営長のシステムメール・プレゼント ----------
+// メール本文は MailStore、既読と受取記録は本人の SyncLock に保存する。
+// 受取記録と灯晶・装備は同一トランザクションで確定するため、再送しても二重付与しない。
+const MAIL_ID_RE = /^[0-9a-z]{10}_[0-9a-f]{32}$/;
+const MAIL_REQUEST_RE = /^[A-Za-z0-9_-]{12,64}$/;
+const MAIL_PAGE = 50;
+const MAIL_MAX_SHARDS = 999999; // クライアントのセーブ上限と同じ。超過分を切り捨てない。
+const MAIL_ITEM_IDS = new Set([...WEAPONS, ...ARMORS].map((x) => x.id));
+const mailStub = (env) => env.MAIL_STORE.get(env.MAIL_STORE.idFromName('chief-mail-v1'));
+const mailCursor = (value) => value == null || value === '' ? '' : typeof value === 'string' && MAIL_ID_RE.test(value) ? value : null;
+function mailText(value, max) {
+  if (typeof value !== 'string') return null;
+  const s = value.replace(/\r\n?/g, '\n').normalize('NFC').trim();
+  return s && [...s].length <= max && !/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/.test(s) ? s : null;
+}
+function mailGift(value) {
+  if (value == null) return { shards: 0, items: [] };
+  if (typeof value !== 'object' || Array.isArray(value)) return null;
+  if (Object.keys(value).some((key) => !['shards', 'items'].includes(key))) return null;
+  const shards = value.shards ?? 0, items = value.items ?? [];
+  if (!Number.isSafeInteger(shards) || shards < 0 || shards > MAIL_MAX_SHARDS || !Array.isArray(items) || items.length > 10) return null;
+  if (items.some((id) => typeof id !== 'string' || !MAIL_ITEM_IDS.has(id))) return null;
+  return { shards, items: [...new Set(items)].sort() };
+}
+async function chiefMail(req, env, H, body, op) {
+  if ((await verify(env, body.token, 'role'))?.r !== 'chief') return json(H, { error: 'denied' }, 403);
+  if (!env.MAIL_STORE) return json(H, { error: 'mail_not_ready' }, 503);
+  if (await limited(env, req, 'mail-' + op, op === 'send' ? 60 : 120, 3600000)) return json(H, { error: 'limit' }, 429);
+  if (op === 'history') {
+    const cursor = mailCursor(body.cursor);
+    if (cursor === null) return json(H, { error: 'bad' }, 400);
+    const r = await doCall(mailStub(env), { op, cursor });
+    return json(H, r.data, r.status);
+  }
+  const requestId = body.requestId, recipient = body.recipient;
+  const title = mailText(body.title, 80), text = mailText(body.body, 2000), gift = mailGift(body.gift);
+  const expiresAt = body.expiresAt;
+  if (typeof requestId !== 'string' || !MAIL_REQUEST_RE.test(requestId) ||
+      typeof recipient !== 'string' || (recipient !== 'all' && !PID_RE.test(recipient)) ||
+      !title || /\n/.test(title) || !text || !gift || !Number.isSafeInteger(expiresAt) || expiresAt <= 0) {
+    return json(H, { error: 'bad' }, 400);
+  }
+  if (recipient !== 'all') {
+    const found = await doCall(env.PID_BIND.get(env.PID_BIND.idFromName(recipient)), { op: 'lookup' });
+    if (found.status !== 200) return json(H, { error: 'server' }, 500);
+    if (!found.data?.registered) return json(H, { error: 'recipient_notfound' }, 404);
+  }
+  const message = { recipient, title, body: text, gift, expiresAt, kind: gift.shards || gift.items.length ? 'gift' : 'system', senderName: '運営長' };
+  const digest = await sha256(JSON.stringify(message));
+  const r = await doCall(mailStub(env), { op, requestId, digest, message });
+  return json(H, r.data, r.status);
+}
+async function playerMail(req, env, H, body, op) {
+  if (!env.MAIL_STORE) return json(H, { error: 'mail_not_ready' }, 503);
+  if (await limited(env, req, 'mail-user', 240, 600000)) return json(H, { error: 'limit' }, 429);
+  const me = await whoAmI(env, body.code);
+  if (!me) return json(H, { error: 'nosync' }, 403);
+  const sync = env.SYNC_LOCK.get(env.SYNC_LOCK.idFromName(me.h));
+  if (op === 'list') {
+    const cursor = mailCursor(body.cursor);
+    if (cursor === null) return json(H, { error: 'bad' }, 400);
+    const r = await doCall(mailStub(env), { op, pid: me.pid, cursor });
+    if (r.status !== 200) return json(H, r.data, r.status);
+    const messages = r.data.messages;
+    const state = await doCall(sync, { op: 'mail-state', pid: me.pid, ids: messages.map((m) => m.id) });
+    if (state.status !== 200) return json(H, state.data, state.status);
+    const states = state.data.states || {};
+    return json(H, { ...r.data, pid: me.pid, messages: messages.map((m) => ({ ...m, ...(states[m.id] || { readAt: 0, claimedAt: 0 }) })) });
+  }
+  if (typeof body.id !== 'string' || !MAIL_ID_RE.test(body.id)) return json(H, { error: 'bad' }, 400);
+  const r = await doCall(mailStub(env), { op: 'get', pid: me.pid, id: body.id });
+  if (r.status !== 200) return json(H, r.data, r.status);
+  const result = await doCall(sync, { op: 'mail-' + op, pid: me.pid, mail: r.data.message });
+  return json(H, result.data, result.status);
+}
+
 // ---------- Durable Objects ----------
 // pid ↔ 同期コードの固定（最初の1件だけ）
 export class PidBind {
@@ -491,12 +574,68 @@ export class PidBind {
     this.state = state;
   }
   async fetch(req) {
-    const { h } = await req.json();
+    const { h, op } = await req.json();
     return this.state.blockConcurrencyWhile(async () => {
       const cur = await this.state.storage.get('h');
+      if (op === 'lookup') return new Response(JSON.stringify({ registered: !!cur }));
+      if (typeof h !== 'string' || !HEX64.test(h)) return new Response('bad', { status: 400 });
       if (!cur) await this.state.storage.put('h', h);
       else if (cur !== h) return new Response('bound', { status: 409 });
       return new Response('ok');
+    });
+  }
+}
+// 配信済みメールは1件ずつ保存。全員宛と個別宛の索引から50件ずつページ取得する。
+// 送信IDと本文ハッシュも原子的に保存し、通信切断後の同じ送信を重複配信しない。
+export class MailStore {
+  constructor(state) { this.state = state; }
+  async fetch(req) {
+    const b = await req.json();
+    return this.state.blockConcurrencyWhile(async () => {
+      const storage = this.state.storage;
+      const out = (v, status = 200) => new Response(JSON.stringify(v), { status });
+      const now = Date.now();
+      const view = (m) => ({ ...m, expired: m.expiresAt <= now });
+      if (b.op === 'send') {
+        const prior = await storage.get('request:' + b.requestId);
+        if (prior) {
+          if (prior.digest !== b.digest) return out({ error: 'send_conflict' }, 409);
+          const message = await storage.get('m:' + prior.id);
+          if (!message) return out({ error: 'server' }, 500);
+          return out({ ok: true, duplicate: true, id: message.id, message: view(message) });
+        }
+        if (!(b.message.expiresAt > now + 60000 && b.message.expiresAt <= now + 90 * DAY)) return out({ error: 'bad' }, 400);
+        const id = now.toString(36).padStart(10, '0') + '_' + crypto.randomUUID().replace(/-/g, '');
+        const message = { ...b.message, id, createdAt: now };
+        const prefix = message.recipient === 'all' ? 'a:' : 'p:' + message.recipient + ':';
+        await writeTogether(storage, [
+          ['m:' + id, message], [prefix + id, id], ['request:' + b.requestId, { id, digest: b.digest }]
+        ]);
+        return out({ ok: true, duplicate: false, id, message: view(message) });
+      }
+      if (b.op === 'get') {
+        const message = await storage.get('m:' + b.id);
+        if (!message) return out({ error: 'notfound' }, 404);
+        if (message.recipient !== 'all' && message.recipient !== b.pid) return out({ error: 'mail_recipient' }, 403);
+        return out({ ok: true, message: view(message) });
+      }
+      if (b.op === 'list' || b.op === 'history') {
+        const options = (prefix) => ({ prefix, reverse: true, limit: MAIL_PAGE + 1, ...(b.cursor ? { end: prefix + b.cursor } : {}) });
+        let candidates;
+        if (b.op === 'history') {
+          candidates = [...(await storage.list(options('m:'))).values()];
+        } else {
+          const global = await storage.list(options('a:'));
+          const personal = await storage.list(options('p:' + b.pid + ':'));
+          const ids = [...new Set([...global.values(), ...personal.values()])];
+          const rows = ids.length ? await storage.get(ids.map((id) => 'm:' + id)) : new Map();
+          candidates = [...rows.values()].filter((m) => m.recipient === 'all' || m.recipient === b.pid);
+        }
+        candidates.sort((a, b) => a.id < b.id ? 1 : a.id > b.id ? -1 : 0);
+        const page = candidates.slice(0, MAIL_PAGE);
+        return out({ ok: true, messages: page.map(view), nextCursor: candidates.length > MAIL_PAGE ? page.at(-1).id : null, serverTime: now });
+      }
+      return out({ error: 'bad' }, 400);
     });
   }
 }
@@ -717,12 +856,58 @@ export class SyncLock {
     this.state = state;
   }
   async fetch(req) {
-    const { data, base, op, amt, gid, opId, wid } = await req.json();
+    const { data, base, op, amt, gid, opId, wid, pid, mail, ids } = await req.json();
     return this.state.blockConcurrencyWhile(async () => {
       const store = this.state.storage;
       const row = (await store.get('row')) || null;
       const res = (x, status = 200) => new Response(JSON.stringify(x), { status });
       if (op === 'get') return res({ row });
+      if (['mail-state', 'mail-read', 'mail-claim'].includes(op)) {
+        let save;
+        try { save = JSON.parse(row?.data || 'null'); } catch { save = null; }
+        if (!save || typeof pid !== 'string' || save.pid !== pid || !PID_RE.test(pid)) return res({ error: 'nosync' }, 403);
+        if (op === 'mail-state') {
+          if (!Array.isArray(ids) || ids.length > MAIL_PAGE || ids.some((id) => typeof id !== 'string' || !MAIL_ID_RE.test(id))) return res({ error: 'bad' }, 400);
+          const keys = ids.flatMap((id) => ['mail:read:' + id, 'mail:claim:' + id]);
+          const saved = keys.length ? await store.get(keys) : new Map();
+          return res({ ok: true, states: Object.fromEntries(ids.map((id) => [id, {
+            readAt: saved.get('mail:read:' + id) || 0,
+            claimedAt: saved.get('mail:claim:' + id)?.claimedAt || 0
+          }])) });
+        }
+        if (!mail || !MAIL_ID_RE.test(String(mail.id || '')) || (mail.recipient !== 'all' && mail.recipient !== pid)) return res({ error: 'mail_recipient' }, 403);
+        const readKey = 'mail:read:' + mail.id;
+        const readAt = (await store.get(readKey)) || Date.now();
+        if (op === 'mail-read') {
+          await store.put(readKey, readAt);
+          return res({ ok: true, id: mail.id, readAt });
+        }
+        const receiptKey = 'mail:claim:' + mail.id;
+        const prior = await store.get(receiptKey);
+        // 過去の残高ではなく最新セーブを返す。再送が遅れても、その後の消費や別の受取を戻さない。
+        if (prior) return res({ ok: true, id: mail.id, pid, duplicate: true, receipt: prior, data: row.data, ver: row.ver, shards: save.shards });
+        if (!(Number.isSafeInteger(mail.expiresAt) && mail.expiresAt > Date.now())) return res({ error: 'expired' }, 410);
+        const gift = mailGift(mail.gift);
+        if (!gift || (!gift.shards && !gift.items.length)) return res({ error: 'no_gift' }, 409);
+        const current = save.shards;
+        if (!Number.isSafeInteger(current) || current < 0) return res({ error: 'wealth' }, 422);
+        if (current + gift.shards > MAIL_MAX_SHARDS) return res({ error: 'wallet_full' }, 409);
+        const owned = new Set(Array.isArray(save.owned) ? save.owned : []);
+        const awarded = gift.items.filter((id) => !owned.has(id));
+        awarded.forEach((id) => owned.add(id));
+        const now = Date.now(), ver = (row.ver || 0) + 1;
+        save.shards = current + gift.shards;
+        save.owned = [...owned];
+        save.syncAt = now;
+        const serialized = JSON.stringify(save);
+        if (serialized.length > 200000) return res({ error: 'too large' }, 413);
+        const receipt = { id: mail.id, shards: gift.shards, items: awarded, claimedAt: now, ver };
+        await writeTogether(store, [
+          ['row', { ...row, data: serialized, ver, wealth: wealthOf(save), wid: '' }],
+          [receiptKey, receipt], [readKey, readAt]
+        ]);
+        return res({ ok: true, id: mail.id, pid, duplicate: false, receipt, data: serialized, ver, shards: save.shards });
+      }
       if (op === 'spend-status') return res({ exists: typeof opId === 'string' && !!(await store.get('op:' + opId)) });
       if (op === 'spend' || op === 'refund') {
         // 操作IDは金額とギルドに固定し、返金も元の記録と一緒に確定する。
