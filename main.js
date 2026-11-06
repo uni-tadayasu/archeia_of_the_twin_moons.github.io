@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { loadModel } from './model-runtime.js?v=20261106orig3d';
-import { Battle, ARENA_R } from './game.js?v=20261106orig3d';
+import { Battle, ARENA_R } from './game.js?v=20261106startfix5';
 import { FIGHTERS, STORY, ROSTER, UPGRADES, MAX_LV, STAGES, BGM, APEX_BGM, ENEMY_ROSTER, UPG_CAP, LB_MAX, lbMaxLv, lbMul, lbCost, WEAPONS, ARMORS, SUMMONS, STAT_LABEL, SPECIAL_KEYS, BOSS_ROSTER, currentEvent, sanitizeEvent, EV_FOE_KINDS } from './data.js';
 import { sayBattle, setVoiceMuted, stopVoices } from './voice.js';
 import { initSocial, uiConfirm } from './social.js';

@@ -10,7 +10,10 @@ const SUMMON_DEFS = {
   s1: { name: 'スサノオ', model: 'assets/models/summon-susanoo.glb', height: 3.4, hpMul: 0.6, dist: 2.2, range: 4.4, mul: 1.5, autoMul: 1.4, autoCd: 1.6, autoRange: 4.0, color: 0x30ff70, color2: 0xa0ffc0 }
 };
 const SUMMON_CACHE = new Map();
-const summonLoader = new GLTFLoader();
+// Reuse the configured GLB loader (including Draco/Meshopt decoding).
+// GLTFLoader was not imported here: constructing it aborted the entire game
+// before the start button was wired up.
+
 
 // 八岐大蛇：一部の首が胴体から切れて見える旧GLBを、滑らかな補強曲線で接続。
 // 元の顔・胴体メッシュとテクスチャは残す。首は独立材質でカメラ背面からも見える。
@@ -81,7 +84,14 @@ function repairOrochiNecks(scene, ownership) {
   return patch;
 }
 function loadSummonModel(url) {
-  if (!SUMMON_CACHE.has(url)) SUMMON_CACHE.set(url, summonLoader.loadAsync(url).catch((err) => { console.warn(err); return null; }));
+  if (!SUMMON_CACHE.has(url)) {
+    const request = loadModel(url).catch((err) => {
+      SUMMON_CACHE.delete(url); // Allow a later summon to retry a failed load.
+      console.warn('[SUMMON MODEL]', url, err);
+      return null;
+    });
+    SUMMON_CACHE.set(url, request);
+  }
   return SUMMON_CACHE.get(url);
 }
 
