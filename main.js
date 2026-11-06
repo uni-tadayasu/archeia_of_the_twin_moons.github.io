@@ -1,6 +1,6 @@
 import * as THREE from 'three';
-import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
-import { Battle, ARENA_R } from './game.js?v=20261106a';
+import { loadModel } from './model-runtime.js?v=20261106orig3d';
+import { Battle, ARENA_R } from './game.js?v=20261106orig3d';
 import { FIGHTERS, STORY, ROSTER, UPGRADES, MAX_LV, STAGES, BGM, APEX_BGM, ENEMY_ROSTER, UPG_CAP, LB_MAX, lbMaxLv, lbMul, lbCost, WEAPONS, ARMORS, SUMMONS, STAT_LABEL, SPECIAL_KEYS, BOSS_ROSTER, currentEvent, sanitizeEvent, EV_FOE_KINDS } from './data.js';
 import { sayBattle, setVoiceMuted, stopVoices } from './voice.js';
 import { initSocial, uiConfirm } from './social.js';
@@ -140,30 +140,88 @@ function setStage(st) {
 const stageById = (id) => STAGES.find((s) => s.id === id) || STAGES[0];
 setStage(STAGES[0]);
 
-// ---------- Assets ----------
+// ---------- キャラクター3Dモデル：元のGLB・骨格・衣装を使う（棒状代替は禁止） ----------
 const assets = {};
-const gltfLoader = new GLTFLoader();
 const modelUrls = [...new Set(Object.values(FIGHTERS).map((d) => d.model))];
 const byUrl = {};
+const modelErrors = new Map();
 let loadedModels = 0;
-const modelErrors = [];
-const loadPromise = Promise.allSettled(modelUrls.map((url) =>
-  gltfLoader.loadAsync(url).then((g) => {
-    byUrl[url] = g;
-    loadedModels++;
-    if ($('#loading')) $('#loading').textContent = `戦士の準備 ${loadedModels}/${modelUrls.length}`;
-  }).catch((error) => {
-    modelErrors.push(url);
-    console.error('[3D MODEL] 読み込み失敗:', url, error);
-  })
-)).then(() => {
-  for (const [k, d] of Object.entries(FIGHTERS)) if (byUrl[d.model]) assets[k] = byUrl[d.model];
-  const msg = $('#loading');
-  if (msg) {
-    msg.textContent = modelErrors.length ? `一部モデルの読み込みに失敗しました（${modelErrors.length}件）。回線を確認して再読み込みしてください。` : '';
-    msg.title = modelErrors.join('\n');
+let loadPromise;
+
+function updateModelStatus() {
+  const progress = `${loadedModels}/${modelUrls.length}`;
+  const el = $('#loading');
+  if (el) {
+    el.textContent = modelErrors.size
+      ? `3Dモデル読込失敗 ${modelErrors.size}件（準備済み ${progress}）。再試行できます。`
+      : loadedModels < modelUrls.length ? `戦士の3Dモデルを準備中 ${progress}` : '3Dモデルの準備が整いました';
+    el.title = [...modelErrors].map(([url, error]) => `${url}: ${error?.message || error}`).join('\n');
   }
+}
+function setLoadedModel(url, result) {
+  if (!byUrl[url]) loadedModels++;
+  byUrl[url] = result;
+  modelErrors.delete(url);
+  for (const [key, fighter] of Object.entries(FIGHTERS)) {
+    if (fighter.model === url) assets[key] = result;
+  }
+  updateModelStatus();
+}
+async function retrieveModel(url) {
+  try {
+    const result = await loadModel(url);
+    setLoadedModel(url, result);
+    return true;
+  } catch (error) {
+    modelErrors.set(url, error);
+    console.error('[3D MODEL]', url, error);
+    updateModelStatus();
+    return false;
+  }
+}
+function modelErrorDialog() {
+  let panel = document.getElementById('arkeia-model-error');
+  if (!panel) {
+    panel = document.createElement('div');
+    panel.id = 'arkeia-model-error';
+    panel.setAttribute('role', 'alert');
+    panel.style.cssText = 'position:fixed;z-index:10003;bottom:12px;left:12px;right:12px;max-width:720px;margin:auto;padding:16px 18px;border:1px solid #debb75;background:rgba(9,13,28,.97);color:#fff0d5;box-shadow:0 12px 40px #000b;font:14px/1.7 system-ui,sans-serif;pointer-events:auto';
+    document.body.append(panel);
+  }
+  const names = [...modelErrors.keys()].map((x) => x.split('/').pop());
+  const caption = document.createElement('strong');
+  caption.textContent = '3Dモデルを読み込めませんでした（棒状の代用品は表示しません）';
+  const detail = document.createElement('div');
+  detail.textContent = `${names.slice(0, 5).join('、')}${names.length > 5 ? ` ほか${names.length - 5}件` : ''}。公開先の assets/models/ の配置を確認してください。`;
+  const retry = document.createElement('button');
+  retry.type = 'button';
+  retry.textContent = 'モデルを再読み込み';
+  retry.style.cssText = 'margin-top:8px;border:1px solid #c9a65a;background:#422519;color:#fff5d9;padding:8px 14px;cursor:pointer';
+  retry.addEventListener('click', async () => {
+    retry.disabled = true;
+    retry.textContent = '再試行中…';
+    const ok = await ensureAllModelsReady();
+    if (ok) panel.remove();
+    retry.disabled = false;
+    retry.textContent = 'モデルを再読み込み';
+  });
+  panel.replaceChildren(caption, detail, retry);
+}
+async function ensureAllModelsReady() {
+  await loadPromise;
+  if (modelErrors.size) {
+    await Promise.all([...modelErrors.keys()].map(retrieveModel));
+  }
+  if (modelErrors.size) {
+    modelErrorDialog();
+    return false;
+  }
+  return true;
+}
+loadPromise = Promise.allSettled(modelUrls.map(retrieveModel)).then(() => {
+  updateModelStatus();
 });
+updateModelStatus();
 
 // ---------- Save ----------
 const SAVE_KEY = 'arkeia-save-v1';
@@ -1790,7 +1848,7 @@ function openEventLevel(cb) {
 }
 
 async function startOffline() {
-  await loadPromise;
+  if (!(await ensureAllModelsReady())) return;
   const evRun = state.mode === 'event' ? (state.eventRun ||= activeEvent()) : null;
   setStage(evRun ? STAGES[evRun.ev.stage % STAGES.length] : state.stage || STAGES[0]);
   const b = makeBattle(null);
@@ -2165,7 +2223,7 @@ function buildStoryBattle(foes, boss) {
 }
 // 目的地の決戦：ボス章は決められた敵、通常の章は1〜6体
 async function startChapterBattle() {
-  await loadPromise;
+  if (!(await ensureAllModelsReady())) return;
   const ch = STORY[state.chapter];
   state.encounter = null;
   let foes = ch.enemies;
@@ -2197,7 +2255,8 @@ function resetFieldLight() {
 }
 async function enterField() {
   // フィールドは物語でしか使わないので必要になった時だけ読み込む（初回表示を軽く）
-  const [{ Field }] = await Promise.all([import('./field.js'), loadPromise]);
+  if (!(await ensureAllModelsReady())) return;
+  const { Field } = await import('./field.js?v=20261106orig3d');
   leaveField();
   const ch = STORY[state.chapter];
   const st = stageById(ch.stage);
@@ -2573,7 +2632,7 @@ function onPeers(peers) {
 }
 
 async function startOnline(peer) {
-  await loadPromise;
+  if (!(await ensureAllModelsReady())) return;
   if (!state.online) {
     return;
   }
@@ -2770,7 +2829,7 @@ async function startInvade(p) {
   if (!w || !operatorUnlocked()) {
     return;
   }
-  await loadPromise;
+  if (!(await ensureAllModelsReady())) return;
   // サーバー設定時：乱入の許可をサーバーで判定し、署名付き許可証を相手に渡す
   let tk = '';
   if (apiEnabled()) {

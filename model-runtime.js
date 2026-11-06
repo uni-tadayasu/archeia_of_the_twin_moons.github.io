@@ -12,7 +12,7 @@ let active = 0;
 let decoderPromise = null;
 let meshoptPromise = null;
 const BASE = new URL('./', import.meta.url);
-export const MODEL_VERSION = 'restore1';
+export const MODEL_VERSION = 'original3d-20261106';
 
 export class ModelLoadError extends Error {
   constructor(url, detail, cause) {

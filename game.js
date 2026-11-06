@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js';
 import { FIGHTERS, ELEMS } from './data.js';
 import { makeGear, animGear } from './gear.js';
-import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { instantiateModel, disposeModel, loadModel } from './model-runtime.js?v=20261106orig3d';
 
 // 召喚獣の見た目と性能（HPは使い手の最大HPに比例）
 const SUMMON_DEFS = {
@@ -481,47 +481,23 @@ export class Fighter {
 
   buildModel(gltf) {
     const h = this.def.height * this.scale;
-    if (gltf) {
-      const m = SkeletonUtils.clone(gltf.scene);
-      m.updateMatrixWorld(true);
-      const box = new THREE.Box3().setFromObject(m);
-      const size = box.getSize(new THREE.Vector3());
-      const s = h / Math.max(size.y, 0.001);
-      m.scale.setScalar(s);
-      m.position.y = -box.min.y * s;
-      const tint = this.tint != null ? new THREE.Color(this.tint) : null;
-      m.traverse((c) => {
-        if (c.isMesh) {
-          c.castShadow = true;
-          if (tint && c.material) {
-            c.material = c.material.clone();
-            c.material.color?.lerp(tint, 0.6);
-          }
-        }
-      });
-      this.visual.add(m);
-      this.mixer = new THREE.AnimationMixer(m);
-      this.clips = {};
-      for (const clip of gltf.animations) {
-        const n = clip.name.toLowerCase();
-        for (const k of ['idle', 'walk', 'run', 'jump']) {
-          if (n.includes(k) && !this.clips[k]) {
-            this.clips[k] = clip;
-          }
-        }
+    if (!gltf?.scene) {
+      throw new Error(`[3D MODEL] ${this.key}: 元のGLBを取得できません。assets/models/ の公開を確認してください。`);
+    }
+    const instance = instantiateModel(gltf, h, this.tint);
+    this.modelInstance = instance;
+    this.visual.add(instance.wrapper);
+    this.mixer = new THREE.AnimationMixer(instance.model);
+    this.clips = {};
+    for (const clip of gltf.animations || []) {
+      const n = clip.name.toLowerCase();
+      for (const key of ['idle', 'walk', 'run', 'jump']) {
+        if (n.includes(key) && !this.clips[key]) this.clips[key] = clip;
       }
-    } else {
-      const mesh = new THREE.Mesh(
-        new THREE.CapsuleGeometry(0.35 * this.scale, h - 0.7 * this.scale, 6, 12),
-        new THREE.MeshStandardMaterial({ color: this.tint ?? this.def.color })
-      );
-      mesh.position.y = h / 2;
-      mesh.castShadow = true;
-      this.visual.add(mesh);
     }
     // 装備：骨格と体形を測ってフィット（骨に付けてアニメに追従）
-    const model = this.visual.children.find((c) => !c.isMesh || c.geometry?.type !== 'CapsuleGeometry') || null;
-    this.gear = this.gearIds ? makeGear(h, this.gearIds.w, this.gearIds.a, gltf ? model : null, this.visual) : null;
+    const model = instance.model;
+    this.gear = this.gearIds ? makeGear(h, this.gearIds.w, this.gearIds.a, model, this.visual) : null;
     const teamColor = this.team === 0 ? 0x7fd3ff : 0xff7a5a;
     this.ringMesh = new THREE.Mesh(GEO.ring, glow(teamColor, 0.7));
     this.ringMesh.scale.setScalar(0.8 * this.scale);
@@ -960,7 +936,16 @@ export class Fighter {
     this.action = null;
     this.inv = 1.6;
     this.dead = false;
-    // 見た目を作り直す
+    // 見た目を作り直す（元のGLBキャッシュは残し、複製した材質だけ解放）
+    if (this.redMats) {
+      for (const [part, original, temporary] of this.redMats) {
+        part.material = original;
+        temporary.dispose();
+      }
+      this.redMats = null;
+    }
+    disposeModel(this.modelInstance, this.mixer);
+    this.modelInstance = null;
     this.visual.clear();
     this.root.remove(this.ringMesh, this.guardMesh);
     this.visual.rotation.set(0, 0, 0);
@@ -2609,7 +2594,9 @@ export class Battle {
   dispose() {
     for (const f of this.fighters) {
       this.scene.remove(f.root);
-      f.mixer?.stopAllAction();
+      if (f.redMats) f.endAwaken();
+      disposeModel(f.modelInstance, f.mixer);
+      f.modelInstance = null;
     }
     // 生存中・消滅演出中のどちらも戦闘終了時に片付ける
     for (const s of this.summons) this.removeSummon(s);
