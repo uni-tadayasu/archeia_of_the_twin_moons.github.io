@@ -1,5 +1,7 @@
-// Riftfall Arena Cloudflare Worker: single-file bundle of the uploaded complete release.
-// Keeps existing Durable Object exports, including MailStore.
+// Riftfall Arena Cloudflare Worker — editor type-check update (2026-11-06).
+// Single-file ES module. Paste this entire file into the existing Worker.
+// Keeps all 8 existing Durable Object exports, including MailStore.
+// No imports, new bindings, migrations, secrets, routes, or balance changes.
 // Original sources: appearance-data.js, data.js, server/worker.js
 
 // 外見の設計値。描画ライブラリ・DOMに依存しないのでサーバーからも読み込める。
@@ -895,6 +897,8 @@ export const STORY = [];
       const isBoss = ci === 9 && arc.boss;
       const mid = MID_BOSS_SPEC[ai + '-' + ci];
       const lvl = 0.75 + ai * 0.08;
+      // 通常敵にはボス専用の名前・色・拡大率がないため、それらは任意項目とする。
+      /** @type {Array<{k: string, hpMul?: number, name?: string, tint?: number, scale?: number}>} */
       let enemies;
       if (isBoss) {
         enemies = [{ ...(PART_BOSS_SPEC[ai] || arc.boss) }];
@@ -1034,7 +1038,11 @@ export function currentEvent(now = Date.now()) {
 
 // ---- 全戦士共通の回復技（skills[4]。H キー／「癒」ボタン） ----
 export const HEAL_SLOT = 4;
-for (const [k, f] of Object.entries(FIGHTERS)) {
+// 各戦士の技を共通の形で扱い、技ごとの差分から巨大な共用体型を作らない。
+// name・kindは必須。他の技パラメーターは実際の値をそのまま保持する。
+/** @type {Array<[string, {hp: number, skills: Array<{name: string, kind: string, [field: string]: unknown}>}]>} */
+const healTargets = Object.entries(FIGHTERS);
+for (const [k, f] of healTargets) {
   if (!f.skills || f.skills.length > HEAL_SLOT) continue;
   while (f.skills.length < HEAL_SLOT) f.skills.push({ ...f.skills[0] });
   const v = k === 'sovereign' || k === 'sovereign2';
@@ -1058,7 +1066,10 @@ for (const [k, f] of Object.entries(FIGHTERS)) {
     { name: '万毒腐界《ヴェノム・パンデミア》', kind: 'rain', visual: 'nova', count: 7, spread: 4, radius: 3, dmg: 140, delay: 0.45, interval: 0.1 },
     { name: '血華千刃《ブラッド・サウザンド》', kind: 'rain', visual: 'blade', count: 14, spread: 4, radius: 1.8, dmg: 105, delay: 0.25, interval: 0.04 }
   ];
-  for (const [key, mul] of [['sovereign', 1], ['sovereign2', 1.25]]) {
+  // 配列の1列目はキャラID、2列目は数値倍率。文字列と数値を混同させない。
+  /** @type {Array<[string, number]>} */
+  const topSkillTargets = [['sovereign', 1], ['sovereign2', 1.25]];
+  for (const [key, mul] of topSkillTargets) {
     const f = FIGHTERS[key];
     TOP.forEach((t, ei) => {
       f.skills.push(finalizeSkill({ ...t, dmg: Math.round(t.dmg * mul), cost: 24, elem: ei, color: ELEMS[ei].c, vivid: true }, ei));
@@ -2059,6 +2070,8 @@ export class SyncLock {
         allow = credit - Math.max(0, growth);
       }
       const nv = ver + 1;
+      // セーブ本体と再送判定用記録は値の形が異なるが、同じトランザクションで保存する。
+      /** @type {Array<[string, unknown]>} */
       const writes = [['row', { data: payload, at: now, ver: nv, wealth, allow, wid: myWid }]];
       if (myWid) writes.push([writeKey, { digest, ver: nv }]);
       await writeTogether(store, writes);
