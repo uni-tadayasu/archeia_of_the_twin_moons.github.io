@@ -1,9 +1,8 @@
 import * as THREE from 'three';
 import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js';
-import { applyCharacterVariant, getCharacterBodyBounds, disposeCharacterVariant } from './character-variants.js?v=20261106-model-ui3';
 import { FIGHTERS, ELEMS } from './data.js';
-import { makeGear, animGear, removeGear } from './gear.js';
-import { createModelLoader, modelAssetUrl } from './model-loader.js?v=20261106-model-ui3';
+import { makeGear, animGear } from './gear.js';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 
 // 召喚獣の見た目と性能（HPは使い手の最大HPに比例）
 const SUMMON_DEFS = {
@@ -11,19 +10,51 @@ const SUMMON_DEFS = {
   s1: { name: 'スサノオ', model: 'assets/models/summon-susanoo.glb', height: 3.4, hpMul: 0.6, dist: 2.2, range: 4.4, mul: 1.5, autoMul: 1.4, autoCd: 1.6, autoRange: 4.0, color: 0x30ff70, color2: 0xa0ffc0 }
 };
 const SUMMON_CACHE = new Map();
-const summonLoader = createModelLoader();
+const summonLoader = new GLTFLoader();
 function loadSummonModel(url) {
-  if (!SUMMON_CACHE.has(url)) {
-    const pending = summonLoader.loadAsync(modelAssetUrl(url)).catch((err) => {
-      // A temporary connection failure must not cache an invisible summon for
-      // the rest of the session. Concurrent loads still share this request.
-      if (SUMMON_CACHE.get(url) === pending) SUMMON_CACHE.delete(url);
-      console.warn(err);
-      return null;
-    });
-    SUMMON_CACHE.set(url, pending);
-  }
+  if (!SUMMON_CACHE.has(url)) SUMMON_CACHE.set(url, summonLoader.loadAsync(url).catch((err) => { console.warn(err); return null; }));
   return SUMMON_CACHE.get(url);
+}
+
+function addOrochiNecks(root, d, k, sizeY) {
+  const necks = new THREE.Group();
+  necks.name = 'orochi-neck-fix';
+  const mainColor = new THREE.Color(d.color);
+  const edgeColor = new THREE.Color(d.color2);
+  const baseY = sizeY * 0.34;
+  const baseZ = sizeY * 0.06;
+  const headY = sizeY * 0.6;
+  const spread = sizeY * 0.12;
+  const bodyRadius = 0.11 * k;
+  for (let i = 0; i < 8; i++) {
+    const side = (i - 3.5) / 3.5;
+    const seg = new THREE.CylinderGeometry(bodyRadius * (0.92 - Math.abs(side) * 0.08), bodyRadius * 1.26, sizeY * 0.42, 8);
+    const mat = new THREE.MeshStandardMaterial({
+      color: mainColor,
+      roughness: 0.72,
+      metalness: 0.08,
+      emissive: edgeColor,
+      emissiveIntensity: 0.07
+    });
+    const mesh = new THREE.Mesh(seg, mat);
+    mesh.castShadow = true;
+    mesh.position.set(side * spread, (baseY + headY) * 0.5, baseZ + 0.32 * k + Math.abs(side) * 0.12 * k);
+    mesh.rotation.x = -0.82 + Math.abs(side) * 0.15;
+    mesh.rotation.z = -side * 0.24;
+    necks.add(mesh);
+    const collar = new THREE.Mesh(new THREE.TorusGeometry(bodyRadius * 0.92, bodyRadius * 0.16, 6, 14), new THREE.MeshStandardMaterial({
+      color: d.color2,
+      roughness: 0.28,
+      metalness: 0.2,
+      emissive: d.color2,
+      emissiveIntensity: 0.1
+    }));
+    collar.rotation.x = Math.PI / 2;
+    collar.position.copy(mesh.position).add(new THREE.Vector3(0, -sizeY * 0.14, -0.06 * k));
+    necks.add(collar);
+  }
+  root.add(necks);
+  return necks;
 }
 
 // 状態異常：持続秒数・継続ダメージ(毎秒)
@@ -197,9 +228,6 @@ const G3 = {
   crescent: new THREE.TorusGeometry(0.9, 0.06, 4, 28, Math.PI * 0.9),
   core: new THREE.IcosahedronGeometry(0.5, 1)
 };
-const SHARED_FX_GEOMETRY = new Set([
-  ...Object.values(GEO), ...Object.values(SG), ...Object.values(G3), ...PRIMS, ...RUNES, PLANE
-]);
 let fx3dLive = 0;
 let grandLive = 0;
 function lite(color, k = 0.4) {
@@ -248,18 +276,7 @@ function fade(obj, k) {
 }
 function kill(parent, obj) {
   parent.remove(obj);
-  if (obj.userData.effectDisposed) return;
-  obj.userData.effectDisposed = true;
-  const resources = new Set();
-  obj.traverse((o) => {
-    // Sprite quads and the module's primitive geometries are shared by every
-    // battle. Only a one-off effect's geometry belongs to this instance.
-    if (o.geometry && !o.isSprite && !SHARED_FX_GEOMETRY.has(o.geometry)) resources.add(o.geometry);
-    for (const material of Array.isArray(o.material) ? o.material : [o.material]) {
-      if (material) resources.add(material);
-    }
-  });
-  for (const resource of resources) resource.dispose();
+  obj.traverse((o) => o.material?.dispose());
 }
 
 function makeShape(kind, color, s = 1) {
@@ -435,26 +452,22 @@ export class Fighter {
   }
 
   buildModel(gltf) {
-    this.modelOwn ||= new Set();
     const h = this.def.height * this.scale;
     if (gltf) {
       const m = SkeletonUtils.clone(gltf.scene);
-      applyCharacterVariant(m, this.def);
       m.updateMatrixWorld(true);
-      const box = getCharacterBodyBounds(m);
+      const box = new THREE.Box3().setFromObject(m);
       const size = box.getSize(new THREE.Vector3());
       const s = h / Math.max(size.y, 0.001);
       m.scale.setScalar(s);
       m.position.y = -box.min.y * s;
-      const tint = !this.def.appearance && this.tint != null ? new THREE.Color(this.tint) : null;
+      const tint = this.tint != null ? new THREE.Color(this.tint) : null;
       m.traverse((c) => {
-        if (c.isSkinnedMesh) this.modelOwn.add(c.skeleton);
         if (c.isMesh) {
           c.castShadow = true;
           if (tint && c.material) {
             c.material = c.material.clone();
             c.material.color?.lerp(tint, 0.6);
-            this.modelOwn.add(c.material);
           }
         }
       });
@@ -477,8 +490,6 @@ export class Fighter {
       mesh.position.y = h / 2;
       mesh.castShadow = true;
       this.visual.add(mesh);
-      this.modelOwn.add(mesh.geometry);
-      this.modelOwn.add(mesh.material);
     }
     // 装備：骨格と体形を測ってフィット（骨に付けてアニメに追従）
     const model = this.visual.children.find((c) => !c.isMesh || c.geometry?.type !== 'CapsuleGeometry') || null;
@@ -488,30 +499,11 @@ export class Fighter {
     this.ringMesh.scale.setScalar(0.8 * this.scale);
     this.ringMesh.position.y = 0.04;
     this.root.add(this.ringMesh);
-    this.modelOwn.add(this.ringMesh.material);
     this.guardMesh = new THREE.Mesh(GEO.sphere, glow(0x9fd8ff, 0.25));
     this.guardMesh.scale.setScalar(h * 0.62);
     this.guardMesh.position.y = h * 0.5;
     this.guardMesh.visible = false;
     this.root.add(this.guardMesh);
-    this.modelOwn.add(this.guardMesh.material);
-  }
-
-  disposeModel() {
-    this.restoreRedMaterials();
-    if (this.mixer) {
-      this.mixer.stopAllAction();
-      this.mixer.uncacheRoot(this.mixer.getRoot());
-    }
-    removeGear(this.gear);
-    disposeCharacterVariant(this.visual);
-    for (const resource of this.modelOwn || []) resource.dispose();
-    this.modelOwn?.clear();
-    this.visual.clear();
-    this.ringMesh?.removeFromParent();
-    this.guardMesh?.removeFromParent();
-    this.mixer = this.gear = this.curAction = this.curAnim = null;
-    this.clips = {};
   }
 
   anim(name) {
@@ -546,7 +538,6 @@ export class Fighter {
   }
 
   update(dt, inp) {
-    this.hitFlash = Math.max(0, (this.hitFlash || 0) - dt);
     if (this.mixer) {
       this.mixer.update(dt);
     }
@@ -667,6 +658,7 @@ export class Fighter {
     }
     const flashOn = this.hitFlash > 0;
     this.visual.position.x = flashOn ? (Math.random() - 0.5) * 0.12 : 0;
+    this.hitFlash = Math.max(0, (this.hitFlash || 0) - 1 / 60);
   }
 
   // 状態異常の付与（この端末で操作している戦士のみ）
@@ -812,16 +804,13 @@ export class Fighter {
       this.root.add(this.awakenAura);
     }
   }
-  restoreRedMaterials() {
+  endAwaken() {
+    this.awakened = 0;
     for (const [c, orig, m] of this.redMats || []) {
       c.material = orig;
       m.dispose();
     }
     this.redMats = null;
-  }
-  endAwaken() {
-    this.awakened = 0;
-    this.restoreRedMaterials();
     if (this.awakenAura) {
       this.root.remove(this.awakenAura);
       this.awakenAura.material.dispose();
@@ -944,9 +933,14 @@ export class Fighter {
     this.inv = 1.6;
     this.dead = false;
     // 見た目を作り直す
-    this.disposeModel();
+    this.visual.clear();
+    this.root.remove(this.ringMesh, this.guardMesh);
     this.visual.rotation.set(0, 0, 0);
     this.visual.position.set(0, 0, 0);
+    this.mixer?.stopAllAction();
+    this.mixer = null;
+    this.curAnim = null;
+    this.curAction = null;
     this.baseY = undefined;
     this.radius = 0.45 * this.scale * (this.def.height / 1.8);
     this.buildModel(this.battle.assets[nk]);
@@ -975,7 +969,6 @@ export class Battle {
     this.slowmo = 0;
     this.shake = 0;
     this.ended = false;
-    this.disposed = false;
     this.camCenter = new THREE.Vector3();
     // 技の閃光用ライト（数を固定してシェーダー再コンパイルを防ぐ）
     this.fxLights = [];
@@ -1044,7 +1037,11 @@ export class Battle {
         this.fxPop(q, el, 6, 1.2, 0.25, { grow: 2.6, spin: 6 });
       }
       if (t < life) return true;
-      for (const o of [pts, ring, core]) kill(this.fx, o);
+      for (const o of [pts, ring, core]) {
+        this.fx.remove(o);
+        o.geometry.dispose();
+        o.material.dispose();
+      }
       return false;
     });
     this.flashLight(pos, color, 1.2, 0.25);
@@ -1274,7 +1271,7 @@ export class Battle {
     if (t) {
       // 受信する攻撃の検証：攻撃者の実在・生存・距離・攻撃回数・技のクールダウン・1撃の上限
       const a = this.fighters.find((f) => f.netId === e.from && f.remoteAuth);
-      if (!a || a.team === t.team || a.hp <= 0 || t.hp <= 0 || t.inv > 0) return;
+      if (!a || a.hp <= 0 || t.hp <= 0) return;
       const now = performance.now() / 1000;
       const dx = a.pos.x - t.pos.x, dz = a.pos.z - t.pos.z;
       const dist = Math.hypot(dx, dz);
@@ -1291,10 +1288,9 @@ export class Battle {
       if (w.n >= 10 || w.d + dmg > netHitCap(a) * 3) return;
       w.n++;
       w.d += dmg;
-      if (this.summonBlock(t, a.pos, dmg)) return;
       const real = t.receive(dmg, e.stun, e.kx, e.kz);
       this.ui.popup(t.pos, real, '#ff8f7a');
-      if (e.st && real > 0) t.applyStatus(e.st);
+      if (e.st) t.applyStatus(e.st);
       this.ui.sfx('hit');
       this.shake = Math.max(this.shake, 0.25);
     }
@@ -1314,7 +1310,6 @@ export class Battle {
   }
 
   cast(f, slot, net) {
-    if (this.disposed) return;
     const idx = Math.max(0, Math.min((f.def.skills?.length || 1) - 1, +slot.slice(1) || 0));
     const spec = slot === 'over' ? f.def.over
       : slot === 'hi' ? hiSpec(f.def)
@@ -1810,7 +1805,6 @@ export class Battle {
 
   // ---- 召喚獣：HPを持ち、倒されるまで使い手の前方に居続ける。通常攻撃の代わりに攻撃する ----
   spawnSummon(f) {
-    if (this.disposed) return null;
     const d = SUMMON_DEFS[f.summonId];
     if (!d) return null;
     const k = (f.def.height / 1.8) * f.scale;
@@ -1848,7 +1842,6 @@ export class Battle {
       m.scale.setScalar(sc);
       m.position.y = -box.min.y * sc;
       m.traverse((c) => {
-        if (c.isSkinnedMesh) s.own.add(c.skeleton);
         if (c.isMesh) {
           c.castShadow = true;
           if (c.material?.emissive) {
@@ -1865,6 +1858,15 @@ export class Battle {
       s.own.delete(ghost.geometry);
       s.own.delete(ghost.material);
       body.add(m);
+      if (f.summonId === 's0') {
+        const neckFix = addOrochiNecks(m, d, k, d.height * k);
+        neckFix.traverse((c) => {
+          if (c.isMesh) {
+            s.own.add(c.geometry);
+            s.own.add(c.material);
+          }
+        });
+      }
       if (gltf.animations?.length) {
         s.mixer = new THREE.AnimationMixer(m);
         const find = (re) => gltf.animations.find((a) => re.test(a.name));
@@ -2005,10 +2007,7 @@ export class Battle {
   removeSummon(s) {
     if (!this.summons.delete(s)) return;
     s.dying = Math.max(s.dying, 1); // 読み込み完了が遅れてもモデルを追加させない
-    if (s.mixer) {
-      s.mixer.stopAllAction();
-      s.mixer.uncacheRoot(s.mixer.getRoot());
-    }
+    s.mixer?.stopAllAction();
     this.scene.remove(s.g);
     // GLBキャッシュの共有素材は残し、この召喚獣専用の素材だけを解放する
     for (const resource of s.own) resource.dispose();
@@ -2038,7 +2037,8 @@ export class Battle {
       t += dt;
       arc.material.opacity = Math.max(0, 0.9 - t * 5);
       if (t > 0.2) {
-        kill(this.fx, arc);
+        arc.geometry.dispose();
+        this.fx.remove(arc);
         return false;
       }
       return true;
@@ -2464,7 +2464,6 @@ export class Battle {
   }
 
   update(rawDt, playerInput) {
-    if (this.disposed) return;
     this.slowmo -= rawDt;
     if (this.intro > 0) this.intro -= rawDt; // 開戦の合図までは誰も動かない
     const dt = rawDt * (this.slowmo > 0 ? 0.4 : 1);
@@ -2579,17 +2578,12 @@ export class Battle {
   }
 
   dispose() {
-    if (this.disposed) return;
-    this.disposed = true;
-    this.ended = true;
     for (const f of this.fighters) {
       this.scene.remove(f.root);
-      f.endAwaken();
-      f.disposeModel();
+      f.mixer?.stopAllAction();
     }
     // 生存中・消滅演出中のどちらも戦闘終了時に片付ける
     for (const s of this.summons) this.removeSummon(s);
-    for (const o of [...this.fx.children]) if (!o.isLight) kill(this.fx, o);
     this.scene.remove(this.fx);
     this.fighters = [];
     this.effects = [];
