@@ -1,5 +1,5 @@
-# 双月のアルケイア — 認証・検証サーバーの自動デプロイ（Cloudflare Workers）
-# main ブランチの server/ か data.js が変わったとき、または Actions 画面から手動で実行
+# Riftfall Arena - Cloudflare Workers deployment.
+# Keep existing secrets in Cloudflare; do not re-upload them from GitHub Actions.
 name: Deploy server
 
 on:
@@ -8,34 +8,45 @@ on:
     paths:
       - 'server/**'
       - 'data.js'
+      - '.github/workflows/deploy-server.yml'
   workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-server-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
 
-      - uses: actions/setup-node@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: '20'
 
-      # Cloudflare Workers へデプロイし、秘密変数も登録する（保存は Durable Object。InstantDB の設定は不要）
+      - name: Check Cloudflare deployment credentials
+        shell: bash
+        env:
+          CF_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CF_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          if [[ -z "$CF_API_TOKEN" || -z "$CF_ACCOUNT_ID" ]]; then
+            echo 'Missing CLOUDFLARE_API_TOKEN or CLOUDFLARE_ACCOUNT_ID in GitHub Actions secrets.' >&2
+            exit 1
+          fi
+
       - name: Deploy Worker
         uses: cloudflare/wrangler-action@v3
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           workingDirectory: server
-          secrets: |
-            SIGN_PRIVATE_JWK
-            PEPPER
-            OP_KEY_SHA256
-            CHIEF_KEY_SHA256
-            STRIPE_WEBHOOK_SECRET
-        env:
-          SIGN_PRIVATE_JWK: ${{ secrets.SIGN_PRIVATE_JWK }}
-          PEPPER: ${{ secrets.PEPPER }}
-          OP_KEY_SHA256: ${{ secrets.OP_KEY_SHA256 }}
-          CHIEF_KEY_SHA256: ${{ secrets.CHIEF_KEY_SHA256 }}
-          STRIPE_WEBHOOK_SECRET: ${{ secrets.STRIPE_WEBHOOK_SECRET }}
+          command: deploy
+          # Intentionally no "secrets:" input: already registered Cloudflare
+          # Worker secrets are retained rather than overwritten or re-uploaded.
