@@ -1,6 +1,6 @@
 import * as THREE from 'three';
-import { loadModel } from './model-runtime.js?v=draco-fix-v20261107';
-import { Battle, ARENA_R } from './game.js?v=draco-fix-v20261107';
+import { loadModel } from './model-runtime.js?v=direct-texture-20261106c';
+import { Battle, ARENA_R } from './game.js?v=direct-texture-20261106c';
 import { FIGHTERS, STORY, ROSTER, UPGRADES, MAX_LV, STAGES, BGM, APEX_BGM, ENEMY_ROSTER, UPG_CAP, LB_MAX, lbMaxLv, lbMul, lbCost, WEAPONS, ARMORS, SUMMONS, STAT_LABEL, SPECIAL_KEYS, BOSS_ROSTER, currentEvent, sanitizeEvent, EV_FOE_KINDS } from './data.js';
 import { sayBattle, setVoiceMuted, stopVoices } from './voice.js';
 import { initSocial, uiConfirm } from './social.js';
@@ -209,13 +209,7 @@ function modelErrorDialog(failedUrls = [...modelErrors.keys()]) {
     if (stillFailed.length) modelErrorDialog(stillFailed);
     else panel.remove();
   });
-  const source = document.createElement('a');
-  source.textContent = 'モデルの公開URLを確認（別タブ）';
-  source.href = new URL(failedUrls[0], document.baseURI).href;
-  source.rel = 'noopener noreferrer';
-  source.target = '_blank';
-  source.style.cssText = 'display:inline-block;margin:8px 12px 0 0;color:#ffd28a;text-decoration:underline';
-  panel.replaceChildren(caption, detail, note, source, retry);
+  panel.replaceChildren(caption, detail, note, retry);
 }
 async function ensureAllModelsReady(requiredKeys = null) {
   // 1 vs 1 doesn't depend on all 20 fighters. Never block it on unused GLBs.
@@ -1410,7 +1404,7 @@ function canUse(k) {
   if (d.locked) return operatorUnlocked();
   return true;
 }
-const SELECT_KEYS = () => [...ROSTER, 'seraphel', 'chief', 'sovereign', 'bloodfiend', 'crimson'];
+const SELECT_KEYS = () => [...ROSTER, 'seraphel', 'chief', 'sovereign', 'bloodfiend', 'gaien', 'crimson'];
 function refreshTitle() {
   $('#btn-invade').hidden = !operatorUnlocked();
   if ($('#btn-evmaker')) $('#btn-evmaker').hidden = !chiefUnlocked();
@@ -1915,7 +1909,7 @@ function beginBattle(boss) {
   // 添付の実音源を再生。ザルグレイヴが戦闘に参加したときは敵味方を問わず最優先。
   const participants = state.battle.fighters.map((f) => f.key);
   const ks = state.battle.fighters.filter((f) => f.team === 1 || state.mode === 'invade').map((f) => f.key);
-  const apex = ks.some((k) => k === 'sovereign' || k === 'sovereign2') ? 2 : ks.includes('chief') ? 1 : 0;
+  const apex = ks.some((k) => k === 'sovereign' || k === 'sovereign2') ? 2 : ks.includes('chief') || ks.includes('gaien') || ks.includes('bloodfiend') ? 1 : 0;
   if (participants.includes('bloodfiend')) {
     playTrack('zarugureibu');
     ui.banner({ name: '— ♪ ザルグレイヴ専用戦闘曲 —' }, '紅翼の血魔');
@@ -2272,7 +2266,7 @@ function resetFieldLight() {
 async function enterField() {
   // フィールドは物語でしか使わないので必要になった時だけ読み込む（初回表示を軽く）
   if (!(await ensureAllModelsReady())) return;
-  const { Field } = await import('./field.js?v=draco-fix-v20261107');
+  const { Field } = await import('./field.js?v=direct-texture-20261106c');
   leaveField();
   const ch = STORY[state.chapter];
   const st = stageById(ch.stage);
@@ -2798,7 +2792,7 @@ async function onInvaded(e) {
   buildHud();
   ui.flash();
   sfx('burst');
-  const apex = ik === 'sovereign' || ik === 'sovereign2' ? 2 : ik === 'chief' || ik === 'bloodfiend' ? 1 : 0;
+  const apex = ik === 'sovereign' || ik === 'sovereign2' ? 2 : ik === 'chief' || ik === 'bloodfiend' || ik === 'gaien' ? 1 : 0;
   playTrack(ik === 'bloodfiend' ? 'zarugureibu' : apex ? 'apex:' + apex : 'boss');
   if (apex) ui.cutin(b.fighters[b.fighters.length - 1], FIGHTERS[ik].name, '運営長、降臨');
   ui.banner({ name: '— 空が裂けた —' }, apex ? '運営長が降りてきた！' : '裁定者が降りてきた！');
@@ -2826,7 +2820,7 @@ function renderInvadeList() {
 
 $('#invade-who').addEventListener('click', () => {
   sfx('ui');
-  const order = chiefUnlocked() ? ['seraphel', 'chief', 'sovereign', 'bloodfiend'] : ['seraphel'];
+  const order = chiefUnlocked() ? ['seraphel', 'chief', 'sovereign', 'bloodfiend', 'gaien'] : ['seraphel'];
   state.invadeKey = order[(order.indexOf(state.invadeKey) + 1) % order.length];
   $('#invade-who').textContent = `乱入する姿：${FIGHTERS[state.invadeKey].name}`;
 });
@@ -2861,7 +2855,7 @@ async function startInvade(p) {
   w.invade({ to: p.id, from: w.myId, name: '運営', tk });
   setStage(stageById(STORY[p.ch]?.stage));
   const b = makeBattle(w);
-  const ik = ['chief', 'sovereign', 'bloodfiend'].includes(state.invadeKey) && chiefUnlocked() ? state.invadeKey : 'seraphel';
+  const ik = ['chief', 'sovereign', 'bloodfiend', 'gaien'].includes(state.invadeKey) && chiefUnlocked() ? state.invadeKey : 'seraphel';
   b.add(ik, { team: 0, player: true, awk: save.awk, netId: w.myId, pos: [0, -9], name: FIGHTERS[ik].name + '（運営）', upg: upgFor(ik), gear: gearFor(ik) });
   b.add(peerKeyOf(p.id, p.fk), { team: 1, remote: true, netId: p.id, pos: [p.x, p.z], name: p.name, gear: { w: p.gw, a: p.ga }, ...peerOpts(p.id, peerKeyOf(p.id, p.fk)) });
   b.strictNet = apiEnabled();

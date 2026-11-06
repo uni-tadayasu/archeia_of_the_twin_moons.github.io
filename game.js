@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js';
 import { FIGHTERS, ELEMS } from './data.js';
 import { makeGear, animGear } from './gear.js';
-import { instantiateModel, disposeModel, loadModel } from './model-runtime.js?v=draco-fix-v20261107';
+import { instantiateModel, disposeModel, loadModel } from './model-runtime.js?v=direct-texture-20261106c';
 
 // 召喚獣の見た目と性能（HPは使い手の最大HPに比例）
 const SUMMON_DEFS = {
@@ -557,6 +557,7 @@ export class Fighter {
     }
     if (this.gear) animGear(this.gear, dt, !!this.action, this.vel.lengthSq() > 0.5);
     if (this.summonCd > 0) this.summonCd -= dt;
+    if (this.formSwapCd > 0) this.formSwapCd -= dt;
     // 召喚獣は戦闘開始時と、倒されてから15秒後に自動で現れる
     else if (this.summonId && !this.summon && !this.dead && !this.remoteAuth) this.battle.spawnSummon(this);
     this.inv = Math.max(0, this.inv - dt);
@@ -842,13 +843,17 @@ export class Fighter {
       if (!a.hit && a.t >= a.hitAt) {
         a.hit = true;
         const big = a.step === 2;
+        if (this.def.manualFormSwap && this.manualFormSwap()) {
+          // 変身後の通常攻撃性能をそのまま使う
+        }
+        const curL = this.def.light;
         if (this.summonId && this.battle.summonStrike(this, big)) {
           // 召喚獣が通常攻撃の代わりに攻撃
-        } else if (L.shots) {
-          this.battle.laserVolley(this, L, big ? L.shots + 2 : L.shots);
+        } else if (curL.shots) {
+          this.battle.laserVolley(this, curL, big ? curL.shots + 2 : curL.shots);
         } else {
           this.battle.swingFx(this);
-          this.battle.meleeHit(this, L.range, L.dmg * (big ? 1.6 : 1), big ? 0.5 : 0.25, big ? 8 : 2.5, null, null, !!L.spin);
+          this.battle.meleeHit(this, curL.range, curL.dmg * (big ? 1.6 : 1), big ? 0.5 : 0.25, big ? 8 : 2.5, null, null, !!curL.spin);
         }
       }
     } else if (a.type === 'dash') {
@@ -920,6 +925,51 @@ export class Fighter {
       vo?.(this, 'hurt');
     }
     return dmg;
+  }
+
+  // 手動変身：通常近接攻撃を出すたびに、進化前/進化後を切り替える
+  manualFormSwap() {
+    const nk = this.def.manualForm2 || this.def.manualBase;
+    if (!nk || this.formSwapCd > 0 || !FIGHTERS[nk]) return false;
+    this.formSwapCd = 0.22;
+    const hpRate = Math.max(0.08, Math.min(1, this.hp / Math.max(1, this.maxHp || 1)));
+    const flux = this.flux;
+    const over = this.over;
+    const stun = this.stun;
+    const act = this.action;
+    this.key = nk;
+    this.def = FIGHTERS[nk];
+    this.name = this.def.name;
+    const u = this.upg;
+    this.atkMul = (1 + 0.06 * (u.atk || 0)) * (this.def.power || 1) * this.balAtk;
+    this.defMul = (1 - 0.05 * (u.def || 0)) * (this.def.armor || 1) * this.balDef;
+    this.fluxRate = 7 * (1 + 0.12 * (u.flux || 0)) * (this.def.fluxMul || 1);
+    this.og = this.def.overGain * (1 + 0.1 * (u.over || 0));
+    this.maxHp = Math.round(this.def.hp * this.hpMul * (1 + 0.08 * (u.hp || 0)));
+    this.hp = Math.max(1, Math.round(this.maxHp * hpRate));
+    this.flux = Math.min(100, Math.max(flux, 36));
+    this.over = over;
+    this.stun = Math.min(stun, 0.12);
+    this.inv = Math.max(this.inv, 0.18);
+    this.dead = false;
+    this.visual.clear();
+    this.root.remove(this.ringMesh, this.guardMesh);
+    this.visual.rotation.set(0, 0, 0);
+    this.visual.position.set(0, 0, 0);
+    this.mixer?.stopAllAction();
+    this.mixer = null;
+    this.curAnim = null;
+    this.curAction = null;
+    this.baseY = undefined;
+    this.radius = 0.45 * this.scale * (this.def.height / 1.8);
+    this.buildModel(this.battle.assets[nk]);
+    this.action = act;
+    if (this.awakened > 0) {
+      this.redMats = null;
+      this.applyRed();
+    }
+    this.battle.transformFx(this);
+    return true;
   }
 
   // 体力が半分を切ったら第二形態へ変身（form2 を持つ戦士のみ・1回だけ）

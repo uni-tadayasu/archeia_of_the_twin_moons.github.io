@@ -1,5 +1,3 @@
-import { assignUniqueAppearances } from './appearance-data.js';
-
 // 戦士データ。skills[0]=技A（立ち）, [1]=技A（移動中）, [2]=技B（立ち）, [3]=技B（移動中）
 export const FIGHTERS = {
   rowen: {
@@ -247,6 +245,32 @@ FIGHTERS.sovereign2 = {
   ],
   over: { name: '深淵開闢・緋紫の終焉', kind: 'judgment', visual: 'pillar', finalVisual: 'bigsword', count: 24, spread: 8, radius: 2.8, dmg: 120, delay: 0.7, interval: 0.05, finalDmg: 650, finalRadius: 11, elem: 9, color: 0xff2050, vivid: true }
 };
+
+// 運営長専用：ガイエン（通常近接で進化前/進化後を切り替えられる炎覇竜）
+FIGHTERS.gaien = {
+  name: 'ガイエン', title: '煉殻竜王（運営長・第一形態）', model: 'assets/models/flame-shell-king.glb', face: 'assets/face-gaien.webp',
+  color: 0xff9a36, height: 2.15, hp: 1750, speed: 5.9, overGain: 1.45, locked: true, special: 'chief', manualFormSwap: true, manualForm2: 'gaien2',
+  light: { dmg: 72, range: 2.7, color: 0xffa24a },
+  skills: [
+    { name: '灼皇息《フレア・ブレス》', cost: 20, kind: 'projectile', visual: 'flame', count: 5, spreadAng: 0.16, dmg: 60, speed: 17, radius: 0.82, elem: 0, color: 0xff6a20, vivid: true },
+    { name: '紅蓮突進', cost: 22, kind: 'dash', dmg: 150, speed: 18, dur: 0.34, elem: 0, color: 0xff7a28, vivid: true },
+    { name: '熔殻震波', cost: 24, kind: 'shockwave', dmg: 165, radius: 7.2, elem: 0, color: 0xffb040, vivid: true },
+    { name: '火山落星', cost: 28, kind: 'rain', visual: 'nova', count: 5, spread: 3.2, radius: 2.2, dmg: 88, delay: 0.45, interval: 0.12, elem: 0, color: 0xff5418, vivid: true }
+  ],
+  over: { name: '終焔天壊《インフェルノ・ドミニオン》', kind: 'judgment', visual: 'nova', count: 10, spread: 5.5, radius: 2.5, dmg: 90, delay: 0.65, interval: 0.08, finalDmg: 430, finalRadius: 8.5, elem: 0, color: 0xff4a18, vivid: true }
+};
+FIGHTERS.gaien2 = {
+  name: 'ガイエン', title: '極焔覇皇（運営長・第二形態）', model: 'assets/models/flame-shell-titan.glb', face: 'assets/face-gaien2.webp',
+  color: 0xff5e20, height: 2.45, hp: 2250, speed: 6.2, overGain: 1.75, locked: true, special: 'chief', hidden: true, manualFormSwap: true, manualBase: 'gaien',
+  light: { dmg: 96, range: 3.0, color: 0xff7426 },
+  skills: [
+    { name: '覇炎獄竜砲《メガ・フレア》', cost: 18, kind: 'projectile', visual: 'flame', count: 7, spreadAng: 0.18, dmg: 82, speed: 19, radius: 0.92, elem: 0, color: 0xff5414, vivid: true },
+    { name: '獄炎王撃', cost: 22, kind: 'dash', dmg: 185, speed: 20, dur: 0.36, elem: 0, color: 0xff6a18, vivid: true },
+    { name: '爆焔咆哮', cost: 24, kind: 'shockwave', dmg: 220, radius: 8.6, elem: 0, color: 0xffb030, vivid: true },
+    { name: '焔王流星群', cost: 28, kind: 'rain', visual: 'nova', count: 7, spread: 3.5, radius: 2.6, dmg: 110, delay: 0.4, interval: 0.1, elem: 0, color: 0xff4010, vivid: true }
+  ],
+  over: { name: '滅界皇焔《アポカリプス・ブレス》', kind: 'judgment', visual: 'nova', count: 14, spread: 6.5, radius: 2.8, dmg: 110, delay: 0.7, interval: 0.07, finalDmg: 560, finalRadius: 9.5, elem: 0, color: 0xff3410, vivid: true }
+};
 // 運営長だけが灯晶で購入できる特別キャラ：血魔ザルグレイヴ（血属性）
 export const BLOODFIEND_PRICE = 50000;
 FIGHTERS.bloodfiend = {
@@ -262,7 +286,7 @@ FIGHTERS.bloodfiend = {
   over: { name: '紅月葬送・血華の宴', kind: 'judgment', visual: 'pillar', finalVisual: 'bigsword', count: 18, spread: 7, radius: 2.6, dmg: 100, delay: 0.7, interval: 0.06, finalDmg: 480, finalRadius: 9.5, elem: 9, color: 0xe0103c, vivid: true }
 };
 // 通常プレイヤーがパーティーに入れられない特別枠
-export const SPECIAL_KEYS = ['seraphel', 'chief', 'crimson', 'sovereign', 'bloodfiend'];
+export const SPECIAL_KEYS = ['seraphel', 'chief', 'crimson', 'sovereign', 'bloodfiend', 'gaien'];
 
 // ---------- 決定的な乱数（毎回同じ内容を生成する） ----------
 function rng(seed) {
@@ -988,6 +1012,3 @@ for (const [k, f] of Object.entries(FIGHTERS)) {
     f.pool = [0, 1, 2, 3, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14];
   }
 }
-
-// 元から固有だった20人は維持。素体・顔絵を使い回していた209人だけを固有化。
-export const CHARACTER_APPEARANCES = assignUniqueAppearances(FIGHTERS);
