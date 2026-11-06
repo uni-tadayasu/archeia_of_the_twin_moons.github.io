@@ -1,12 +1,13 @@
 import * as THREE from 'three';
-import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
-import { MeshoptDecoder } from './assets/vendor/meshopt_decoder.module.js';
-import { Battle, ARENA_R } from './game.js';
+import { createModelLoader, modelAssetUrl } from './model-loader.js?v=20261106-model-ui3';
+import { Battle, ARENA_R } from './game.js?v=20261106-model-ui3';
 import { FIGHTERS, STORY, ROSTER, UPGRADES, MAX_LV, STAGES, APEX_BGM, ENEMY_ROSTER, UPG_CAP, LB_MAX, lbMaxLv, lbMul, lbCost, WEAPONS, ARMORS, SUMMONS, STAT_LABEL, SPECIAL_KEYS, BOSS_ROSTER, currentEvent, sanitizeEvent, EV_FOE_KINDS } from './data.js';
 import { ProcMusic } from './music.js';
 import { sayBattle, setVoiceMuted, stopVoices } from './voice.js';
 import { initSocial, uiConfirm } from './social.js';
 import { initMailbox } from './mailbox.js';
+import { getStageArt } from './stage-art.js';
+import { configureSelection, filterSelection, renderStageBrowser, renderHubStatus, filterForge, activateUiDialog, installUiShell } from './ui-overhaul.js';
 import { OPERATOR_KEY_SHA256, CHIEF_KEY_SHA256, MAX_KEY_ATTEMPTS, LOCKOUT_MS, SHOP_ITEMS } from './config.js';
 import { connect, issueInvite, redeemInvite, syncPush, syncPullV } from './net.js';
 import { apiEnabled, api, verifyToken } from './api.js';
@@ -145,11 +146,11 @@ setStage(STAGES[0]);
 
 // ---------- Assets ----------
 const assets = {};
-const gltfLoader = new GLTFLoader().setMeshoptDecoder(MeshoptDecoder);
+const gltfLoader = createModelLoader();
 const modelUrls = [...new Set(Object.values(FIGHTERS).map((d) => d.model))];
 const byUrl = {};
 const loadPromise = Promise.allSettled(modelUrls.map((url) =>
-  gltfLoader.loadAsync(url).then((g) => {
+  gltfLoader.loadAsync(modelAssetUrl(url)).then((g) => {
     byUrl[url] = g;
   })
 )).then(() => {
@@ -1073,7 +1074,8 @@ function setMuted(m) {
     t?.play().catch(() => {});
     startProc();
   }
-  $('#opt-mute').textContent = m ? '音：黙らせる' : '音：鳴らす';
+  $('#opt-mute').textContent = m ? 'サウンド：オフ' : 'サウンド：オン';
+  $('#opt-mute').setAttribute('aria-pressed', String(!m));
 }
 setMuted(audio.muted);
 
@@ -1093,7 +1095,8 @@ function inBattleView() {
 }
 
 window.addEventListener('keydown', (e) => {
-  if (e.target.tagName === 'INPUT') {
+  if (e.defaultPrevented) return;
+  if (e.target?.matches?.('input, textarea, select') || e.target?.isContentEditable) {
     if (e.code === 'Escape') {
       e.target.blur();
     }
@@ -1235,10 +1238,14 @@ function isScreen(id) {
 function show(id) {
   for (const s of document.querySelectorAll('.screen')) {
     s.classList.toggle('on', s.id === id);
+    s.setAttribute('aria-hidden', String(s.id !== id));
+    s.inert = s.id !== id;
   }
+  document.body.dataset.screen = id || 'play';
   $('#hud').hidden = id !== null;
   $('#touch').classList.toggle('active', id === null);
   if (id) {
+    $('#' + id).scrollTop = 0;
     const first = $('#' + id).querySelector('.menu button, .card:not(.locked), .chip');
     if (first && !isTouch) {
       first.focus({ preventScroll: true });
@@ -1246,6 +1253,8 @@ function show(id) {
   }
 }
 function goBackCurrent() {
+  const modal = document.querySelector('.ui-overlay .ui-dialog');
+  if (modal) { modal.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', code: 'Escape', bubbles: true, cancelable: true })); return; }
   if (mailbox?.isOpen()) { mailbox.close(); return; }
   if (!$('#pause').hidden) {
     togglePause();
@@ -1400,7 +1409,8 @@ const SELECT_KEYS = () => [...ROSTER, 'seraphel', 'chief', 'sovereign', 'bloodfi
 function refreshTitle() {
   $('#btn-invade').hidden = !operatorUnlocked();
   if ($('#btn-evmaker')) $('#btn-evmaker').hidden = !chiefUnlocked();
-  $('#title-shards').textContent = `灯晶　${save.shards}`;
+  $('#title-shards').textContent = `灯晶　${save.shards.toLocaleString()}`;
+  renderHubStatus(save, FIGHTERS, STORY, canUse);
   {
     const { ev, ends } = activeEvent();
     const days = Math.max(0, Math.ceil((ends - Date.now()) / 86400000));
@@ -1486,6 +1496,10 @@ function openSelect(label, crumb, cb, { allowLocked = false, onBack = goTitle } 
     const locked = !canUse(k) && !allowLocked;
     const card = document.createElement('button');
     card.className = 'card' + (locked ? ' locked' : '');
+    card.type = 'button';
+    card.dataset.fighter = k;
+    card.dataset.search = locked ? '未解放 ' + (d.shop ? '商店' : '運営') : [d.name, d.title, ...d.skills.map((x) => x.name), d.over.name].join(' ');
+    card.setAttribute('aria-label', locked ? '未解放の戦士' : d.name + '、' + d.title);
     card.style.setProperty('--c', '#' + d.color.toString(16).padStart(6, '0'));
     const t = document.createElement('em');
     t.textContent = locked ? '名を封じられし者' : d.title;
@@ -1513,6 +1527,7 @@ function openSelect(label, crumb, cb, { allowLocked = false, onBack = goTitle } 
     });
     grid.append(card);
   }
+  configureSelection('fighter');
   show('scr-select');
 }
 
@@ -1551,6 +1566,15 @@ function openPartySelect(done) {
       const isMain = k === main && !noHero;
       b.textContent = k ? (isMain ? '★ ' : '') + FIGHTERS[k].name : '（空き）';
       b.className = isMain ? 'main' : '';
+      b.type = 'button';
+      b.dataset.slot = String(i + 1);
+      b.setAttribute('aria-pressed', String(isMain));
+      b.setAttribute('aria-label', k ? FIGHTERS[k].name + (isMain ? '、操作キャラクター' : 'を操作キャラクターにする') : '編成枠 ' + (i + 1) + '、空き');
+      if (k) {
+        const img = document.createElement('img');
+        img.src = FIGHTERS[k].face; img.alt = ''; img.decoding = 'async';
+        b.prepend(img);
+      }
       b.disabled = !k;
       b.addEventListener('click', () => {
         sfx('ui');
@@ -1559,14 +1583,23 @@ function openPartySelect(done) {
       });
       slots.append(b);
     }
-    for (const k in cards) cards[k].classList.toggle('picked', party.includes(k));
+    for (const k in cards) {
+      cards[k].classList.toggle('picked', party.includes(k));
+      cards[k].setAttribute('aria-pressed', String(party.includes(k)));
+    }
+    $('#party-status').textContent = party.length + ' / 4 人';
     $('#party-go').disabled = !party.length;
+    filterSelection();
   };
   grid.replaceChildren();
   for (const k of pool) {
     const d = FIGHTERS[k];
     const card = document.createElement('button');
     card.className = 'card';
+    card.type = 'button';
+    card.dataset.fighter = k;
+    card.dataset.search = [d.name, d.title, ...d.skills.map((x) => x.name), d.over.name].join(' ');
+    card.setAttribute('aria-label', d.name + '、' + d.title + '。編成に加える・外す');
     card.style.setProperty('--c', '#' + d.color.toString(16).padStart(6, '0'));
     if (d.face) {
       const img = document.createElement('img');
@@ -1584,12 +1617,15 @@ function openPartySelect(done) {
     card.append(t, n);
     card.addEventListener('click', () => {
       sfx('ui');
+      $('#selection-notice').textContent = '';
       if (party.includes(k)) {
         party = party.filter((x) => x !== k);
         if (main === k) main = party[0] || null;
       } else if (party.length < 4) {
         party.push(k);
         if (!main) main = k;
+      } else {
+        $('#selection-notice').textContent = '編成は4人までです。入れ替えるときは、選択済みの戦士を押して外してください。';
       }
       render();
     });
@@ -1606,62 +1642,30 @@ function openPartySelect(done) {
     $('#party-bar').hidden = true;
     done();
   };
+  configureSelection('party');
   render();
   show('scr-select');
 }
 
 function openStageSelect(crumb, onBack) {
+  let active = true;
   $('#party-bar').hidden = true;
-  $('#select-label').textContent = 'どこで剣を抜く？';
+  $('#select-label').textContent = '舞台を選ぶ';
   $('#select-crumb').textContent = crumb;
   $('#select-back').onclick = () => {
+    active = false;
     sfx('ui');
     onBack();
   };
-  const grid = $('#select-grid');
-  grid.replaceChildren();
-  const list = [{ id: 'random', name: '風まかせ', floor: 0xc9a65a, seg: 0 }, ...STAGES];
-  for (const st of list) {
-    const card = document.createElement('button');
-    card.className = 'card';
-    card.style.setProperty('--c', '#' + st.floor.toString(16).padStart(6, '0'));
-    const t = document.createElement('em');
-    t.textContent = st.seg ? (st.seg > 20 ? '円の舞台' : `${st.seg}つの辺を持つ舞台`) : 'どこへ連れていかれるかは月次第';
-    const n = document.createElement('b');
-    n.textContent = st.name;
-    const hex = (c) => '#' + c.toString(16).padStart(6, '0');
-    const thumb = document.createElement('div');
-    thumb.className = 'sthumb';
-    if (st.sky) {
-      thumb.style.backgroundImage = `url(${st.sky})`;
-      const fl = document.createElement('i');
-      const segs = Math.min(st.seg, 24);
-      const pts = Array.from({ length: segs }, (_, i) => {
-        const a = (i / segs) * Math.PI * 2 - Math.PI / 2;
-        return `${50 + Math.cos(a) * 46}% ${50 + Math.sin(a) * 46}%`;
-      }).join(',');
-      fl.style.clipPath = `polygon(${pts})`;
-      fl.style.background = `radial-gradient(circle, ${hex(st.floor)}, ${hex(st.rim)})`;
-      fl.style.boxShadow = `0 0 12px ${hex(st.crystal)}`;
-      thumb.append(fl);
-    } else {
-      thumb.textContent = '？';
-    }
-    card.append(thumb, t, n);
-    if (st.bgm != null) {
-      const s = document.createElement('small');
-      s.textContent = '♪ 通常戦闘曲';
-      card.append(s);
-    }
-    card.addEventListener('mouseenter', () => st.sky && setStage(st));
-    card.addEventListener('focus', () => st.sky && setStage(st));
-    card.addEventListener('click', () => {
-      sfx('ui');
+  renderStageBrowser({
+    stages: STAGES, getArt: getStageArt, selected: state.stage?.id, sound: () => sfx('ui'),
+    onConfirm: async (st) => {
+      await loadPromise;
+      if (!active || !isScreen('scr-select') || $('#scr-select').dataset.kind !== 'stage') return;
       state.stage = st.sky ? st : STAGES[Math.floor(Math.random() * STAGES.length)];
-      startOffline();
-    });
-    grid.append(card);
-  }
+      await startOffline();
+    }
+  });
   show('scr-select');
 }
 
@@ -1817,6 +1821,7 @@ function openEventLevel(cb) {
   const { ev } = activeEvent();
   const done = evCleared();
   const ov = document.createElement('div');
+  let closeDialog = () => ov.remove();
   ov.style.cssText = 'position:fixed;inset:0;z-index:70;background:rgba(5,5,15,.82);display:flex;align-items:center;justify-content:center;padding:12px';
   const box = document.createElement('div');
   box.style.cssText = 'background:#16163a;border:1px solid #d6b46a;border-radius:12px;padding:16px;max-width:520px;width:100%;color:#f4ead2;max-height:90vh;overflow:auto';
@@ -1838,7 +1843,7 @@ function openEventLevel(cb) {
     b.textContent = `${lv <= done ? '★' : open ? '☆' : '🔒'} 第${lv}段階　敵の強さ×${m.hp.toFixed(2)}　報酬 ${Math.round(ev.reward * m.reward)}${lv > done ? `（初回+${ev.first * m.first}）` : ''}`;
     b.addEventListener('click', () => {
       sfx('ui');
-      ov.remove();
+      closeDialog();
       cb(lv);
     });
     grid.append(b);
@@ -1848,12 +1853,13 @@ function openEventLevel(cb) {
   back.textContent = 'やめる';
   back.style.marginTop = '10px';
   back.addEventListener('click', () => {
-    ov.remove();
+    closeDialog();
     goTitle();
   });
   box.append(h, p, grid, back);
   ov.append(box);
   document.body.append(ov);
+  closeDialog = activateUiDialog(ov, box, ev.name + 'の段階選択', () => back.click());
 }
 
 async function startOffline() {
@@ -2264,7 +2270,7 @@ function resetFieldLight() {
 }
 async function enterField() {
   // フィールドは物語でしか使わないので必要になった時だけ読み込む（初回表示を軽く）
-  const [{ Field }] = await Promise.all([import('./field.js'), loadPromise]);
+  const [{ Field }] = await Promise.all([import('./field.js?v=20261106-model-ui3'), loadPromise]);
   leaveField();
   const ch = STORY[state.chapter];
   const st = stageById(ch.stage);
@@ -2368,11 +2374,22 @@ let forgeSel = 'rowen';
 let forgeTab = 'upg';
 function renderForge() {
   const list = $('#forge-list');
+  const focusKey = document.activeElement?.dataset.forgeFocus;
+  const listTop = list.scrollTop;
+  const restoreFocus = () => {
+    if (focusKey) [...$('#scr-forge').querySelectorAll('[data-forge-focus]')].find((node) => node.dataset.forgeFocus === focusKey && !node.disabled)?.focus({ preventScroll: true });
+    list.scrollTop = listTop;
+  };
   list.replaceChildren();
   const keysList = SELECT_KEYS().filter(canUse);
+  if (!keysList.includes(forgeSel)) forgeSel = keysList[0] || 'rowen';
   for (const k of keysList) {
     const b = document.createElement('button');
     b.className = 'chip' + (k === forgeSel ? ' on' : '');
+    b.type = 'button';
+    b.dataset.search = FIGHTERS[k].name + ' ' + FIGHTERS[k].title;
+    b.dataset.forgeFocus = 'fighter:' + k;
+    b.setAttribute('aria-pressed', String(k === forgeSel));
     const total = UPGRADES.reduce((s, u) => s + lvOf(k, u.id), 0);
     b.textContent = `${FIGHTERS[k].name}${lbOf(k) ? `【突破${lbOf(k)}】` : ''}　${total}/${UPGRADES.length * maxLvOf(k)}`;
     b.addEventListener('click', () => {
@@ -2383,7 +2400,10 @@ function renderForge() {
     list.append(b);
   }
   const d = FIGHTERS[forgeSel];
+  filterForge();
+  $('#forge-portrait').src = d.face;
   $('#forge-name').textContent = `${d.name}　— ${d.title}`;
+  $('#forge-summary').textContent = `限界突破 ${lbOf(forgeSel)}回 ／ 強化 ${UPGRADES.reduce((n, u) => n + lvOf(forgeSel, u.id), 0)} / ${UPGRADES.length * maxLvOf(forgeSel)}段`;
   const rows = $('#forge-rows');
   rows.replaceChildren();
   const tabs = document.createElement('div');
@@ -2393,6 +2413,8 @@ function renderForge() {
   for (const [id, label] of [['upg', '強化（100種）'], ['wep', '武器'], ['arm', '防具'], ...(sumOk ? [['sum', '召喚獣']] : [])]) {
     const tb = document.createElement('button');
     tb.className = 'btn mini' + (forgeTab === id ? ' on' : '');
+    tb.dataset.forgeFocus = 'tab:' + id;
+    tb.setAttribute('aria-pressed', String(forgeTab === id));
     tb.textContent = label;
     tb.addEventListener('click', () => {
       sfx('ui');
@@ -2415,6 +2437,7 @@ function renderForge() {
       lab.textContent = s.name;
       const btn = document.createElement('button');
       btn.className = 'btn mini';
+      btn.dataset.forgeFocus = 'summon:' + s.id;
       btn.textContent = owned ? (isOn ? '召喚をやめる' : '召喚を有効にする') : `買う ${s.price}`;
       btn.disabled = !owned && save.shards < s.price;
       btn.addEventListener('click', () => {
@@ -2440,6 +2463,7 @@ function renderForge() {
       rows.append(row);
     }
     $('#forge-shards').textContent = `手持ちの灯晶　${save.shards}`;
+    restoreFocus();
     return;
   }
   if (forgeTab === 'wep' || forgeTab === 'arm') {
@@ -2458,6 +2482,7 @@ function renderForge() {
       lab.textContent = w.name;
       const btn = document.createElement('button');
       btn.className = 'btn mini';
+      btn.dataset.forgeFocus = 'gear:' + w.id;
       btn.textContent = on ? '外す' : owned ? '装備' : `買う ${w.price}`;
       btn.disabled = !owned && save.shards < w.price;
       btn.addEventListener('click', () => {
@@ -2485,6 +2510,7 @@ function renderForge() {
       rows.append(row);
     }
     $('#forge-shards').textContent = `手持ちの灯晶　${save.shards}`;
+    restoreFocus();
     return;
   }
   // 限界突破
@@ -2497,6 +2523,7 @@ function renderForge() {
     lab.textContent = `限界突破　${lb}/${LB_MAX}`;
     const btn = document.createElement('button');
     btn.className = 'btn mini';
+    btn.dataset.forgeFocus = 'limit';
     const cost = lbCost(lb);
     const ready = allMaxed(forgeSel);
     btn.textContent = lb >= LB_MAX ? '頂に至る' : ready ? `突破 ${cost}` : '全強化で解放';
@@ -2529,6 +2556,7 @@ function renderForge() {
     lab.textContent = u.label;
     const btn = document.createElement('button');
     btn.className = 'btn mini';
+    btn.dataset.forgeFocus = 'upgrade:' + u.id;
     btn.textContent = lv >= MAX_LV ? '極めた' : `注ぐ ${cost}`;
     btn.disabled = lv >= MAX_LV || save.shards < cost;
     btn.addEventListener('click', () => {
@@ -2550,6 +2578,7 @@ function renderForge() {
     rows.append(row);
   }
   $('#forge-shards').textContent = `手持ちの灯晶　${save.shards}`;
+  restoreFocus();
 }
 $('#btn-forge').addEventListener('click', () => {
   sfx('ui');
@@ -3108,6 +3137,8 @@ function togglePause() {
   $('#pause-note').textContent = state.online ? '遠い相手の時間は止まりません。' : '';
   if (state.paused && !isTouch) {
     $('#btn-resume').focus();
+  } else if (!state.paused && !isTouch) {
+    $('#btn-pause').focus({ preventScroll: true });
   }
 }
 $('#btn-pause').addEventListener('click', togglePause);
@@ -3136,7 +3167,8 @@ function refreshOptions() {
   const sc = syncCodeNow();
   if (sc.length === 12 && !$('#sync-code').value) $('#sync-code').value = sc.match(/.{4}/g).join('-');
   if (sc.length === 12 && !$('#sync-msg').textContent) $('#sync-msg').textContent = `この端末の同期コード：${sc.match(/.{4}/g).join('-')}（自動で同期中）`;
-  $('#opt-mute').textContent = audio.muted ? '音：黙らせる' : '音：鳴らす';
+  $('#opt-mute').textContent = audio.muted ? 'サウンド：オフ' : 'サウンド：オン';
+  $('#opt-mute').setAttribute('aria-pressed', String(!audio.muted));
   $('#opt-diff').textContent = `CPUの強さ：${DIFFS[save.diff].n}`;
   $('#op-state').textContent = chiefUnlocked()
     ? '運営長として認められています — ルミナリアとセラフェルが選べます'
@@ -3323,6 +3355,7 @@ function onChiefEvent(n) {
   if (isScreen('scr-title')) refreshTitle();
 }
 function openEventMaker() {
+  if (!chiefUnlocked()) return;
   const own = readJSON('arkeia-cevent-own');
   const base = sanitizeEvent(own?.ev, FIGHTERS) || { name: '', desc: '', foes: [['boss', 1]], hp: 1, atk: 1, scale: 1, ally: 0, first: 1000, reward: 200, stage: 0, at: Date.now(), ends: Date.now() + 7 * 86400000 };
   const ov = document.createElement('div');
@@ -3342,11 +3375,14 @@ function openEventMaker() {
   const addFoe = (k = 'mob', n = 1) => {
     if (foeBox.children.length >= 4) return;
     const r = document.createElement('div');
-    r.style.cssText = 'display:grid;grid-template-columns:1fr 70px 34px;gap:4px';
+    r.style.cssText = 'display:grid;grid-template-columns:minmax(0,1fr) 70px 44px;gap:4px';
     const s = document.createElement('select'); s.style.cssText = inp;
+    s.setAttribute('aria-label', '出現する敵の種類');
     for (const [v, t] of foeOpts) s.append(mk('option', { value: v, textContent: t, selected: v === k }));
     const c = num(n, 1, 8, 1);
+    c.setAttribute('aria-label', '敵の数');
     const x = mk('button', { type: 'button', textContent: '✕', className: 'btn mini' });
+    x.setAttribute('aria-label', 'この敵の組を削除');
     x.onclick = () => r.remove();
     r.append(s, c, x);
     foeBox.append(r);
@@ -3393,9 +3429,11 @@ function openEventMaker() {
     msg.textContent = '公開を終了しました。通常の週替わりイベントに戻ります。';
     refreshTitle();
   };
-  close.onclick = () => ov.remove();
+  let closeDialog = () => ov.remove();
+  close.onclick = () => closeDialog();
   ov.append(box);
   document.body.append(ov);
+  closeDialog = activateUiDialog(ov, box, '運営長専用 イベント作成', () => close.click());
 }
 $('#btn-evmaker')?.addEventListener('click', () => { sfx('ui'); openEventMaker(); });
 // ---- 交流（お知らせテロップ・チャット・ギルド） ----
@@ -3707,11 +3745,12 @@ function pollPad(dt) {
   if (btn(13)) mz = 1;
   const anyDown = g.buttons.some((_, i) => down(i));
   const mailDialog = mailbox?.isOpen() ? $('#mailbox-dialog') : null;
-  if (!mailDialog && isScreen('scr-press')) {
+  const uiDialog = document.querySelector('.ui-overlay .ui-dialog');
+  if (!mailDialog && !uiDialog && isScreen('scr-press')) {
     if (anyDown) {
       enterTitle();
     }
-  } else if (!mailDialog && inBattleView() && !state.paused) {
+  } else if (!mailDialog && !uiDialog && inBattleView() && !state.paused) {
     padState.mx = mx;
     padState.mz = mz;
     padState.guard = btn(4) || btn(6) || btn(7);
@@ -3725,7 +3764,7 @@ function pollPad(dt) {
     if (down(12) || down(10)) edges.heal = true;
     if (down(9)) togglePause();
   } else {
-    const root = mailDialog || (state.paused ? $('#pause') : document.querySelector('.screen.on'));
+    const root = mailDialog || uiDialog || (state.paused ? $('#pause') : document.querySelector('.screen.on'));
     const items = root ? [...root.querySelectorAll('button:not([disabled]), input, select, textarea, summary, #story-box')].filter((b) => b.offsetParent !== null) : [];
     pad.navT -= dt;
     if (items.length && pad.navT <= 0 && (Math.abs(mx) > 0.5 || Math.abs(mz) > 0.5)) {
@@ -3757,6 +3796,7 @@ function pollPad(dt) {
 }
 
 // ---------- Loop ----------
+installUiShell();
 setupTouch();
 const timer = new THREE.Timer();
 var adaptQ = null;

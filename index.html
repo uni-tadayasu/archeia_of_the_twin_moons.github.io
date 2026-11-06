@@ -27,8 +27,8 @@
     <script type="application/ld+json">
       {"@context":"https://schema.org","@type":"VideoGame","name":"双月のアルケイア","alternateName":"Arkeia of Twin Moons","description":"100人の戦士と全100章の物語を楽しめる、ブラウザ3Dアリーナファンタジーアクション。","image":"assets/app-icon.webp","genre":["Action","Fighting","Fantasy","RPG"],"gamePlatform":["Web browser","PC","Mobile"],"playMode":["SinglePlayer","MultiPlayer","CoOp"],"applicationCategory":"Game","operatingSystem":"Any","inLanguage":"ja","isAccessibleForFree":true,"offers":{"@type":"Offer","price":"0","priceCurrency":"JPY"},"publisher":{"@type":"Organization","name":"KASAI SOLUTIONS INC."},"author":{"@type":"Organization","name":"KASAI SOLUTIONS INC."},"copyrightHolder":{"@type":"Organization","name":"KASAI SOLUTIONS INC."},"copyrightNotice":"© KASAI SOLUTIONS INC. All rights reserved.","musicBy":{"@type":"Organization","name":"KASAI SOLUTIONS INC."},"keywords":"3Dアクション,覚醒,秘奥義,追加技,オンライン対戦,ブラウザゲーム"}
     </script>
-    <link rel="modulepreload" href="./main.js" />
-    <link rel="modulepreload" href="./game.js" />
+    <link rel="modulepreload" href="./main.js?v=20261106-model-ui3" />
+    <link rel="modulepreload" href="./game.js?v=20261106-model-ui3" />
     <link rel="modulepreload" href="./data.js" />
     <link rel="modulepreload" href="./music.js" />
     <link rel="preconnect" href="https://esm.sh" crossorigin>
@@ -108,7 +108,6 @@
       .card small { white-space:pre-line; font-size:clamp(9px,1.3vmin,11px); line-height:1.5; color:#3a3450; }
       .card img.face { width:100%; aspect-ratio:1; object-fit:contain; background:radial-gradient(circle, color-mix(in srgb, var(--c) 45%, #fff), #2a2440); border-radius:4px; }
       .sthumb { width:100%; aspect-ratio:16/9; background-size:cover; background-position:center; border-radius:4px; position:relative; overflow:hidden; display:grid; place-items:center; color:#fff; font-size:28px; background-color:#2a2440; }
-      .sthumb i { position:absolute; left:15%; right:15%; top:42%; bottom:-8%; transform:perspective(200px) rotateX(55deg); }
       .ftabs { display:flex; gap:6px; margin:6px 0; }
       .ftabs button.on { outline:2px solid var(--ember); }
       #party-bar { width:100%; display:flex; flex-direction:column; align-items:center; gap:6px; }
@@ -364,7 +363,9 @@
             transform: scale(1.05);
         }
     }
-</style></head>
+</style>
+    <link rel="stylesheet" href="./ui-overhaul.css?v=20261106-ui2" />
+  </head>
   <body>
 <div id="rosebud-exported-splash" aria-live="polite">
     <div class="rosebud-exported-splash__content">
@@ -398,6 +399,8 @@
     <main id="ui">
       <section id="scr-press" class="screen on" aria-label="はじまり">
         <div class="inner">
+          <div class="moon-seal" aria-hidden="true"></div>
+          <p class="eyebrow">双つの月が照らす、あなたの旅路</p>
           <h1>双月のアルケイア<span>ARKEIA · A RONDO UNDER TWIN MOONS</span></h1>
           <p class="tagline">光は一つ、空は二つ。どちらを灯すか、剣で決めよう。</p>
           <p class="press-hint" id="press-hint">— なにかキーを押して、扉をひらく —</p>
@@ -406,25 +409,34 @@
       </section>
 
       <section id="scr-title" class="screen" aria-label="旅の分かれ道">
-        <div class="inner">
-          <div class="topbar"><button class="back" data-to="press">扉の前へ</button><span class="shards" id="title-shards"></span></div>
-          <h1 style="font-size:clamp(24px,5vmin,48px)">双月のアルケイア</h1>
-          <nav class="menu wide">
-            <button data-go="story">灯脈の旅路<small id="story-sub">全八章の物語。灯をめぐる出会いと剣戟</small></button>
-            <button data-go="event" id="btn-event">週替わりイベント<small id="event-sub">今週のボーナスステージ</small></button>
-            <button data-go="cpu">ひとりで手合わせ<small>好きな相手を選んで一対一</small></button>
-            <button data-go="duo">背中をあずける<small>CPUの相棒と組んで二対二</small></button>
-            <button data-go="online-vs">遠い誰かと剣を交える<small>合言葉でつながるオンライン対戦</small></button>
-            <button data-go="online-coop">遠い誰かと肩を並べる<small>オンライン協力 — 裁定者討伐</small></button>
-            <button id="btn-forge">鍛錬の工房<small>灯晶を注いで戦士を鍛える</small></button>
-            <button id="btn-mailbox">受信箱<span class="mail-badge" data-mail-badge></span><small>運営長からのお便り・プレゼントを受け取る</small></button>
-            <button id="btn-chief-mail" hidden>プレゼント・メール配信<small>運営長専用 — 個別・全員への配信と送信履歴</small></button>
-            <button id="btn-evmaker" hidden>イベント作成の間<small>運営長専用 — 特別イベントを作って全員に配信</small></button>
-            <button id="btn-invade" hidden>乱入の窓<small>運営専用 — 誰かの物語に裁定者として割り込む</small></button>
-            <button id="btn-shop">灯晶商店<small>特別な戦士を迎える</small></button>
-            <button id="btn-options">旅支度<small>音・CPUの強さ・ゲームパッド・運営の鍵</small></button>
+        <div class="inner hub-inner">
+          <div class="topbar hub-topbar"><button class="back" data-to="press">タイトルへ</button><span class="hub-mark">ARKEIA <span>双月のアルケイア</span></span><span class="shards" id="title-shards"></span></div>
+          <header class="hub-heading"><div><p class="eyebrow">THE CROSSROADS</p><h1>旅の分かれ道</h1></div><p>灯を整え、次の一歩を。</p></header>
+          <nav class="menu wide hub-menu" aria-label="遊び方を選ぶ">
+            <button data-go="story" class="hub-story"><span class="eyebrow">STORY</span><strong>灯脈の旅路</strong><small id="story-sub">灯をめぐる出会いと剣戟</small><span class="hub-action">物語へ進む <span aria-hidden="true">→</span></span></button>
+            <aside class="hub-journal" aria-label="現在の旅の記録"><p id="hub-greeting">旅人の旅の記録</p><div class="journal-progress"><span>物語の進行</span><b id="hub-progress"></b></div><progress id="hub-progress-bar" value="0" max="100" aria-label="物語の進行"></progress><span class="journal-label">前回の編成</span><div id="hub-party"></div></aside>
+            <button data-go="event" id="btn-event" class="hub-event"><span class="menu-kicker">EVENT</span><strong>週替わりイベント</strong><small id="event-sub">今週のボーナスステージ</small><span aria-hidden="true" class="menu-arrow">↗</span></button>
+            <div class="hub-section-label">剣を交える <span>BATTLE</span></div>
+            <div class="hub-battles">
+              <button data-go="cpu"><span class="menu-kicker">SOLO · 1 vs 1</span><strong>ひとりで手合わせ</strong><small>戦士と舞台を選んで一対一</small></button>
+              <button data-go="duo"><span class="menu-kicker">TEAM · 2 vs 2</span><strong>背中をあずける</strong><small>CPUの相棒と組んで二対二</small></button>
+              <button data-go="online-vs"><span class="menu-kicker">ONLINE · VERSUS</span><strong>遠い誰かと対戦</strong><small>合言葉でつながるオンライン対戦</small></button>
+              <button data-go="online-coop"><span class="menu-kicker">ONLINE · CO-OP</span><strong>遠い誰かと協力</strong><small>仲間とともに、裁定者へ挑む</small></button>
+            </div>
+            <div class="hub-section-label">旅を整える <span>SUPPORT</span></div>
+            <div class="hub-support">
+              <button id="btn-forge"><strong>鍛錬の工房</strong><small>強化・武器・防具・召喚</small></button>
+              <button id="btn-shop"><strong>灯晶商店</strong><small>特別な戦士を迎える</small></button>
+              <button id="btn-mailbox"><strong>受信箱<span class="mail-badge" data-mail-badge></span></strong><small>お便り・プレゼントの受け取り</small></button>
+              <button id="btn-options"><strong>旅支度</strong><small>音・難易度・操作・記録の同期</small></button>
+            </div>
+            <div class="hub-staff">
+              <button id="btn-chief-mail" hidden><strong>プレゼント・メール配信</strong><small>運営長専用 — 配信と送信履歴</small></button>
+              <button id="btn-evmaker" hidden><strong>イベント作成の間</strong><small>運営長専用 — 特別イベントを配信</small></button>
+              <button id="btn-invade" hidden><strong>乱入の窓</strong><small>運営専用 — 誰かの物語へ</small></button>
+            </div>
           </nav>
-          <p class="foot">WASD 移動／J 斬る／K 技A／U 技B／L 奥義／Shift 構え／Space 跳ぶ／Esc 戻る・休む<br>移動しながら技を出すと、別の技に変わります。技の直後にタイミングよく同じ技で「追加技」。<br>ダメージを溜めると「覚醒」（被ダメージ半減）、覚醒中の奥義は「秘奥義」に。</p>
+          <details class="control-guide"><summary>操作ガイド</summary><p><kbd>WASD</kbd> 移動 <kbd>J</kbd> 斬る <kbd>K</kbd> 技A <kbd>U</kbd> 技B <kbd>L</kbd> 奥義 <kbd>Shift</kbd> 構え <kbd>Space</kbd> 跳ぶ <kbd>Esc</kbd> 戻る・休む</p><p>移動しながら技を出すと、別の技に変化。技の直後にタイミングよく同じ技で「追加技」。ダメージを溜めて覚醒すると、奥義が「秘奥義」に変わります。</p><p>スマホは画面のスティックとボタンで操作できます。ゲームパッドの操作は「旅支度」で確認できます。</p></details>
           <p class="foot license">© <span id="copy-year">2025</span> KASAI SOLUTIONS INC. All rights reserved.</p>
         </div>
       </section>
@@ -432,13 +444,12 @@
       <section id="scr-options" class="screen" aria-label="旅支度">
         <div class="inner">
           <div class="topbar"><button class="back" data-to="title">分かれ道へ</button><span class="crumb">旅支度</span></div>
-          <div class="label">旅支度</div>
-          <div class="menu">
-            <button class="btn" id="opt-mute">音：鳴らす</button>
-            <button class="btn" id="opt-diff">CPUの強さ：ノーマル</button>
-            <p class="foot" id="pad-status" style="text-align:left">ゲームパッド：まだ見つかっていません（ボタンを押すと気づきます）</p>
-            <p class="foot" style="text-align:left">パッド　スティック/十字：移動　A(×)：斬る　X(□)：技A　RB(R1)：技B　Y(△)：奥義　B(○)：跳ぶ　LB/LT/RT：構え　START：休む<br>メニュー　十字で選ぶ／A(×)で決める／B(○)で戻る</p>
-            <form id="op-form" class="field" style="width:100%">
+          <h2 class="label">旅支度</h2>
+          <div class="menu settings-grid">
+            <section class="settings-card"><h3>音と難易度</h3><p>ボタンを押すと設定が切り替わります。</p><button class="btn" id="opt-mute">サウンド：オン</button><button class="btn" id="opt-diff">CPUの強さ：ノーマル</button></section>
+            <details class="settings-card" open><summary>操作方法・ゲームパッド</summary><p class="foot" id="pad-status">ゲームパッド：まだ見つかっていません（ボタンを押すと気づきます）</p><p class="foot">スティック／十字：移動<br>A(×)：斬る　X(□)：技A　RB(R1)：技B<br>Y(△)：奥義　B(○)：跳ぶ<br>LB／LT／RT：構え　START：休む</p><p class="foot">メニューは十字で選ぶ／A(×)で決める／B(○)で戻る。</p></details>
+            <section class="settings-card settings-sync"><h3>記録の同期</h3><p>同じ同期コードで、別の端末へ旅の続きが引き継げます。一度設定すると、自動で同期されます。</p><div class="field" style="width:100%"><button type="button" class="btn" id="sync-push">この端末の記録を預ける</button><label for="sync-code">同期コード</label><input id="sync-code" maxlength="32" autocomplete="off" aria-label="同期コード" placeholder="例：ABCD-EFGH-JKLM"><button type="button" class="btn" id="sync-pull">同期コードで記録を受け取る</button><span id="sync-msg" class="foot" role="status"></span></div></section>
+            <details class="settings-card settings-operator"><summary>運営の設定</summary><form id="op-form" class="field" style="width:100%">
               <span id="op-state">運営の鍵 — 封じられた裁定者を解き放つ</span>
               <input id="op-key" type="password" maxlength="128" autocomplete="off" aria-label="運営キー" placeholder="鍵の言葉">
               <button type="submit" class="btn">鍵を差し込む</button>
@@ -449,14 +460,7 @@
               <button type="button" class="btn" id="chief-issue">運営キーを発行する</button>
               <button type="button" class="btn" id="chief-mail-center">プレゼント・システムメールを送る</button>
               <input id="chief-code" readonly aria-label="発行された運営キー" placeholder="ここに表示されます">
-            </div>
-            <div class="field" style="width:100%">
-              <span>端末間の同期 — 同じ同期コードで、別の端末に進み具合を引き継げます（一度設定すると以後は自動で常時同期されます）</span>
-              <button type="button" class="btn" id="sync-push">この端末の記録を預ける（同期コード発行・更新）</button>
-              <input id="sync-code" maxlength="32" autocomplete="off" aria-label="同期コード" placeholder="同期コード（例：ABCD-EFGH-JKLM）">
-              <button type="button" class="btn" id="sync-pull">同期コードで記録を受け取る</button>
-              <span id="sync-msg" class="foot"></span>
-            </div>
+            </div></details>
           </div>
         </div>
       </section>
@@ -464,12 +468,12 @@
       <section id="scr-forge" class="screen" aria-label="鍛錬の工房">
         <div class="inner">
           <div class="topbar"><button class="back" data-to="title">分かれ道へ</button><span class="shards" id="forge-shards"></span></div>
-          <div class="label">鍛錬の工房</div>
+          <h2 class="label">鍛錬の工房</h2>
           <div class="forge">
-            <div id="forge-list"></div>
-            <div class="fpanel"><b id="forge-name"></b><div id="forge-rows"></div></div>
+            <aside class="forge-browser"><label for="forge-search">戦士を探す</label><input id="forge-search" type="search" placeholder="名前・二つ名" autocomplete="off"><span id="forge-count" class="collection-count" role="status"></span><div id="forge-list"></div><p id="forge-empty" class="empty-state" hidden>一致する戦士がいません。</p></aside>
+            <div class="fpanel"><header class="forge-profile"><img id="forge-portrait" alt="" width="80" height="80"><div><b id="forge-name"></b><p id="forge-summary"></p></div></header><div id="forge-rows"></div></div>
           </div>
-          <p class="foot">灯晶は戦いに勝つと手に入ります。一人につき五つの道、それぞれ五段まで。</p>
+          <p class="foot">灯晶を注いで100種の能力を強化。すべてを極めると、限界突破でさらに先へ進めます。</p>
         </div>
       </section>
 
@@ -495,14 +499,17 @@
       <section id="scr-select" class="screen" aria-label="戦士選び">
         <div class="inner">
           <div class="topbar"><button class="back" id="select-back">ひとつ戻る</button><span class="crumb" id="select-crumb"></span></div>
-          <div class="label" id="select-label"></div>
+          <h2 class="label" id="select-label"></h2>
           <div id="party-bar" hidden>
+            <div class="party-heading"><span>旅の編成</span><b id="party-status" role="status"></b></div>
             <div id="party-slots"></div>
             <p class="foot">最大4人。選んだ戦士をもう一度押すと外れます。上の枠を押すと、その戦士を自分で操作します（★）。残りの仲間は自動で戦います。</p>
             <button class="btn ghost" id="party-nohero" type="button" hidden>主人公：あり（★を自分で操作）</button>
             <button class="btn" id="party-go">この顔ぶれで旅立つ</button>
           </div>
-          <div id="select-grid"></div>
+          <div id="select-tools" class="collection-tools"><label class="collection-search"><span id="select-search-label">戦士を探す</span><input id="select-search" type="search" placeholder="名前・二つ名・技で探す" autocomplete="off" aria-controls="select-grid"></label><label class="collection-filter"><span id="select-filter-label">表示</span><select id="select-filter" aria-controls="select-grid"><option value="all">すべて</option></select></label><button id="select-clear" type="button" class="btn mini">条件をクリア</button><span id="select-count" class="collection-count" role="status"></span></div>
+          <p id="selection-notice" role="status"></p>
+          <div id="select-layout"><div class="collection-results"><div id="select-grid"></div><p id="select-empty" class="empty-state" hidden>条件に一致する項目がありません。検索語や表示条件を変えてください。</p></div><aside id="stage-detail" hidden aria-label="選択中の舞台"><img id="stage-preview" alt="" width="384" height="216" decoding="async"><div class="stage-detail-copy"><span class="eyebrow">選択中の舞台</span><p id="stage-location"></p><h3 id="stage-name"></h3><p id="stage-note"></p><button id="stage-confirm" class="btn" type="button">この舞台で始める</button></div></aside></div>
         </div>
       </section>
 
@@ -575,7 +582,7 @@
           <button data-act="jump">跳</button><button data-act="over">奥</button><button data-act="attack">斬</button><button data-act="heal" style="border-color:#30ff70">癒</button>
         </div>
       </div>
-      <div id="pause" hidden>
+      <div id="pause" hidden role="dialog" aria-modal="true" aria-label="ひと息">
         <div class="label">ひと息</div>
         <p class="foot" id="pause-note"></p>
         <div class="menu">
@@ -584,7 +591,7 @@
         </div>
       </div>
     </main>
-    <script type="module" src="main.js"></script>
+    <script type="module" src="main.js?v=20261106-model-ui3"></script>
     <script src="https://storage.googleapis.com/rosebud_staticfiles/ChatManager.js" defer></script>
     <script src="https://storage.googleapis.com/rosebud_staticfiles/ProgressLogger.js" defer></script>
     <script src="https://storage.googleapis.com/rosebud_staticfiles/OGP.js" defer></script>

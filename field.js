@@ -2,7 +2,7 @@
 // 魔物は姿が見える「シンボルエンカウント」。触れると戦闘、目的地の祭壇で章の決戦。
 import * as THREE from 'three';
 import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js';
-import { applyCharacterVariant, disposeCharacterVariant } from './character-variants.js';
+import { applyCharacterVariant, getCharacterBodyBounds, disposeCharacterVariant } from './character-variants.js?v=20261106-model-ui3';
 import { FIGHTERS } from './data.js';
 import { makeGear, animGear, removeGear } from './gear.js';
 
@@ -61,7 +61,7 @@ function makeActor(gltf, height, color, tint, own, def = null) {
     const m = SkeletonUtils.clone(gltf.scene);
     applyCharacterVariant(m, def);
     m.updateMatrixWorld(true);
-    const box = new THREE.Box3().setFromObject(m);
+    const box = getCharacterBodyBounds(m);
     const size = box.getSize(new THREE.Vector3());
     const s = height / Math.max(size.y, 0.001);
     m.scale.setScalar(s);

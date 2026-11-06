@@ -24,6 +24,11 @@ const smooth = (a, b, x) => {
   const t = clamp((x - a) / (b - a), 0, 1);
   return t * t * (3 - 2 * t);
 };
+const smoothSlope = (a, b, x) => {
+  if (x <= a || x >= b) return 0;
+  const t = (x - a) / (b - a);
+  return 6 * t * (1 - t) / (b - a);
+};
 
 function bonesOf(model) {
   const b = {};
@@ -116,12 +121,18 @@ function reshape(model, profile, bounds, owned) {
   const inverse = model.matrixWorld.clone().invert();
   const transform = new THREE.Matrix4();
   const back = new THREE.Matrix4();
+  const normalTransform = new THREE.Matrix4();
+  const normalToModel = new THREE.Matrix3();
+  const normalToGeometry = new THREE.Matrix3();
+  const normal = new THREE.Vector3();
   const [headWidth, headDepth, shoulders, waist, jaw] = profile.shape;
   model.traverse(o => {
     if (!o.isMesh || !o.geometry?.getAttribute('position')) return;
     const geometry = o.geometry.clone();
     const source = o.geometry.getAttribute('position');
+    const sourceNormal = o.geometry.getAttribute('normal');
     const positions = new Float32Array(source.count * 3);
+    const normals = sourceNormal ? new Float32Array(source.count * 3) : null;
     transform.multiplyMatrices(inverse, o.matrixWorld);
     back.copy(transform).invert();
     // Mesh quantization may live in inverse bind matrices rather than mesh.scale.
@@ -151,10 +162,34 @@ function reshape(model, profile, bounds, owned) {
       const shoulder = Math.exp(-Math.pow((y - 0.745) / 0.12, 2));
       const core = Math.exp(-Math.pow((y - 0.59) / 0.095, 2));
       const jawBand = Math.exp(-Math.pow((y - 0.87) / 0.045, 2));
-      const body = (1 - head) * (1 + (shoulders - 1) * shoulder + (waist - 1) * core);
+      const torsoScale = 1 + (shoulders - 1) * shoulder + (waist - 1) * core;
+      const body = (1 - head) * torsoScale;
       const sx = body + head * (headWidth + (jaw - 1) * jawBand);
+      const sz = 1 + head * (headDepth - 1) + core * (waist - 1) * 0.55;
+      if (normals) {
+        // Keep the authored smooth normals across UV seams. Rebuilding normals
+        // from the split mesh creates dark triangle-shaped patches on faces.
+        // Transform them with the inverse transpose of this exact deformation.
+        normalTransform.copy(transform);
+        if (palette) normalTransform.multiply(skin);
+        normalToModel.getNormalMatrix(normalTransform);
+        normalToGeometry.copy(normalToModel).invert();
+        normal.fromBufferAttribute(sourceNormal, i).applyMatrix3(normalToModel);
+        const headSlope = smoothSlope(0.80, 0.87, y);
+        const shoulderSlope = -2 * (y - 0.745) * shoulder / (0.12 * 0.12);
+        const coreSlope = -2 * (y - 0.59) * core / (0.095 * 0.095);
+        const jawSlope = -2 * (y - 0.87) * jawBand / (0.045 * 0.045);
+        const sxSlope = (1 - head) * ((shoulders - 1) * shoulderSlope + (waist - 1) * coreSlope)
+          + headSlope * (headWidth + (jaw - 1) * jawBand - torsoScale) + head * (jaw - 1) * jawSlope;
+        const szSlope = headSlope * (headDepth - 1) + coreSlope * (waist - 1) * 0.55;
+        const dy = 1 + smoothSlope(0.88, 1.0, y) * ((profile.ordinal % 5) - 2) * 0.004;
+        const nx = normal.x / sx, nz = normal.z / sz;
+        normal.set(nx, (normal.y - (V.x - cx) * sxSlope * nx / h - (V.z - cz) * szSlope * nz / h) / dy, nz);
+        normal.applyMatrix3(normalToGeometry).normalize();
+        normals.set([normal.x, normal.y, normal.z], i * 3);
+      }
       V.x = cx + (V.x - cx) * sx;
-      V.z = cz + (V.z - cz) * (1 + head * (headDepth - 1) + core * (waist - 1) * 0.55);
+      V.z = cz + (V.z - cz) * sz;
       // A small crown-length difference makes even bare-headed silhouettes distinct.
       V.y += smooth(0.88, 1.0, y) * h * ((profile.ordinal % 5) - 2) * 0.004;
       V.applyMatrix4(back);
@@ -162,7 +197,8 @@ function reshape(model, profile, bounds, owned) {
       positions.set([V.x, V.y, V.z], i * 3);
     }
     geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-    geometry.computeVertexNormals();
+    if (normals) geometry.setAttribute('normal', new THREE.BufferAttribute(normals, 3));
+    else geometry.computeVertexNormals();
     geometry.computeBoundingBox();
     geometry.computeBoundingSphere();
     geometry.userData.appearanceId = profile.id;
@@ -740,7 +776,9 @@ export function applyCharacterVariant(model, fighter) {
   const bones = bonesOf(model);
   const initial = modelBounds(model);
   reshape(model, p, initial, owned);
-  const M = measure(model, bones, modelBounds(model));
+  const bodyBounds = modelBounds(model);
+  model.userData.characterBodyBounds = { min: bodyBounds.min.toArray(), max: bodyBounds.max.toArray() };
+  const M = measure(model, bones, bodyBounds);
   const C = makeContext(model, p, M, bones, owned);
   headwear(C);
   outfit(C);
@@ -757,6 +795,14 @@ export function applyCharacterVariant(model, fighter) {
   model.userData.variantPortraitHeight = M.h * 0.42;
   model.updateMatrixWorld(true);
   return model;
+}
+
+/** Bind-pose body bounds for initial height and ground alignment, without added apparel. */
+export function getCharacterBodyBounds(model) {
+  model.updateMatrixWorld(true);
+  const bounds = model.userData.characterBodyBounds;
+  if (!bounds) return new THREE.Box3().setFromObject(model);
+  return new THREE.Box3(new THREE.Vector3(...bounds.min), new THREE.Vector3(...bounds.max)).applyMatrix4(model.matrixWorld);
 }
 
 /** World-space upper-body framing used to capture the actual in-game appearance. */
