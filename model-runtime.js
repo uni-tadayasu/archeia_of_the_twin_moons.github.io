@@ -12,7 +12,7 @@ let active = 0;
 let decoderPromise = null;
 let meshoptPromise = null;
 const BASE = new URL('./', import.meta.url);
-export const MODEL_VERSION = 'fix20-20261106a';
+export const MODEL_VERSION = 'texture-fetch-20261106b';
 
 export class ModelLoadError extends Error {
   constructor(url, detail, cause) {
@@ -90,6 +90,47 @@ async function getMeshopt() {
     .catch((error) => { meshoptPromise = null; throw error; });
   return meshoptPromise;
 }
+// Chrome's ImageBitmapLoader internally calls fetch(blob:...) for WebP
+// images stored inside a GLB. Some deployed CSP headers forbid that call even
+// when the original .glb was fetched successfully. HTMLImageElement uses the
+// img-src directive instead, which already permits blob: in this application.
+// Construct GLTFParser while createImageBitmap is temporarily unavailable;
+// GLTFLoader then selects THREE.TextureLoader. The global is restored in the
+// same synchronous call stack, before any awaited work or other events.
+function parseWithImageElements(loader, payload, sourceDir) {
+  if (typeof globalThis.createImageBitmap !== 'function') {
+    return loader.parseAsync(payload, sourceDir);
+  }
+  const own = Object.getOwnPropertyDescriptor(globalThis, 'createImageBitmap');
+  let changed = false;
+  try {
+    if (!own || own.configurable) {
+      Object.defineProperty(globalThis, 'createImageBitmap', {
+        configurable: true, writable: true, enumerable: own?.enumerable ?? true,
+        value: undefined
+      });
+      changed = true;
+    } else if (own.writable) {
+      globalThis.createImageBitmap = undefined;
+      changed = globalThis.createImageBitmap === undefined;
+    }
+    // parseAsync constructs the parser synchronously before it returns.
+    // Do not await here: restore createImageBitmap immediately.
+    return loader.parseAsync(payload, sourceDir);
+  } finally {
+    if (changed) {
+      if (own) Object.defineProperty(globalThis, 'createImageBitmap', own);
+      else delete globalThis.createImageBitmap;
+    }
+  }
+}
+function createGLTFParser(extensions) {
+  const loader = new GLTFLoader(new THREE.LoadingManager());
+  // Decoder setup remains shared; GLBs with only embedded WebP textures don't
+  // need the Draco or Meshopt network requests at all.
+  return loader;
+}
+
 export function peekModel(url) { return cache.get(absolute(url).href) || null; }
 export function modelError(url) { return errors.get(absolute(url).href) || null; }
 export function loadModel(url) {
@@ -106,22 +147,33 @@ export function loadModel(url) {
       const { doc } = documentOf(payload);
       if (!doc.asset || doc.asset.version !== '2.0') throw new Error('glTF 2.0として認識できません');
       const extensions = new Set([...(doc.extensionsUsed || []), ...(doc.extensionsRequired || [])]);
-      const manager = new THREE.LoadingManager();
-      const loader = new GLTFLoader(manager);
-      if (extensions.has('KHR_draco_mesh_compression')) loader.setDRACOLoader(await getDraco());
-      if (extensions.has('EXT_meshopt_compression') || extensions.has('KHR_meshopt_compression')) loader.setMeshoptDecoder(await getMeshopt());
-      // Embedded images and geometry are resolved by the official glTF parser.
+      const newLoader = async () => {
+        const loader = createGLTFParser(extensions);
+        if (extensions.has('KHR_draco_mesh_compression')) loader.setDRACOLoader(await getDraco());
+        if (extensions.has('EXT_meshopt_compression') || extensions.has('KHR_meshopt_compression')) loader.setMeshoptDecoder(await getMeshopt());
+        return loader;
+      };
       const sourceDir = new URL('./', key).href;
+      // These source avatars include two WebP images as embedded bufferViews.
+      // Use an <img> decoding path from the start rather than fetch(blob:),
+      // which is restricted on some hosting/CSP combinations.
+      const embeddedImages = (doc.images || []).some((image) =>
+        Number.isInteger(image.bufferView) && /^image\//.test(image.mimeType || '')
+      );
       let result;
       try {
-        result = await deadline(loader.parseAsync(payload, sourceDir), 90000, 'GLBの解析に時間がかかりすぎました');
+        const loader = await newLoader();
+        const parsed = embeddedImages ? parseWithImageElements(loader, payload, sourceDir) : loader.parseAsync(payload, sourceDir);
+        result = await deadline(parsed, 35000, 'GLB解析タイムアウト');
       } catch (primary) {
-        // Allow the stock URL loader to recover when parseAsync behaves
-        // differently under an older browser/CDN implementation.
+        // In case the target browser forbids <img> too, try the alternative
+        // parser once, without fetching the already-validated GLB again.
         try {
-          result = await deadline(loader.loadAsync(key), 90000, 'モデルの再取得がタイムアウトしました');
+          const loader = await newLoader();
+          const alternate = embeddedImages ? loader.parseAsync(payload, sourceDir) : parseWithImageElements(loader, payload, sourceDir);
+          result = await deadline(alternate, 25000, '内蔵画像の読み込みタイムアウト');
         } catch (secondary) {
-          throw new Error(`GLB解析失敗：${primary?.message || primary} / 再試行：${secondary?.message || secondary}`);
+          throw new Error(`GLB内蔵画像の解析に失敗しました。方式1: ${primary?.message || primary} / 方式2: ${secondary?.message || secondary}。Console の blob: または CSP を確認してください。`);
         }
       }
       let visibleMeshes = 0;
