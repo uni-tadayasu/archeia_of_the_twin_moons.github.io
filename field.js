@@ -2,6 +2,7 @@
 // 魔物は姿が見える「シンボルエンカウント」。触れると戦闘、目的地の祭壇で章の決戦。
 import * as THREE from 'three';
 import { attachGaienWalk } from './gaien-motion.js';
+import { enhanceGaienModel } from './gaien-style.js';
 import { instantiateModel } from './model-runtime.js?v=draco-fix-v20261107';
 import { FIGHTERS } from './data.js?v=gaien-bgm-20261107b';
 import { makeGear, animGear, removeGear } from './gear.js';
@@ -61,6 +62,7 @@ function makeActor(gltf, height, color, tint, own, key = "") {
   root.add(instance.wrapper);
   a.model = instance.model;
   a.gaienWalk = attachGaienWalk(instance.model, key);
+  a.gaienStyle = enhanceGaienModel(instance.model, key);
   own.push(...instance.materials);
   a.mixer = new THREE.AnimationMixer(instance.model);
   for (const clip of gltf.animations || []) {
@@ -1549,6 +1551,7 @@ export class Field {
       if (a.far) continue;
       a.mixer?.update(dt);
       a.gaienWalk?.update(dt, a.cur === 'run' || a.cur === 'walk' ? (a.cur === 'run' ? 'run' : 'walk') : false);
+      a.gaienStyle?.update(dt, a.cur === 'run' || a.cur === 'walk');
       if (a.gear) animGear(a.gear, dt, false, a.cur === 'run');
       a.root.position.copy(a.pos);
       a.root.rotation.y = a.facing;
@@ -1686,6 +1689,7 @@ export class Field {
       a.play(a.mv ? 'run' : 'idle');
       a.mixer?.update(dt);
       a.gaienWalk?.update(dt, a.mv ? 'run' : false);
+      a.gaienStyle?.update(dt, !!a.mv);
       if (a.gear) animGear(a.gear, dt, false, a.mv);
       a.root.position.copy(a.pos);
       a.root.rotation.y = a.facing;

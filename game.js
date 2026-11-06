@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { attachGaienWalk } from './gaien-motion.js';
+import { enhanceGaienModel } from './gaien-style.js';
 import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js';
 import { FIGHTERS, ELEMS } from './data.js?v=gaien-bgm-20261107b';
 import { makeGear, animGear } from './gear.js';
@@ -499,6 +500,7 @@ export class Fighter {
     this.modelInstance = instance;
     this.visual.add(instance.wrapper);
     this.gaienWalk = attachGaienWalk(instance.model, this.key);
+    this.gaienStyle = enhanceGaienModel(instance.model, this.key);
     this.mixer = new THREE.AnimationMixer(instance.model);
     this.clips = {};
     for (const clip of gltf.animations || []) {
@@ -558,6 +560,7 @@ export class Fighter {
     if (this.mixer) {
       this.mixer.update(dt);
     }
+    this.gaienStyle?.update(dt, this.dead ? false : (this.moving || this.netMoving));
     if (this.gear) animGear(this.gear, dt, !!this.action, this.vel.lengthSq() > 0.5);
     if (this.summonCd > 0) this.summonCd -= dt;
     if (this.formSwapCd > 0) this.formSwapCd -= dt;
@@ -958,6 +961,8 @@ export class Fighter {
     this.dead = false;
     this.gaienWalk?.stop();
     this.gaienWalk = null;
+    this.gaienStyle?.stop?.();
+    this.gaienStyle = null;
     // 旧形態のGPU資源を解放し、同じ見た目に関連する共有GLBは残す。
     disposeModel(this.modelInstance, this.mixer);
     this.modelInstance = null;
@@ -1017,6 +1022,8 @@ export class Fighter {
     this.modelInstance = null;
     this.gaienWalk?.stop();
     this.gaienWalk = null;
+    this.gaienStyle?.stop?.();
+    this.gaienStyle = null;
     this.visual.clear();
     this.root.remove(this.ringMesh, this.guardMesh);
     this.visual.rotation.set(0, 0, 0);
