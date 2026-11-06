@@ -2,75 +2,14 @@ import * as THREE from 'three';
 import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js';
 import { FIGHTERS, ELEMS } from './data.js';
 import { makeGear, animGear } from './gear.js';
-import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { loadModel, instantiateModel, disposeModel } from './model-runtime.js?v=restore1';
 
 // 召喚獣の見た目と性能（HPは使い手の最大HPに比例）
 const SUMMON_DEFS = {
   s0: { name: 'ヤマタノオロチ', model: 'assets/models/summon-orochi.glb', height: 3.6, hpMul: 0.6, dist: 2.4, range: 4.4, mul: 1.5, autoMul: 1.3, autoCd: 1.8, autoRange: 4.5, color: 0xd01030, color2: 0xff6020 },
   s1: { name: 'スサノオ', model: 'assets/models/summon-susanoo.glb', height: 3.4, hpMul: 0.6, dist: 2.2, range: 4.4, mul: 1.5, autoMul: 1.4, autoCd: 1.6, autoRange: 4.0, color: 0x30ff70, color2: 0xa0ffc0 }
 };
-const SUMMON_CACHE = new Map();
-
-function makePortraitFallback(fighter, h, scale, tint) {
-  const g = new THREE.Group();
-  const palette = tint ?? fighter.color;
-  const glowCol = fighter.color2 ?? fighter.color;
-  const cloak = new THREE.Mesh(
-    new THREE.CapsuleGeometry(0.34 * scale, Math.max(0.9, h - 0.9 * scale), 6, 14),
-    new THREE.MeshStandardMaterial({ color: palette, roughness: 0.72, metalness: 0.08 })
-  );
-  cloak.position.y = h * 0.44;
-  cloak.castShadow = true;
-  g.add(cloak);
-  const mantle = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.55 * scale, 0.18 * scale, 0.9 * scale, 6, 1, true),
-    new THREE.MeshStandardMaterial({ color: glowCol, roughness: 0.56, metalness: 0.15, side: THREE.DoubleSide })
-  );
-  mantle.position.y = h * 0.72;
-  mantle.rotation.y = Math.PI / 6;
-  mantle.castShadow = true;
-  g.add(mantle);
-  const sigil = new THREE.Mesh(
-    new THREE.CircleGeometry(0.18 * scale, 24),
-    new THREE.MeshBasicMaterial({ color: glowCol, transparent: true, opacity: 0.8 })
-  );
-  sigil.position.set(0, h * 0.58, 0.28 * scale);
-  g.add(sigil);
-  const plateGeo = new THREE.PlaneGeometry(0.95 * scale, 1.2 * scale);
-  const plateMat = new THREE.MeshStandardMaterial({ color: 0xffffff, transparent: true, alphaTest: 0.08, side: THREE.DoubleSide });
-  const plate = new THREE.Mesh(plateGeo, plateMat);
-  plate.position.set(0, h * 0.76, 0.3 * scale);
-  plate.castShadow = true;
-  g.add(plate);
-  if (fighter.face) {
-    loadFaceTex(fighter.face).then((tex) => {
-      if (!tex) return;
-      tex.colorSpace = THREE.SRGBColorSpace;
-      plateMat.map = tex;
-      plateMat.needsUpdate = true;
-    });
-  }
-  const crest = new THREE.Mesh(
-    new THREE.RingGeometry(0.34 * scale, 0.47 * scale, 24),
-    new THREE.MeshBasicMaterial({ color: glowCol, transparent: true, opacity: 0.72, side: THREE.DoubleSide })
-  );
-  crest.position.set(0, h * 0.98, -0.08 * scale);
-  g.add(crest);
-  return g;
-}
-
-const summonLoader = new GLTFLoader();
-const faceTexLoader = new THREE.TextureLoader();
-const FACE_TEX_CACHE = new Map();
-function loadFaceTex(url) {
-  if (!url) return Promise.resolve(null);
-  if (!FACE_TEX_CACHE.has(url)) FACE_TEX_CACHE.set(url, faceTexLoader.loadAsync(url).catch((err) => { console.warn(err); return null; }));
-  return FACE_TEX_CACHE.get(url);
-}
-function loadSummonModel(url) {
-  if (!SUMMON_CACHE.has(url)) SUMMON_CACHE.set(url, summonLoader.loadAsync(url).catch((err) => { console.warn(err); return null; }));
-  return SUMMON_CACHE.get(url);
-}
+const loadSummonModel = (url) => loadModel(url);
 
 // 状態異常：持続秒数・継続ダメージ(毎秒)
 const ST_INFO = {
@@ -468,42 +407,20 @@ export class Fighter {
 
   buildModel(gltf) {
     const h = this.def.height * this.scale;
-    if (gltf) {
-      const m = SkeletonUtils.clone(gltf.scene);
-      m.updateMatrixWorld(true);
-      const box = new THREE.Box3().setFromObject(m);
-      const size = box.getSize(new THREE.Vector3());
-      const s = h / Math.max(size.y, 0.001);
-      m.scale.setScalar(s);
-      m.position.y = -box.min.y * s;
-      const tint = this.tint != null ? new THREE.Color(this.tint) : null;
-      m.traverse((c) => {
-        if (c.isMesh) {
-          c.castShadow = true;
-          if (tint && c.material) {
-            c.material = c.material.clone();
-            c.material.color?.lerp(tint, 0.6);
-          }
-        }
-      });
-      this.visual.add(m);
-      this.mixer = new THREE.AnimationMixer(m);
-      this.clips = {};
-      for (const clip of gltf.animations) {
-        const n = clip.name.toLowerCase();
-        for (const k of ['idle', 'walk', 'run', 'jump']) {
-          if (n.includes(k) && !this.clips[k]) {
-            this.clips[k] = clip;
-          }
-        }
+    const instance = instantiateModel(gltf, h, this.tint);
+    this.modelInstance = instance;
+    const m = instance.model;
+    this.visual.add(instance.wrapper);
+    this.mixer = new THREE.AnimationMixer(m);
+    this.clips = {};
+    for (const clip of gltf.animations || []) {
+      const name = clip.name.toLowerCase();
+      for (const key of ['idle', 'walk', 'run', 'jump']) {
+        if (name.includes(key) && !this.clips[key]) this.clips[key] = clip;
       }
-    } else {
-      const fallback = makePortraitFallback(this.def, h, this.scale, this.tint);
-      this.visual.add(fallback);
     }
-    // 装備：骨格と体形を測ってフィット（骨に付けてアニメに追従）
-    const model = this.visual.children.find((c) => !c.isMesh || c.geometry?.type !== 'CapsuleGeometry') || null;
-    this.gear = this.gearIds ? makeGear(h, this.gearIds.w, this.gearIds.a, gltf ? model : null, this.visual) : null;
+    this.visual.updateMatrixWorld(true);
+    this.gear = this.gearIds ? makeGear(h, this.gearIds.w, this.gearIds.a, m, this.visual) : null;
     const teamColor = this.team === 0 ? 0x7fd3ff : 0xff7a5a;
     this.ringMesh = new THREE.Mesh(GEO.ring, glow(teamColor, 0.7));
     this.ringMesh.scale.setScalar(0.8 * this.scale);
@@ -923,7 +840,7 @@ export class Fighter {
     if (this.transformed || !this.def.form2) return false;
     if (!force && (this.remoteAuth || this.hp > this.maxHp * 0.5)) return false;
     const nk = this.def.form2;
-    if (!FIGHTERS[nk]) return false;
+    if (!FIGHTERS[nk] || !this.battle.assets[nk]) return false;
     this.transformed = true;
     this.key = nk;
     this.def = FIGHTERS[nk];
@@ -943,6 +860,7 @@ export class Fighter {
     this.inv = 1.6;
     this.dead = false;
     // 見た目を作り直す
+    disposeModel(this.modelInstance, this.mixer);
     this.visual.clear();
     this.root.remove(this.ringMesh, this.guardMesh);
     this.visual.rotation.set(0, 0, 0);
@@ -1844,30 +1762,17 @@ export class Battle {
     f.summon = s;
     loadSummonModel(d.model).then((gltf) => {
       if (!gltf || s.dying) return;
-      const m = SkeletonUtils.clone(gltf.scene);
-      m.updateMatrixWorld(true);
-      const box = new THREE.Box3().setFromObject(m);
-      const size = box.getSize(new THREE.Vector3());
-      const sc = (d.height * k) / Math.max(size.y, 0.001);
-      m.scale.setScalar(sc);
-      m.position.y = -box.min.y * sc;
-      m.traverse((c) => {
-        if (c.isMesh) {
-          c.castShadow = true;
-          if (c.material?.emissive) {
-            c.material = c.material.clone();
-            s.own.add(c.material);
-            c.material.emissive.setHex(d.color);
-            c.material.emissiveIntensity = 0.12;
-          }
-        }
-      });
+      if (this.disposed || !this.summons.has(s)) return;
+      const instance = instantiateModel(gltf, d.height * k);
+      const m = instance.model;
+      s.modelInstance = instance;
+      for (const material of instance.materials) s.own.add(material);
       body.remove(ghost);
       ghost.geometry.dispose();
       ghost.material.dispose();
       s.own.delete(ghost.geometry);
       s.own.delete(ghost.material);
-      body.add(m);
+      body.add(instance.wrapper);
       if (gltf.animations?.length) {
         s.mixer = new THREE.AnimationMixer(m);
         const find = (re) => gltf.animations.find((a) => re.test(a.name));
@@ -1879,6 +1784,12 @@ export class Battle {
         if (s.acts.atk) s.acts.atk.setLoop(THREE.LoopOnce, 1);
         if (s.acts.die) { s.acts.die.setLoop(THREE.LoopOnce, 1); s.acts.die.clampWhenFinished = true; }
       }
+    }).catch((error) => {
+      if (this.disposed || !this.summons.has(s)) return;
+      this.removeSummon(s);
+      f.summonCd = 15;
+      this.ui.banner?.({ name: '召喚モデルの読込に失敗' }, d.name + '（15秒後に再試行）');
+      console.error(error);
     });
     // 出現演出
     this.burstFx ? this.burstFx(g.position.clone().setY(1.2), d.color, elOf(f.def.skills[0])) : this.spark(g.position.clone().setY(1.2), d.color, 2);
@@ -2579,7 +2490,9 @@ export class Battle {
   }
 
   dispose() {
+    this.disposed = true;
     for (const f of this.fighters) {
+      disposeModel(f.modelInstance, f.mixer);
       this.scene.remove(f.root);
       f.mixer?.stopAllAction();
     }

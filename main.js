@@ -1,6 +1,6 @@
 import * as THREE from 'three';
-import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
-import { Battle, ARENA_R } from './game.js';
+import { loadModel, peekModel, modelError } from './model-runtime.js?v=restore1';
+import { Battle, ARENA_R } from './game.js?v=restore1';
 import { FIGHTERS, STORY, ROSTER, UPGRADES, MAX_LV, STAGES, BGM, APEX_BGM, ENEMY_ROSTER, UPG_CAP, LB_MAX, lbMaxLv, lbMul, lbCost, WEAPONS, ARMORS, SUMMONS, STAT_LABEL, SPECIAL_KEYS, BOSS_ROSTER, currentEvent, sanitizeEvent, EV_FOE_KINDS } from './data.js';
 import { ProcMusic } from './music.js';
 import { sayBattle, setVoiceMuted, stopVoices } from './voice.js';
@@ -141,38 +141,90 @@ function setStage(st) {
 const stageById = (id) => STAGES.find((s) => s.id === id) || STAGES[0];
 setStage(STAGES[0]);
 
-// ---------- Assets ----------
+// ---------- Assets: only real, successfully decoded GLB models ----------
 const assets = {};
-const gltfLoader = new GLTFLoader();
-const modelUrls = [...new Set(Object.values(FIGHTERS).map((d) => d.model))];
-const byUrl = {};
+const modelUrls = [...new Set(Object.values(FIGHTERS).map((d) => d.model).filter(Boolean))];
 let loadedModelCount = 0;
-const updateLoadStatus = () => {
-  const loadingEl = $('#loading');
-  if (loadingEl) loadingEl.textContent = `戦士モデルを読み込んでいます… ${loadedModelCount}/${modelUrls.length}`;
-  const hc = $('#home-char-count');
-  if (hc) hc.textContent = `${loadedModelCount} / ${modelUrls.length}`;
-  const hs = $('#home-stage-count');
-  if (hs) hs.textContent = `${STAGES.filter((s) => !!s.sky).length} / ${STAGES.length}`;
-};
-updateLoadStatus();
-const loadPromise = Promise.allSettled(modelUrls.map((url) =>
-  gltfLoader.loadAsync(url).then((g) => {
-    byUrl[url] = g;
-    loadedModelCount++;
-    updateLoadStatus();
-  }).catch((err) => {
-    console.warn('model load failed', url, err);
-    updateLoadStatus();
-    return null;
-  })
-)).then(() => {
-  for (const [k, d] of Object.entries(FIGHTERS)) {
-    if (byUrl[d.model]) assets[k] = byUrl[d.model];
+let assetRequestId = 0;
+let screenRevision = 0;
+let assetDialog = null;
+function refreshAssets() {
+  for (const [key, def] of Object.entries(FIGHTERS)) {
+    const gltf = peekModel(def.model);
+    if (gltf) assets[key] = gltf;
   }
-  if ($('#loading')) $('#loading').textContent = 'モデル読込完了。クリックまたはタップでトップページへ';
-  updateLoadStatus();
-});
+  loadedModelCount = modelUrls.filter((url) => peekModel(url)).length;
+  const failed = modelUrls.filter((url) => modelError(url)).length;
+  const text = loadedModelCount === modelUrls.length
+    ? `3Dモデル ${loadedModelCount}/${modelUrls.length} 読込完了`
+    : `3Dモデル ${loadedModelCount}/${modelUrls.length}${failed ? ` · ${failed}件の読込に失敗（開始時に再試行できます）` : ' 読込中'}`;
+  const loadingEl = $('#loading'); if (loadingEl) loadingEl.textContent = text;
+  const home = $('#home-char-count'); if (home) home.textContent = `${loadedModelCount} / ${modelUrls.length}`;
+  const stage = $('#home-stage-count'); if (stage) stage.textContent = String(STAGES.length);
+  if (assetDialog?.open) {
+    const selected = assetDialog.arkeiaRequired || modelUrls;
+    const readyCount = selected.filter((url) => peekModel(url)).length;
+    assetDialog.querySelector('progress').value = readyCount;
+    assetDialog.querySelector('[data-load-count]').textContent = `3Dモデル ${readyCount}/${selected.length} 準備完了`;
+  }
+}
+window.addEventListener('arkeia:models', refreshAssets);
+refreshAssets();
+// Errors are recorded individually, never silently replaced with capsule models.
+// Load a few featured fighters first, rather than downloading every GLB before starting.
+const featuredModels = ['rowen', 'minase', 'garou'].map((key) => FIGHTERS[key]?.model).filter(Boolean);
+const loadPromise = Promise.allSettled(featuredModels.map((url) => loadModel(url))).then(refreshAssets);
+function requestFighterModel(key) {
+  const url = FIGHTERS[key]?.model;
+  if (url && !peekModel(url)) loadModel(url).then(refreshAssets).catch(() => {});
+}
+async function ensureGameModels(requiredKeys = null) {
+  const keys = requiredKeys || Object.keys(FIGHTERS);
+  const withForms = [...keys, ...keys.map((key) => FIGHTERS[key]?.form2).filter(Boolean)];
+  const requiredUrls = [...new Set(withForms.map((key) => FIGHTERS[key]?.model).filter(Boolean))];
+  if (!requiredUrls.length) return true;
+  refreshAssets();
+  if (requiredUrls.every((url) => peekModel(url))) return true;
+  if (assetDialog?.open) return false;
+  const requestId = ++assetRequestId, revision = screenRevision;
+  const dialog = document.createElement('dialog');
+  assetDialog = dialog; dialog.className = 'asset-dialog'; dialog.arkeiaRequired = requiredUrls;
+  const heading = document.createElement('h2'); heading.textContent = '戦士の姿を読み込んでいます';
+  const desc = document.createElement('p'); desc.textContent = '顔・衣装・装備・アニメーションを含む3Dモデルを準備しています。未読込のまま戦闘は開始しません。';
+  const progress = document.createElement('progress'); progress.max = requiredUrls.length;
+  const count = document.createElement('p'); count.dataset.loadCount = '';
+  const failures = document.createElement('ul'); failures.className = 'asset-failures';
+  const retry = document.createElement('button'); retry.textContent = '読み込みを再試行'; retry.hidden = true;
+  const cancel = document.createElement('button'); cancel.textContent = '戻る'; cancel.className = 'ghost';
+  dialog.append(heading, desc, progress, count, failures, retry, cancel);
+  document.body.append(dialog); dialog.showModal(); refreshAssets();
+  return new Promise((resolve) => {
+    let done = false;
+    const finish = (ok) => {
+      if (done) return; done = true;
+      if (dialog.open) dialog.close(); dialog.remove();
+      if (assetDialog === dialog) assetDialog = null;
+      resolve(ok && requestId === assetRequestId && revision === screenRevision);
+    };
+    cancel.onclick = () => finish(false);
+    dialog.addEventListener('cancel', (event) => { event.preventDefault(); finish(false); });
+    const run = async () => {
+      retry.hidden = true; failures.replaceChildren();
+      await Promise.allSettled(requiredUrls.filter((url) => !peekModel(url)).map((url) => loadModel(url)));
+      if (done) return;
+      refreshAssets();
+      if (requiredUrls.every((url) => peekModel(url))) { finish(true); return; }
+      heading.textContent = 'モデルを読み込めませんでした';
+      desc.textContent = '下のファイル名を確認してください。画面だけ先へ進めず、元の姿で表示できるまで開始を止めています。assets/models 内の .glb・共有 .bin も同じ場所に必要です。';
+      for (const url of requiredUrls.filter((item) => !peekModel(item))) {
+        const item = document.createElement('li'); item.textContent = modelError(url)?.message || url;
+        failures.append(item);
+      }
+      retry.hidden = false;
+    };
+    retry.onclick = run; run();
+  });
+}
 
 // ---------- Save ----------
 const SAVE_KEY = 'arkeia-save-v1';
@@ -996,10 +1048,7 @@ window.addEventListener('keydown', (e) => {
     }
     return;
   }
-  if (isScreen('scr-press')) {
-    enterTitle();
-    return;
-  }
+  if (isScreen('scr-press')) return; // portal.js handles Enter/Space and the start button
   if (e.code === 'Escape') {
     goBackCurrent();
     return;
@@ -1126,6 +1175,7 @@ function isScreen(id) {
   return $('#' + id)?.classList.contains('on');
 }
 function show(id) {
+  screenRevision++;
   for (const s of document.querySelectorAll('.screen')) {
     s.classList.toggle('on', s.id === id);
   }
@@ -1296,7 +1346,7 @@ function refreshTitle() {
   const hc = $('#home-char-count');
   if (hc) hc.textContent = `${loadedModelCount} / ${modelUrls.length}`;
   const hs = $('#home-stage-count');
-  if (hs) hs.textContent = `${STAGES.filter((s) => !!s.sky).length} / ${STAGES.length}`;
+  if (hs) hs.textContent = String(STAGES.length);
   {
     const { ev, ends } = activeEvent();
     const days = Math.max(0, Math.ceil((ends - Date.now()) / 86400000));
@@ -1312,18 +1362,6 @@ function enterTitle() {
   refreshTitle();
   show('scr-title');
 }
-
-$('#scr-press').addEventListener('pointerdown', () => {
-  if (isScreen('scr-press')) {
-    enterTitle();
-  }
-});
-
-$('#press-start')?.addEventListener('click', (e) => {
-  e.stopPropagation();
-  sfx('ui');
-  enterTitle();
-});
 
 document.querySelectorAll('[data-to]').forEach((b) => b.addEventListener('click', () => {
   sfx('ui');
@@ -1417,7 +1455,10 @@ function openSelect(label, crumb, cb, { allowLocked = false, onBack = goTitle } 
     meta.append(t, n, s);
     card.append(media, meta);
     card.disabled = locked;
+    card.addEventListener('pointerenter', () => requestFighterModel(k), { once: true });
+    card.addEventListener('focus', () => requestFighterModel(k), { once: true });
     card.addEventListener('click', () => {
+      requestFighterModel(k);
       sfx('ui');
       cb(k);
     });
@@ -1501,7 +1542,10 @@ function openPartySelect(done) {
     n.textContent = d.name;
     meta.append(t, n);
     card.append(media, meta);
+    card.addEventListener('pointerenter', () => requestFighterModel(k), { once: true });
+    card.addEventListener('focus', () => requestFighterModel(k), { once: true });
     card.addEventListener('click', () => {
+      requestFighterModel(k);
       sfx('ui');
       if (party.includes(k)) {
         party = party.filter((x) => x !== k);
@@ -1540,6 +1584,16 @@ function openStageSelect(crumb, onBack) {
   const grid = $('#select-grid');
   grid.replaceChildren();
   const list = [{ id: 'random', name: '風まかせ', floor: 0xc9a65a, seg: 0, sky: STAGES[0].sky, rim: 0xc9a65a, crystal: 0xfff0b2 }, ...STAGES];
+  const artType = (st) => {
+    if (['moon', 'desert', 'frost', 'bamboo', 'heaven', 'ember', 'void'].includes(st.id)) return st.id;
+    const sky = st.sky || '';
+    if (sky.includes('desert')) return st.floor === 0xff9a7a ? 'ember' : 'desert';
+    if (sky.includes('frost')) return 'frost';
+    if (sky.includes('bamboo')) return 'bamboo';
+    if (sky.includes('heaven')) return 'heaven';
+    return 'moon';
+  };
+  const artNames = { moon: '蒼月の闘技場', desert: '夕映えの砂海', frost: '霜と氷晶の舞台', bamboo: '月夜の竹林', heaven: '雲上の聖域', ember: '灼熱の祭壇', void: '冥紫の回廊' };
   for (const st of list) {
     const card = document.createElement('button');
     card.className = 'card stage-card';
@@ -1548,21 +1602,21 @@ function openStageSelect(crumb, onBack) {
     media.className = 'card-media';
     const thumb = document.createElement('div');
     thumb.className = 'sthumb';
-    if (st.sky) thumb.style.backgroundImage = `url(${st.sky})`;
-    else thumb.style.background = 'linear-gradient(135deg,#2f2748,#111a2f)';
+    const artName = artType(st);
+    const artAlt = st.id.startsWith('s') && (Number(st.id.slice(1)) % 2 === 0) ? '-alt' : '';
+    const stageImage = `assets/stage-illustrations/${artName}${artAlt}.webp`;
+    thumb.style.backgroundImage = `url("${stageImage}")`;
+    thumb.setAttribute('role', 'img');
+    thumb.setAttribute('aria-label', `${st.name}の風景画`);
+
     const badge = document.createElement('span');
     badge.className = 'card-badge';
-    badge.textContent = st.id === 'random' ? 'RANDOM' : 'STAGE';
-    const floor = document.createElement('span');
-    floor.className = 'stage-floor';
-    const hex = (c) => '#' + c.toString(16).padStart(6, '0');
-    floor.style.background = `radial-gradient(circle, ${hex(st.floor)}, ${hex(st.rim || st.floor)})`;
-    floor.style.boxShadow = `0 0 22px ${hex(st.crystal || st.floor)}`;
-    media.append(thumb, floor, badge);
+    badge.textContent = st.id === 'random' ? 'RANDOM' : '舞台風景';
+    media.append(thumb, badge);
     const meta = document.createElement('div');
     meta.className = 'card-meta';
     const t = document.createElement('em');
-    t.textContent = st.seg ? (st.seg > 20 ? '円の舞台' : `${st.seg}つの辺を持つ舞台`) : 'どこへ連れていかれるかは月次第';
+    t.textContent = st.id === 'random' ? '月が導く未知の舞台' : artNames[artName];
     const n = document.createElement('b');
     n.textContent = st.name;
     meta.append(t, n);
@@ -1572,8 +1626,6 @@ function openStageSelect(crumb, onBack) {
       meta.append(s);
     }
     card.append(media, meta);
-    card.addEventListener('mouseenter', () => st.sky && setStage(st));
-    card.addEventListener('focus', () => st.sky && setStage(st));
     card.addEventListener('click', () => {
       sfx('ui');
       state.stage = st.id === 'random' ? STAGES[Math.floor(Math.random() * STAGES.length)] : st;
@@ -1761,8 +1813,14 @@ function openEventLevel(cb) {
   document.body.append(ov);
 }
 
+let offlineStarting = false;
 async function startOffline() {
-  await loadPromise;
+  if (offlineStarting) return;
+  offlineStarting = true;
+  let ready;
+  const required = state.mode === 'cpu' ? [state.myKey, state.oppKey] : null;
+  try { ready = await ensureGameModels(required); } finally { offlineStarting = false; }
+  if (!ready) return;
   const evRun = state.mode === 'event' ? (state.eventRun ||= activeEvent()) : null;
   setStage(evRun ? STAGES[evRun.ev.stage % STAGES.length] : state.stage || STAGES[0]);
   const b = makeBattle(null);
@@ -2132,7 +2190,7 @@ function buildStoryBattle(foes, boss) {
 }
 // 目的地の決戦：ボス章は決められた敵、通常の章は1〜6体
 async function startChapterBattle() {
-  await loadPromise;
+  if (!(await ensureGameModels())) return;
   const ch = STORY[state.chapter];
   state.encounter = null;
   let foes = ch.enemies;
@@ -2164,7 +2222,10 @@ function resetFieldLight() {
 }
 async function enterField() {
   // フィールドは物語でしか使わないので必要になった時だけ読み込む（初回表示を軽く）
-  const [{ Field }] = await Promise.all([import('./field.js'), loadPromise]);
+  if (!(await ensureGameModels())) return;
+  const revision = screenRevision;
+  const { Field } = await import('./field.js?v=restore1');
+  if (revision !== screenRevision || state.mode !== 'story') return;
   leaveField();
   const ch = STORY[state.chapter];
   const st = stageById(ch.stage);
@@ -2532,6 +2593,7 @@ function onPeers(peers) {
     }
     return;
   }
+  if (!remote) return;
   remote.netTarget.set(p.x, 0, p.z);
   remote.netFacing = p.ry;
   remote.netMoving = p.mv;
@@ -2540,7 +2602,13 @@ function onPeers(peers) {
 }
 
 async function startOnline(peer) {
-  await loadPromise;
+  if (!state.online || state.online.starting || state.online.started) return;
+  const session = state.online; session.starting = true;
+  let ready;
+  const needed = [state.myKey, peerKeyOf(peer.id, peer.fk)];
+  if (state.mode === 'online-coop') needed.push('seraphel');
+  try { ready = await ensureGameModels(needed); } finally { session.starting = false; }
+  if (!ready || state.online !== session) return;
   if (!state.online) {
     return;
   }
@@ -2737,7 +2805,7 @@ async function startInvade(p) {
   if (!w || !operatorUnlocked()) {
     return;
   }
-  await loadPromise;
+  if (!(await ensureGameModels())) return;
   // サーバー設定時：乱入の許可をサーバーで判定し、署名付き許可証を相手に渡す
   let tk = '';
   if (apiEnabled()) {
@@ -3681,3 +3749,7 @@ renderer.setAnimationLoop((time) => {
 });
 
 show('scr-press');
+window.ArkeiaPortal?.bind({
+  openMenu: enterTitle,
+  openLanding: () => { goTitle(); show('scr-press'); }
+});
