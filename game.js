@@ -2,14 +2,88 @@ import * as THREE from 'three';
 import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js';
 import { FIGHTERS, ELEMS } from './data.js';
 import { makeGear, animGear } from './gear.js';
-import { loadModel, instantiateModel, disposeModel } from './model-runtime.js?v=restore1';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 
 // 召喚獣の見た目と性能（HPは使い手の最大HPに比例）
 const SUMMON_DEFS = {
   s0: { name: 'ヤマタノオロチ', model: 'assets/models/summon-orochi.glb', height: 3.6, hpMul: 0.6, dist: 2.4, range: 4.4, mul: 1.5, autoMul: 1.3, autoCd: 1.8, autoRange: 4.5, color: 0xd01030, color2: 0xff6020 },
   s1: { name: 'スサノオ', model: 'assets/models/summon-susanoo.glb', height: 3.4, hpMul: 0.6, dist: 2.2, range: 4.4, mul: 1.5, autoMul: 1.4, autoCd: 1.6, autoRange: 4.0, color: 0x30ff70, color2: 0xa0ffc0 }
 };
-const loadSummonModel = (url) => loadModel(url);
+const SUMMON_CACHE = new Map();
+const summonLoader = new GLTFLoader();
+
+// 八岐大蛇：一部の首が胴体から切れて見える旧GLBを、滑らかな補強曲線で接続。
+// 元の顔・胴体メッシュとテクスチャは残す。首は独立材質でカメラ背面からも見える。
+function repairOrochiNecks(scene, ownership) {
+  const patch = new THREE.Group();
+  patch.name = 'orochi_eight_necks_repaired';
+  const rootColor = 0x211522;
+  const ridgeColor = 0x702b35;
+  const bellyColor = 0x49202a;
+  const bodyMat = new THREE.MeshStandardMaterial({ color: rootColor, roughness: 0.78, metalness: 0.06, side: THREE.DoubleSide });
+  const bellyMat = new THREE.MeshStandardMaterial({ color: bellyColor, roughness: 0.85, side: THREE.DoubleSide });
+  const ridgeMat = new THREE.MeshStandardMaterial({ color: ridgeColor, roughness: 0.74, metalness: 0.03 });
+  const shellMat = new THREE.MeshStandardMaterial({ color: 0x392534, roughness: 0.8 });
+  for (const mat of [bodyMat, bellyMat, ridgeMat, shellMat]) ownership.add(mat);
+  // 旧GLBの局所座標。各首先端は元の8頭の根元の内側へ入り込ませ、切れ目を隠す。
+  const heads = [
+    [-0.335, 0.66, 0.020], [-0.237, 0.77, -0.050], [-0.13, 0.725, -0.12], [-0.035, 0.79, 0.035],
+    [ 0.115, 0.82, 0.005], [ 0.225, 0.72, -0.055], [ 0.41, 0.52, 0.018], [ 0.405, 0.315, 0.075]
+  ];
+  heads.forEach(([x, y, z], i) => {
+    const side = (i - 3.5) / 3.5;
+    const base = new THREE.Vector3(-0.03 + side * 0.043, 0.105, -0.07 + (i % 3) * 0.02);
+    const target = new THREE.Vector3(x, y - 0.025, z);
+    const curve = new THREE.CatmullRomCurve3([
+      base,
+      new THREE.Vector3(base.x + side * 0.025, 0.20 + i * 0.002, -0.05),
+      new THREE.Vector3(x * 0.53, y * 0.53, z * 0.8),
+      new THREE.Vector3(x * 0.83, y - 0.13, z - 0.015),
+      target
+    ], false, 'centripetal', 0.45);
+    const radius = i >= 6 ? 0.025 : 0.031;
+    const tubeGeo = new THREE.TubeGeometry(curve, 40, radius, 14, false);
+    const main = new THREE.Mesh(tubeGeo, bodyMat);
+    main.name = 'neck_' + (i + 1);
+    main.castShadow = true;
+    main.receiveShadow = true;
+    patch.add(main);
+    ownership.add(tubeGeo);
+    // 鱗の背筋。先端までつながる長いリブを首に沿わせる。
+    const edgePoints = [];
+    for (let j = 0; j <= 32; j++) {
+      const pos = curve.getPoint(j / 32);
+      pos.y += radius * 0.68;
+      pos.z -= radius * 0.35;
+      edgePoints.push(pos);
+    }
+    const edgeGeo = new THREE.TubeGeometry(new THREE.CatmullRomCurve3(edgePoints), 32, radius * 0.26, 6, false);
+    patch.add(new THREE.Mesh(edgeGeo, ridgeMat));
+    ownership.add(edgeGeo);
+    const bellyPoints = [];
+    for (let j = 0; j <= 28; j++) {
+      const pos = curve.getPoint(j / 28);
+      pos.z += radius * 0.78;
+      bellyPoints.push(pos);
+    }
+    const bellyGeo = new THREE.TubeGeometry(new THREE.CatmullRomCurve3(bellyPoints), 28, radius * 0.55, 10, false);
+    patch.add(new THREE.Mesh(bellyGeo, bellyMat));
+    ownership.add(bellyGeo);
+    // 胴体とのつなぎ目を滑らかに覆う骨格の節。
+    const collarGeo = new THREE.SphereGeometry(radius * 1.35, 12, 8);
+    const collar = new THREE.Mesh(collarGeo, shellMat);
+    collar.position.copy(base);
+    collar.scale.set(1.25, 1.2, 1.25);
+    patch.add(collar);
+    ownership.add(collarGeo);
+  });
+  scene.add(patch);
+  return patch;
+}
+function loadSummonModel(url) {
+  if (!SUMMON_CACHE.has(url)) SUMMON_CACHE.set(url, summonLoader.loadAsync(url).catch((err) => { console.warn(err); return null; }));
+  return SUMMON_CACHE.get(url);
+}
 
 // 状態異常：持続秒数・継続ダメージ(毎秒)
 const ST_INFO = {
@@ -407,20 +481,47 @@ export class Fighter {
 
   buildModel(gltf) {
     const h = this.def.height * this.scale;
-    const instance = instantiateModel(gltf, h, this.tint);
-    this.modelInstance = instance;
-    const m = instance.model;
-    this.visual.add(instance.wrapper);
-    this.mixer = new THREE.AnimationMixer(m);
-    this.clips = {};
-    for (const clip of gltf.animations || []) {
-      const name = clip.name.toLowerCase();
-      for (const key of ['idle', 'walk', 'run', 'jump']) {
-        if (name.includes(key) && !this.clips[key]) this.clips[key] = clip;
+    if (gltf) {
+      const m = SkeletonUtils.clone(gltf.scene);
+      m.updateMatrixWorld(true);
+      const box = new THREE.Box3().setFromObject(m);
+      const size = box.getSize(new THREE.Vector3());
+      const s = h / Math.max(size.y, 0.001);
+      m.scale.setScalar(s);
+      m.position.y = -box.min.y * s;
+      const tint = this.tint != null ? new THREE.Color(this.tint) : null;
+      m.traverse((c) => {
+        if (c.isMesh) {
+          c.castShadow = true;
+          if (tint && c.material) {
+            c.material = c.material.clone();
+            c.material.color?.lerp(tint, 0.6);
+          }
+        }
+      });
+      this.visual.add(m);
+      this.mixer = new THREE.AnimationMixer(m);
+      this.clips = {};
+      for (const clip of gltf.animations) {
+        const n = clip.name.toLowerCase();
+        for (const k of ['idle', 'walk', 'run', 'jump']) {
+          if (n.includes(k) && !this.clips[k]) {
+            this.clips[k] = clip;
+          }
+        }
       }
+    } else {
+      const mesh = new THREE.Mesh(
+        new THREE.CapsuleGeometry(0.35 * this.scale, h - 0.7 * this.scale, 6, 12),
+        new THREE.MeshStandardMaterial({ color: this.tint ?? this.def.color })
+      );
+      mesh.position.y = h / 2;
+      mesh.castShadow = true;
+      this.visual.add(mesh);
     }
-    this.visual.updateMatrixWorld(true);
-    this.gear = this.gearIds ? makeGear(h, this.gearIds.w, this.gearIds.a, m, this.visual) : null;
+    // 装備：骨格と体形を測ってフィット（骨に付けてアニメに追従）
+    const model = this.visual.children.find((c) => !c.isMesh || c.geometry?.type !== 'CapsuleGeometry') || null;
+    this.gear = this.gearIds ? makeGear(h, this.gearIds.w, this.gearIds.a, gltf ? model : null, this.visual) : null;
     const teamColor = this.team === 0 ? 0x7fd3ff : 0xff7a5a;
     this.ringMesh = new THREE.Mesh(GEO.ring, glow(teamColor, 0.7));
     this.ringMesh.scale.setScalar(0.8 * this.scale);
@@ -840,7 +941,7 @@ export class Fighter {
     if (this.transformed || !this.def.form2) return false;
     if (!force && (this.remoteAuth || this.hp > this.maxHp * 0.5)) return false;
     const nk = this.def.form2;
-    if (!FIGHTERS[nk] || !this.battle.assets[nk]) return false;
+    if (!FIGHTERS[nk]) return false;
     this.transformed = true;
     this.key = nk;
     this.def = FIGHTERS[nk];
@@ -860,7 +961,6 @@ export class Fighter {
     this.inv = 1.6;
     this.dead = false;
     // 見た目を作り直す
-    disposeModel(this.modelInstance, this.mixer);
     this.visual.clear();
     this.root.remove(this.ringMesh, this.guardMesh);
     this.visual.rotation.set(0, 0, 0);
@@ -1762,17 +1862,40 @@ export class Battle {
     f.summon = s;
     loadSummonModel(d.model).then((gltf) => {
       if (!gltf || s.dying) return;
-      if (this.disposed || !this.summons.has(s)) return;
-      const instance = instantiateModel(gltf, d.height * k);
-      const m = instance.model;
-      s.modelInstance = instance;
-      for (const material of instance.materials) s.own.add(material);
+      const m = SkeletonUtils.clone(gltf.scene);
+      m.updateMatrixWorld(true);
+      const box = new THREE.Box3().setFromObject(m);
+      const size = box.getSize(new THREE.Vector3());
+      const sc = (d.height * k) / Math.max(size.y, 0.001);
+      m.scale.setScalar(sc);
+      m.position.y = -box.min.y * sc;
+      m.traverse((c) => {
+        if (c.isMesh) {
+          c.castShadow = true;
+          if (c.material?.emissive) {
+            c.material = c.material.clone();
+            s.own.add(c.material);
+            c.material.emissive.setHex(d.color);
+            c.material.emissiveIntensity = 0.12;
+          }
+        }
+      });
       body.remove(ghost);
       ghost.geometry.dispose();
       ghost.material.dispose();
       s.own.delete(ghost.geometry);
       s.own.delete(ghost.material);
-      body.add(instance.wrapper);
+      if (f.summonId === 's0') {
+        // 修復メッシュもGLBの局所座標で配置し、上のm.scaleと同じ倍率で拡大する。
+        repairOrochiNecks(m, s.own);
+        // 既存モデルの片面描画で消えていた薄い首の裏面も表示。
+        m.traverse((c) => {
+          if (!c.isMesh || c.parent?.name === 'orochi_eight_necks_repaired') return;
+          const materials = Array.isArray(c.material) ? c.material : [c.material];
+          for (const material of materials) if (material) material.side = THREE.DoubleSide;
+        });
+      }
+      body.add(m);
       if (gltf.animations?.length) {
         s.mixer = new THREE.AnimationMixer(m);
         const find = (re) => gltf.animations.find((a) => re.test(a.name));
@@ -1784,12 +1907,6 @@ export class Battle {
         if (s.acts.atk) s.acts.atk.setLoop(THREE.LoopOnce, 1);
         if (s.acts.die) { s.acts.die.setLoop(THREE.LoopOnce, 1); s.acts.die.clampWhenFinished = true; }
       }
-    }).catch((error) => {
-      if (this.disposed || !this.summons.has(s)) return;
-      this.removeSummon(s);
-      f.summonCd = 15;
-      this.ui.banner?.({ name: '召喚モデルの読込に失敗' }, d.name + '（15秒後に再試行）');
-      console.error(error);
     });
     // 出現演出
     this.burstFx ? this.burstFx(g.position.clone().setY(1.2), d.color, elOf(f.def.skills[0])) : this.spark(g.position.clone().setY(1.2), d.color, 2);
@@ -2490,9 +2607,7 @@ export class Battle {
   }
 
   dispose() {
-    this.disposed = true;
     for (const f of this.fighters) {
-      disposeModel(f.modelInstance, f.mixer);
       this.scene.remove(f.root);
       f.mixer?.stopAllAction();
     }

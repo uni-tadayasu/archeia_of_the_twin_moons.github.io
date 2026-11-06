@@ -1,8 +1,7 @@
 import * as THREE from 'three';
-import { loadModel, peekModel, modelError } from './model-runtime.js?v=restore1';
-import { Battle, ARENA_R } from './game.js?v=restore1';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { Battle, ARENA_R } from './game.js?v=20261106a';
 import { FIGHTERS, STORY, ROSTER, UPGRADES, MAX_LV, STAGES, BGM, APEX_BGM, ENEMY_ROSTER, UPG_CAP, LB_MAX, lbMaxLv, lbMul, lbCost, WEAPONS, ARMORS, SUMMONS, STAT_LABEL, SPECIAL_KEYS, BOSS_ROSTER, currentEvent, sanitizeEvent, EV_FOE_KINDS } from './data.js';
-import { ProcMusic } from './music.js';
 import { sayBattle, setVoiceMuted, stopVoices } from './voice.js';
 import { initSocial, uiConfirm } from './social.js';
 import { OPERATOR_KEY_SHA256, CHIEF_KEY_SHA256, MAX_KEY_ATTEMPTS, LOCKOUT_MS, SHOP_ITEMS } from './config.js';
@@ -141,90 +140,30 @@ function setStage(st) {
 const stageById = (id) => STAGES.find((s) => s.id === id) || STAGES[0];
 setStage(STAGES[0]);
 
-// ---------- Assets: only real, successfully decoded GLB models ----------
+// ---------- Assets ----------
 const assets = {};
-const modelUrls = [...new Set(Object.values(FIGHTERS).map((d) => d.model).filter(Boolean))];
-let loadedModelCount = 0;
-let assetRequestId = 0;
-let screenRevision = 0;
-let assetDialog = null;
-function refreshAssets() {
-  for (const [key, def] of Object.entries(FIGHTERS)) {
-    const gltf = peekModel(def.model);
-    if (gltf) assets[key] = gltf;
+const gltfLoader = new GLTFLoader();
+const modelUrls = [...new Set(Object.values(FIGHTERS).map((d) => d.model))];
+const byUrl = {};
+let loadedModels = 0;
+const modelErrors = [];
+const loadPromise = Promise.allSettled(modelUrls.map((url) =>
+  gltfLoader.loadAsync(url).then((g) => {
+    byUrl[url] = g;
+    loadedModels++;
+    if ($('#loading')) $('#loading').textContent = `戦士の準備 ${loadedModels}/${modelUrls.length}`;
+  }).catch((error) => {
+    modelErrors.push(url);
+    console.error('[3D MODEL] 読み込み失敗:', url, error);
+  })
+)).then(() => {
+  for (const [k, d] of Object.entries(FIGHTERS)) if (byUrl[d.model]) assets[k] = byUrl[d.model];
+  const msg = $('#loading');
+  if (msg) {
+    msg.textContent = modelErrors.length ? `一部モデルの読み込みに失敗しました（${modelErrors.length}件）。回線を確認して再読み込みしてください。` : '';
+    msg.title = modelErrors.join('\n');
   }
-  loadedModelCount = modelUrls.filter((url) => peekModel(url)).length;
-  const failed = modelUrls.filter((url) => modelError(url)).length;
-  const text = loadedModelCount === modelUrls.length
-    ? `3Dモデル ${loadedModelCount}/${modelUrls.length} 読込完了`
-    : `3Dモデル ${loadedModelCount}/${modelUrls.length}${failed ? ` · ${failed}件の読込に失敗（開始時に再試行できます）` : ' 読込中'}`;
-  const loadingEl = $('#loading'); if (loadingEl) loadingEl.textContent = text;
-  const home = $('#home-char-count'); if (home) home.textContent = `${loadedModelCount} / ${modelUrls.length}`;
-  const stage = $('#home-stage-count'); if (stage) stage.textContent = String(STAGES.length);
-  if (assetDialog?.open) {
-    const selected = assetDialog.arkeiaRequired || modelUrls;
-    const readyCount = selected.filter((url) => peekModel(url)).length;
-    assetDialog.querySelector('progress').value = readyCount;
-    assetDialog.querySelector('[data-load-count]').textContent = `3Dモデル ${readyCount}/${selected.length} 準備完了`;
-  }
-}
-window.addEventListener('arkeia:models', refreshAssets);
-refreshAssets();
-// Errors are recorded individually, never silently replaced with capsule models.
-// Load a few featured fighters first, rather than downloading every GLB before starting.
-const featuredModels = ['rowen', 'minase', 'garou'].map((key) => FIGHTERS[key]?.model).filter(Boolean);
-const loadPromise = Promise.allSettled(featuredModels.map((url) => loadModel(url))).then(refreshAssets);
-function requestFighterModel(key) {
-  const url = FIGHTERS[key]?.model;
-  if (url && !peekModel(url)) loadModel(url).then(refreshAssets).catch(() => {});
-}
-async function ensureGameModels(requiredKeys = null) {
-  const keys = requiredKeys || Object.keys(FIGHTERS);
-  const withForms = [...keys, ...keys.map((key) => FIGHTERS[key]?.form2).filter(Boolean)];
-  const requiredUrls = [...new Set(withForms.map((key) => FIGHTERS[key]?.model).filter(Boolean))];
-  if (!requiredUrls.length) return true;
-  refreshAssets();
-  if (requiredUrls.every((url) => peekModel(url))) return true;
-  if (assetDialog?.open) return false;
-  const requestId = ++assetRequestId, revision = screenRevision;
-  const dialog = document.createElement('dialog');
-  assetDialog = dialog; dialog.className = 'asset-dialog'; dialog.arkeiaRequired = requiredUrls;
-  const heading = document.createElement('h2'); heading.textContent = '戦士の姿を読み込んでいます';
-  const desc = document.createElement('p'); desc.textContent = '顔・衣装・装備・アニメーションを含む3Dモデルを準備しています。未読込のまま戦闘は開始しません。';
-  const progress = document.createElement('progress'); progress.max = requiredUrls.length;
-  const count = document.createElement('p'); count.dataset.loadCount = '';
-  const failures = document.createElement('ul'); failures.className = 'asset-failures';
-  const retry = document.createElement('button'); retry.textContent = '読み込みを再試行'; retry.hidden = true;
-  const cancel = document.createElement('button'); cancel.textContent = '戻る'; cancel.className = 'ghost';
-  dialog.append(heading, desc, progress, count, failures, retry, cancel);
-  document.body.append(dialog); dialog.showModal(); refreshAssets();
-  return new Promise((resolve) => {
-    let done = false;
-    const finish = (ok) => {
-      if (done) return; done = true;
-      if (dialog.open) dialog.close(); dialog.remove();
-      if (assetDialog === dialog) assetDialog = null;
-      resolve(ok && requestId === assetRequestId && revision === screenRevision);
-    };
-    cancel.onclick = () => finish(false);
-    dialog.addEventListener('cancel', (event) => { event.preventDefault(); finish(false); });
-    const run = async () => {
-      retry.hidden = true; failures.replaceChildren();
-      await Promise.allSettled(requiredUrls.filter((url) => !peekModel(url)).map((url) => loadModel(url)));
-      if (done) return;
-      refreshAssets();
-      if (requiredUrls.every((url) => peekModel(url))) { finish(true); return; }
-      heading.textContent = 'モデルを読み込めませんでした';
-      desc.textContent = '下のファイル名を確認してください。画面だけ先へ進めず、元の姿で表示できるまで開始を止めています。assets/models 内の .glb・共有 .bin も同じ場所に必要です。';
-      for (const url of requiredUrls.filter((item) => !peekModel(item))) {
-        const item = document.createElement('li'); item.textContent = modelError(url)?.message || url;
-        failures.append(item);
-      }
-      retry.hidden = false;
-    };
-    retry.onclick = run; run();
-  });
-}
+});
 
 // ---------- Save ----------
 const SAVE_KEY = 'arkeia-save-v1';
@@ -643,17 +582,31 @@ persist(false); // 起動時の整形だけでは同期の「変更あり」に�
 // ---------- Audio ----------
 const audio = {
   muted: localStorage.getItem('arkeia-muted') === '1',
-  tracks: {},
-  current: null,
-  pools: {},
-  ctx: null,
-  unlocked: false
+  tracks: {}, current: null, currentKey: null, pools: {}, ctx: null,
+  unlocked: false,
+  volume: Math.max(0, Math.min(100, +(localStorage.getItem('arkeia-bgm-volume') ?? 70))) / 100,
+  fadeId: 0
 };
-for (const name of ['title', 'story', 'battle', 'boss']) {
-  const a = new Audio(`assets/audio/${name}-theme.mp3`);
+// データで指定した音楽を実際に再生する。旧式の自動生成曲は使わない。
+const MUSIC_FILES = {
+  title: 'title-theme.mp3',
+  story: 'story-theme.mp3',
+  field: 'field-theme.mp3',
+  battle: 'battle-theme.mp3',
+  event: 'event-theme.mp3',
+  boss: 'boss-theme.mp3',
+  zarugureibu: 'zarugureibu-theme.mp3'
+};
+for (const [name, file] of Object.entries(MUSIC_FILES)) {
+  const a = new Audio('assets/audio/' + file + '?v=20261106a');
   a.loop = true;
-  a.preload = 'none';
-  a.volume = 0.35;
+  a.preload = name === 'title' ? 'metadata' : 'none';
+  a.volume = audio.volume * .6;
+  a.addEventListener('error', () => {
+    console.warn(`[BGM] 再生ファイルを確認してください: assets/audio/${file}`);
+    const error = document.getElementById('opt-audio-status');
+    if (error) error.textContent = `音源を読み込めませんでした：${file}`;
+  });
   audio.tracks[name] = a;
 }
 function pool(name, url, n) {
@@ -661,33 +614,65 @@ function pool(name, url, n) {
 }
 pool('hit', 'assets/audio/hit-impact.mp3', 4);
 pool('burst', 'assets/audio/arte-burst.mp3', 2);
-let proc = null;
-function startProc() {
-  const m = /^(bgm|field|apex):(\d+)$/.exec(audio.current || '');
-  if (!m || !audio.ctx || audio.muted) return;
-  proc ||= new ProcMusic(audio.ctx);
-  const n = +m[2];
-  if (m[1] === 'apex') {
-    proc.play(APEX_BGM[n] || APEX_BGM[1]);
-    return;
-  }
-  // フィールド用：壮大な冒険曲（金管・聖歌隊を必ず入れ、ゆったり力強いテンポ）
-  proc.play(m[1] === 'field' ? { seed: 50021 + n * 131, bpm: 104 + (n % 6) * 4, epic: true } : BGM[n % BGM.length]);
+function musicKey(name) {
+  if (/^field:\d+$/.test(name)) return 'field';
+  if (/^bgm:\d+$/.test(name)) return 'battle';
+  if (/^apex:\d+$/.test(name)) return 'boss';
+  return MUSIC_FILES[name] ? name : null;
+}
+function applyMusicVolume() {
+  const el = document.getElementById('opt-bgm-volume');
+  const val = document.getElementById('opt-bgm-value');
+  if (el) el.value = String(Math.round(audio.volume * 100));
+  if (val) val.textContent = `${Math.round(audio.volume * 100)}%`;
+  const track = audio.tracks[audio.currentKey];
+  if (track) track.volume = audio.muted ? 0 : audio.volume * .6;
+}
+function setBgmVolume(value) {
+  const n = +value;
+  audio.volume = Number.isFinite(n) ? Math.max(0, Math.min(1, n / 100)) : .7;
+  localStorage.setItem('arkeia-bgm-volume', String(Math.round(audio.volume * 100)));
+  applyMusicVolume();
 }
 function playTrack(name) {
-  if (audio.current === name) {
+  const key = musicKey(name);
+  if (!key) return;
+  const oldKey = audio.currentKey;
+  if (audio.current === name || (key === oldKey && oldKey !== null)) {
+    audio.current = name;
     return;
   }
-  const old = audio.tracks[audio.current];
-  old?.pause();
-  proc?.stop();
   audio.current = name;
-  const t = audio.tracks[name];
-  if (t && audio.unlocked && !audio.muted) {
-    t.currentTime = 0;
-    t.play().catch(() => {});
+  audio.currentKey = key;
+  const next = audio.tracks[key];
+  const prev = audio.tracks[oldKey];
+  const token = ++audio.fadeId;
+  // 高速連続遷移で古い曲が残らないよう、前々の曲はすぐ停止。
+  for (const [id, track] of Object.entries(audio.tracks)) {
+    if (id !== oldKey && id !== key) track.pause();
   }
-  if (audio.unlocked) startProc();
+  if (!audio.unlocked || audio.muted) {
+    prev?.pause();
+    return;
+  }
+  try { next.currentTime = 0; } catch {}
+  next.volume = 0;
+  next.play().catch((err) => {
+    console.warn('[BGM] ブラウザーが再生を拒否しました:', key, err);
+    const status = document.getElementById('opt-audio-status');
+    if (status) status.textContent = '自動再生できませんでした。画面を操作して再開してください。';
+  });
+  const from = prev && !prev.paused ? prev.volume : 0;
+  const started = performance.now();
+  const fade = (time) => {
+    if (token !== audio.fadeId) return;
+    const progress = Math.min(1, (time - started) / 380);
+    next.volume = audio.volume * .6 * progress;
+    if (prev && prev !== next) prev.volume = from * (1 - progress);
+    if (progress < 1) requestAnimationFrame(fade);
+    else if (prev && prev !== next) { prev.pause(); try { prev.currentTime = 0; } catch {} }
+  };
+  requestAnimationFrame(fade);
 }
 function blip(freq) {
   if (!audio.ctx) {
@@ -1000,31 +985,36 @@ function sfx(name, spec) {
 }
 function unlockAudio() {
   if (!audio.ctx) {
-    audio.ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const AudioContextCtor = window.AudioContext || window.webkitAudioContext;
+    if (AudioContextCtor) audio.ctx = new AudioContextCtor();
   }
   audio.unlocked = true;
-  audio.ctx.resume?.();
-  const t = audio.tracks[audio.current];
+  audio.ctx?.resume?.();
+  const t = audio.tracks[audio.currentKey];
   if (t && !audio.muted && t.paused) {
-    t.play().catch(() => {});
+    t.volume = audio.volume * .6;
+    t.play().catch((err) => console.warn('[BGM] 再生開始に失敗:', err));
   }
-  if (!proc?.playing) startProc();
 }
 function setMuted(m) {
-  audio.muted = m;
-  setVoiceMuted(m);
-  localStorage.setItem('arkeia-muted', m ? '1' : '0');
-  const t = audio.tracks[audio.current];
-  if (m) {
-    t?.pause();
-    proc?.stop();
-  } else if (audio.unlocked) {
-    t?.play().catch(() => {});
-    startProc();
+  audio.muted = !!m;
+  setVoiceMuted(audio.muted);
+  localStorage.setItem('arkeia-muted', audio.muted ? '1' : '0');
+  ++audio.fadeId;
+  for (const t of Object.values(audio.tracks)) {
+    if (audio.muted) t.pause();
+    else t.volume = audio.volume * .6;
   }
-  $('#opt-mute').textContent = m ? '音：黙らせる' : '音：鳴らす';
+  if (!audio.muted && audio.unlocked) {
+    audio.tracks[audio.currentKey]?.play().catch((err) => console.warn('[BGM] ミュート解除で再生失敗:', err));
+  }
+  const button = $('#opt-mute');
+  if (button) button.textContent = audio.muted ? '音をオンにする' : '音をミュートする';
+  applyMusicVolume();
 }
 setMuted(audio.muted);
+$('#opt-bgm-volume')?.addEventListener('input', (e) => setBgmVolume(e.currentTarget.value));
+applyMusicVolume();
 
 // ---------- Input ----------
 const keys = new Set();
@@ -1048,7 +1038,10 @@ window.addEventListener('keydown', (e) => {
     }
     return;
   }
-  if (isScreen('scr-press')) return; // portal.js handles Enter/Space and the start button
+  if (isScreen('scr-press')) {
+    enterTitle();
+    return;
+  }
   if (e.code === 'Escape') {
     goBackCurrent();
     return;
@@ -1171,11 +1164,17 @@ function setupTouch() {
 
 // ---------- Screens ----------
 const state = { mode: null, myKey: null, oppKey: null, chapter: 0, battle: null, paused: false, net: null, online: null, dialogue: null, lastWin: false };
+// オンライン途中乱入時も専用曲を優先し、戦闘中は通常曲へ戻さない。
+setInterval(() => {
+  const fighters = state.battle?.fighters;
+  if (!fighters?.length) return;
+  if (fighters.some((f) => f.key === 'bloodfiend') && musicKey(audio.current) !== 'zarugureibu') playTrack('zarugureibu');
+}, 650);
+
 function isScreen(id) {
   return $('#' + id)?.classList.contains('on');
 }
 function show(id) {
-  screenRevision++;
   for (const s of document.querySelectorAll('.screen')) {
     s.classList.toggle('on', s.id === id);
   }
@@ -1343,10 +1342,6 @@ function refreshTitle() {
   $('#btn-invade').hidden = !operatorUnlocked();
   if ($('#btn-evmaker')) $('#btn-evmaker').hidden = !chiefUnlocked();
   $('#title-shards').textContent = `灯晶　${save.shards}`;
-  const hc = $('#home-char-count');
-  if (hc) hc.textContent = `${loadedModelCount} / ${modelUrls.length}`;
-  const hs = $('#home-stage-count');
-  if (hs) hs.textContent = String(STAGES.length);
   {
     const { ev, ends } = activeEvent();
     const days = Math.max(0, Math.ceil((ends - Date.now()) / 86400000));
@@ -1362,6 +1357,15 @@ function enterTitle() {
   refreshTitle();
   show('scr-title');
 }
+
+$('#scr-press').addEventListener('pointerdown', () => {
+  if (isScreen('scr-press')) {
+    enterTitle();
+  }
+});
+$('#press-start')?.addEventListener('click', () => {
+  if (isScreen('scr-press')) enterTitle();
+});
 
 document.querySelectorAll('[data-to]').forEach((b) => b.addEventListener('click', () => {
   sfx('ui');
@@ -1411,6 +1415,7 @@ document.querySelectorAll('[data-go]').forEach((b) => b.addEventListener('click'
 }));
 
 function openSelect(label, crumb, cb, { allowLocked = false, onBack = goTitle } = {}) {
+  if ($('#select-search')) $('#select-search').value = '';
   $('#select-label').textContent = label;
   $('#select-crumb').textContent = crumb;
   $('#select-back').onclick = () => {
@@ -1424,25 +1429,8 @@ function openSelect(label, crumb, cb, { allowLocked = false, onBack = goTitle } 
     const d = FIGHTERS[k];
     const locked = !canUse(k) && !allowLocked;
     const card = document.createElement('button');
-    card.className = 'card char-card' + (locked ? ' locked' : '');
+    card.className = 'card' + (locked ? ' locked' : '');
     card.style.setProperty('--c', '#' + d.color.toString(16).padStart(6, '0'));
-    const media = document.createElement('div');
-    media.className = 'card-media';
-    const badge = document.createElement('span');
-    badge.className = 'card-badge';
-    badge.textContent = locked ? '封印中' : 'CHARACTER';
-    media.append(badge);
-    if (d.face) {
-      const img = document.createElement('img');
-      img.className = 'face';
-      img.src = d.face;
-      img.alt = '';
-      img.loading = 'lazy';
-      if (d.faceHue) img.style.filter = `hue-rotate(${d.faceHue}deg)`;
-      media.append(img);
-    }
-    const meta = document.createElement('div');
-    meta.className = 'card-meta';
     const t = document.createElement('em');
     t.textContent = locked ? '名を封じられし者' : d.title;
     const n = document.createElement('b');
@@ -1450,15 +1438,20 @@ function openSelect(label, crumb, cb, { allowLocked = false, onBack = goTitle } 
     const s = document.createElement('small');
     s.textContent = locked
       ? (d.shop ? '灯晶商店で迎えられる' : '運営の鍵でのみ目覚める')
-      : `${d.skills.map((x) => x.name).join('／')}
-奥義：${d.over.name}`;
-    meta.append(t, n, s);
-    card.append(media, meta);
+      : `${d.skills.map((x) => x.name).join('／')}\n奥義：${d.over.name}`;
+    if (d.face) {
+      const img = document.createElement('img');
+      img.className = 'face';
+      img.src = d.face;
+      img.alt = '';
+      img.loading = 'lazy';
+      if (d.faceHue) img.style.filter = `hue-rotate(${d.faceHue}deg)`;
+      if (locked) img.style.filter = 'brightness(0)';
+      card.append(img);
+    }
+    card.append(t, n, s);
     card.disabled = locked;
-    card.addEventListener('pointerenter', () => requestFighterModel(k), { once: true });
-    card.addEventListener('focus', () => requestFighterModel(k), { once: true });
     card.addEventListener('click', () => {
-      requestFighterModel(k);
       sfx('ui');
       cb(k);
     });
@@ -1469,6 +1462,7 @@ function openSelect(label, crumb, cb, { allowLocked = false, onBack = goTitle } 
 
 // 物語のパーティー編成（最大4人、★が自分の操作キャラ）
 function openPartySelect(done) {
+  if ($('#select-search')) $('#select-search').value = '';
   const pool = SELECT_KEYS().filter((k) => canUse(k) && (!SPECIAL_KEYS.includes(k) || operatorUnlocked() || FIGHTERS[k].shop));
   let party = save.party.filter((k) => pool.includes(k));
   if (!party.length) party = ['rowen'];
@@ -1517,14 +1511,8 @@ function openPartySelect(done) {
   for (const k of pool) {
     const d = FIGHTERS[k];
     const card = document.createElement('button');
-    card.className = 'card char-card';
+    card.className = 'card';
     card.style.setProperty('--c', '#' + d.color.toString(16).padStart(6, '0'));
-    const media = document.createElement('div');
-    media.className = 'card-media';
-    const badge = document.createElement('span');
-    badge.className = 'card-badge';
-    badge.textContent = party.includes(k) ? '編成中' : 'PARTY';
-    media.append(badge);
     if (d.face) {
       const img = document.createElement('img');
       img.className = 'face';
@@ -1532,20 +1520,14 @@ function openPartySelect(done) {
       img.alt = '';
       img.loading = 'lazy';
       if (d.faceHue) img.style.filter = `hue-rotate(${d.faceHue}deg)`;
-      media.append(img);
+      card.append(img);
     }
-    const meta = document.createElement('div');
-    meta.className = 'card-meta';
     const t = document.createElement('em');
     t.textContent = d.title;
     const n = document.createElement('b');
     n.textContent = d.name;
-    meta.append(t, n);
-    card.append(media, meta);
-    card.addEventListener('pointerenter', () => requestFighterModel(k), { once: true });
-    card.addEventListener('focus', () => requestFighterModel(k), { once: true });
+    card.append(t, n);
     card.addEventListener('click', () => {
-      requestFighterModel(k);
       sfx('ui');
       if (party.includes(k)) {
         party = party.filter((x) => x !== k);
@@ -1573,59 +1555,53 @@ function openPartySelect(done) {
   show('scr-select');
 }
 
+// 自前の背景絵を使用するステージ選択。3Dのポリゴン床はカード表示に使わない。
+function stageIllustration(st, index) {
+  const id = st.id || '';
+  let category = 'moon';
+  if (['moon', 'desert', 'frost', 'bamboo', 'heaven', 'ember', 'void'].includes(id)) category = id;
+  else {
+    const sky = st.sky || '';
+    if (/bamboo/.test(sky) || st.pshape === 'bamboo') category = 'bamboo';
+    else if (/frost/.test(sky)) category = 'frost';
+    else if (/heaven/.test(sky)) category = 'heaven';
+    else if (/desert/.test(sky)) category = st.rim === 0xff5a2a ? 'ember' : 'desert';
+    else if (st.cshape === 'torus') category = 'void';
+    else if (st.pshape === 'spire') category = 'ember';
+  }
+  const suffix = index > 0 && index % 2 ? '-alt' : '';
+  return 'assets/stage-illustrations/' + category + suffix + '.webp';
+}
 function openStageSelect(crumb, onBack) {
   $('#party-bar').hidden = true;
-  $('#select-label').textContent = 'どこで剣を抜く？';
+  $('#select-label').textContent = '戦いの舞台を選ぶ';
   $('#select-crumb').textContent = crumb;
-  $('#select-back').onclick = () => {
-    sfx('ui');
-    onBack();
-  };
+  $('#select-back').onclick = () => { sfx('ui'); onBack(); };
+  const search = $('#select-search');
+  if (search) search.value = '';
   const grid = $('#select-grid');
   grid.replaceChildren();
-  const list = [{ id: 'random', name: '風まかせ', floor: 0xc9a65a, seg: 0, sky: STAGES[0].sky, rim: 0xc9a65a, crystal: 0xfff0b2 }, ...STAGES];
-  const artType = (st) => {
-    if (['moon', 'desert', 'frost', 'bamboo', 'heaven', 'ember', 'void'].includes(st.id)) return st.id;
-    const sky = st.sky || '';
-    if (sky.includes('desert')) return st.floor === 0xff9a7a ? 'ember' : 'desert';
-    if (sky.includes('frost')) return 'frost';
-    if (sky.includes('bamboo')) return 'bamboo';
-    if (sky.includes('heaven')) return 'heaven';
-    return 'moon';
-  };
-  const artNames = { moon: '蒼月の闘技場', desert: '夕映えの砂海', frost: '霜と氷晶の舞台', bamboo: '月夜の竹林', heaven: '雲上の聖域', ember: '灼熱の祭壇', void: '冥紫の回廊' };
-  for (const st of list) {
+  const list = [{ id: 'random', name: '風まかせ', seg: 0, sky: '', floor: 0xc9a65a }, ...STAGES];
+  for (const [i, st] of list.entries()) {
     const card = document.createElement('button');
-    card.className = 'card stage-card';
+    card.type = 'button';
+    card.className = 'card stage-tile';
     card.style.setProperty('--c', '#' + st.floor.toString(16).padStart(6, '0'));
-    const media = document.createElement('div');
-    media.className = 'card-media';
-    const thumb = document.createElement('div');
-    thumb.className = 'sthumb';
-    const artName = artType(st);
-    const artAlt = st.id.startsWith('s') && (Number(st.id.slice(1)) % 2 === 0) ? '-alt' : '';
-    const stageImage = `assets/stage-illustrations/${artName}${artAlt}.webp`;
-    thumb.style.backgroundImage = `url("${stageImage}")`;
-    thumb.setAttribute('role', 'img');
-    thumb.setAttribute('aria-label', `${st.name}の風景画`);
-
-    const badge = document.createElement('span');
-    badge.className = 'card-badge';
-    badge.textContent = st.id === 'random' ? 'RANDOM' : '舞台風景';
-    media.append(thumb, badge);
-    const meta = document.createElement('div');
-    meta.className = 'card-meta';
-    const t = document.createElement('em');
-    t.textContent = st.id === 'random' ? '月が導く未知の舞台' : artNames[artName];
-    const n = document.createElement('b');
-    n.textContent = st.name;
-    meta.append(t, n);
-    if (st.bgm != null) {
-      const s = document.createElement('small');
-      s.textContent = `♪ ${BGM[st.bgm % BGM.length].name}`;
-      meta.append(s);
-    }
-    card.append(media, meta);
+    card.dataset.search = [st.name, st.id, st.pshape || '', st.cshape || '', st.seg || ''].join(' ');
+    const image = document.createElement('div');
+    image.className = 'sthumb';
+    image.style.backgroundImage = `url("${stageIllustration(st, i)}")`;
+    image.setAttribute('role', 'img');
+    image.setAttribute('aria-label', st.name + 'の背景イラスト');
+    const eyebrow = document.createElement('em');
+    eyebrow.textContent = st.id === 'random' ? 'RANDOM / いずれかの舞台' : `${String(i).padStart(3, '0')} / STAGE`;
+    const title = document.createElement('b');
+    title.textContent = st.name;
+    const description = document.createElement('small');
+    description.textContent = st.id === 'random' ? '舞台をランダムに決める' : st.seg >= 20 ? '円形の闘技場' : `${st.seg}角の舞台`; 
+    card.append(image, eyebrow, title, description);
+    card.addEventListener('mouseenter', () => st.sky && setStage(st));
+    card.addEventListener('focus', () => st.sky && setStage(st));
     card.addEventListener('click', () => {
       sfx('ui');
       state.stage = st.id === 'random' ? STAGES[Math.floor(Math.random() * STAGES.length)] : st;
@@ -1813,14 +1789,8 @@ function openEventLevel(cb) {
   document.body.append(ov);
 }
 
-let offlineStarting = false;
 async function startOffline() {
-  if (offlineStarting) return;
-  offlineStarting = true;
-  let ready;
-  const required = state.mode === 'cpu' ? [state.myKey, state.oppKey] : null;
-  try { ready = await ensureGameModels(required); } finally { offlineStarting = false; }
-  if (!ready) return;
+  await loadPromise;
   const evRun = state.mode === 'event' ? (state.eventRun ||= activeEvent()) : null;
   setStage(evRun ? STAGES[evRun.ev.stage % STAGES.length] : state.stage || STAGES[0]);
   const b = makeBattle(null);
@@ -1868,17 +1838,22 @@ async function startOffline() {
 function beginBattle(boss) {
   buildHud();
   show(null);
-  // 物語は章ごとに100曲から、その他は舞台の曲。ヴェスペラ・運営長戦は専用曲
-  const bgmIdx = (state.mode === 'story' ? state.chapter : currentStage?.bgm ?? 0) % BGM.length;
-  // 敵側（運営の乱入時は両方）にヴェスペラ／運営長がいる時だけ
+  // 添付の実音源を再生。ザルグレイヴが戦闘に参加したときは敵味方を問わず最優先。
+  const participants = state.battle.fighters.map((f) => f.key);
   const ks = state.battle.fighters.filter((f) => f.team === 1 || state.mode === 'invade').map((f) => f.key);
-  const apex = ks.some((k) => k === 'sovereign' || k === 'sovereign2') ? 2 : ks.includes('chief') || ks.includes('bloodfiend') ? 1 : 0;
-  if (apex) {
+  const apex = ks.some((k) => k === 'sovereign' || k === 'sovereign2') ? 2 : ks.includes('chief') ? 1 : 0;
+  if (participants.includes('bloodfiend')) {
+    playTrack('zarugureibu');
+    ui.banner({ name: '— ♪ ザルグレイヴ専用戦闘曲 —' }, '紅翼の血魔');
+  } else if (apex) {
     playTrack('apex:' + apex);
     ui.banner({ name: `— ♪ ${APEX_BGM[apex].name} —` }, '頂上決戦');
+  } else if (state.mode === 'event') {
+    playTrack('event');
+    ui.banner({ name: '— ♪ イベント専用曲 —' }, '特別試練');
   } else {
-    playTrack(boss ? 'boss' : 'bgm:' + bgmIdx);
-    ui.banner({ name: boss ? '— 双月の下で —' : `— ♪ ${BGM[bgmIdx].name} —` }, '剣を抜け');
+    playTrack(boss ? 'boss' : 'battle');
+    ui.banner({ name: boss ? '— ♪ ボス戦 —' : '— ♪ 通常戦闘曲 —' }, '剣を抜け');
   }
   // 開戦の合図：構え → 3・2・1 → 戦闘開始！（その間は誰も動かない）
   const b = state.battle;
@@ -2190,7 +2165,7 @@ function buildStoryBattle(foes, boss) {
 }
 // 目的地の決戦：ボス章は決められた敵、通常の章は1〜6体
 async function startChapterBattle() {
-  if (!(await ensureGameModels())) return;
+  await loadPromise;
   const ch = STORY[state.chapter];
   state.encounter = null;
   let foes = ch.enemies;
@@ -2222,10 +2197,7 @@ function resetFieldLight() {
 }
 async function enterField() {
   // フィールドは物語でしか使わないので必要になった時だけ読み込む（初回表示を軽く）
-  if (!(await ensureGameModels())) return;
-  const revision = screenRevision;
-  const { Field } = await import('./field.js?v=restore1');
-  if (revision !== screenRevision || state.mode !== 'story') return;
+  const [{ Field }] = await Promise.all([import('./field.js'), loadPromise]);
   leaveField();
   const ch = STORY[state.chapter];
   const st = stageById(ch.stage);
@@ -2593,7 +2565,6 @@ function onPeers(peers) {
     }
     return;
   }
-  if (!remote) return;
   remote.netTarget.set(p.x, 0, p.z);
   remote.netFacing = p.ry;
   remote.netMoving = p.mv;
@@ -2602,13 +2573,7 @@ function onPeers(peers) {
 }
 
 async function startOnline(peer) {
-  if (!state.online || state.online.starting || state.online.started) return;
-  const session = state.online; session.starting = true;
-  let ready;
-  const needed = [state.myKey, peerKeyOf(peer.id, peer.fk)];
-  if (state.mode === 'online-coop') needed.push('seraphel');
-  try { ready = await ensureGameModels(needed); } finally { session.starting = false; }
-  if (!ready || state.online !== session) return;
+  await loadPromise;
   if (!state.online) {
     return;
   }
@@ -2758,7 +2723,7 @@ async function onInvaded(e) {
   ui.flash();
   sfx('burst');
   const apex = ik === 'sovereign' || ik === 'sovereign2' ? 2 : ik === 'chief' || ik === 'bloodfiend' ? 1 : 0;
-  playTrack(apex ? 'apex:' + apex : 'boss');
+  playTrack(ik === 'bloodfiend' ? 'zarugureibu' : apex ? 'apex:' + apex : 'boss');
   if (apex) ui.cutin(b.fighters[b.fighters.length - 1], FIGHTERS[ik].name, '運営長、降臨');
   ui.banner({ name: '— 空が裂けた —' }, apex ? '運営長が降りてきた！' : '裁定者が降りてきた！');
 }
@@ -2805,7 +2770,7 @@ async function startInvade(p) {
   if (!w || !operatorUnlocked()) {
     return;
   }
-  if (!(await ensureGameModels())) return;
+  await loadPromise;
   // サーバー設定時：乱入の許可をサーバーで判定し、署名付き許可証を相手に渡す
   let tk = '';
   if (apiEnabled()) {
@@ -3749,7 +3714,5 @@ renderer.setAnimationLoop((time) => {
 });
 
 show('scr-press');
-window.ArkeiaPortal?.bind({
-  openMenu: enterTitle,
-  openLanding: () => { goTitle(); show('scr-press'); }
-});
+window.__arkeiaBootOk = true;
+window.dispatchEvent(new Event('arkeia-boot-ready'));
