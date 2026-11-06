@@ -564,9 +564,9 @@ export class Fighter {
     this.gaienStyle?.update(dt, this.dead ? false : (this.moving || this.netMoving));
     if (this.gear) animGear(this.gear, dt, !!this.action, this.vel.lengthSq() > 0.5);
     if (this.summonCd > 0) this.summonCd -= dt;
-    if (this.formSwapCd > 0) this.formSwapCd -= dt;
-    // 召喚獣は戦闘開始時と、倒されてから15秒後に自動で現れる
-    else if (this.summonId && !this.summon && !this.dead && !this.remoteAuth) this.battle.spawnSummon(this);
+    if (this.formSwapCd > 0) this.formSwapCd = Math.max(0, this.formSwapCd - dt);
+    // 召喚獣の更新とガイエンの形態切替クールダウンは独立させる。
+    if (this.summonCd <= 0 && this.summonId && !this.summon && !this.dead && !this.remoteAuth) this.battle.spawnSummon(this);
     this.inv = Math.max(0, this.inv - dt);
     this.comboWindow = Math.max(0, this.comboWindow - dt);
     if (this.dead) {
@@ -675,7 +675,7 @@ export class Fighter {
     this.root.position.set(this.pos.x, this.y, this.pos.z);
     this.root.rotation.y = this.facing;
     this.guardMesh.visible = this.guard;
-    if (!this.mixer || !this.clips.idle) {
+    if ((!this.mixer || !this.clips.idle) && !this.gaienWalk && this.visual.children[0]) {
       const bob = (this.moving || this.netMoving) && !this.dead;
       this.visual.children[0].position.y = (this.baseY ??= this.visual.children[0].position.y) + (bob ? Math.abs(Math.sin(performance.now() / 70)) * 0.12 : 0);
     }
@@ -938,7 +938,12 @@ export class Fighter {
   // 手動変身：通常近接攻撃を出すたびに、進化前/進化後を切り替える
   manualFormSwap() {
     const nk = this.def.manualForm2 || this.def.manualBase;
-    if (!nk || this.formSwapCd > 0 || !FIGHTERS[nk]) return false;
+    if (!nk || this.remoteAuth || this.dead || this.formSwapCd > 0 || !FIGHTERS[nk]) return false;
+    // 変身先を予め準備できていない場合は、形態だけ更新して棒状になることを防ぐ。
+    if (!this.battle.assets?.[nk]?.scene) {
+      if (this.isPlayer) this.battle.ui.popup?.(this.pos, '変身先の3Dモデルを読込中', '#ffc080');
+      return false;
+    }
     this.formSwapCd = 0.22;
     const hpRate = Math.max(0.08, Math.min(1, this.hp / Math.max(1, this.maxHp || 1)));
     const flux = this.flux;
@@ -984,6 +989,7 @@ export class Fighter {
       this.applyRed();
     }
     this.battle.transformFx(this);
+    this.battle.ui.popup?.(this.pos, nk === 'gaien2' ? '第二形態・極焔覇皇' : '第一形態・煉殻竜王', '#ff9a3a');
     return true;
   }
 
