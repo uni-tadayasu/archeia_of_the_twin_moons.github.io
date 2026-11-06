@@ -64,7 +64,7 @@ export function assignUniqueAppearances(fighters) {
       label: `${HEAD_NAMES[head]}・${COAT_NAMES[coat]}`,
       modelIdentity: `generated:${id}:v1`
     };
-    fighter.face = `assets/portraits/${id}.webp`;
+    fighter.face = `assets/portraits/${id}.webp?v=20261106-illustrated1`;
     delete fighter.faceHue;
     changed.push(id);
   }
