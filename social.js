@@ -1200,7 +1200,20 @@ function renderOnline() {
   rows.sort((a, b) => (b.me - a.me) || (b.st - a.st) || String(a.name).localeCompare(String(b.name), 'ja'));
   g.append(el('div', 'cp-mem', `接続中 ${rows.length} 人（運営長・運営のみ閲覧可）`));
   for (const p of rows) {
-    g.append(el('div', 'cp-mem', `● ${p.name}${p.me ? '（あなた）' : ''}${p.st ? '【運営】' : ''}${p.gname ? `　[${p.gname}]` : ''}${p.pid ? `　#${String(p.pid).slice(0, 6)}` : ''}`));
+    const row = el('div', 'row');
+    row.append(el('div', 'cp-mem', `● ${p.name}${p.me ? '（あなた）' : ''}${p.st ? '【運営】' : ''}${p.gname ? `　[${p.gname}]` : ''}${p.pid ? `　ID: ${p.pid}` : ''}`));
+    if (S.opts.isChief?.() && /^[a-z0-9]{8,24}$/.test(p.pid || '')) {
+      const gift = el('button', 'cp-b', '贈る');
+      gift.type = 'button';
+      gift.setAttribute('aria-label', `${p.name}へプレゼントを送る`);
+      gift.addEventListener('click', () => S.opts.openMailbox?.('gift', p.pid));
+      const mail = el('button', 'cp-b', 'メール');
+      mail.type = 'button';
+      mail.setAttribute('aria-label', `${p.name}へシステムメールを送る`);
+      mail.addEventListener('click', () => S.opts.openMailbox?.('system', p.pid));
+      row.append(gift, mail);
+    }
+    g.append(row);
   }
 }
 function onlineCount(filter) {

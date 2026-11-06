@@ -1,8 +1,10 @@
 import * as THREE from 'three';
 import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js';
+import { applyCharacterVariant, disposeCharacterVariant } from './character-variants.js';
 import { FIGHTERS, ELEMS } from './data.js';
 import { makeGear, animGear } from './gear.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { MeshoptDecoder } from './assets/vendor/meshopt_decoder.module.js';
 
 // 召喚獣の見た目と性能（HPは使い手の最大HPに比例）
 const SUMMON_DEFS = {
@@ -10,7 +12,7 @@ const SUMMON_DEFS = {
   s1: { name: 'スサノオ', model: 'assets/models/summon-susanoo.glb', height: 3.4, hpMul: 0.6, dist: 2.2, range: 4.4, mul: 1.5, autoMul: 1.4, autoCd: 1.6, autoRange: 4.0, color: 0x30ff70, color2: 0xa0ffc0 }
 };
 const SUMMON_CACHE = new Map();
-const summonLoader = new GLTFLoader();
+const summonLoader = new GLTFLoader().setMeshoptDecoder(MeshoptDecoder);
 function loadSummonModel(url) {
   if (!SUMMON_CACHE.has(url)) SUMMON_CACHE.set(url, summonLoader.loadAsync(url).catch((err) => { console.warn(err); return null; }));
   return SUMMON_CACHE.get(url);
@@ -414,13 +416,14 @@ export class Fighter {
     const h = this.def.height * this.scale;
     if (gltf) {
       const m = SkeletonUtils.clone(gltf.scene);
+      applyCharacterVariant(m, this.def);
       m.updateMatrixWorld(true);
       const box = new THREE.Box3().setFromObject(m);
       const size = box.getSize(new THREE.Vector3());
       const s = h / Math.max(size.y, 0.001);
       m.scale.setScalar(s);
       m.position.y = -box.min.y * s;
-      const tint = this.tint != null ? new THREE.Color(this.tint) : null;
+      const tint = !this.def.appearance && this.tint != null ? new THREE.Color(this.tint) : null;
       m.traverse((c) => {
         if (c.isMesh) {
           c.castShadow = true;
@@ -892,6 +895,7 @@ export class Fighter {
     this.inv = 1.6;
     this.dead = false;
     // 見た目を作り直す
+    disposeCharacterVariant(this.visual);
     this.visual.clear();
     this.root.remove(this.ringMesh, this.guardMesh);
     this.visual.rotation.set(0, 0, 0);
@@ -2531,6 +2535,7 @@ export class Battle {
     for (const f of this.fighters) {
       this.scene.remove(f.root);
       f.mixer?.stopAllAction();
+      disposeCharacterVariant(f.visual);
     }
     // 生存中・消滅演出中のどちらも戦闘終了時に片付ける
     for (const s of this.summons) this.removeSummon(s);

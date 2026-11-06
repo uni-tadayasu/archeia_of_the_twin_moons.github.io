@@ -23,7 +23,7 @@
     <link rel="icon" type="image/webp" href="assets/app-icon.webp" />
     <link rel="apple-touch-icon" href="assets/app-icon.webp" />
     <meta name="referrer" content="strict-origin-when-cross-origin" />
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://esm.sh https://storage.googleapis.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob: https:; media-src 'self' blob: https:; connect-src 'self' data: blob: https://esm.sh https://api.instantdb.com wss://api.instantdb.com https://*.instantdb.com wss://*.instantdb.com https://storage.googleapis.com https://*.workers.dev; worker-src 'self' blob:; object-src 'none'; frame-src 'none'; manifest-src 'self'; script-src-attr 'none'; base-uri 'self'; form-action 'none'; upgrade-insecure-requests" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' https://esm.sh https://storage.googleapis.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob: https:; media-src 'self' blob: https:; connect-src 'self' data: blob: https://esm.sh https://api.instantdb.com wss://api.instantdb.com https://*.instantdb.com wss://*.instantdb.com https://storage.googleapis.com https://*.workers.dev; worker-src 'self' blob:; object-src 'none'; frame-src 'none'; manifest-src 'self'; script-src-attr 'none'; base-uri 'self'; form-action 'none'; upgrade-insecure-requests" />
     <script type="application/ld+json">
       {"@context":"https://schema.org","@type":"VideoGame","name":"双月のアルケイア","alternateName":"Arkeia of Twin Moons","description":"100人の戦士と全100章の物語を楽しめる、ブラウザ3Dアリーナファンタジーアクション。","image":"assets/app-icon.webp","genre":["Action","Fighting","Fantasy","RPG"],"gamePlatform":["Web browser","PC","Mobile"],"playMode":["SinglePlayer","MultiPlayer","CoOp"],"applicationCategory":"Game","operatingSystem":"Any","inLanguage":"ja","isAccessibleForFree":true,"offers":{"@type":"Offer","price":"0","priceCurrency":"JPY"},"publisher":{"@type":"Organization","name":"KASAI SOLUTIONS INC."},"author":{"@type":"Organization","name":"KASAI SOLUTIONS INC."},"copyrightHolder":{"@type":"Organization","name":"KASAI SOLUTIONS INC."},"copyrightNotice":"© KASAI SOLUTIONS INC. All rights reserved.","musicBy":{"@type":"Organization","name":"KASAI SOLUTIONS INC."},"keywords":"3Dアクション,覚醒,秘奥義,追加技,オンライン対戦,ブラウザゲーム"}
     </script>
@@ -58,6 +58,7 @@
       ]}
     </script>
     <link rel="stylesheet" href="./rosebud-game-defaults.css" />
+    <link rel="stylesheet" href="./mailbox.css" />
     <script src="./rosebud-game-defaults.js" defer></script>
     <script type="importmap">
       {
@@ -416,6 +417,8 @@
             <button data-go="online-vs">遠い誰かと剣を交える<small>合言葉でつながるオンライン対戦</small></button>
             <button data-go="online-coop">遠い誰かと肩を並べる<small>オンライン協力 — 裁定者討伐</small></button>
             <button id="btn-forge">鍛錬の工房<small>灯晶を注いで戦士を鍛える</small></button>
+            <button id="btn-mailbox">受信箱<span class="mail-badge" data-mail-badge></span><small>運営長からのお便り・プレゼントを受け取る</small></button>
+            <button id="btn-chief-mail" hidden>プレゼント・メール配信<small>運営長専用 — 個別・全員への配信と送信履歴</small></button>
             <button id="btn-evmaker" hidden>イベント作成の間<small>運営長専用 — 特別イベントを作って全員に配信</small></button>
             <button id="btn-invade" hidden>乱入の窓<small>運営専用 — 誰かの物語に裁定者として割り込む</small></button>
             <button id="btn-shop">灯晶商店<small>特別な戦士を迎える</small></button>
@@ -444,6 +447,7 @@
             <div id="chief-panel" class="field" style="width:100%" hidden>
               <span>運営長の間 — 1回だけ使える運営キーを発行して、信頼できる人に渡します</span>
               <button type="button" class="btn" id="chief-issue">運営キーを発行する</button>
+              <button type="button" class="btn" id="chief-mail-center">プレゼント・システムメールを送る</button>
               <input id="chief-code" readonly aria-label="発行された運営キー" placeholder="ここに表示されます">
             </div>
             <div class="field" style="width:100%">

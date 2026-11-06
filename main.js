@@ -1,10 +1,12 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { MeshoptDecoder } from './assets/vendor/meshopt_decoder.module.js';
 import { Battle, ARENA_R } from './game.js';
 import { FIGHTERS, STORY, ROSTER, UPGRADES, MAX_LV, STAGES, BGM, APEX_BGM, ENEMY_ROSTER, UPG_CAP, LB_MAX, lbMaxLv, lbMul, lbCost, WEAPONS, ARMORS, SUMMONS, STAT_LABEL, SPECIAL_KEYS, BOSS_ROSTER, currentEvent, sanitizeEvent, EV_FOE_KINDS } from './data.js';
 import { ProcMusic } from './music.js';
 import { sayBattle, setVoiceMuted, stopVoices } from './voice.js';
 import { initSocial, uiConfirm } from './social.js';
+import { initMailbox } from './mailbox.js';
 import { OPERATOR_KEY_SHA256, CHIEF_KEY_SHA256, MAX_KEY_ATTEMPTS, LOCKOUT_MS, SHOP_ITEMS } from './config.js';
 import { connect, issueInvite, redeemInvite, syncPush, syncPullV } from './net.js';
 import { apiEnabled, api, verifyToken } from './api.js';
@@ -143,7 +145,7 @@ setStage(STAGES[0]);
 
 // ---------- Assets ----------
 const assets = {};
-const gltfLoader = new GLTFLoader();
+const gltfLoader = new GLTFLoader().setMeshoptDecoder(MeshoptDecoder);
 const modelUrls = [...new Set(Object.values(FIGHTERS).map((d) => d.model))];
 const byUrl = {};
 const loadPromise = Promise.allSettled(modelUrls.map((url) =>
@@ -215,6 +217,11 @@ function loadSave() {
   s.guildNote = typeof raw.guildNote === 'string' ? raw.guildNote.replace(/[<>\u0000-\u001f]/g, '').slice(0, 200) : null;
   // 直近の同期書き込みID（再送時の二重反映を防ぐ）
   s.wids = Array.isArray(raw.wids) ? raw.wids.filter((w) => typeof w === 'string' && /^[A-Za-z0-9_-]{8,64}$/.test(w)).slice(-20) : [];
+  // 受取済みセーブと同期基準を結び付ける回復記録。同期メタデータの保存失敗時も捨てない。
+  const mr = raw.mailReconcile;
+  if (mr && mr.pid === raw.pid && /^[A-Z0-9]{12}$/.test(mr.code || '') && Number.isSafeInteger(mr.ver) && mr.ver > 0 && Number.isSafeInteger(mr.base) && mr.base >= 0 && mr.base <= 999999) {
+    s.mailReconcile = { pid: mr.pid, code: mr.code, ver: mr.ver, base: mr.base, at: +mr.at || Date.now(), dirty: !!mr.dirty };
+  }
   return s;
 }
 const save = loadSave();
@@ -249,6 +256,7 @@ function upgFor(k) {
 const summonFor = (k) => SUMMONS.find((s) => s.fighter === k && save.owned.includes(s.id) && save.summonOn[s.id] && (!s.chief || chiefUnlocked())) || null;
 const gearFor = (k) => ({ w: save.equip[k] || '', a: save.armor[k] || '', h: summonFor(k)?.id || '' });
 function persist(sync = true) {
+  if (sync && save.mailReconcile) save.mailReconcile.dirty = true;
   try {
     localStorage.setItem(SAVE_KEY, JSON.stringify(save));
   } catch (err) {
@@ -262,7 +270,7 @@ var syncReady = false; // 起動直後の保存では「変更あり」にしな
 const syncCodeNow = () => String(localStorage.getItem('arkeia-sync') || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
 function scheduleAutoSync() {
   if (syncCodeNow().length !== 12) return;
-  try { localStorage.setItem('arkeia-sync-dirty', '1'); } catch {}
+  try { markSyncDirty(); } catch {}
   syncGen++; // 送信中に変化があったかを判定するための世代番号
   if (!syncReady) return;
   clearTimeout(autoPushTimer);
@@ -292,7 +300,23 @@ const setPend = (p) => {
   localStorage.setItem('arkeia-sync-pend', JSON.stringify([p]));
 };
 // 版番号つきの送受信（サーバー時は Durable Object で直列化、未設定時は InstantDB に直接）
-const syncVer = () => Number(localStorage.getItem('arkeia-sync-ver')) || 0;
+// 他タブの保存メタデータと、このタブが実際に反映したセーブを混同しない。
+var syncVersionLocal = Number(localStorage.getItem('arkeia-sync-ver')) || 0;
+var syncBaseLocal = localStorage.getItem('arkeia-sync-base') == null ? NaN : Number(localStorage.getItem('arkeia-sync-base'));
+var syncDirtyLocal = !!localStorage.getItem('arkeia-sync-dirty');
+const syncVer = () => syncVersionLocal;
+const readSyncBase = () => syncBaseLocal;
+function writeSyncBase(value) {
+  localStorage.setItem('arkeia-sync-base', String(value));
+  syncBaseLocal = Number(value);
+}
+function hasSyncChanges() { return syncDirtyLocal || !!localStorage.getItem('arkeia-sync-dirty'); }
+function markSyncDirty() {
+  syncDirtyLocal = true;
+  if (save.mailReconcile) save.mailReconcile.dirty = true;
+  localStorage.setItem('arkeia-sync-dirty', '1');
+}
+function clearSyncDirty() { localStorage.removeItem('arkeia-sync-dirty'); syncDirtyLocal = false; }
 async function sendVersioned(code, json, base, wid = '') {
   if (apiEnabled()) {
     const r = await api('/sync/push', { code, data: json, base, wid });
@@ -351,8 +375,9 @@ function mergeSaves(local, remote, baseShards) {
 function markSynced(ver, at, shards) {
   localStorage.setItem('arkeia-sync-ver', String(ver || 0));
   localStorage.setItem('arkeia-sync-at', String(at));
-  localStorage.setItem('arkeia-sync-base', String(shards));
-  localStorage.removeItem('arkeia-sync-dirty');
+  writeSyncBase(shards);
+  clearSyncDirty();
+  syncVersionLocal = Number(ver) || 0;
 }
 function preserveLocalChanges(target, before, after) {
   for (const key of ['diff', 'uname', 'party', 'main', 'noHero', 'summonOn', 'equip', 'armor', 'friends', 'awk']) {
@@ -364,9 +389,10 @@ function preserveLocalChanges(target, before, after) {
 }
 let syncErr = ''; // 直近の同期失敗の理由（'wealth' / 'pid' / 'net'）
 async function autoPush({ forSpend = false, reload = true } = {}) {
+  try { recoverMailboxSync(); } catch { syncErr = 'net'; return; }
   const code = syncCodeNow();
   if (code.length !== 12 || autoBusy || syncImportBusy || (syncSpendBusy && !forSpend)) return;
-  if (!localStorage.getItem('arkeia-sync-dirty') && !getPends().length) return;
+  if (!hasSyncChanges() && !getPends().length) return;
   autoBusy = true;
   // 応答が途切れた場合も、同じ本文・版・IDで結果を確定してから次の変更を送る。
   let snap, preferenceBase, payload, wid, baseVer;
@@ -391,7 +417,7 @@ async function autoPush({ forSpend = false, reload = true } = {}) {
     syncHoldUntil = 0;
     if (changed) {
       // 送信中に増えた変更は、改めて送る
-      localStorage.setItem('arkeia-sync-dirty', '1');
+      markSyncDirty();
       clearTimeout(autoPushTimer);
       autoPushTimer = setTimeout(autoPush, 3000);
     }
@@ -424,15 +450,14 @@ async function autoPush({ forSpend = false, reload = true } = {}) {
       const remote = JSON.parse(r.data || '{}');
       const rw = Array.isArray(remote.wids) ? remote.wids : [];
       // 前回の書き込み（結果不明）が反映済みなら、その時に送った灯晶を基準にする（二重加算を防ぐ）
-      const storedBase = localStorage.getItem('arkeia-sync-base');
-      let base = storedBase == null ? NaN : Number(storedBase);
+      let base = readSyncBase();
       // 結果不明の書き込み（今回分を含む）のうち、最後に反映されていたものの灯晶を基準にする
       for (const p of [...oldPends, ...getPends()]) {
         if (r.appliedWid === p.wid || r.wid === p.wid || rw.includes(p.wid)) base = +(p.localShards ?? p.shards);
       }
       if (!Number.isFinite(base)) base = +remote.shards || 0;
       // 判明した基準をすぐ保存（この後の送信が失敗しても、次回に同じ増減を二重に足さない）
-      localStorage.setItem('arkeia-sync-base', String(base));
+      writeSyncBase(base);
       snap = JSON.parse(JSON.stringify(save));
       wid = newWid();
       payload = mergeSaves(snap, remote, base);
@@ -471,9 +496,10 @@ async function autoPush({ forSpend = false, reload = true } = {}) {
   }
 }
 async function autoPull() {
+  try { recoverMailboxSync(); } catch { return; }
   const code = syncCodeNow();
   if (code.length !== 12 || autoBusy || syncSpendBusy || syncImportBusy || document.hidden) return;
-  if (localStorage.getItem('arkeia-sync-dirty') || getPends().length) {
+  if (hasSyncChanges() || getPends().length) {
     // 未送信の変更を優先（再送待ちの間は送らない）
     if (Date.now() >= syncHoldUntil) return autoPush();
     return;
@@ -483,7 +509,7 @@ async function autoPull() {
     let { data: json, ver } = await fetchVersioned(code);
     if (!json || syncCodeNow() !== code) return;
     // 戦闘中は反映せず、次回の確認（戦闘外）で取り込む
-    if (ver > syncVer() && !state.battle && !localStorage.getItem('arkeia-sync-dirty')) {
+    if (ver > syncVer() && !state.battle && !hasSyncChanges()) {
       const remote = JSON.parse(json);
       // サーバーは購入キャラ(chars)を保存しないため、端末側の分を残す
       const uni = (a, b) => [...new Set([...(Array.isArray(a) ? a : []), ...(Array.isArray(b) ? b : [])])];
@@ -505,12 +531,12 @@ async function autoPull() {
 function applyServerSpend(amt, ver) {
   if (Number.isFinite(+ver) && +ver > 0 && syncVer() >= +ver) return;
   save.shards = Math.max(0, (+save.shards || 0) - amt);
-  if (!localStorage.getItem('arkeia-sync-dirty') && ver && syncVer() === ver - 1) {
+  if (!hasSyncChanges() && ver && syncVer() === ver - 1) {
     markSynced(ver, Date.now(), save.shards);
     localStorage.setItem(SAVE_KEY, JSON.stringify(save));
   } else {
-    const b = localStorage.getItem('arkeia-sync-base');
-    if (b != null && Number.isFinite(+b)) localStorage.setItem('arkeia-sync-base', String(+b - amt));
+    const b = readSyncBase();
+    if (Number.isFinite(b)) writeSyncBase(b - amt);
     // 未確定送信があるときは古い本文を変更せず、次回の競合解決で消費済み基準を使う。
     const ps = getPends().map((p) => ({ ...p, localShards: +(p.localShards ?? p.shards) - amt }));
     if (ps.length) localStorage.setItem('arkeia-sync-pend', JSON.stringify(ps));
@@ -518,15 +544,16 @@ function applyServerSpend(amt, ver) {
   }
 }
 async function runServerSpend(amt, operation) {
+  recoverMailboxSync();
   const code = syncCodeNow();
   if (code.length !== 12) throw Object.assign(new Error('nosync'), { code: 'nosync' });
   while (autoBusy || syncSpendBusy || syncImportBusy) await new Promise((resolve) => setTimeout(resolve, 100));
   if (syncCodeNow() !== code) throw Object.assign(new Error('nosync'), { code: 'nosync' });
   syncSpendBusy = true;
   try {
-    if (localStorage.getItem('arkeia-sync-dirty') || getPends().length) {
+    if (hasSyncChanges() || getPends().length) {
       await autoPush({ forSpend: true, reload: false });
-      if (localStorage.getItem('arkeia-sync-dirty') || getPends().length) {
+      if (hasSyncChanges() || getPends().length) {
         throw Object.assign(new Error('sync'), { code: 'sync' });
       }
     }
@@ -535,14 +562,101 @@ async function runServerSpend(amt, operation) {
     return result;
   } finally {
     syncSpendBusy = false;
-    if (localStorage.getItem('arkeia-sync-dirty')) scheduleAutoSync();
+    if (hasSyncChanges()) scheduleAutoSync();
+  }
+}
+// メール受取も同期と同じ排他範囲で実行する。報酬の差分を端末で加算せず、
+// サーバーの最新セーブ・版番号を取り込むことで、再送・再起動・他端末受取を二重計上しない。
+const mailPendingKey = (pid = save.pid) => 'arkeia-mail-pending:' + pid;
+function pendingMailClaims() {
+  try {
+    const ids = JSON.parse(localStorage.getItem(mailPendingKey()) || '[]');
+    return Array.isArray(ids) ? ids.filter(id => typeof id === 'string' && /^[A-Za-z0-9_-]{8,80}$/.test(id)).slice(-100) : [];
+  } catch { return []; }
+}
+function rememberMailClaim(id, done = false) {
+  const ids = pendingMailClaims().filter(x => x !== id);
+  if (!done) ids.push(id);
+  try { localStorage.setItem(mailPendingKey(), JSON.stringify(ids.slice(-100))); }
+  catch { throw Object.assign(new Error('storage'), { code: 'storage' }); }
+}
+function recoverMailboxSync() {
+  const m = save.mailReconcile;
+  if (!m) return;
+  if (m.pid !== save.pid || m.code !== syncCodeNow()) throw Object.assign(new Error('identity'), { code: 'identity' });
+  // 記録は灯晶と同じSAVE_KEY書き込みで保存済み。メタデータを先に揃え、
+  // 全項目の保存に成功するまで回復記録は消さない。途中で失敗しても同じ値で再実行できる。
+  const dirty = !!m.dirty || hasSyncChanges();
+  try {
+    localStorage.setItem('arkeia-sync-ver', String(m.ver));
+    localStorage.setItem('arkeia-sync-at', String(m.at));
+    writeSyncBase(m.base);
+    if (dirty) markSyncDirty(); else clearSyncDirty();
+    const clean = { ...save };
+    delete clean.mailReconcile;
+    localStorage.setItem(SAVE_KEY, JSON.stringify(clean));
+    syncVersionLocal = m.ver;
+    delete save.mailReconcile;
+  } catch { throw Object.assign(new Error('storage'), { code: 'storage' }); }
+}
+async function claimMailboxGift(id) {
+  const fail = (code, status) => Object.assign(new Error(code), { code, status });
+  if (state.battle) throw fail('busy');
+  recoverMailboxSync();
+  const code = syncCodeNow(), pid = save.pid;
+  if (code.length !== 12) throw fail('nosync');
+  const deadline = Date.now() + 30000;
+  while (autoBusy || syncSpendBusy || syncImportBusy) {
+    if (Date.now() > deadline) throw fail('sync');
+    await new Promise(resolve => setTimeout(resolve, 100));
+  }
+  if (syncCodeNow() !== code || save.pid !== pid) throw fail('identity');
+  syncSpendBusy = true;
+  try {
+    if (hasSyncChanges() || getPends().length) {
+      await autoPush({ forSpend: true, reload: false });
+      if (hasSyncChanges() || getPends().length) throw fail('sync');
+    }
+    if (syncCodeNow() !== code || save.pid !== pid || state.battle) throw fail('busy');
+    const before = JSON.parse(JSON.stringify(save));
+    rememberMailClaim(id);
+    const r = await api('/mail/claim', { code, id });
+    if (!r.ok) {
+      if (['expired', 'no_gift', 'notfound'].includes(r.error)) rememberMailClaim(id, true);
+      throw fail(r.error || 'net', r.status);
+    }
+    if (syncCodeNow() !== code || save.pid !== pid || r.pid !== pid) throw fail('identity');
+    let remote;
+    try { remote = JSON.parse(r.data); } catch { throw fail('invalid_response'); }
+    if (!remote || remote.pid !== pid || !Number.isSafeInteger(r.ver) || r.ver < 1 || !Number.isSafeInteger(remote.shards) || remote.shards < 0 || remote.shards > 999999) throw fail('invalid_response');
+    if (r.ver >= syncVer()) {
+      const changed = JSON.stringify(before) !== JSON.stringify(save);
+      const final = changed ? preserveLocalChanges(mergeSaves(save, remote, +before.shards || 0), before, save) : { ...remote };
+      // 課金キャラの所持確認は別の署名APIが管理しているため、端末で確認済みの分を保つ。
+      final.chars = [...new Set([...(remote.chars || []), ...(save.chars || [])])];
+      final.mailReconcile = { pid, code, ver: r.ver, base: remote.shards, at: Number(remote.syncAt) || Date.now(), dirty: changed };
+      try {
+        // 回復記録と付与済み所持品を、ひとつの原子的なlocalStorage書き込みで保存する。
+        localStorage.setItem(SAVE_KEY, JSON.stringify(final));
+        Object.assign(save, final);
+        setPend(null);
+        recoverMailboxSync();
+      } catch { throw fail('storage'); }
+    }
+    rememberMailClaim(id, true);
+    refreshTitle();
+    if (isScreen('scr-forge')) renderForge();
+    return r;
+  } finally {
+    syncSpendBusy = false;
+    if (hasSyncChanges()) scheduleAutoSync();
   }
 }
 setTimeout(() => {
   syncReady = true;
   autoPull();
   setInterval(() => { if (!state.battle) autoPull(); }, 45000);
-  document.addEventListener('visibilitychange', () => { if (!document.hidden && !state.battle) autoPull(); else if (document.hidden && localStorage.getItem('arkeia-sync-dirty')) autoPush(); });
+  document.addEventListener('visibilitychange', () => { if (!document.hidden && !state.battle) autoPull(); else if (document.hidden && hasSyncChanges()) autoPush(); });
 }, 3000);
 // 通信ライブラリの読み込みに続けて失敗した時：再読み込みが必要な旨を画面に出す
 window.addEventListener('arkeia-net-fail', (e) => {
@@ -565,6 +679,7 @@ window.addEventListener('arkeia-net-fail', (e) => {
   d.append(b, x);
   document.body.append(d);
 });
+try { recoverMailboxSync(); } catch (e) { console.warn('メール受取の保存状態を再確認します', e); }
 persist(false); // 起動時の整形だけでは同期の「変更あり」にしない
 {
   const cy = document.getElementById('copy-year');
@@ -1015,6 +1130,10 @@ renderer.domElement.addEventListener('mousedown', (e) => {
 renderer.domElement.addEventListener('contextmenu', (e) => e.preventDefault());
 
 function readInput() {
+  if (mailbox?.isOpen()) {
+    for (const k in edges) edges[k] = false;
+    return { mx: 0, mz: 0, guard: false, holdSkill: false, holdSkill2: false };
+  }
   let mx = touchState.mx + padState.mx;
   let mz = touchState.mz + padState.mz;
   if (keys.has('KeyA') || keys.has('ArrowLeft')) mx -= 1;
@@ -1122,6 +1241,7 @@ function show(id) {
   }
 }
 function goBackCurrent() {
+  if (mailbox?.isOpen()) { mailbox.close(); return; }
   if (!$('#pause').hidden) {
     togglePause();
     return;
@@ -1163,7 +1283,7 @@ async function refreshProfile(key) {
   Object.assign(profState, { key, tok: '', at: Date.now() }); // 失敗時は1分おいて再試行
   try {
     // 強化・装備はサーバーに預けた同期セーブから算出される（端末の申告は使わない）
-    if (localStorage.getItem('arkeia-sync-dirty')) await autoPush();
+    if (hasSyncChanges()) await autoPush();
     const r = await api('/profile', { code: syncCodeNow(), key, role: roleState.tok, buyer: save.buyId });
     if (r.ok && (await verifyToken(r.token, 'prof'))) Object.assign(profState, { key, tok: r.token, at: Date.now() });
   } catch (err) {
@@ -1282,6 +1402,7 @@ function refreshTitle() {
     $('#event-sub').textContent = `${ev.custom ? '特別' : '今週'}：${ev.name} — ${ev.desc}（全8段階・${evCleared()}段階まで制覇・残り${days}日）`;
   }
   social?.refresh();
+  mailbox?.refreshAccess();
   const ch = save.chapter % STORY.length;
   $('#story-sub').textContent = save.chapter >= STORY.length ? '旅は終わった。もう一度、最初の灯から' : `続きから：${STORY[ch].title}`;
 }
@@ -2997,6 +3118,7 @@ function refreshOptions() {
     ? '運営長として認められています — ルミナリアとセラフェルが選べます'
     : operatorUnlocked() ? '運営として認められています — セラフェルが選べます' : '運営の鍵・運営長の鍵・招待された運営キー（OP-…）を入力';
   $('#chief-panel').hidden = !chiefUnlocked();
+  mailbox?.refreshAccess();
 }
 // 推測されにくいランダムコード（紛らわしい文字を除外）
 function randomCode(groups) {
@@ -3031,9 +3153,9 @@ $('#sync-push').addEventListener('click', async () => {
   if (normSync(code).length !== 12) code = randomCode(3);
   m.textContent = '預けています…';
   try {
-    if (localStorage.getItem('arkeia-sync') !== code) localStorage.setItem('arkeia-sync-ver', '0');
+    if (localStorage.getItem('arkeia-sync') !== code) { localStorage.setItem('arkeia-sync-ver', '0'); syncVersionLocal = 0; syncBaseLocal = NaN; }
     localStorage.setItem('arkeia-sync', code);
-    localStorage.setItem('arkeia-sync-dirty', '1');
+    markSyncDirty();
     while (autoBusy || syncSpendBusy || syncImportBusy) await new Promise((r) => setTimeout(r, 100));
     syncErr = '';
     await autoPush(); // 版番号・競合解決つきで送る
@@ -3046,7 +3168,7 @@ $('#sync-push').addEventListener('click', async () => {
       m.textContent = '前回預けてから灯晶や強化が短時間に増えすぎたため、サーバーが記録を受け付けませんでした。少し時間をおいてから、もう一度「預ける」を押してください。';
       return;
     }
-    if (localStorage.getItem('arkeia-sync-dirty')) throw new Error('push');
+    if (hasSyncChanges()) throw new Error('push');
     m.textContent = `預けました。別の端末で同期コード「${code}」を入力してください（他人には教えないでください）。`;
   } catch {
     m.textContent = '預けられませんでした（通信を確認してください）。';
@@ -3260,6 +3382,7 @@ var social = initSocial({
   isChief: () => chiefUnlocked(),
   isOperator: () => operatorUnlocked(),
   roleToken: () => roleState.tok,
+  openMailbox: (kind, pid) => mailbox?.open(kind, pid),
   // サーバーでの本人確認に使う同期コード
   syncCode: () => syncCodeNow(),
   // サーバー側で灯晶を消費した（寄付など）：手元にも反映し、同期の基準値を合わせる
@@ -3286,6 +3409,23 @@ var social = initSocial({
       save.guild ? `所属ギルド「${save.guild.name}」` : 'ギルドを結成して仲間と語り合おう（チャット › ギルド）'
     ];
   }
+});
+var mailbox = initMailbox({
+  save, sfx,
+  isChief: chiefUnlocked,
+  roleToken: () => roleState.tok,
+  syncCode: syncCodeNow,
+  inBattle: () => !!state.battle,
+  pendingClaims: pendingMailClaims,
+  claim: claimMailboxGift,
+  openSync: () => { refreshOptions(); show('scr-options'); $('#sync-push').focus(); },
+  onOpen: () => {
+    keys.clear();
+    for (const k in edges) edges[k] = false;
+    touchState.mx = touchState.mz = 0;
+    touchState.guard = touchState.skill = touchState.skill2 = mouseSkillHeld = false;
+  },
+  onClose: () => { keys.clear(); for (const k in edges) edges[k] = false; }
 });
 function renderShop() {
   const list = $('#shop-list');
@@ -3542,11 +3682,12 @@ function pollPad(dt) {
   if (btn(12)) mz = -1;
   if (btn(13)) mz = 1;
   const anyDown = g.buttons.some((_, i) => down(i));
-  if (isScreen('scr-press')) {
+  const mailDialog = mailbox?.isOpen() ? $('#mailbox-dialog') : null;
+  if (!mailDialog && isScreen('scr-press')) {
     if (anyDown) {
       enterTitle();
     }
-  } else if (inBattleView() && !state.paused) {
+  } else if (!mailDialog && inBattleView() && !state.paused) {
     padState.mx = mx;
     padState.mz = mz;
     padState.guard = btn(4) || btn(6) || btn(7);
@@ -3560,8 +3701,8 @@ function pollPad(dt) {
     if (down(12) || down(10)) edges.heal = true;
     if (down(9)) togglePause();
   } else {
-    const root = state.paused ? $('#pause') : document.querySelector('.screen.on');
-    const items = root ? [...root.querySelectorAll('button:not([disabled]), input, #story-box')].filter((b) => b.offsetParent !== null) : [];
+    const root = mailDialog || (state.paused ? $('#pause') : document.querySelector('.screen.on'));
+    const items = root ? [...root.querySelectorAll('button:not([disabled]), input, select, textarea, summary, #story-box')].filter((b) => b.offsetParent !== null) : [];
     pad.navT -= dt;
     if (items.length && pad.navT <= 0 && (Math.abs(mx) > 0.5 || Math.abs(mz) > 0.5)) {
       pad.navT = 0.18;

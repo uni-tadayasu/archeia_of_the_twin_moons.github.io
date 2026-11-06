@@ -2,6 +2,7 @@
 // 魔物は姿が見える「シンボルエンカウント」。触れると戦闘、目的地の祭壇で章の決戦。
 import * as THREE from 'three';
 import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js';
+import { applyCharacterVariant, disposeCharacterVariant } from './character-variants.js';
 import { FIGHTERS } from './data.js';
 import { makeGear, animGear, removeGear } from './gear.js';
 
@@ -53,18 +54,19 @@ function baseTex(name) {
 const FLOWER_COLS = [0xff5a8a, 0xffd23a, 0xffffff, 0xb070ff, 0x5ab0ff, 0xff8a3a, 0xff3a5a, 0xf0a0ff];
 
 // ---- モデル（GLB）を指定の高さで置く小さな役者 ----
-function makeActor(gltf, height, color, tint, own) {
+function makeActor(gltf, height, color, tint, own, def = null) {
   const root = new THREE.Group();
   const a = { root, mixer: null, clips: {}, cur: null, act: null };
   if (gltf) {
     const m = SkeletonUtils.clone(gltf.scene);
+    applyCharacterVariant(m, def);
     m.updateMatrixWorld(true);
     const box = new THREE.Box3().setFromObject(m);
     const size = box.getSize(new THREE.Vector3());
     const s = height / Math.max(size.y, 0.001);
     m.scale.setScalar(s);
     m.position.y = -box.min.y * s;
-    const tc = tint != null ? new THREE.Color(tint) : null;
+    const tc = !def?.appearance && tint != null ? new THREE.Color(tint) : null;
     m.traverse((c) => {
       if (c.isMesh) {
         c.castShadow = true;
@@ -1080,7 +1082,7 @@ export class Field {
     const town = this.townName, dun = this.dunName;
     // 主人公と仲間
     const def = FIGHTERS[o.mainKey];
-    this.player = makeActor(o.assets[o.mainKey], def.height, def.color, def.tint, this.own);
+    this.player = makeActor(o.assets[o.mainKey], def.height, def.color, def.tint, this.own, def);
     this.setGear(this.player, def.height, o.gear);
     // 2章目以降は前の地から旅を続け、南の街道の端から歩いてくる
     this.continued = o.chapter > 0;
@@ -1107,7 +1109,7 @@ export class Field {
     }
     this.followers = o.partyKeys.filter((k) => k !== o.mainKey).map((k) => {
       const d = FIGHTERS[k];
-      const a = makeActor(o.assets[k], d.height, d.color, d.tint, this.own);
+      const a = makeActor(o.assets[k], d.height, d.color, d.tint, this.own, d);
       a.pos = this.player.pos.clone().add(new THREE.Vector3(0, 0, 2));
       a.facing = Math.PI;
       this.group.add(a.root);
@@ -1141,7 +1143,7 @@ export class Field {
     people.forEach(([role, lines], i) => {
       const k = npcModels[i % npcModels.length];
       const d = FIGHTERS[k];
-      const a = makeActor(o.assets[k], (d?.height || 1.75) * 0.95, d?.color, [0xd8c8a8, 0x9ab0d0, 0xc0a080, 0xa0c090, 0xe0b0b0, 0xb0a0d0][i % 6], this.own);
+      const a = makeActor(o.assets[k], (d?.height || 1.75) * 0.95, d?.color, [0xd8c8a8, 0x9ab0d0, 0xc0a080, 0xa0c090, 0xe0b0b0, 0xb0a0d0][i % 6], this.own, d);
       const [x, z] = spots[i];
       a.pos = new THREE.Vector3(x, 0, z);
       a.home = a.pos.clone();
@@ -1184,7 +1186,7 @@ export class Field {
     for (const [x, z] of spotsE) {
       const k = pick(o.enemyPool);
       const d = FIGHTERS[k];
-      const a = makeActor(o.assets[k], 1.7, d?.color, d?.tint, this.own);
+      const a = makeActor(o.assets[k], 1.7, d?.color, d?.tint, this.own, d);
       const aura = new THREE.Mesh(auraGeo, auraMat);
       aura.rotation.x = -Math.PI / 2;
       aura.position.y = 0.06;
@@ -1201,7 +1203,7 @@ export class Field {
     // 最奥の主（章の敵）
     const bossKey = ch.enemies[0]?.k || pick(o.enemyPool);
     const bd = FIGHTERS[bossKey];
-    this.boss = makeActor(o.assets[bossKey], ch.boss ? 2.6 : 2, bd?.color, ch.enemies[0]?.tint ?? bd?.tint, this.own);
+    this.boss = makeActor(o.assets[bossKey], ch.boss ? 2.6 : 2, bd?.color, ch.enemies[0]?.tint ?? bd?.tint, this.own, bd);
     this.boss.pos = new THREE.Vector3(this.goal.x, 0.5, this.goal.z);
     this.boss.facing = 0;
     this.group.add(this.boss.root);
@@ -1651,7 +1653,7 @@ export class Field {
       if (!a) {
         const d = FIGHTERS[p.fk] || FIGHTERS[this.o.mainKey];
         const h = d?.height || 1.75;
-        a = makeActor(this.o.assets[p.fk] || null, h, d?.color, d?.tint, this.own);
+        a = makeActor(this.o.assets[p.fk] || null, h, d?.color, d?.tint, this.own, d);
         a.fk = p.fk;
         a.h = h;
         a.pos = new THREE.Vector3(p.x, 0, p.z);
@@ -1679,6 +1681,7 @@ export class Field {
     const a = this.remotes.get(id);
     if (!a) return;
     a.mixer?.stopAllAction();
+    disposeCharacterVariant(a.root);
     this.group.remove(a.root);
     a.tag?.material.map.dispose();
     a.tag?.material.dispose();
@@ -1717,6 +1720,8 @@ export class Field {
   resume(sym, won) {
     if (sym && won) {
       this.syms = this.syms.filter((s) => s !== sym);
+      sym.mixer?.stopAllAction();
+      disposeCharacterVariant(sym.root);
       this.group.remove(sym.root);
     }
     if (!won && sym) {
@@ -1732,6 +1737,7 @@ export class Field {
     for (const id of [...this.remotes.keys()]) this.removeRemote(id);
     this.player?.tag?.material.map.dispose();
     this.player?.tag?.material.dispose();
+    disposeCharacterVariant(this.group);
     this.scene.remove(this.group);
     for (const a of [this.player, ...this.followers, ...this.npcs, ...this.syms, this.boss]) a?.mixer?.stopAllAction();
     for (const x of this.own) x.dispose?.();

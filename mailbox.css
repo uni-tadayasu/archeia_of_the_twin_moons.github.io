@@ -1,0 +1,58 @@
+#mailbox-dialog{--mb-line:#635337;--mb-gold:#e4c47b;--mb-ink:#f4ead2;box-sizing:border-box;width:min(920px,96vw);max-height:92dvh;padding:0;border:1px solid var(--mb-line);border-radius:14px;background:#151322;color:var(--mb-ink);box-shadow:0 22px 90px #000b;font:15px/1.65 system-ui,sans-serif;overflow:hidden;pointer-events:auto}
+#mailbox-dialog::backdrop{background:#070711c9;backdrop-filter:blur(3px)}
+#mailbox-dialog[open]{display:flex;flex-direction:column;height:min(760px,92dvh)}
+#mailbox-dialog .mb-head,#mailbox-dialog .mb-tabs,#mailbox-dialog .mb-status{flex-shrink:0}
+#mailbox-dialog *{box-sizing:border-box}
+#mailbox-dialog,#mailbox-dialog .mb-content{touch-action:pan-y}
+#mailbox-dialog input,#mailbox-dialog textarea,#mailbox-dialog .mb-body{-webkit-user-select:text;user-select:text}
+#mailbox-dialog [hidden]{display:none!important}
+#mailbox-dialog .mb-head{display:flex;align-items:center;gap:12px;padding:14px 20px;border-bottom:1px solid var(--mb-line);background:linear-gradient(100deg,#262035,#171522)}
+#mailbox-dialog h2{flex:1;margin:0;font:700 21px/1.3 serif;letter-spacing:.08em;color:var(--mb-gold)}
+#mailbox-dialog h3{margin:0 0 10px;font-size:18px;overflow-wrap:anywhere}
+#mailbox-dialog button,#mailbox-dialog input,#mailbox-dialog select,#mailbox-dialog textarea{font:inherit;color:inherit}
+#mailbox-dialog button{min-height:40px;padding:7px 12px;border:1px solid #79633f;border-radius:7px;background:#2c2540;cursor:pointer;white-space:normal}
+#mailbox-dialog button:hover:not(:disabled){background:#443455}
+#mailbox-dialog button:disabled{opacity:.5;cursor:default}
+#mailbox-dialog button:focus-visible,#mailbox-dialog input:focus-visible,#mailbox-dialog select:focus-visible,#mailbox-dialog textarea:focus-visible,#mailbox-dialog summary:focus-visible{outline:2px solid #ffe0a0;outline-offset:3px}
+#mailbox-dialog .mb-primary{background:#705124;border-color:#cfa652;font-weight:700}
+#mailbox-dialog .mb-primary:hover:not(:disabled){background:#8c652a}
+#mailbox-dialog .mb-tabs{display:flex;flex-wrap:wrap;gap:5px;padding:10px 18px;border-bottom:1px solid #383044}
+#mailbox-dialog .mb-tabs button{border-color:transparent;background:transparent}
+#mailbox-dialog .mb-tabs [aria-selected=true]{background:#403047;border-color:#b89150;color:#ffe3a3}
+#mailbox-dialog .mb-status{margin:0;padding:0 20px;color:#f6d08a;white-space:pre-wrap;overflow-wrap:anywhere}
+#mailbox-dialog .mb-status:not(:empty){padding-top:10px;padding-bottom:8px}
+#mailbox-dialog .mb-status.mb-error{color:#ffbcb0}
+#mailbox-dialog .mb-content{flex:1;min-height:0;padding:16px 20px 22px;overflow:auto;overscroll-behavior:contain}
+#mailbox-dialog .mb-row{display:flex;gap:9px;align-items:center;flex-wrap:wrap}
+#mailbox-dialog .mb-row.mb-space{justify-content:space-between}
+#mailbox-dialog .mb-muted{font-size:13px;color:#c3b7cb}
+#mailbox-dialog .mb-note{padding:10px 12px;border:1px solid #665237;border-radius:8px;background:#d6b46a0b;font-size:13px}
+#mailbox-dialog .mb-note p{margin:4px 0}
+#mailbox-dialog .mb-empty{padding:30px 10px;text-align:center;color:#c3b7cb}
+#mailbox-dialog .mb-list{display:flex;flex-direction:column;gap:7px;margin:12px 0}
+#mailbox-dialog .mb-message{text-align:left;display:grid;grid-template-columns:1fr auto;column-gap:12px;align-items:center;width:100%;padding:12px 14px;background:#1f1a2b}
+#mailbox-dialog .mb-message.mb-unread{border-left:3px solid #f4cd75;background:#33283a}
+#mailbox-dialog .mb-message b{font-weight:650;overflow-wrap:anywhere}
+#mailbox-dialog .mb-message small{grid-column:1;color:#bbaec5;font-size:12px}
+#mailbox-dialog .mb-tag{grid-column:2;grid-row:1/3;border:1px solid #78643d;border-radius:20px;padding:2px 9px;color:#e8c785;font-size:12px;white-space:nowrap}
+#mailbox-dialog .mb-detail{margin-top:16px;padding:18px;border:1px solid #554459;background:#211b2c;border-radius:10px}
+#mailbox-dialog .mb-body{white-space:pre-wrap;overflow-wrap:anywhere;margin:16px 0;line-height:1.9}
+#mailbox-dialog .mb-gift{border:1px solid #937544;border-radius:8px;padding:12px;background:#c9a65a0c;margin:14px 0}
+#mailbox-dialog .mb-gift ul{margin:6px 0 0;padding-left:22px}
+#mailbox-dialog .mb-form{display:flex;flex-direction:column;gap:14px;max-width:700px;margin:auto}
+#mailbox-dialog label.mb-field{display:flex;flex-direction:column;gap:5px;color:#e7d2aa;font-weight:650}
+#mailbox-dialog input:not([type=checkbox]),#mailbox-dialog select,#mailbox-dialog textarea{width:100%;min-width:0;padding:9px 11px;border:1px solid #665878;border-radius:6px;background:#100e1a;font-weight:400;line-height:1.6}
+#mailbox-dialog textarea{resize:vertical;min-height:140px;max-height:330px}
+#mailbox-dialog .mb-split{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+#mailbox-dialog .mb-items{max-height:190px;overflow:auto;border:1px solid #4b3b58;border-radius:7px;padding:6px;margin-top:8px}
+#mailbox-dialog .mb-item{display:flex;align-items:center;gap:8px;padding:4px 6px;cursor:pointer;font-size:13px}
+#mailbox-dialog .mb-item input{accent-color:#d8b66d;width:17px;height:17px}
+#mailbox-dialog details{border:1px solid #50435c;border-radius:7px;padding:9px 12px}
+#mailbox-dialog summary{cursor:pointer;color:#e0cb9f;font-weight:650;min-height:28px}
+#mailbox-dialog .mb-id{font-family:ui-monospace,monospace;letter-spacing:.04em;user-select:text;overflow-wrap:anywhere}
+#mailbox-dialog .mb-review dl{margin:14px 0;display:grid;grid-template-columns:100px 1fr;gap:8px 12px}
+#mailbox-dialog .mb-review dt{color:#c6b7ca}
+#mailbox-dialog .mb-review dd{margin:0;overflow-wrap:anywhere}
+.mail-badge{display:inline-block;margin-left:8px;min-width:22px;padding:0 6px;border-radius:12px;background:#8c3545;color:white;font:700 12px/22px system-ui;vertical-align:middle}
+.mail-badge:empty{display:none}
+@media(max-width:560px){#mailbox-dialog{width:96vw;max-height:96dvh}#mailbox-dialog[open]{height:min(760px,96dvh)}#mailbox-dialog .mb-head{padding:12px 14px}#mailbox-dialog .mb-tabs{padding:8px 10px;gap:2px}#mailbox-dialog .mb-tabs button{font-size:13px;padding:5px 8px}#mailbox-dialog .mb-content{padding:12px 14px 18px}#mailbox-dialog .mb-split{grid-template-columns:1fr}#mailbox-dialog .mb-message{padding:10px;column-gap:5px}#mailbox-dialog .mb-detail{padding:13px}#mailbox-dialog .mb-review dl{grid-template-columns:74px 1fr}}

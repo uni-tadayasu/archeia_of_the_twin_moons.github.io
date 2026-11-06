@@ -1,3 +1,5 @@
+import { assignUniqueAppearances } from './appearance-data.js';
+
 // 戦士データ。skills[0]=技A（立ち）, [1]=技A（移動中）, [2]=技B（立ち）, [3]=技B（移動中）
 export const FIGHTERS = {
   rowen: {
@@ -986,3 +988,6 @@ for (const [k, f] of Object.entries(FIGHTERS)) {
     f.pool = [0, 1, 2, 3, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14];
   }
 }
+
+// 元から固有だった20人は維持。素体・顔絵を使い回していた209人だけを固有化。
+export const CHARACTER_APPEARANCES = assignUniqueAppearances(FIGHTERS);
