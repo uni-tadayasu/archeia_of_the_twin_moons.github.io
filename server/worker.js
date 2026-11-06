@@ -1,7 +1,7 @@
-// Riftfall Arena Cloudflare Worker — editor type-check update (2026-11-06).
-// Single-file ES module. Paste this entire file into the existing Worker.
-// Keeps all 8 existing Durable Object exports, including MailStore.
-// No imports, new bindings, migrations, secrets, routes, or balance changes.
+// Riftfall Arena Cloudflare Worker — runtime/preview guard update (2026-11-06).
+// Single-file ES module for the existing Worker.
+// Preserves 8 Durable Object classes including MailStore and existing POST APIs.
+// Adds GET / and /health as startup checks; no new bindings or migrations.
 // Original sources: appearance-data.js, data.js, server/worker.js
 
 // 外見の設計値。描画ライブラリ・DOMに依存しないのでサーバーからも読み込める。
@@ -1233,11 +1233,26 @@ const CHIEF_ONLY = new Set(['chief', 'sovereign', 'sovereign2', 'bloodfiend']);
 
 // ---------- ルート ----------
 export default {
-  async fetch(req, env) {
-    const H = cors(env, req);
-    if (req.method === 'OPTIONS') return new Response(null, { status: 204, headers: H });
-    const url = new URL(req.url);
+  async fetch(req, env = {}) {
+    // Keep the complete request entry point inside the try/catch. Cloudflare
+    // quick-edit previews can invoke the Worker without production bindings.
+    // A missing binding must produce a controlled JSON error, not HTTP 1101.
+    let H = { 'Access-Control-Allow-Origin': 'null' };
     try {
+      env = env || {};
+      H = cors(env, req);
+      if (req.method === 'OPTIONS') return new Response(null, { status: 204, headers: H });
+      const url = new URL(req.url);
+      // GET health check needs no secrets or Durable Object bindings.
+      // This confirms script startup only; it does not test gameplay storage.
+      if (req.method === 'GET' && (url.pathname === '/' || url.pathname === '/health')) {
+        return json(H, {
+          ok: true,
+          service: 'riftfall-arena-api',
+          check: 'worker-runtime',
+          version: '20261106-rebuild'
+        });
+      }
       if (url.pathname === '/stripe/webhook') return await stripeWebhook(req, env);
       if (req.method !== 'POST') return json(H, { error: 'method' }, 405);
       const raw = await req.text();
@@ -1274,7 +1289,8 @@ export default {
         default: return json(H, { error: 'not found' }, 404);
       }
     } catch (err) {
-      console.error(err);
+      // Detailed failure stays in Worker logs, not in public API responses.
+      console.error('[Riftfall Arena API] request error:', err?.stack || String(err));
       return json(H, { error: 'server' }, 500);
     }
   }
