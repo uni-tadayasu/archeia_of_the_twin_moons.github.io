@@ -3,7 +3,8 @@
 import * as THREE from 'three';
 import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
-import { separateEmbeddedTextures } from './model-image-fix.js?v=direct-texture-20261106c';
+import { separateEmbeddedTextures } from './model-image-fix.js?v=model-fetch-v20261107';
+import { getModelBytes, modelURLCandidates } from './model-transport.js?v=model-fetch-v20261107';
 
 const cache = new Map();
 const pending = new Map();
@@ -12,8 +13,8 @@ const queue = [];
 let active = 0;
 let decoderPromise = null;
 let meshoptPromise = null;
-const BASE = new URL('./', import.meta.url);
-export const MODEL_VERSION = 'direct-texture-20261106c';
+const BASE = new URL('./', (typeof document !== 'undefined' && document.baseURI) || import.meta.url);
+export const MODEL_VERSION = 'model-fetch-v20261107';
 
 export class ModelLoadError extends Error {
   constructor(url, detail, cause) {
@@ -35,7 +36,7 @@ function pump() {
     Promise.resolve().then(job.task).then(job.resolve, job.reject).finally(() => { active--; pump(); });
   }
 }
-function absolute(url) { return new URL(url, BASE); }
+function absolute(url) { return modelURLCandidates(url, import.meta.url)[0]; }
 function deadline(promise, ms, label) {
   let timer;
   return Promise.race([promise, new Promise((_, reject) => {
@@ -43,18 +44,9 @@ function deadline(promise, ms, label) {
   })]).finally(() => clearTimeout(timer));
 }
 async function fetchBytes(url) {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 60000);
-  try {
-    const response = await fetch(url, { signal: controller.signal, cache: 'no-cache', credentials: 'same-origin' });
-    if (!response.ok) {
-      const status = `HTTP ${response.status}`;
-      throw new Error(`${status}：モデルが公開されていません（${new URL(url).pathname}）。GitHub/Rosebud の assets/models/ を確認してください`);
-    }
-    const result = await response.arrayBuffer();
-    if (result.byteLength < 32) throw new Error(`GLBが短すぎます (${result.byteLength} bytes)`);
-    return result;
-  } finally { clearTimeout(timer); }
+  // Resolve against the page URL; module URLs from Rosebud/online editors may
+  // be blob: or an external CDN and do not identify the public models directory.
+  return getModelBytes(url, import.meta.url);
 }
 function documentOf(buffer) {
   const data = new DataView(buffer);
@@ -192,7 +184,7 @@ export function loadModel(url) {
     try {
       // Keep the on-disk asset path unchanged. The previous ?v= suffix could be
       // rejected by static hosts; HTTP cache validation refreshes stale files.
-      const payload = await fetchBytes(key);
+      const payload = await fetchBytes(url);
       const { doc } = documentOf(payload);
       if (!doc.asset || doc.asset.version !== '2.0') throw new Error('glTF 2.0として認識できません');
       const extensions = new Set([...(doc.extensionsUsed || []), ...(doc.extensionsRequired || [])]);
