@@ -1,0 +1,61 @@
+/* ARKEIA atelier edition — original navigation and visual language. */
+:root { --ink:#161a29; --paper:#f3e7ce; --brass:#c6a773; --ember:#d79b63; --frost:#9ac9d1; }
+body { font-family:'Shippori Mincho','Yu Mincho','Hiragino Mincho ProN',serif; }
+.screen { background:radial-gradient(ellipse at 12% 9%,rgba(123,91,76,.20),transparent 40%),linear-gradient(160deg,rgba(12,17,29,.82),rgba(14,22,37,.94) 60%,rgba(23,21,30,.91)); }
+.screen::before { inset:18px; border-color:rgba(204,177,125,.18); }
+.screen::after { content:''; pointer-events:none; position:fixed; inset:0; background-image: repeating-linear-gradient(90deg,transparent 0,transparent 79px,rgba(213,185,133,.017) 80px),repeating-linear-gradient(0deg,transparent 0,transparent 79px,rgba(213,185,133,.016) 80px); }
+.inner { isolation:isolate; width:min(1050px,100%); background:linear-gradient(155deg,rgba(22,27,42,.94),rgba(15,22,37,.95)); border:1px solid rgba(214,184,130,.36); border-radius:0; box-shadow:0 26px 76px rgba(0,0,0,.38), inset 0 0 0 6px rgba(214,184,130,.025); gap:clamp(12px,2.5vh,22px); padding:clamp(20px,3.5vw,38px); }
+.inner::before { width:54px; height:54px; left:14px; top:14px; border-color:rgba(214,184,130,.52); }
+.inner::after { width:54px; height:54px; right:14px; bottom:14px; border-color:rgba(214,184,130,.52); }
+.atelier-overline { text-align:center; font:600 10px/1.8 system-ui,sans-serif; letter-spacing:.3em; color:#bca77b; }
+.atelier-sigil { height:126px; width:136px; position:relative; display:flex; justify-content:center; align-items:center; margin:6px auto 2px; }
+.atelier-sigil::before { content:''; width:110px; height:110px; position:absolute; border:1px solid rgba(208,174,111,.46); transform:rotate(45deg); }
+.atelier-sigil::after { content:''; width:96px; height:96px; border:1px solid rgba(208,174,111,.24); position:absolute; border-radius:50%; }
+.atelier-sigil i { width:46px; height:46px; border-radius:50%; position:absolute; left:28px; background:radial-gradient(circle at 31% 29%,#eee0bf,#a88757 78%); box-shadow:0 0 28px rgba(208,174,111,.14); }
+.atelier-sigil i:nth-child(2) { left:60px; background:radial-gradient(circle at 31% 29%,#e3ebeb,#82a8b7 78%); }
+.atelier-sigil span { position:absolute; bottom:-10px; background:#171b2c; padding:2px 10px; font-size:12px; z-index:1; color:#d1b681; }
+h1 { font-weight:800; letter-spacing:.15em; text-shadow:0 3px 12px rgba(0,0,0,.4); }
+h1::before, h1::after { display:none; }
+h1 span { margin-top:12px; font-size:clamp(9px,1.3vw,12px); letter-spacing:.24em; color:#bda779; }
+.tagline { font-size:clamp(13px,2vw,16px); letter-spacing:.12em; color:#d5cfbd; }
+#scr-press .inner { min-height:min(84vh,800px); background:linear-gradient(165deg,rgba(25,31,48,.84),rgba(12,18,30,.95)); }
+.atelier-start { display:flex; justify-content:center; align-items:center; gap:25px; min-width:min(390px,100%); padding:17px 32px; font-size:clamp(16px,2vw,20px); letter-spacing:.18em; border:1px solid rgba(208,174,111,.55); color:#f2e3c8; background:rgba(177,133,67,.09); animation:none; transition:background .2s,transform .2s,border-color .2s; }
+.atelier-start:hover,.atelier-start:focus-visible { transform:translateY(-3px); background:rgba(177,133,67,.19); border-color:#e3c694; outline:2px solid transparent; }
+.atelier-start span { font-family:system-ui,sans-serif; color:#dabb88; }
+.atelier-meta { display:flex; flex-wrap:wrap; gap:8px; justify-content:center; }
+.atelier-meta span { border-top:1px solid rgba(207,182,139,.22); padding:7px 12px; min-width:64px; font-size:11px; text-align:center; letter-spacing:.12em; color:#aaaeb6; }
+.atelier-loading { color:#aeb7c7; font-size:12px; line-height:1.8; text-align:center; }
+.boot-recovery { text-align:center; max-width:540px; width:100%; border:1px solid rgba(204,139,105,.6); background:rgba(83,35,27,.22); padding:15px; font-family:system-ui,sans-serif; }
+.boot-recovery[hidden] { display:none; }
+.boot-recovery strong { color:#f4c8a2; }
+.boot-recovery p { color:#f1d8c7; font-size:12px; overflow-wrap:anywhere; line-height:1.6; }
+.boot-recovery button { padding:12px 18px; color:#fff1d9; border:1px solid #ba8e62; background:#41352f; }
+.atelier-title-heading { margin:0 auto 7px; }
+.atelier-section-line { width:100%; display:flex; justify-content:space-between; gap:16px; align-items:baseline; padding-bottom:10px; border-bottom:1px solid rgba(206,175,116,.28); font-size:14px; letter-spacing:.15em; }
+.atelier-section-line span:last-child { font-size:11px; letter-spacing:.04em; color:#a5a9ae; }
+#scr-title .inner { width:min(1000px,100%); }
+#scr-title .menu.wide { width:100%; display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; }
+#scr-title .menu.wide button { min-height:86px; position:relative; padding:14px 48px 14px 20px; display:flex; flex-direction:column; align-items:flex-start; justify-content:center; border:1px solid rgba(197,169,121,.28); border-left:3px solid #b89b73; background:linear-gradient(110deg,rgba(45,50,66,.92),rgba(27,34,52,.88)); color:#f2e7cf; font-size:clamp(15px,1.8vw,18px); letter-spacing:.08em; transition:transform .2s,background .2s,border-color .2s; }
+#scr-title .menu.wide button::after { content:'↗'; position:absolute; right:17px; top:calc(50% - 11px); font:18px system-ui,sans-serif; color:#bfa373; }
+#scr-title .menu.wide button:nth-child(4n+1) { background:linear-gradient(110deg,rgba(48,53,71,.95),rgba(32,38,55,.89)); }
+#scr-title .menu.wide button:nth-child(4n+2) { background:linear-gradient(110deg,rgba(52,44,55,.93),rgba(37,34,48,.87)); }
+#scr-title .menu.wide button:hover,#scr-title .menu.wide button:focus-visible { transform:translateY(-2px); border-color:#d8b680; background:#414353; outline:1px solid rgba(232,194,129,.34); }
+#scr-title .menu.wide button small { margin-top:5px; font-family:system-ui,sans-serif; color:#b2b8bc; font-size:11px; letter-spacing:0; line-height:1.5; }
+.menu button,.btn,.back { border-radius:0; letter-spacing:.08em; }
+.menu button:focus-visible,.btn:focus-visible,.back:focus-visible,input:focus-visible { outline:2px solid #e0c493; outline-offset:3px; }
+.label { font-size:clamp(20px,3vmin,28px); font-weight:800; border-bottom:1px solid #b89c6d; }
+.card { transition:transform .18s,box-shadow .18s; }
+#select-grid { gap:14px; }
+#select-grid .card { padding:12px; background:#e9dfca; border-top-width:3px; box-shadow:0 10px 24px rgba(0,0,0,.24); }
+#select-grid .card:hover { transform:translateY(-3px); }
+#scr-options .inner,#scr-forge .inner,#scr-select .inner,#scr-shop .inner { max-width:1050px; }
+.back { min-height:40px; }
+@media(max-width:750px){
+  .inner { padding:18px 12px; border-left:0; border-right:0; }
+  #scr-title .menu.wide { grid-template-columns:1fr; }
+  #scr-title .menu.wide button { min-height:66px; }
+  .atelier-section-line span:last-child { display:none; }
+  .atelier-sigil { height:98px; transform:scale(.8); margin:0; }
+  #scr-press .inner { min-height:76vh; }
+}
+@media(prefers-reduced-motion:reduce){*,*::before,*::after {animation-duration:.01ms!important;transition-duration:.01ms!important;scroll-behavior:auto!important;}}

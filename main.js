@@ -1,16 +1,13 @@
 import * as THREE from 'three';
-import { createModelLoader, modelAssetUrl } from './model-loader.js?v=20261106-model-ui3';
-import { Battle, ARENA_R } from './game.js?v=20261106-complete-review1';
-import { FIGHTERS, STORY, ROSTER, UPGRADES, MAX_LV, STAGES, APEX_BGM, ENEMY_ROSTER, UPG_CAP, LB_MAX, lbMaxLv, lbMul, lbCost, WEAPONS, ARMORS, SUMMONS, STAT_LABEL, SPECIAL_KEYS, BOSS_ROSTER, currentEvent, sanitizeEvent, EV_FOE_KINDS } from './data.js';
-import { ProcMusic } from './music.js?v=20261106-complete-review1';
-import { sayBattle, setVoiceMuted, stopVoices } from './voice.js?v=20261106-complete-review1';
-import { initSocial, uiConfirm } from './social.js?v=20261106-complete-review1';
-import { initMailbox } from './mailbox.js?v=20261106-complete-review1';
-import { getStageArt } from './stage-art.js';
-import { configureSelection, filterSelection, renderStageBrowser, renderHubStatus, filterForge, activateUiDialog, installUiShell } from './ui-overhaul.js?v=20261106-complete-review1';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { Battle, ARENA_R } from './game.js';
+import { FIGHTERS, STORY, ROSTER, UPGRADES, MAX_LV, STAGES, BGM, APEX_BGM, ENEMY_ROSTER, UPG_CAP, LB_MAX, lbMaxLv, lbMul, lbCost, WEAPONS, ARMORS, SUMMONS, STAT_LABEL, SPECIAL_KEYS, BOSS_ROSTER, currentEvent, sanitizeEvent, EV_FOE_KINDS } from './data.js';
+import { ProcMusic } from './music.js';
+import { sayBattle, setVoiceMuted, stopVoices } from './voice.js';
+import { initSocial, uiConfirm } from './social.js';
 import { OPERATOR_KEY_SHA256, CHIEF_KEY_SHA256, MAX_KEY_ATTEMPTS, LOCKOUT_MS, SHOP_ITEMS } from './config.js';
-import { connect, issueInvite, redeemInvite, syncPush, syncPullV } from './net.js?v=20261106-complete-review1';
-import { apiEnabled, api, verifyToken } from './api.js?v=20261106-complete-review1';
+import { connect, issueInvite, redeemInvite, syncPush, syncPullV } from './net.js';
+import { apiEnabled, api, verifyToken } from './api.js';
 
 const $ = (s) => document.querySelector(s);
 const isTouch = matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window;
@@ -131,7 +128,6 @@ function setStage(st) {
     if (i % (st.pshape === 'bamboo' ? 2 : 1) === 0) {
       const c = new THREE.Mesh(crystalGeo(st.cshape), cMat);
       c.position.set(p.position.x, ph + 0.9, p.position.z);
-      c.userData.floatY = c.position.y;
       arena.add(c);
       crystals.push(c);
     }
@@ -147,52 +143,31 @@ setStage(STAGES[0]);
 
 // ---------- Assets ----------
 const assets = {};
-const gltfLoader = createModelLoader();
+const gltfLoader = new GLTFLoader();
 const modelUrls = [...new Set(Object.values(FIGHTERS).map((d) => d.model))];
 const byUrl = {};
-let modelLoadPending = null;
-function showAssetLoadFailure(message, retryAction = () => loadModels()) {
-  let note = document.getElementById('asset-load-note');
-  if (!note) {
-    note = document.createElement('div');
-    note.id = 'asset-load-note';
-    note.setAttribute('role', 'alert');
-    note.style.cssText = 'position:fixed;left:50%;bottom:max(16px,env(safe-area-inset-bottom));transform:translateX(-50%);z-index:9998;width:min(560px,calc(100% - 24px));background:#211c30;border:1px solid #c9a65a;color:#f4ead2;padding:12px;border-radius:10px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;pointer-events:auto';
-    const text = document.createElement('span');
-    text.dataset.loadMessage = '';
-    const retry = document.createElement('button');
-    retry.type = 'button';
-    retry.className = 'btn mini';
-    retry.textContent = '読み込みを再試行';
-    retry.addEventListener('click', async () => {
-      retry.disabled = true;
-      try { await note.retryAction(); } finally { retry.disabled = false; }
-    });
-    note.append(text, retry);
-    document.body.append(note);
+// A slow or missing GLB must not keep the game in an endless loading state.
+let loadedModels = 0;
+const loadStatus = () => {
+  const el = $('#loading');
+  if (el) el.textContent = `戦士の準備中：${loadedModels} / ${modelUrls.length}（読み込み中もメニューへ進めます）`;
+};
+loadStatus();
+const loadPromise = Promise.allSettled(modelUrls.map((url) =>
+  Promise.race([
+    gltfLoader.loadAsync(url),
+    new Promise((_, reject) => setTimeout(() => reject(new Error(`モデル読み込み時間超過: ${url}`)), 18000))
+  ]).then((g) => { byUrl[url] = g; }, (err) => {
+    console.warn('モデルを読み込めませんでした:', url, err);
+  }).finally(() => { loadedModels++; loadStatus(); })
+)).then(() => {
+  for (const [k, d] of Object.entries(FIGHTERS)) {
+    if (byUrl[d.model]) assets[k] = byUrl[d.model];
   }
-  note.retryAction = retryAction;
-  note.querySelector('[data-load-message]').textContent = message;
-}
-function loadModels() {
-  if (modelLoadPending) return modelLoadPending;
-  const missing = modelUrls.filter(url => !byUrl[url]);
-  if (!missing.length) return Promise.resolve(true);
-  $('#loading').textContent = `戦士を読み込んでいます… ${modelUrls.length - missing.length} / ${modelUrls.length}`;
-  modelLoadPending = Promise.allSettled(missing.map(async url => {
-    byUrl[url] = await gltfLoader.loadAsync(modelAssetUrl(url));
-    $('#loading').textContent = `戦士を読み込んでいます… ${Object.keys(byUrl).length} / ${modelUrls.length}`;
-  })).then(() => {
-    for (const [k, d] of Object.entries(FIGHTERS)) if (byUrl[d.model]) assets[k] = byUrl[d.model];
-    const failed = modelUrls.filter(url => !byUrl[url]).length;
-    $('#loading').textContent = failed ? `戦士 ${failed} 件の読み込みを再試行できます。` : '';
-    if (failed) showAssetLoadFailure(`一部の戦士を読み込めませんでした（${failed} 件）。接続を確認して再試行してください。`);
-    else document.getElementById('asset-load-note')?.remove();
-    return failed === 0;
-  }).finally(() => { modelLoadPending = null; });
-  return modelLoadPending;
-}
-const loadPromise = loadModels();
+  const failed = modelUrls.length - Object.keys(byUrl).length;
+  const el = $('#loading');
+  if (el) el.textContent = failed ? `準備完了（一部モデル ${failed} 件は未読み込み）` : '準備完了。冒険を始められます。';
+});
 
 // ---------- Save ----------
 const SAVE_KEY = 'arkeia-save-v1';
@@ -233,7 +208,7 @@ function loadSave() {
   s.diff = raw.diff == null ? 1 : clampInt(raw.diff, 0, 3);
   s.chars = Array.isArray(raw.chars) ? raw.chars.filter((k) => FIGHTERS[k]?.shop) : [];
   s.gemChars = Array.isArray(raw.gemChars) ? raw.gemChars.filter((k) => FIGHTERS[k]?.shardPrice) : [];
-  s.party = Array.isArray(raw.party) ? [...new Set(raw.party.filter((k) => FIGHTERS[k]))].slice(0, 4) : [];
+  s.party = Array.isArray(raw.party) ? raw.party.filter((k) => FIGHTERS[k]).slice(0, 4) : [];
   s.main = FIGHTERS[raw.main] ? raw.main : null;
   s.pid = raw.pid;
   s.friends = raw.friends;
@@ -252,11 +227,6 @@ function loadSave() {
   s.guildNote = typeof raw.guildNote === 'string' ? raw.guildNote.replace(/[<>\u0000-\u001f]/g, '').slice(0, 200) : null;
   // 直近の同期書き込みID（再送時の二重反映を防ぐ）
   s.wids = Array.isArray(raw.wids) ? raw.wids.filter((w) => typeof w === 'string' && /^[A-Za-z0-9_-]{8,64}$/.test(w)).slice(-20) : [];
-  // 受取済みセーブと同期基準を結び付ける回復記録。同期メタデータの保存失敗時も捨てない。
-  const mr = raw.mailReconcile;
-  if (mr && mr.pid === raw.pid && /^[A-Z0-9]{12}$/.test(mr.code || '') && Number.isSafeInteger(mr.ver) && mr.ver > 0 && Number.isSafeInteger(mr.base) && mr.base >= 0 && mr.base <= 999999) {
-    s.mailReconcile = { pid: mr.pid, code: mr.code, ver: mr.ver, base: mr.base, at: +mr.at || Date.now(), dirty: !!mr.dirty };
-  }
   return s;
 }
 const save = loadSave();
@@ -291,7 +261,6 @@ function upgFor(k) {
 const summonFor = (k) => SUMMONS.find((s) => s.fighter === k && save.owned.includes(s.id) && save.summonOn[s.id] && (!s.chief || chiefUnlocked())) || null;
 const gearFor = (k) => ({ w: save.equip[k] || '', a: save.armor[k] || '', h: summonFor(k)?.id || '' });
 function persist(sync = true) {
-  if (sync && save.mailReconcile) save.mailReconcile.dirty = true;
   try {
     localStorage.setItem(SAVE_KEY, JSON.stringify(save));
   } catch (err) {
@@ -305,7 +274,7 @@ var syncReady = false; // 起動直後の保存では「変更あり」にしな
 const syncCodeNow = () => String(localStorage.getItem('arkeia-sync') || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
 function scheduleAutoSync() {
   if (syncCodeNow().length !== 12) return;
-  try { markSyncDirty(); } catch {}
+  try { localStorage.setItem('arkeia-sync-dirty', '1'); } catch {}
   syncGen++; // 送信中に変化があったかを判定するための世代番号
   if (!syncReady) return;
   clearTimeout(autoPushTimer);
@@ -335,23 +304,7 @@ const setPend = (p) => {
   localStorage.setItem('arkeia-sync-pend', JSON.stringify([p]));
 };
 // 版番号つきの送受信（サーバー時は Durable Object で直列化、未設定時は InstantDB に直接）
-// 他タブの保存メタデータと、このタブが実際に反映したセーブを混同しない。
-var syncVersionLocal = Number(localStorage.getItem('arkeia-sync-ver')) || 0;
-var syncBaseLocal = localStorage.getItem('arkeia-sync-base') == null ? NaN : Number(localStorage.getItem('arkeia-sync-base'));
-var syncDirtyLocal = !!localStorage.getItem('arkeia-sync-dirty');
-const syncVer = () => syncVersionLocal;
-const readSyncBase = () => syncBaseLocal;
-function writeSyncBase(value) {
-  localStorage.setItem('arkeia-sync-base', String(value));
-  syncBaseLocal = Number(value);
-}
-function hasSyncChanges() { return syncDirtyLocal || !!localStorage.getItem('arkeia-sync-dirty'); }
-function markSyncDirty() {
-  syncDirtyLocal = true;
-  if (save.mailReconcile) save.mailReconcile.dirty = true;
-  localStorage.setItem('arkeia-sync-dirty', '1');
-}
-function clearSyncDirty() { localStorage.removeItem('arkeia-sync-dirty'); syncDirtyLocal = false; }
+const syncVer = () => Number(localStorage.getItem('arkeia-sync-ver')) || 0;
 async function sendVersioned(code, json, base, wid = '') {
   if (apiEnabled()) {
     const r = await api('/sync/push', { code, data: json, base, wid });
@@ -410,9 +363,8 @@ function mergeSaves(local, remote, baseShards) {
 function markSynced(ver, at, shards) {
   localStorage.setItem('arkeia-sync-ver', String(ver || 0));
   localStorage.setItem('arkeia-sync-at', String(at));
-  writeSyncBase(shards);
-  clearSyncDirty();
-  syncVersionLocal = Number(ver) || 0;
+  localStorage.setItem('arkeia-sync-base', String(shards));
+  localStorage.removeItem('arkeia-sync-dirty');
 }
 function preserveLocalChanges(target, before, after) {
   for (const key of ['diff', 'uname', 'party', 'main', 'noHero', 'summonOn', 'equip', 'armor', 'friends', 'awk']) {
@@ -424,10 +376,9 @@ function preserveLocalChanges(target, before, after) {
 }
 let syncErr = ''; // 直近の同期失敗の理由（'wealth' / 'pid' / 'net'）
 async function autoPush({ forSpend = false, reload = true } = {}) {
-  try { recoverMailboxSync(); } catch { syncErr = 'net'; return; }
   const code = syncCodeNow();
   if (code.length !== 12 || autoBusy || syncImportBusy || (syncSpendBusy && !forSpend)) return;
-  if (!hasSyncChanges() && !getPends().length) return;
+  if (!localStorage.getItem('arkeia-sync-dirty') && !getPends().length) return;
   autoBusy = true;
   // 応答が途切れた場合も、同じ本文・版・IDで結果を確定してから次の変更を送る。
   let snap, preferenceBase, payload, wid, baseVer;
@@ -452,7 +403,7 @@ async function autoPush({ forSpend = false, reload = true } = {}) {
     syncHoldUntil = 0;
     if (changed) {
       // 送信中に増えた変更は、改めて送る
-      markSyncDirty();
+      localStorage.setItem('arkeia-sync-dirty', '1');
       clearTimeout(autoPushTimer);
       autoPushTimer = setTimeout(autoPush, 3000);
     }
@@ -485,14 +436,15 @@ async function autoPush({ forSpend = false, reload = true } = {}) {
       const remote = JSON.parse(r.data || '{}');
       const rw = Array.isArray(remote.wids) ? remote.wids : [];
       // 前回の書き込み（結果不明）が反映済みなら、その時に送った灯晶を基準にする（二重加算を防ぐ）
-      let base = readSyncBase();
+      const storedBase = localStorage.getItem('arkeia-sync-base');
+      let base = storedBase == null ? NaN : Number(storedBase);
       // 結果不明の書き込み（今回分を含む）のうち、最後に反映されていたものの灯晶を基準にする
       for (const p of [...oldPends, ...getPends()]) {
         if (r.appliedWid === p.wid || r.wid === p.wid || rw.includes(p.wid)) base = +(p.localShards ?? p.shards);
       }
       if (!Number.isFinite(base)) base = +remote.shards || 0;
       // 判明した基準をすぐ保存（この後の送信が失敗しても、次回に同じ増減を二重に足さない）
-      writeSyncBase(base);
+      localStorage.setItem('arkeia-sync-base', String(base));
       snap = JSON.parse(JSON.stringify(save));
       wid = newWid();
       payload = mergeSaves(snap, remote, base);
@@ -531,10 +483,9 @@ async function autoPush({ forSpend = false, reload = true } = {}) {
   }
 }
 async function autoPull() {
-  try { recoverMailboxSync(); } catch { return; }
   const code = syncCodeNow();
   if (code.length !== 12 || autoBusy || syncSpendBusy || syncImportBusy || document.hidden) return;
-  if (hasSyncChanges() || getPends().length) {
+  if (localStorage.getItem('arkeia-sync-dirty') || getPends().length) {
     // 未送信の変更を優先（再送待ちの間は送らない）
     if (Date.now() >= syncHoldUntil) return autoPush();
     return;
@@ -544,7 +495,7 @@ async function autoPull() {
     let { data: json, ver } = await fetchVersioned(code);
     if (!json || syncCodeNow() !== code) return;
     // 戦闘中は反映せず、次回の確認（戦闘外）で取り込む
-    if (ver > syncVer() && !state.battle && !hasSyncChanges()) {
+    if (ver > syncVer() && !state.battle && !localStorage.getItem('arkeia-sync-dirty')) {
       const remote = JSON.parse(json);
       // サーバーは購入キャラ(chars)を保存しないため、端末側の分を残す
       const uni = (a, b) => [...new Set([...(Array.isArray(a) ? a : []), ...(Array.isArray(b) ? b : [])])];
@@ -566,12 +517,12 @@ async function autoPull() {
 function applyServerSpend(amt, ver) {
   if (Number.isFinite(+ver) && +ver > 0 && syncVer() >= +ver) return;
   save.shards = Math.max(0, (+save.shards || 0) - amt);
-  if (!hasSyncChanges() && ver && syncVer() === ver - 1) {
+  if (!localStorage.getItem('arkeia-sync-dirty') && ver && syncVer() === ver - 1) {
     markSynced(ver, Date.now(), save.shards);
     localStorage.setItem(SAVE_KEY, JSON.stringify(save));
   } else {
-    const b = readSyncBase();
-    if (Number.isFinite(b)) writeSyncBase(b - amt);
+    const b = localStorage.getItem('arkeia-sync-base');
+    if (b != null && Number.isFinite(+b)) localStorage.setItem('arkeia-sync-base', String(+b - amt));
     // 未確定送信があるときは古い本文を変更せず、次回の競合解決で消費済み基準を使う。
     const ps = getPends().map((p) => ({ ...p, localShards: +(p.localShards ?? p.shards) - amt }));
     if (ps.length) localStorage.setItem('arkeia-sync-pend', JSON.stringify(ps));
@@ -579,16 +530,15 @@ function applyServerSpend(amt, ver) {
   }
 }
 async function runServerSpend(amt, operation) {
-  recoverMailboxSync();
   const code = syncCodeNow();
   if (code.length !== 12) throw Object.assign(new Error('nosync'), { code: 'nosync' });
   while (autoBusy || syncSpendBusy || syncImportBusy) await new Promise((resolve) => setTimeout(resolve, 100));
   if (syncCodeNow() !== code) throw Object.assign(new Error('nosync'), { code: 'nosync' });
   syncSpendBusy = true;
   try {
-    if (hasSyncChanges() || getPends().length) {
+    if (localStorage.getItem('arkeia-sync-dirty') || getPends().length) {
       await autoPush({ forSpend: true, reload: false });
-      if (hasSyncChanges() || getPends().length) {
+      if (localStorage.getItem('arkeia-sync-dirty') || getPends().length) {
         throw Object.assign(new Error('sync'), { code: 'sync' });
       }
     }
@@ -597,101 +547,14 @@ async function runServerSpend(amt, operation) {
     return result;
   } finally {
     syncSpendBusy = false;
-    if (hasSyncChanges()) scheduleAutoSync();
-  }
-}
-// メール受取も同期と同じ排他範囲で実行する。報酬の差分を端末で加算せず、
-// サーバーの最新セーブ・版番号を取り込むことで、再送・再起動・他端末受取を二重計上しない。
-const mailPendingKey = (pid = save.pid) => 'arkeia-mail-pending:' + pid;
-function pendingMailClaims() {
-  try {
-    const ids = JSON.parse(localStorage.getItem(mailPendingKey()) || '[]');
-    return Array.isArray(ids) ? ids.filter(id => typeof id === 'string' && /^[A-Za-z0-9_-]{8,80}$/.test(id)).slice(-100) : [];
-  } catch { return []; }
-}
-function rememberMailClaim(id, done = false) {
-  const ids = pendingMailClaims().filter(x => x !== id);
-  if (!done) ids.push(id);
-  try { localStorage.setItem(mailPendingKey(), JSON.stringify(ids.slice(-100))); }
-  catch { throw Object.assign(new Error('storage'), { code: 'storage' }); }
-}
-function recoverMailboxSync() {
-  const m = save.mailReconcile;
-  if (!m) return;
-  if (m.pid !== save.pid || m.code !== syncCodeNow()) throw Object.assign(new Error('identity'), { code: 'identity' });
-  // 記録は灯晶と同じSAVE_KEY書き込みで保存済み。メタデータを先に揃え、
-  // 全項目の保存に成功するまで回復記録は消さない。途中で失敗しても同じ値で再実行できる。
-  const dirty = !!m.dirty || hasSyncChanges();
-  try {
-    localStorage.setItem('arkeia-sync-ver', String(m.ver));
-    localStorage.setItem('arkeia-sync-at', String(m.at));
-    writeSyncBase(m.base);
-    if (dirty) markSyncDirty(); else clearSyncDirty();
-    const clean = { ...save };
-    delete clean.mailReconcile;
-    localStorage.setItem(SAVE_KEY, JSON.stringify(clean));
-    syncVersionLocal = m.ver;
-    delete save.mailReconcile;
-  } catch { throw Object.assign(new Error('storage'), { code: 'storage' }); }
-}
-async function claimMailboxGift(id) {
-  const fail = (code, status) => Object.assign(new Error(code), { code, status });
-  if (state.battle) throw fail('busy');
-  recoverMailboxSync();
-  const code = syncCodeNow(), pid = save.pid;
-  if (code.length !== 12) throw fail('nosync');
-  const deadline = Date.now() + 30000;
-  while (autoBusy || syncSpendBusy || syncImportBusy) {
-    if (Date.now() > deadline) throw fail('sync');
-    await new Promise(resolve => setTimeout(resolve, 100));
-  }
-  if (syncCodeNow() !== code || save.pid !== pid) throw fail('identity');
-  syncSpendBusy = true;
-  try {
-    if (hasSyncChanges() || getPends().length) {
-      await autoPush({ forSpend: true, reload: false });
-      if (hasSyncChanges() || getPends().length) throw fail('sync');
-    }
-    if (syncCodeNow() !== code || save.pid !== pid || state.battle) throw fail('busy');
-    const before = JSON.parse(JSON.stringify(save));
-    rememberMailClaim(id);
-    const r = await api('/mail/claim', { code, id });
-    if (!r.ok) {
-      if (['expired', 'no_gift', 'notfound'].includes(r.error)) rememberMailClaim(id, true);
-      throw fail(r.error || 'net', r.status);
-    }
-    if (syncCodeNow() !== code || save.pid !== pid || r.pid !== pid) throw fail('identity');
-    let remote;
-    try { remote = JSON.parse(r.data); } catch { throw fail('invalid_response'); }
-    if (!remote || remote.pid !== pid || !Number.isSafeInteger(r.ver) || r.ver < 1 || !Number.isSafeInteger(remote.shards) || remote.shards < 0 || remote.shards > 999999) throw fail('invalid_response');
-    if (r.ver >= syncVer()) {
-      const changed = JSON.stringify(before) !== JSON.stringify(save);
-      const final = changed ? preserveLocalChanges(mergeSaves(save, remote, +before.shards || 0), before, save) : { ...remote };
-      // 課金キャラの所持確認は別の署名APIが管理しているため、端末で確認済みの分を保つ。
-      final.chars = [...new Set([...(remote.chars || []), ...(save.chars || [])])];
-      final.mailReconcile = { pid, code, ver: r.ver, base: remote.shards, at: Number(remote.syncAt) || Date.now(), dirty: changed };
-      try {
-        // 回復記録と付与済み所持品を、ひとつの原子的なlocalStorage書き込みで保存する。
-        localStorage.setItem(SAVE_KEY, JSON.stringify(final));
-        Object.assign(save, final);
-        setPend(null);
-        recoverMailboxSync();
-      } catch { throw fail('storage'); }
-    }
-    rememberMailClaim(id, true);
-    refreshTitle();
-    if (isScreen('scr-forge')) renderForge();
-    return r;
-  } finally {
-    syncSpendBusy = false;
-    if (hasSyncChanges()) scheduleAutoSync();
+    if (localStorage.getItem('arkeia-sync-dirty')) scheduleAutoSync();
   }
 }
 setTimeout(() => {
   syncReady = true;
   autoPull();
   setInterval(() => { if (!state.battle) autoPull(); }, 45000);
-  document.addEventListener('visibilitychange', () => { if (!document.hidden && !state.battle) autoPull(); else if (document.hidden && hasSyncChanges()) autoPush(); });
+  document.addEventListener('visibilitychange', () => { if (!document.hidden && !state.battle) autoPull(); else if (document.hidden && localStorage.getItem('arkeia-sync-dirty')) autoPush(); });
 }, 3000);
 // 通信ライブラリの読み込みに続けて失敗した時：再読み込みが必要な旨を画面に出す
 window.addEventListener('arkeia-net-fail', (e) => {
@@ -714,7 +577,6 @@ window.addEventListener('arkeia-net-fail', (e) => {
   d.append(b, x);
   document.body.append(d);
 });
-try { recoverMailboxSync(); } catch (e) { console.warn('メール受取の保存状態を再確認します', e); }
 persist(false); // 起動時の整形だけでは同期の「変更あり」にしない
 {
   const cy = document.getElementById('copy-year');
@@ -730,9 +592,8 @@ const audio = {
   ctx: null,
   unlocked: false
 };
-for (const name of ['title', 'story', 'battle', 'boss', 'field', 'event', 'zarugureibu']) {
-  const version = '?v=20261106-bgm2';
-  const a = new Audio(`assets/audio/${name}-theme.mp3${version}`);
+for (const name of ['title', 'story', 'battle', 'boss']) {
+  const a = new Audio(`assets/audio/${name}-theme.mp3`);
   a.loop = true;
   a.preload = 'none';
   a.volume = 0.35;
@@ -745,22 +606,18 @@ pool('hit', 'assets/audio/hit-impact.mp3', 4);
 pool('burst', 'assets/audio/arte-burst.mp3', 2);
 let proc = null;
 function startProc() {
-  const m = /^apex:(\d+)$/.exec(audio.current || '');
+  const m = /^(bgm|field|apex):(\d+)$/.exec(audio.current || '');
   if (!m || !audio.ctx || audio.muted) return;
   proc ||= new ProcMusic(audio.ctx);
-  proc.play(APEX_BGM[+m[1]] || APEX_BGM[1]);
-}
-function hasZarugureibuTheme(b) {
-  if (!b) return false;
-  // どちらの陣営でも、一度参戦したらこの戦闘が終わるまで専用曲を優先する。
-  b.zarugureibuTheme ||= b.fighters.some((f) => f.key === 'bloodfiend');
-  return b.zarugureibuTheme;
+  const n = +m[2];
+  if (m[1] === 'apex') {
+    proc.play(APEX_BGM[n] || APEX_BGM[1]);
+    return;
+  }
+  // フィールド用：壮大な冒険曲（金管・聖歌隊を必ず入れ、ゆったり力強いテンポ）
+  proc.play(m[1] === 'field' ? { seed: 50021 + n * 131, bpm: 104 + (n % 6) * 4, epic: true } : BGM[n % BGM.length]);
 }
 function playTrack(name) {
-  const b = state.battle;
-  const combat = /^(battle|boss|event|zarugureibu|apex:\d+)$/.test(name);
-  if (combat && b?.bgmStarted && !b.ended && hasZarugureibuTheme(b)) name = 'zarugureibu';
-  if (b && !combat) b.bgmStarted = false;
   if (audio.current === name) {
     return;
   }
@@ -1108,8 +965,7 @@ function setMuted(m) {
     t?.play().catch(() => {});
     startProc();
   }
-  $('#opt-mute').textContent = m ? 'サウンド：オフ' : 'サウンド：オン';
-  $('#opt-mute').setAttribute('aria-pressed', String(!m));
+  $('#opt-mute').textContent = m ? '音：黙らせる' : '音：鳴らす';
 }
 setMuted(audio.muted);
 
@@ -1128,26 +984,8 @@ function inBattleView() {
   return (!!state.battle || !!state.field) && !document.querySelector('.screen.on');
 }
 
-function inputIsBlocked() {
-  const active = document.activeElement;
-  return document.hidden || state.paused || mailbox?.isOpen()
-    || !!document.querySelector('.ui-overlay .ui-dialog')
-    || !!document.querySelector('#chat-panel:not([hidden])')
-    || active?.matches?.('input, textarea, select') || active?.isContentEditable;
-}
-
-function resetGameplayInput() {
-  keys.clear();
-  for (const k in edges) edges[k] = false;
-  mouseSkillHeld = false;
-  for (const input of [touchState, padState]) Object.assign(input, { mx: 0, mz: 0, guard: false, skill: false, skill2: false });
-  $('#knob').style.transform = '';
-  document.dispatchEvent(new Event('arkeia-input-reset'));
-}
-
 window.addEventListener('keydown', (e) => {
-  if (e.defaultPrevented || e.isComposing || e.keyCode === 229) return;
-  if (e.target?.matches?.('input, textarea, select') || e.target?.isContentEditable) {
+  if (e.target.tagName === 'INPUT') {
     if (e.code === 'Escape') {
       e.target.blur();
     }
@@ -1161,25 +999,21 @@ window.addEventListener('keydown', (e) => {
     goBackCurrent();
     return;
   }
-  if (inBattleView() && !inputIsBlocked() && !e.repeat && KEYMAP[e.code]) {
+  if (inBattleView() && !e.repeat && KEYMAP[e.code]) {
     edges[KEYMAP[e.code]] = true;
   }
   if (isScreen('scr-story') && (e.code === 'Enter' || e.code === 'Space')) {
     advanceDialogue();
   }
-  if (!inputIsBlocked()) keys.add(e.code);
+  keys.add(e.code);
   if (e.code === 'Space' && inBattleView()) {
     e.preventDefault();
   }
 });
 window.addEventListener('keyup', (e) => keys.delete(e.code));
-window.addEventListener('blur', resetGameplayInput);
-document.addEventListener('visibilitychange', () => { if (document.hidden) resetGameplayInput(); });
-document.addEventListener('focusin', (e) => {
-  if (e.target?.matches?.('input, textarea, select') || e.target?.isContentEditable || e.target?.closest?.('.ui-dialog, #mailbox-dialog, #chat-panel')) resetGameplayInput();
-});
+window.addEventListener('blur', () => keys.clear());
 renderer.domElement.addEventListener('mousedown', (e) => {
-  if (!inBattleView() || inputIsBlocked()) {
+  if (!inBattleView()) {
     return;
   }
   if (e.button === 0) {
@@ -1193,10 +1027,6 @@ renderer.domElement.addEventListener('mousedown', (e) => {
 renderer.domElement.addEventListener('contextmenu', (e) => e.preventDefault());
 
 function readInput() {
-  if (inputIsBlocked()) {
-    resetGameplayInput();
-    return { mx: 0, mz: 0, guard: false, holdSkill: false, holdSkill2: false };
-  }
   let mx = touchState.mx + padState.mx;
   let mz = touchState.mz + padState.mz;
   if (keys.has('KeyA') || keys.has('ArrowLeft')) mx -= 1;
@@ -1230,7 +1060,6 @@ function setupTouch() {
   let ox = 0;
   let oy = 0;
   joy.addEventListener('pointerdown', (e) => {
-    if (jid !== null || inputIsBlocked()) return;
     jid = e.pointerId;
     const r = joy.getBoundingClientRect();
     ox = r.left + r.width / 2;
@@ -1263,17 +1092,10 @@ function setupTouch() {
   };
   joy.addEventListener('pointerup', endJoy);
   joy.addEventListener('pointercancel', endJoy);
-  joy.addEventListener('lostpointercapture', endJoy);
-  document.addEventListener('arkeia-input-reset', () => {
-    const id = jid;
-    jid = null;
-    if (id !== null && joy.hasPointerCapture?.(id)) joy.releasePointerCapture(id);
-  });
   for (const b of pad.querySelectorAll('[data-act]')) {
     const act = b.dataset.act;
     b.addEventListener('pointerdown', (e) => {
       e.preventDefault();
-      if (inputIsBlocked()) return;
       if (act === 'guard') {
         touchState.guard = true;
       } else {
@@ -1295,23 +1117,16 @@ function setupTouch() {
 
 // ---------- Screens ----------
 const state = { mode: null, myKey: null, oppKey: null, chapter: 0, battle: null, paused: false, net: null, online: null, dialogue: null, lastWin: false };
-let viewGeneration = 0;
 function isScreen(id) {
   return $('#' + id)?.classList.contains('on');
 }
 function show(id) {
-  viewGeneration++;
-  resetGameplayInput();
   for (const s of document.querySelectorAll('.screen')) {
     s.classList.toggle('on', s.id === id);
-    s.setAttribute('aria-hidden', String(s.id !== id));
-    s.inert = s.id !== id;
   }
-  document.body.dataset.screen = id || 'play';
   $('#hud').hidden = id !== null;
   $('#touch').classList.toggle('active', id === null);
   if (id) {
-    $('#' + id).scrollTop = 0;
     const first = $('#' + id).querySelector('.menu button, .card:not(.locked), .chip');
     if (first && !isTouch) {
       first.focus({ preventScroll: true });
@@ -1319,10 +1134,6 @@ function show(id) {
   }
 }
 function goBackCurrent() {
-  const modal = [...document.querySelectorAll('.ui-overlay .ui-dialog')].at(-1);
-  if (modal) { modal.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', code: 'Escape', bubbles: true, cancelable: true })); return; }
-  if (mailbox?.isOpen()) { mailbox.close(); return; }
-  if (social?.isOpen()) { social.close(); resetGameplayInput(); return; }
   if (!$('#pause').hidden) {
     togglePause();
     return;
@@ -1336,78 +1147,42 @@ function goBackCurrent() {
 }
 // 運営長：運営長キーでのみ（このタブの間だけ）
 // サーバー設定時は、サーバー署名の役割トークンでのみ判定（端末内のフラグは無視）
-const roleState = { r: null, tok: '', exp: 0 };
-let roleRefreshTimer = 0;
-function acceptRole(tok, data) {
-  clearTimeout(roleRefreshTimer);
-  const valid = data && ['op', 'chief'].includes(data.r) && data.exp > Date.now();
-  Object.assign(roleState, valid ? { r: data.r, tok, exp: data.exp } : { r: null, tok: '', exp: 0 });
-  if (valid) roleRefreshTimer = setTimeout(() => refreshRole(), Math.min(2147483647, Math.max(10, data.exp - Date.now() + 10)));
-}
-function activeRole() {
-  return roleState.exp > Date.now() && roleState.tok === (localStorage.getItem('arkeia-role') || '') ? roleState.r : null;
-}
+const roleState = { r: null, tok: '' };
 async function refreshRole() {
   if (!apiEnabled()) return;
   const tok = localStorage.getItem('arkeia-role') || '';
   const d = await verifyToken(tok, 'role');
-  if ((localStorage.getItem('arkeia-role') || '') !== tok) return;
-  acceptRole(tok, d);
-  if (!roleState.r) localStorage.removeItem('arkeia-role');
+  roleState.r = d?.r || null;
+  roleState.tok = d ? tok : '';
+  if (!d) localStorage.removeItem('arkeia-role');
   refreshOptions();
-  if (isScreen('scr-title')) refreshTitle();
 }
 function chiefUnlocked() {
-  if (apiEnabled()) return activeRole() === 'chief';
+  if (apiEnabled()) return roleState.r === 'chief';
   return localStorage.getItem('arkeia-chief') === '1' || sessionStorage.getItem('arkeia-chief') === '1';
 }
 // 運営：運営キー（このタブの間）／招待コードで登録済み（この端末）／運営長
 function operatorUnlocked() {
-  if (apiEnabled()) return !!activeRole();
+  if (apiEnabled()) return !!roleState.r;
   return localStorage.getItem('arkeia-op') === '1' || sessionStorage.getItem('arkeia-op') === '1' || localStorage.getItem('arkeia-op-reg') === '1' || chiefUnlocked();
 }
 // ---- サーバー検証の戦闘プロフィール（強化・装備・キャラ使用権） ----
-const profState = { key: '', tok: '', at: 0, exp: 0, stamp: '', pending: null, retryStamp: '', retryAt: 0 };
-function profileStamp(key) {
-  return JSON.stringify([key, save.pid, syncCodeNow(), syncVer(), save.buyId, activeRole() ? roleState.tok : '',
-    save.upg[key] || {}, save.lb[key] || 0, save.equip[key] || '', save.armor[key] || '', save.gemChars, save.chars]);
-}
-function profileToken(key) {
-  return profState.key === key && profState.exp > Date.now() && profState.stamp === profileStamp(key) ? profState.tok : '';
-}
+const profState = { key: '', tok: '', at: 0, busy: false };
 async function refreshProfile(key) {
-  if (!apiEnabled() || !FIGHTERS[key] || syncCodeNow().length !== 12) return;
-  if (profState.pending) {
-    await profState.pending;
-    return refreshProfile(key);
+  if (!apiEnabled() || !FIGHTERS[key] || profState.busy) return;
+  if (profState.key === key && Date.now() - profState.at < (profState.tok ? 30 * 60000 : 60000)) return;
+  profState.busy = true;
+  Object.assign(profState, { key, tok: '', at: Date.now() }); // 失敗時は1分おいて再試行
+  try {
+    // 強化・装備はサーバーに預けた同期セーブから算出される（端末の申告は使わない）
+    if (localStorage.getItem('arkeia-sync-dirty')) await autoPush();
+    const r = await api('/profile', { code: syncCodeNow(), key, role: roleState.tok, buyer: save.buyId });
+    if (r.ok && (await verifyToken(r.token, 'prof'))) Object.assign(profState, { key, tok: r.token, at: Date.now() });
+  } catch (err) {
+    console.warn(err);
+  } finally {
+    profState.busy = false;
   }
-  const stamp = profileStamp(key);
-  if (profState.retryStamp === stamp && Date.now() < profState.retryAt) return;
-  if ((hasSyncChanges() || getPends().length) && Date.now() < syncHoldUntil) return;
-  if (profState.key === key && profState.stamp === stamp && Date.now() - profState.at < (profState.tok ? 30 * 60000 : 60000) && (!profState.tok || profState.exp > Date.now())) return;
-  profState.pending = (async () => {
-    try {
-      // Wait for the actual saved equipment/upgrade version, without reloading
-      // a screen while an online connection is being prepared.
-      if (hasSyncChanges() || getPends().length) {
-        await autoPush({ reload: false });
-        if (hasSyncChanges() || getPends().length) {
-          profState.retryStamp = profileStamp(key);
-          profState.retryAt = Math.max(Date.now() + 60000, syncHoldUntil);
-          return;
-        }
-      }
-      profState.retryAt = 0;
-      const current = profileStamp(key), pid = save.pid;
-      Object.assign(profState, { key, tok: '', exp: 0, stamp: current, at: Date.now() });
-      const r = await api('/profile', { code: syncCodeNow(), key, role: activeRole() ? roleState.tok : '', buyer: save.buyId });
-      const data = r.ok ? await verifyToken(r.token, 'prof') : null;
-      if (profileStamp(key) === current && data?.p === pid && data.k === key && data.exp > Date.now()) {
-        Object.assign(profState, { key, tok: r.token, exp: data.exp, stamp: current, at: Date.now() });
-      }
-    } catch (err) { console.warn(err); }
-  })().finally(() => { profState.pending = null; });
-  return profState.pending;
 }
 const profOk = Object.create(null); // peerId → 検証済みプロフィール
 const profSeen = new Map(); // 最新のpresence（pid・token）と、進行中の検証
@@ -1503,7 +1278,6 @@ const foeHp = (m) => (m || 1) * DIFFS[save.diff].h;
 // その戦士を使えるか（運営専用・ショップ解放）
 function canUse(k) {
   const d = FIGHTERS[k];
-  if (!d) return false;
   if (d.special === 'chief') return chiefUnlocked() && (!d.shardPrice || save.gemChars.includes(k));
   if (d.shop) return save.chars.includes(k) || operatorUnlocked();
   if (d.locked) return operatorUnlocked();
@@ -1513,15 +1287,13 @@ const SELECT_KEYS = () => [...ROSTER, 'seraphel', 'chief', 'sovereign', 'bloodfi
 function refreshTitle() {
   $('#btn-invade').hidden = !operatorUnlocked();
   if ($('#btn-evmaker')) $('#btn-evmaker').hidden = !chiefUnlocked();
-  $('#title-shards').textContent = `灯晶　${save.shards.toLocaleString()}`;
-  renderHubStatus(save, FIGHTERS, STORY, canUse);
+  $('#title-shards').textContent = `灯晶　${save.shards}`;
   {
     const { ev, ends } = activeEvent();
     const days = Math.max(0, Math.ceil((ends - Date.now()) / 86400000));
     $('#event-sub').textContent = `${ev.custom ? '特別' : '今週'}：${ev.name} — ${ev.desc}（全8段階・${evCleared()}段階まで制覇・残り${days}日）`;
   }
   social?.refresh();
-  mailbox?.refreshAccess();
   const ch = save.chapter % STORY.length;
   $('#story-sub').textContent = save.chapter >= STORY.length ? '旅は終わった。もう一度、最初の灯から' : `続きから：${STORY[ch].title}`;
 }
@@ -1532,7 +1304,8 @@ function enterTitle() {
   show('scr-title');
 }
 
-$('#scr-press').addEventListener('pointerdown', () => {
+$('#scr-press').addEventListener('pointerdown', (e) => {
+  if (e.target.closest('#boot-recovery')) return;
   if (isScreen('scr-press')) {
     enterTitle();
   }
@@ -1600,10 +1373,6 @@ function openSelect(label, crumb, cb, { allowLocked = false, onBack = goTitle } 
     const locked = !canUse(k) && !allowLocked;
     const card = document.createElement('button');
     card.className = 'card' + (locked ? ' locked' : '');
-    card.type = 'button';
-    card.dataset.fighter = k;
-    card.dataset.search = locked ? '未解放 ' + (d.shop ? '商店' : '運営') : [d.name, d.title, ...d.skills.map((x) => x.name), d.over.name].join(' ');
-    card.setAttribute('aria-label', locked ? '未解放の戦士' : d.name + '、' + d.title);
     card.style.setProperty('--c', '#' + d.color.toString(16).padStart(6, '0'));
     const t = document.createElement('em');
     t.textContent = locked ? '名を封じられし者' : d.title;
@@ -1631,7 +1400,6 @@ function openSelect(label, crumb, cb, { allowLocked = false, onBack = goTitle } 
     });
     grid.append(card);
   }
-  configureSelection('fighter');
   show('scr-select');
 }
 
@@ -1670,15 +1438,6 @@ function openPartySelect(done) {
       const isMain = k === main && !noHero;
       b.textContent = k ? (isMain ? '★ ' : '') + FIGHTERS[k].name : '（空き）';
       b.className = isMain ? 'main' : '';
-      b.type = 'button';
-      b.dataset.slot = String(i + 1);
-      b.setAttribute('aria-pressed', String(isMain));
-      b.setAttribute('aria-label', k ? FIGHTERS[k].name + (isMain ? '、操作キャラクター' : 'を操作キャラクターにする') : '編成枠 ' + (i + 1) + '、空き');
-      if (k) {
-        const img = document.createElement('img');
-        img.src = FIGHTERS[k].face; img.alt = ''; img.decoding = 'async';
-        b.prepend(img);
-      }
       b.disabled = !k;
       b.addEventListener('click', () => {
         sfx('ui');
@@ -1687,23 +1446,14 @@ function openPartySelect(done) {
       });
       slots.append(b);
     }
-    for (const k in cards) {
-      cards[k].classList.toggle('picked', party.includes(k));
-      cards[k].setAttribute('aria-pressed', String(party.includes(k)));
-    }
-    $('#party-status').textContent = party.length + ' / 4 人';
+    for (const k in cards) cards[k].classList.toggle('picked', party.includes(k));
     $('#party-go').disabled = !party.length;
-    filterSelection();
   };
   grid.replaceChildren();
   for (const k of pool) {
     const d = FIGHTERS[k];
     const card = document.createElement('button');
     card.className = 'card';
-    card.type = 'button';
-    card.dataset.fighter = k;
-    card.dataset.search = [d.name, d.title, ...d.skills.map((x) => x.name), d.over.name].join(' ');
-    card.setAttribute('aria-label', d.name + '、' + d.title + '。編成に加える・外す');
     card.style.setProperty('--c', '#' + d.color.toString(16).padStart(6, '0'));
     if (d.face) {
       const img = document.createElement('img');
@@ -1721,15 +1471,12 @@ function openPartySelect(done) {
     card.append(t, n);
     card.addEventListener('click', () => {
       sfx('ui');
-      $('#selection-notice').textContent = '';
       if (party.includes(k)) {
         party = party.filter((x) => x !== k);
         if (main === k) main = party[0] || null;
       } else if (party.length < 4) {
         party.push(k);
         if (!main) main = k;
-      } else {
-        $('#selection-notice').textContent = '編成は4人までです。入れ替えるときは、選択済みの戦士を押して外してください。';
       }
       render();
     });
@@ -1746,30 +1493,62 @@ function openPartySelect(done) {
     $('#party-bar').hidden = true;
     done();
   };
-  configureSelection('party');
   render();
   show('scr-select');
 }
 
 function openStageSelect(crumb, onBack) {
-  let active = true;
   $('#party-bar').hidden = true;
-  $('#select-label').textContent = '舞台を選ぶ';
+  $('#select-label').textContent = 'どこで剣を抜く？';
   $('#select-crumb').textContent = crumb;
   $('#select-back').onclick = () => {
-    active = false;
     sfx('ui');
     onBack();
   };
-  renderStageBrowser({
-    stages: STAGES, getArt: getStageArt, selected: state.stage?.id, sound: () => sfx('ui'),
-    onConfirm: async (st) => {
-      if (!await loadModels()) throw new Error('models_unavailable');
-      if (!active || !isScreen('scr-select') || $('#scr-select').dataset.kind !== 'stage') return;
-      state.stage = st.sky ? st : STAGES[Math.floor(Math.random() * STAGES.length)];
-      await startOffline();
+  const grid = $('#select-grid');
+  grid.replaceChildren();
+  const list = [{ id: 'random', name: '風まかせ', floor: 0xc9a65a, seg: 0 }, ...STAGES];
+  for (const st of list) {
+    const card = document.createElement('button');
+    card.className = 'card';
+    card.style.setProperty('--c', '#' + st.floor.toString(16).padStart(6, '0'));
+    const t = document.createElement('em');
+    t.textContent = st.seg ? (st.seg > 20 ? '円の舞台' : `${st.seg}つの辺を持つ舞台`) : 'どこへ連れていかれるかは月次第';
+    const n = document.createElement('b');
+    n.textContent = st.name;
+    const hex = (c) => '#' + c.toString(16).padStart(6, '0');
+    const thumb = document.createElement('div');
+    thumb.className = 'sthumb';
+    if (st.sky) {
+      thumb.style.backgroundImage = `url(${st.sky})`;
+      const fl = document.createElement('i');
+      const segs = Math.min(st.seg, 24);
+      const pts = Array.from({ length: segs }, (_, i) => {
+        const a = (i / segs) * Math.PI * 2 - Math.PI / 2;
+        return `${50 + Math.cos(a) * 46}% ${50 + Math.sin(a) * 46}%`;
+      }).join(',');
+      fl.style.clipPath = `polygon(${pts})`;
+      fl.style.background = `radial-gradient(circle, ${hex(st.floor)}, ${hex(st.rim)})`;
+      fl.style.boxShadow = `0 0 12px ${hex(st.crystal)}`;
+      thumb.append(fl);
+    } else {
+      thumb.textContent = '？';
     }
-  });
+    card.append(thumb, t, n);
+    if (st.bgm != null) {
+      const s = document.createElement('small');
+      s.textContent = `♪ ${BGM[st.bgm % BGM.length].name}`;
+      card.append(s);
+    }
+    card.addEventListener('mouseenter', () => st.sky && setStage(st));
+    card.addEventListener('focus', () => st.sky && setStage(st));
+    card.addEventListener('click', () => {
+      sfx('ui');
+      state.stage = st.sky ? st : STAGES[Math.floor(Math.random() * STAGES.length)];
+      startOffline();
+    });
+    grid.append(card);
+  }
   show('scr-select');
 }
 
@@ -1878,41 +1657,19 @@ const ui = {
     fl.classList.add('go');
   },
   end(winTeam) {
-    const battle = state.battle;
-    if (!battle) return;
-    clearTimeout(battle.resultTimer);
-    battle.resultTimer = setTimeout(() => {
-      if (state.battle === battle) onBattleEnd(winTeam === 0);
-    }, 1400);
+    setTimeout(() => onBattleEnd(winTeam === 0), 1400);
   }
 };
 
 function makeBattle(net) {
   endBattle();
   state.invaded = false;
-  const b = state.battle = new Battle(scene, camera, { assets, ui, net });
-  b.bgmStarted = false;
-  b.zarugureibuTheme = false;
-  const add = b.add.bind(b);
-  b.add = (key, opts) => {
-    const f = add(key, opts);
-    if (f.key === 'bloodfiend') {
-      b.zarugureibuTheme = true;
-      // 開戦前は beginBattle に任せる。途中乱入は追加直後に切り替える。
-      if (state.battle === b && b.bgmStarted && !b.ended) playTrack('zarugureibu');
-    }
-    return f;
-  };
-  return b;
+  state.battle = new Battle(scene, camera, { assets, ui, net });
+  return state.battle;
 }
 function endBattle() {
   stopVoices();
   if (state.battle) {
-    clearTimeout(state.battle.resultTimer);
-    clearTimeout($('#countdown')._t);
-    $('#countdown').hidden = true;
-    state.battle.bgmStarted = false;
-    state.battle.zarugureibuTheme = false;
     // 覚醒の蓄積ダメージは次の戦いへ持ち越す（覚醒中に終わったらリセット）
     const me = state.battle.fighters.find((f) => f.isPlayer && !f.remoteAuth);
     if (me) {
@@ -1933,7 +1690,6 @@ function openEventLevel(cb) {
   const { ev } = activeEvent();
   const done = evCleared();
   const ov = document.createElement('div');
-  let closeDialog = () => ov.remove();
   ov.style.cssText = 'position:fixed;inset:0;z-index:70;background:rgba(5,5,15,.82);display:flex;align-items:center;justify-content:center;padding:12px';
   const box = document.createElement('div');
   box.style.cssText = 'background:#16163a;border:1px solid #d6b46a;border-radius:12px;padding:16px;max-width:520px;width:100%;color:#f4ead2;max-height:90vh;overflow:auto';
@@ -1955,7 +1711,7 @@ function openEventLevel(cb) {
     b.textContent = `${lv <= done ? '★' : open ? '☆' : '🔒'} 第${lv}段階　敵の強さ×${m.hp.toFixed(2)}　報酬 ${Math.round(ev.reward * m.reward)}${lv > done ? `（初回+${ev.first * m.first}）` : ''}`;
     b.addEventListener('click', () => {
       sfx('ui');
-      closeDialog();
+      ov.remove();
       cb(lv);
     });
     grid.append(b);
@@ -1965,18 +1721,16 @@ function openEventLevel(cb) {
   back.textContent = 'やめる';
   back.style.marginTop = '10px';
   back.addEventListener('click', () => {
-    closeDialog();
+    ov.remove();
     goTitle();
   });
   box.append(h, p, grid, back);
   ov.append(box);
   document.body.append(ov);
-  closeDialog = activateUiDialog(ov, box, ev.name + 'の段階選択', () => back.click());
 }
 
 async function startOffline() {
-  const generation = ++viewGeneration, mode = state.mode;
-  if (!await loadModels() || generation !== viewGeneration || state.mode !== mode || !['cpu', 'duo', 'event'].includes(mode)) return;
+  await loadPromise;
   const evRun = state.mode === 'event' ? (state.eventRun ||= activeEvent()) : null;
   setStage(evRun ? STAGES[evRun.ev.stage % STAGES.length] : state.stage || STAGES[0]);
   const b = makeBattle(null);
@@ -2022,27 +1776,22 @@ async function startOffline() {
 }
 
 function beginBattle(boss) {
-  const b = state.battle;
-  b.bgmStarted = true;
   buildHud();
   show(null);
-  // ザルグレイヴ参戦 > イベント > 特別な決戦 > 通常戦闘の順で曲を選ぶ。
+  // 物語は章ごとに100曲から、その他は舞台の曲。ヴェスペラ・運営長戦は専用曲
+  const bgmIdx = (state.mode === 'story' ? state.chapter : currentStage?.bgm ?? 0) % BGM.length;
   // 敵側（運営の乱入時は両方）にヴェスペラ／運営長がいる時だけ
-  const ks = b.fighters.filter((f) => f.team === 1 || state.mode === 'invade').map((f) => f.key);
-  const apex = ks.some((k) => k === 'sovereign' || k === 'sovereign2') ? 2 : ks.includes('chief') ? 1 : 0;
-  if (hasZarugureibuTheme(b)) {
-    playTrack('zarugureibu');
-    ui.banner({ name: '— ♪ ザルグレイヴ専用曲 —' }, '紅翼の血魔');
-  } else if (state.mode === 'event') {
-    playTrack('event');
-  } else if (apex) {
+  const ks = state.battle.fighters.filter((f) => f.team === 1 || state.mode === 'invade').map((f) => f.key);
+  const apex = ks.some((k) => k === 'sovereign' || k === 'sovereign2') ? 2 : ks.includes('chief') || ks.includes('bloodfiend') ? 1 : 0;
+  if (apex) {
     playTrack('apex:' + apex);
     ui.banner({ name: `— ♪ ${APEX_BGM[apex].name} —` }, '頂上決戦');
   } else {
-    playTrack(boss ? 'boss' : 'battle');
-    ui.banner({ name: boss ? '— 双月の下で —' : '— ♪ 通常戦闘曲 —' }, '剣を抜け');
+    playTrack(boss ? 'boss' : 'bgm:' + bgmIdx);
+    ui.banner({ name: boss ? '— 双月の下で —' : `— ♪ ${BGM[bgmIdx].name} —` }, '剣を抜け');
   }
   // 開戦の合図：構え → 3・2・1 → 戦闘開始！（その間は誰も動かない）
+  const b = state.battle;
   b.intro = 4.3;
   const cd = $('#countdown');
   clearTimeout(cd._t);
@@ -2351,8 +2100,7 @@ function buildStoryBattle(foes, boss) {
 }
 // 目的地の決戦：ボス章は決められた敵、通常の章は1〜6体
 async function startChapterBattle() {
-  const generation = ++viewGeneration, chapter = state.chapter;
-  if (!await loadModels() || generation !== viewGeneration || state.mode !== 'story' || state.chapter !== chapter) return;
+  await loadPromise;
   const ch = STORY[state.chapter];
   state.encounter = null;
   let foes = ch.enemies;
@@ -2384,24 +2132,14 @@ function resetFieldLight() {
 }
 async function enterField() {
   // フィールドは物語でしか使わないので必要になった時だけ読み込む（初回表示を軽く）
-  const generation = ++viewGeneration, chapter = state.chapter;
-  let Field, modelsReady;
-  try {
-    const result = await Promise.all([import('./field.js?v=20261106-complete-review1'), loadModels()]);
-    Field = result[0].Field;
-    modelsReady = result[1];
-  } catch {
-    if (generation === viewGeneration) showAssetLoadFailure('フィールドを読み込めませんでした。接続を確認して、ページを再読み込みしてください。', () => location.reload());
-    return;
-  }
-  if (!modelsReady || generation !== viewGeneration || state.mode !== 'story' || state.chapter !== chapter) return;
+  const [{ Field }] = await Promise.all([import('./field.js'), loadPromise]);
   leaveField();
   const ch = STORY[state.chapter];
   const st = stageById(ch.stage);
   setStage(st);
   const { party, mainKey } = storyParty();
   state.myKey = mainKey;
-  const field = state.field = new Field(scene, {
+  state.field = new Field(scene, {
     chapter: state.chapter, ch, stage: st, assets, floorTex,
     mainKey, gear: gearFor(mainKey), partyKeys: party, npcKeys: ROSTER, enemyPool: ENEMY_ROSTER,
     onTalk: (lines) => {
@@ -2422,14 +2160,14 @@ async function enterField() {
       ui.flash();
       ui.banner({ name: '— 魔物が現れた！ —' }, FIGHTERS[sym.key]?.name || '魔物');
       setTimeout(() => {
-        if (state.field === field && state.mode === 'story' && !state.battle) startEncounter(sym);
+        if (state.field && !state.battle) startEncounter(sym);
       }, 700);
     },
     onGoal: () => {
       sfx('burst');
       ui.flash();
       setTimeout(() => {
-        if (state.field === field && state.mode === 'story' && !state.battle) startChapterBattle();
+        if (state.field && !state.battle) startChapterBattle();
       }, 600);
     }
   });
@@ -2441,7 +2179,7 @@ async function enterField() {
   $('#hud-right').replaceChildren();
   state.fieldHud = '';
   show(null);
-  playTrack('field');
+  playTrack('field:' + state.chapter);
   state.field.setOwnName(myName());
   // 世界中の旅人とつながる
   ensureWorld().then(() => refreshFieldRemotes());
@@ -2461,7 +2199,7 @@ function returnToField(sym, won) {
   $('#hud-left').replaceChildren();
   $('#hud-right').replaceChildren();
   show(null);
-  playTrack('field');
+  playTrack('field:' + state.chapter);
 }
 function leaveField() {
   if (state.field) {
@@ -2498,22 +2236,11 @@ let forgeSel = 'rowen';
 let forgeTab = 'upg';
 function renderForge() {
   const list = $('#forge-list');
-  const focusKey = document.activeElement?.dataset.forgeFocus;
-  const listTop = list.scrollTop;
-  const restoreFocus = () => {
-    if (focusKey) [...$('#scr-forge').querySelectorAll('[data-forge-focus]')].find((node) => node.dataset.forgeFocus === focusKey && !node.disabled)?.focus({ preventScroll: true });
-    list.scrollTop = listTop;
-  };
   list.replaceChildren();
   const keysList = SELECT_KEYS().filter(canUse);
-  if (!keysList.includes(forgeSel)) forgeSel = keysList[0] || 'rowen';
   for (const k of keysList) {
     const b = document.createElement('button');
     b.className = 'chip' + (k === forgeSel ? ' on' : '');
-    b.type = 'button';
-    b.dataset.search = FIGHTERS[k].name + ' ' + FIGHTERS[k].title;
-    b.dataset.forgeFocus = 'fighter:' + k;
-    b.setAttribute('aria-pressed', String(k === forgeSel));
     const total = UPGRADES.reduce((s, u) => s + lvOf(k, u.id), 0);
     b.textContent = `${FIGHTERS[k].name}${lbOf(k) ? `【突破${lbOf(k)}】` : ''}　${total}/${UPGRADES.length * maxLvOf(k)}`;
     b.addEventListener('click', () => {
@@ -2524,10 +2251,7 @@ function renderForge() {
     list.append(b);
   }
   const d = FIGHTERS[forgeSel];
-  filterForge();
-  $('#forge-portrait').src = d.face;
   $('#forge-name').textContent = `${d.name}　— ${d.title}`;
-  $('#forge-summary').textContent = `限界突破 ${lbOf(forgeSel)}回 ／ 強化 ${UPGRADES.reduce((n, u) => n + lvOf(forgeSel, u.id), 0)} / ${UPGRADES.length * maxLvOf(forgeSel)}段`;
   const rows = $('#forge-rows');
   rows.replaceChildren();
   const tabs = document.createElement('div');
@@ -2537,8 +2261,6 @@ function renderForge() {
   for (const [id, label] of [['upg', '強化（100種）'], ['wep', '武器'], ['arm', '防具'], ...(sumOk ? [['sum', '召喚獣']] : [])]) {
     const tb = document.createElement('button');
     tb.className = 'btn mini' + (forgeTab === id ? ' on' : '');
-    tb.dataset.forgeFocus = 'tab:' + id;
-    tb.setAttribute('aria-pressed', String(forgeTab === id));
     tb.textContent = label;
     tb.addEventListener('click', () => {
       sfx('ui');
@@ -2561,7 +2283,6 @@ function renderForge() {
       lab.textContent = s.name;
       const btn = document.createElement('button');
       btn.className = 'btn mini';
-      btn.dataset.forgeFocus = 'summon:' + s.id;
       btn.textContent = owned ? (isOn ? '召喚をやめる' : '召喚を有効にする') : `買う ${s.price}`;
       btn.disabled = !owned && save.shards < s.price;
       btn.addEventListener('click', () => {
@@ -2587,7 +2308,6 @@ function renderForge() {
       rows.append(row);
     }
     $('#forge-shards').textContent = `手持ちの灯晶　${save.shards}`;
-    restoreFocus();
     return;
   }
   if (forgeTab === 'wep' || forgeTab === 'arm') {
@@ -2606,7 +2326,6 @@ function renderForge() {
       lab.textContent = w.name;
       const btn = document.createElement('button');
       btn.className = 'btn mini';
-      btn.dataset.forgeFocus = 'gear:' + w.id;
       btn.textContent = on ? '外す' : owned ? '装備' : `買う ${w.price}`;
       btn.disabled = !owned && save.shards < w.price;
       btn.addEventListener('click', () => {
@@ -2634,7 +2353,6 @@ function renderForge() {
       rows.append(row);
     }
     $('#forge-shards').textContent = `手持ちの灯晶　${save.shards}`;
-    restoreFocus();
     return;
   }
   // 限界突破
@@ -2647,7 +2365,6 @@ function renderForge() {
     lab.textContent = `限界突破　${lb}/${LB_MAX}`;
     const btn = document.createElement('button');
     btn.className = 'btn mini';
-    btn.dataset.forgeFocus = 'limit';
     const cost = lbCost(lb);
     const ready = allMaxed(forgeSel);
     btn.textContent = lb >= LB_MAX ? '頂に至る' : ready ? `突破 ${cost}` : '全強化で解放';
@@ -2680,7 +2397,6 @@ function renderForge() {
     lab.textContent = u.label;
     const btn = document.createElement('button');
     btn.className = 'btn mini';
-    btn.dataset.forgeFocus = 'upgrade:' + u.id;
     btn.textContent = lv >= MAX_LV ? '極めた' : `注ぐ ${cost}`;
     btn.disabled = lv >= MAX_LV || save.shards < cost;
     btn.addEventListener('click', () => {
@@ -2702,7 +2418,6 @@ function renderForge() {
     rows.append(row);
   }
   $('#forge-shards').textContent = `手持ちの灯晶　${save.shards}`;
-  restoreFocus();
 }
 $('#btn-forge').addEventListener('click', () => {
   sfx('ui');
@@ -2730,26 +2445,17 @@ $('#btn-join').addEventListener('click', async () => {
   $('#btn-join').disabled = true;
   $('#lobby-status').textContent = '回線を結んでいます…';
   history.replaceState({}, '', `?room=${encodeURIComponent(room)}`);
-  const generation = ++viewGeneration, mode = state.mode;
-  let connection = null, latestPeers = null;
-  const currentConnection = () => connection ? state.net === connection : generation === viewGeneration && state.mode === mode && isScreen('scr-lobby');
   try {
-    connection = await connect(mode, room, {
-      onPeers: (p) => {
-        if (!currentConnection()) return;
-        latestPeers = p;
-        if (connection) onPeers(p);
-      },
+    state.net = await connect(state.mode, room, {
+      onPeers: (p) => onPeers(p),
       onCast: (e) => {
-        if (!currentConnection()) return;
         const f = state.battle?.fighters.find((x) => x.netId === e.id && x.remoteAuth);
         if (f) {
           state.battle.cast(f, e.slot, e);
         }
       },
-      onHit: (e) => { if (currentConnection()) state.battle?.receiveNetHit(e); },
+      onHit: (e) => state.battle?.receiveNetHit(e),
       onBoss: (e) => {
-        if (!currentConnection()) return;
         const boss = state.battle?.fighters.find((x) => x.netId === 'boss' && x.remoteAuth);
         if (boss) {
           boss.netTarget.set(e.x, 0, e.z);
@@ -2760,25 +2466,13 @@ $('#btn-join').addEventListener('click', async () => {
         }
       }
     });
-    if (generation !== viewGeneration || state.mode !== mode || !isScreen('scr-lobby')) { connection.leave(); return; }
-    state.net = connection;
-    const online = state.online = { name, started: false, starting: false, connecting: true, peers: latestPeers || {} };
+    state.online = { name, started: false };
     $('#lobby-status').textContent = `焚き火を起こしました（合言葉: ${room}）。相手を待っています…`;
     if (apiEnabled()) await refreshProfile(state.myKey).catch(() => {});
-    if (state.net !== connection || state.online !== online || generation !== viewGeneration || state.mode !== mode) { connection.leave(); return; }
-    if (apiEnabled() && restrictedKey(state.myKey) && !profileToken(state.myKey)) throw new Error('profile_unavailable');
-    connection.publish({ name, pid: save.pid, prof: profileToken(state.myKey), fk: state.myKey, mode, x: 0, z: 0, ry: 0, hp: 1, mv: false, ready: true });
-    online.connecting = false;
-    onPeers(online.peers);
+    state.net.publish({ name, pid: save.pid, prof: profState.key === state.myKey ? profState.tok : '', fk: state.myKey, mode: state.mode, x: 0, z: 0, ry: 0, hp: 1, mv: false, ready: true });
   } catch (err) {
     console.error(err);
-    if (generation !== viewGeneration || state.mode !== mode) { connection?.leave(); return; }
-    if (state.net === connection) state.net = null;
-    state.online = null;
-    connection?.leave();
-    $('#lobby-status').textContent = err?.message === 'profile_unavailable'
-      ? 'この戦士の使用権を確認できませんでした。旅支度で記録の同期と認証を確認し、もう一度参加してください。'
-      : 'つながりませんでした。少し置いてから、もう一度。';
+    $('#lobby-status').textContent = 'つながりませんでした。少し置いてから、もう一度。';
     $('#btn-join').disabled = false;
   }
 });
@@ -2788,10 +2482,8 @@ function onPeers(peers) {
   if (!state.online) {
     return;
   }
-  state.online.peers = peers;
-  if (state.online.connecting) return;
   const peer = Object.values(peers).find((p) => p.mode === state.mode && p.ready);
-  if (!state.online.started && !state.online.starting && peer) {
+  if (!state.online.started && peer) {
     startOnline(peer);
     return;
   }
@@ -2808,7 +2500,6 @@ function onPeers(peers) {
     }
     return;
   }
-  if (!remote) return;
   remote.netTarget.set(p.x, 0, p.z);
   remote.netFacing = p.ry;
   remote.netMoving = p.mv;
@@ -2817,42 +2508,29 @@ function onPeers(peers) {
 }
 
 async function startOnline(peer) {
-  const online = state.online, connection = state.net, mode = state.mode;
-  if (!online || !connection || online.started || online.starting) return;
-  const generation = ++viewGeneration;
-  online.starting = true;
-  const current = () => state.online === online && state.net === connection && state.mode === mode && generation === viewGeneration;
-  try {
-    const ready = await loadModels();
-    if (!current()) return;
-    if (!ready) throw new Error('models_unavailable');
-    await verifyPeer(peer); // サーバー運用時は相手の使用権を確認してから生成
-    if (!current() || !online.peers[peer.id]?.ready) return;
-    const myId = connection.myId, host = myId < peer.id;
-    const peerKey = peerKeyOf(peer.id, peer.fk);
-    const roomSeed = [...($('#lobby-room').value || 'a')].reduce((s, c) => s + c.charCodeAt(0), 0);
-    setStage(mode === 'online-coop' ? stageById('heaven') : STAGES[roomSeed % STAGES.length]);
-    online.started = true;
-    online.peerId = peer.id;
-    const b = makeBattle(connection);
-    const vs = mode === 'online-vs';
-    const mePos = host ? [-4, 3] : vs ? [4, -3] : [-6, -1];
-    const peerPos = host ? (vs ? [4, -3] : [-6, -1]) : [-4, 3];
-    b.add(state.myKey, { team: 0, player: true, awk: save.awk, netId: myId, pos: mePos, name: online.name, upg: upgFor(state.myKey), gear: gearFor(state.myKey) });
-    b.add(peerKey, { team: vs ? 1 : 0, remote: true, netId: peer.id, pos: peerPos, name: peer.name, hpMul: 1.15, ...peerOpts(peer.id, peerKey) });
-    if (!vs) b.add('seraphel', { team: 1, cpu: 0.9, remote: !host, netId: 'boss', pos: [5, -5], facing: Math.PI, hpMul: 2.2, name: '裁定者セラフェル' });
-    beginBattle(!vs || b.fighters.some((f) => f.key === 'seraphel'));
-  } catch (error) {
-    if (state.online === online && state.net === connection) {
-      endBattle();
-      connection.leave();
-      state.net = null;
-      state.online = null;
-      $('#lobby-status').textContent = '対戦を準備できませんでした。読み込みと接続を確認して、もう一度参加してください。';
-      $('#btn-join').disabled = false;
-      show('scr-lobby');
-    }
-  } finally { online.starting = false; }
+  await loadPromise;
+  if (!state.online) {
+    return;
+  }
+  state.online.started = true;
+  state.online.peerId = peer.id;
+  const myId = state.net.myId;
+  const host = myId < peer.id;
+  await verifyPeer(peer); // サーバー運用時は相手の使用権を確認してから生成
+  if (!state.online) return;
+  const peerKey = peerKeyOf(peer.id, peer.fk);
+  const roomSeed = [...($('#lobby-room').value || 'a')].reduce((s, c) => s + c.charCodeAt(0), 0);
+  setStage(state.mode === 'online-coop' ? stageById('heaven') : STAGES[roomSeed % STAGES.length]);
+  const b = makeBattle(state.net);
+  const vs = state.mode === 'online-vs';
+  const mePos = host ? [-4, 3] : vs ? [4, -3] : [-6, -1];
+  const peerPos = host ? (vs ? [4, -3] : [-6, -1]) : [-4, 3];
+  b.add(state.myKey, { team: 0, player: true, awk: save.awk, netId: myId, pos: mePos, name: state.online.name, upg: upgFor(state.myKey), gear: gearFor(state.myKey) });
+  b.add(peerKey, { team: vs ? 1 : 0, remote: true, netId: peer.id, pos: peerPos, name: peer.name, hpMul: 1.15, ...peerOpts(peer.id, peerKey) });
+  if (!vs) {
+    b.add('seraphel', { team: 1, cpu: 0.9, remote: !host, netId: 'boss', pos: [5, -5], facing: Math.PI, hpMul: 2.2, name: '裁定者セラフェル' });
+  }
+  beginBattle(!vs || b.fighters.some((f) => f.key === 'seraphel'));
 }
 
 let netTimer = 0;
@@ -2867,7 +2545,7 @@ function netTick(dt) {
   }
   netTimer = 0;
   const me = b.fighters.find((f) => f.isPlayer);
-  state.net.publish({ name: state.online.name, pid: save.pid, prof: profileToken(state.myKey), fk: state.myKey, mode: state.mode, x: me.pos.x, z: me.pos.z, ry: me.facing, hp: me.hp, mv: !!me.moving, ready: true });
+  state.net.publish({ name: state.online.name, pid: save.pid, prof: profState.key === state.myKey ? profState.tok : '', fk: state.myKey, mode: state.mode, x: me.pos.x, z: me.pos.z, ry: me.facing, hp: me.hp, mv: !!me.moving, ready: true });
   const boss = b.fighters.find((f) => f.netId === 'boss' && !f.remoteAuth);
   if (boss) {
     state.net.boss({ x: boss.pos.x, z: boss.pos.z, ry: boss.facing, hp: boss.hp, mv: !!boss.moving });
@@ -2955,7 +2633,6 @@ function syncWorldRemotes(peers) {
 
 async function onInvaded(e) {
   const w = state.world;
-  const b = state.battle;
   if (!w || e.to !== w.myId) return;
   // サーバー設定時：サーバー署名の乱入許可証（宛先・送り主・60秒の期限）がなければ拒否
   let tr = null;
@@ -2964,7 +2641,8 @@ async function onInvaded(e) {
     if (!t || t.to !== w.myId || t.from !== e.from) return;
     tr = t.r;
   }
-  if (state.world !== w || state.battle !== b || state.mode !== 'story' || !b || b.ended || state.invaded || !allowInvade() || document.querySelector('.screen.on')) {
+  const b = state.battle;
+  if (state.mode !== 'story' || !b || b.ended || state.invaded || !allowInvade() || document.querySelector('.screen.on')) {
     return;
   }
   state.invaded = true;
@@ -3027,8 +2705,7 @@ async function startInvade(p) {
   if (!w || !operatorUnlocked()) {
     return;
   }
-  const generation = ++viewGeneration;
-  if (!await loadModels() || generation !== viewGeneration || state.world !== w || !isScreen('scr-invade') || !operatorUnlocked()) return;
+  await loadPromise;
   // サーバー設定時：乱入の許可をサーバーで判定し、署名付き許可証を相手に渡す
   let tk = '';
   if (apiEnabled()) {
@@ -3039,7 +2716,6 @@ async function startInvade(p) {
     }
     tk = r.ticket;
   }
-  if (generation !== viewGeneration || state.world !== w || !isScreen('scr-invade') || !operatorUnlocked()) return;
   state.mode = 'invade';
   w.invade({ to: p.id, from: w.myId, name: '運営', tk });
   setStage(stageById(STORY[p.ch]?.stage));
@@ -3068,7 +2744,7 @@ function worldTick(dt) {
   const me = b?.fighters.find((f) => f.isPlayer);
   const gk = state.myKey || '';
   if (gk) refreshProfile(gk);
-  const base = { name: myName(), pid: save.pid, mode: 'world', ready: false, gw: save.equip[gk] || '', ga: save.armor[gk] || '', prof: profileToken(gk) };
+  const base = { name: myName(), pid: save.pid, mode: 'world', ready: false, gw: save.equip[gk] || '', ga: save.armor[gk] || '', prof: profState.key === gk ? profState.tok : '' };
   if (state.mode === 'story' && state.field && !b) {
     const fp = state.field.player;
     w.publish({ ...base, role: 'field', fk: state.myKey, ch: state.chapter, ib: false, x: 0, z: 0, fx: fp.pos.x, fz: fp.pos.z, ry: fp.facing, hp: 1, mv: fp.cur === 'run' });
@@ -3296,13 +2972,10 @@ function togglePause() {
     return;
   }
   state.paused = !state.paused;
-  resetGameplayInput();
   $('#pause').hidden = !state.paused;
   $('#pause-note').textContent = state.online ? '遠い相手の時間は止まりません。' : '';
   if (state.paused && !isTouch) {
     $('#btn-resume').focus();
-  } else if (!state.paused && !isTouch) {
-    $('#btn-pause').focus({ preventScroll: true });
   }
 }
 $('#btn-pause').addEventListener('click', togglePause);
@@ -3331,14 +3004,12 @@ function refreshOptions() {
   const sc = syncCodeNow();
   if (sc.length === 12 && !$('#sync-code').value) $('#sync-code').value = sc.match(/.{4}/g).join('-');
   if (sc.length === 12 && !$('#sync-msg').textContent) $('#sync-msg').textContent = `この端末の同期コード：${sc.match(/.{4}/g).join('-')}（自動で同期中）`;
-  $('#opt-mute').textContent = audio.muted ? 'サウンド：オフ' : 'サウンド：オン';
-  $('#opt-mute').setAttribute('aria-pressed', String(!audio.muted));
+  $('#opt-mute').textContent = audio.muted ? '音：黙らせる' : '音：鳴らす';
   $('#opt-diff').textContent = `CPUの強さ：${DIFFS[save.diff].n}`;
   $('#op-state').textContent = chiefUnlocked()
     ? '運営長として認められています — ルミナリアとセラフェルが選べます'
     : operatorUnlocked() ? '運営として認められています — セラフェルが選べます' : '運営の鍵・運営長の鍵・招待された運営キー（OP-…）を入力';
   $('#chief-panel').hidden = !chiefUnlocked();
-  mailbox?.refreshAccess();
 }
 // 推測されにくいランダムコード（紛らわしい文字を除外）
 function randomCode(groups) {
@@ -3373,9 +3044,9 @@ $('#sync-push').addEventListener('click', async () => {
   if (normSync(code).length !== 12) code = randomCode(3);
   m.textContent = '預けています…';
   try {
-    if (localStorage.getItem('arkeia-sync') !== code) { localStorage.setItem('arkeia-sync-ver', '0'); syncVersionLocal = 0; syncBaseLocal = NaN; }
+    if (localStorage.getItem('arkeia-sync') !== code) localStorage.setItem('arkeia-sync-ver', '0');
     localStorage.setItem('arkeia-sync', code);
-    markSyncDirty();
+    localStorage.setItem('arkeia-sync-dirty', '1');
     while (autoBusy || syncSpendBusy || syncImportBusy) await new Promise((r) => setTimeout(r, 100));
     syncErr = '';
     await autoPush(); // 版番号・競合解決つきで送る
@@ -3388,7 +3059,7 @@ $('#sync-push').addEventListener('click', async () => {
       m.textContent = '前回預けてから灯晶や強化が短時間に増えすぎたため、サーバーが記録を受け付けませんでした。少し時間をおいてから、もう一度「預ける」を押してください。';
       return;
     }
-    if (hasSyncChanges()) throw new Error('push');
+    if (localStorage.getItem('arkeia-sync-dirty')) throw new Error('push');
     m.textContent = `預けました。別の端末で同期コード「${code}」を入力してください（他人には教えないでください）。`;
   } catch {
     m.textContent = '預けられませんでした（通信を確認してください）。';
@@ -3464,11 +3135,10 @@ $('#opt-diff').addEventListener('click', () => {
 // サーバー設定時：購入キャラはサーバー署名の購入記録とだけ一致させる（端末内の改変は消える）
 async function syncEntitlements() {
   if (!apiEnabled()) return null;
-  const buyer = save.buyId, pid = save.pid;
   try {
-    const r = await api('/entitlements', { buyer });
+    const r = await api('/entitlements', { buyer: save.buyId });
     const d = r.ok ? await verifyToken(r.token, 'ent') : null;
-    if (!d || !Array.isArray(d.keys) || save.buyId !== buyer || save.pid !== pid) return null;
+    if (!d || !Array.isArray(d.keys)) return null;
     save.chars = d.keys.filter((k) => FIGHTERS[k]?.shop);
     persist(false); // 購入記録はサーバー管理。起動時の確認だけで古いセーブを再送しない。
     return save.chars;
@@ -3520,7 +3190,6 @@ function onChiefEvent(n) {
   if (isScreen('scr-title')) refreshTitle();
 }
 function openEventMaker() {
-  if (!chiefUnlocked()) return;
   const own = readJSON('arkeia-cevent-own');
   const base = sanitizeEvent(own?.ev, FIGHTERS) || { name: '', desc: '', foes: [['boss', 1]], hp: 1, atk: 1, scale: 1, ally: 0, first: 1000, reward: 200, stage: 0, at: Date.now(), ends: Date.now() + 7 * 86400000 };
   const ov = document.createElement('div');
@@ -3540,14 +3209,11 @@ function openEventMaker() {
   const addFoe = (k = 'mob', n = 1) => {
     if (foeBox.children.length >= 4) return;
     const r = document.createElement('div');
-    r.style.cssText = 'display:grid;grid-template-columns:minmax(0,1fr) 70px 44px;gap:4px';
+    r.style.cssText = 'display:grid;grid-template-columns:1fr 70px 34px;gap:4px';
     const s = document.createElement('select'); s.style.cssText = inp;
-    s.setAttribute('aria-label', '出現する敵の種類');
     for (const [v, t] of foeOpts) s.append(mk('option', { value: v, textContent: t, selected: v === k }));
     const c = num(n, 1, 8, 1);
-    c.setAttribute('aria-label', '敵の数');
     const x = mk('button', { type: 'button', textContent: '✕', className: 'btn mini' });
-    x.setAttribute('aria-label', 'この敵の組を削除');
     x.onclick = () => r.remove();
     r.append(s, c, x);
     foeBox.append(r);
@@ -3572,32 +3238,6 @@ function openEventMaker() {
   btns.append(pub, stop, close);
   const h = mk('h3', { textContent: '運営長専用　イベント作成' }); h.style.margin = '0';
   box.append(h, row('イベント名', fName), row('説明', fDesc), mk('b', { textContent: '出現する敵' }), foeBox, addB, grid2, btns, msg);
-  let publishing = false;
-  const commitEvent = async (ev) => {
-    if (publishing) return;
-    if (!chiefUnlocked()) { msg.textContent = '運営長の認証が必要です。旅支度から再認証してください。'; return; }
-    const record = { ev, at: Date.now() }, pid = save.pid;
-    publishing = true;
-    pub.disabled = stop.disabled = true;
-    msg.textContent = ev ? '公開を確認しています…' : '公開の終了を確認しています…';
-    try {
-      const result = await social?.sendEvent(record);
-      if (!result?.ok) throw new Error('publish');
-      if (save.pid !== pid) return;
-      setEventRec('arkeia-cevent-own', record);
-      social.refresh();
-      if (ev) social.news(`運営長の特別イベント「${ev.name}」が始まった！`);
-      msg.textContent = ev ? '公開しました。オンラインの全員に配信されます。' : '公開を終了しました。通常の週替わりイベントに戻ります。';
-      refreshTitle();
-    } catch (error) {
-      msg.textContent = error?.code === 'event_conflict'
-        ? '別の端末で新しいイベントが更新されています。一度閉じて、最新の内容を確認してください。'
-        : '変更を保存できませんでした。接続と運営長の認証を確認して、もう一度お試しください。';
-    } finally {
-      publishing = false;
-      pub.disabled = stop.disabled = false;
-    }
-  };
   box.addEventListener('submit', (e) => {
     e.preventDefault();
     const at = Date.now();
@@ -3608,14 +3248,21 @@ function openEventMaker() {
       stage: +fStage.value, at, ends: at + Math.round(+fDays.value || 7) * 86400000
     }, FIGHTERS);
     if (!ev) { msg.textContent = '内容を確認してください（名前必須・敵は合計10体まで）。'; return; }
-    commitEvent(ev);
+    setEventRec('arkeia-cevent-own', { ev, at });
+    social?.sendEvent();
+    social?.news(`運営長の特別イベント「${ev.name}」が始まった！`);
+    msg.textContent = '公開しました。オンラインの全員に配信され、30秒ごとに再配信されます。';
+    refreshTitle();
   });
-  stop.onclick = () => commitEvent(null);
-  let closeDialog = () => ov.remove();
-  close.onclick = () => closeDialog();
+  stop.onclick = () => {
+    setEventRec('arkeia-cevent-own', { ev: null, at: Date.now() });
+    social?.sendEvent();
+    msg.textContent = '公開を終了しました。通常の週替わりイベントに戻ります。';
+    refreshTitle();
+  };
+  close.onclick = () => ov.remove();
   ov.append(box);
   document.body.append(ov);
-  closeDialog = activateUiDialog(ov, box, '運営長専用 イベント作成', () => close.click());
 }
 $('#btn-evmaker')?.addEventListener('click', () => { sfx('ui'); openEventMaker(); });
 // ---- 交流（お知らせテロップ・チャット・ギルド） ----
@@ -3626,7 +3273,6 @@ var social = initSocial({
   isChief: () => chiefUnlocked(),
   isOperator: () => operatorUnlocked(),
   roleToken: () => roleState.tok,
-  openMailbox: (kind, pid) => mailbox?.open(kind, pid),
   // サーバーでの本人確認に使う同期コード
   syncCode: () => syncCodeNow(),
   // サーバー側で灯晶を消費した（寄付など）：手元にも反映し、同期の基準値を合わせる
@@ -3653,23 +3299,6 @@ var social = initSocial({
       save.guild ? `所属ギルド「${save.guild.name}」` : 'ギルドを結成して仲間と語り合おう（チャット › ギルド）'
     ];
   }
-});
-var mailbox = initMailbox({
-  save, sfx,
-  isChief: chiefUnlocked,
-  roleToken: () => roleState.tok,
-  syncCode: syncCodeNow,
-  inBattle: () => !!state.battle,
-  pendingClaims: pendingMailClaims,
-  claim: claimMailboxGift,
-  openSync: () => { refreshOptions(); show('scr-options'); $('#sync-push').focus(); },
-  onOpen: () => {
-    keys.clear();
-    for (const k in edges) edges[k] = false;
-    touchState.mx = touchState.mz = 0;
-    touchState.guard = touchState.skill = touchState.skill2 = mouseSkillHeld = false;
-  },
-  onClose: () => { keys.clear(); for (const k in edges) edges[k] = false; }
 });
 function renderShop() {
   const list = $('#shop-list');
@@ -3855,7 +3484,8 @@ $('#op-form').addEventListener('submit', async (e) => {
       const d = r.ok ? await verifyToken(r.token, 'role') : null;
       if (d) {
         localStorage.setItem('arkeia-role', r.token);
-        acceptRole(r.token, d);
+        roleState.r = d.r;
+        roleState.tok = r.token;
         ok(d.r === 'chief' ? '運営長として認められた。白耀の天后ルミナリアが目を覚ます。' : isInvite ? '招待が受理された。あなたは運営として登録された（このキーはもう使えない）。' : 'かちり、と音がした。裁定者セラフェルが目を覚ます。');
       } else {
         msg.textContent = r.status === 429 ? '鍵穴が熱を持っています。少し待ってから。' : '鍵は回らなかった。';
@@ -3890,7 +3520,6 @@ $('#op-form').addEventListener('submit', async (e) => {
 });
 
 refreshRole();
-window.addEventListener('storage', (event) => { if (event.key === 'arkeia-role') refreshRole(); });
 
 // ---------- Gamepad (Standard mapping: Xbox / PlayStation / Switch Pro / 汎用) ----------
 const pad = { prev: [], navT: 0 };
@@ -3915,7 +3544,6 @@ function pollPad(dt) {
   padState.skill = padState.skill2 = false;
   const g = activePad();
   if (!g) {
-    pad.prev = [];
     return;
   }
   const btn = (i) => !!(g.buttons[i] && (g.buttons[i].pressed || g.buttons[i].value > 0.5));
@@ -3927,18 +3555,11 @@ function pollPad(dt) {
   if (btn(12)) mz = -1;
   if (btn(13)) mz = 1;
   const anyDown = g.buttons.some((_, i) => down(i));
-  const mailDialog = mailbox?.isOpen() ? $('#mailbox-dialog') : null;
-  const uiDialog = [...document.querySelectorAll('.ui-overlay .ui-dialog')].at(-1);
-  if (document.hidden || (!mailDialog && !uiDialog && (social?.isOpen() || document.activeElement?.matches?.('input, textarea, select')) && inBattleView())) {
-    if (!document.hidden && (down(1) || down(8))) goBackCurrent();
-    pad.prev = g.buttons.map((b) => b.pressed || b.value > 0.5);
-    return;
-  }
-  if (!mailDialog && !uiDialog && isScreen('scr-press')) {
+  if (isScreen('scr-press')) {
     if (anyDown) {
       enterTitle();
     }
-  } else if (!mailDialog && !uiDialog && inBattleView() && !state.paused) {
+  } else if (inBattleView() && !state.paused) {
     padState.mx = mx;
     padState.mz = mz;
     padState.guard = btn(4) || btn(6) || btn(7);
@@ -3952,8 +3573,8 @@ function pollPad(dt) {
     if (down(12) || down(10)) edges.heal = true;
     if (down(9)) togglePause();
   } else {
-    const root = mailDialog || uiDialog || (state.paused ? $('#pause') : document.querySelector('.screen.on'));
-    const items = root ? [...root.querySelectorAll('button:not([disabled]), input, select, textarea, summary, #story-box')].filter((b) => b.offsetParent !== null) : [];
+    const root = state.paused ? $('#pause') : document.querySelector('.screen.on');
+    const items = root ? [...root.querySelectorAll('button:not([disabled]), input, #story-box')].filter((b) => b.offsetParent !== null) : [];
     pad.navT -= dt;
     if (items.length && pad.navT <= 0 && (Math.abs(mx) > 0.5 || Math.abs(mz) > 0.5)) {
       pad.navT = 0.18;
@@ -3984,7 +3605,6 @@ function pollPad(dt) {
 }
 
 // ---------- Loop ----------
-installUiShell();
 setupTouch();
 const timer = new THREE.Timer();
 var adaptQ = null;
@@ -4009,7 +3629,7 @@ renderer.setAnimationLoop((time) => {
   }
   pollPad(dt);
   crystals.forEach((c, i) => {
-    c.position.y = c.userData.floatY + Math.sin(t * 1.5 + i) * 0.16;
+    c.position.y += Math.sin(t * 1.5 + i) * 0.004;
     c.rotation.y += dt;
   });
   worldTick(dt);
@@ -4029,3 +3649,4 @@ renderer.setAnimationLoop((time) => {
 });
 
 show('scr-press');
+window.__arkeiaBootReady = true;

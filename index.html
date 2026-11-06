@@ -58,6 +58,7 @@
       ]}
     </script>
     <link rel="stylesheet" href="./rosebud-game-defaults.css" />
+    <link rel="stylesheet" href="./atelier-ui.css?v=20261106a" />
     <script src="./rosebud-game-defaults.js" defer></script>
     <script type="importmap">
       {
@@ -492,18 +493,22 @@
     <main id="ui">
       <section id="scr-press" class="screen on" aria-label="はじまり">
         <div class="inner">
-          <h1>双月のアルケイア<span>ARKEIA · A RONDO UNDER TWIN MOONS</span></h1>
+          <div class="atelier-overline">KASAI SOLUTIONS　／　FANTASY ACTION RPG</div>
+          <div class="atelier-sigil" aria-hidden="true"><i></i><i></i><span>双</span></div>
+          <h1>双月のアルケイア<span>ARKEIA — THE TWIN MOONS CHRONICLE</span></h1>
           <p class="tagline">光は一つ、空は二つ。どちらを灯すか、剣で決めよう。</p>
-          <p class="press-hint" id="press-hint">— なにかキーを押して、扉をひらく —</p>
-          <span id="loading">戦士たちを呼び寄せています…</span>
+          <button class="press-hint atelier-start" id="press-hint" type="button">旅をはじめる <span aria-hidden="true">↗</span></button>
+          <div class="atelier-meta" aria-label="ゲームの特徴"><span>物語</span><span>戦闘</span><span>協力</span><span>探索</span></div>
+          <div class="atelier-loading" id="loading" role="status" aria-live="polite">ゲームの準備をしています…</div>
+          <div id="boot-recovery" class="boot-recovery" hidden><strong>起動を確認できませんでした</strong><p id="boot-detail">通信状態を確認して再読み込みしてください。</p><button id="boot-retry" type="button">再読み込みして確認</button></div>
         </div>
       </section>
 
       <section id="scr-title" class="screen" aria-label="旅の分かれ道">
         <div class="inner">
           <div class="topbar"><button class="back" data-to="press">扉の前へ</button><span class="shards" id="title-shards"></span></div>
-          <h1 style="font-size:clamp(24px,5vmin,48px)">双月のアルケイア</h1>
-          <nav class="menu wide">
+          <div class="atelier-overline">双月年代記　／　冒険の目次</div><h1 class="atelier-title-heading" style="font-size:clamp(24px,5vmin,48px)">双月のアルケイア</h1>
+          <div class="atelier-section-line"><span>冒険の扉</span><span>選ぶ物語が、次の一頁になる。</span></div><nav class="menu wide">
             <button data-go="story">灯脈の旅路<small id="story-sub">全八章の物語。灯をめぐる出会いと剣戟</small></button>
             <button data-go="event" id="btn-event">週替わりイベント<small id="event-sub">今週のボーナスステージ</small></button>
             <button data-go="cpu">ひとりで手合わせ<small>好きな相手を選んで一対一</small></button>
@@ -675,7 +680,8 @@
         </div>
       </div>
     </main>
-    <script type="module" src="main.js"></script>
+    <script src="./boot-guard.js?v=20261106a" defer></script>
+    <script type="module" src="./main.js?v=20261106a"></script>
 <script>
     (() => {
         const splashRoot = document.getElementById('arkeia-splash');
