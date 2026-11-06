@@ -1,9 +1,8 @@
 // 交流機能：画面上部のお知らせテロップ・世界／ギルド／フレンド／運営会議チャット・ギルド
 // サーバー（config.js の API_BASE）設定時：ギルドの存在・役職・除名・寄付・チャンネル参加資格・運営長の署名はすべてサーバーで検証。
 // 未設定時：端末内判定の簡易モード（改ざん耐性なし。寄付は不正防止のため停止）。
-import { connectSocial, saveChiefEvent, loadChiefEvent, guildDonors, guildBoard, joinChannel } from './net.js?v=20261106-complete-review1';
-import { apiEnabled, api, verifyToken } from './api.js?v=20261106-complete-review1';
-import { activateUiDialog } from './ui-overhaul.js?v=20261106-complete-review1';
+import { connectSocial, saveChiefEvent, loadChiefEvent, guildDonors, guildBoard, joinChannel } from './net.js?v=gaien-bgm-20261107b';
+import { apiEnabled, api, verifyToken } from './api.js';
 
 const serverMode = () => apiEnabled();
 
@@ -12,6 +11,7 @@ const serverMode = () => apiEnabled();
 let dlgSeq = 0;
 function uiConfirm(text, okLabel = 'はい', danger = false, extra = {}) {
   return new Promise((resolve) => {
+    const prev = document.activeElement;
     const n = ++dlgSeq;
     const ov = document.createElement('div');
     ov.style.cssText = 'position:fixed;inset:0;z-index:99999;background:rgba(5,6,14,.72);display:flex;align-items:center;justify-content:center;padding:16px;pointer-events:auto';
@@ -19,7 +19,7 @@ function uiConfirm(text, okLabel = 'はい', danger = false, extra = {}) {
     box.setAttribute('role', 'alertdialog');
     box.setAttribute('aria-modal', 'true');
     box.setAttribute('aria-labelledby', `uic-t${n}`);
-    box.style.cssText = 'max-width:380px;width:100%;max-height:calc(100dvh - 32px);overflow:auto;background:linear-gradient(#1b1830,#100e1e);border:1px solid rgba(214,180,106,.7);border-radius:12px;padding:18px;color:#f3ead2;font-size:15px;line-height:1.6;box-shadow:0 10px 40px rgba(0,0,0,.6);text-align:center';
+    box.style.cssText = 'max-width:380px;width:100%;background:linear-gradient(#1b1830,#100e1e);border:1px solid rgba(214,180,106,.7);border-radius:12px;padding:18px;color:#f3ead2;font-size:15px;line-height:1.6;box-shadow:0 10px 40px rgba(0,0,0,.6);text-align:center';
     const p = document.createElement('div');
     p.id = `uic-t${n}`;
     p.textContent = text;
@@ -62,36 +62,42 @@ function uiConfirm(text, okLabel = 'はい', danger = false, extra = {}) {
       return b;
     };
     const no = mk('キャンセル', '#2a2740');
-    no.classList.add('ui-dialog-cancel');
     const ok = mk(okLabel, danger ? '#8a2330' : '#7a5a1e');
     const result = (yes) => (field ? (yes ? field.value : null) : yes);
     let closed = false;
-    let closeDialog;
     const done = (v) => {
       if (closed) return;
       closed = true;
-      closeDialog();
+      ov.remove();
+      window.removeEventListener('keydown', key, true);
+      if (prev && prev.isConnected && typeof prev.focus === 'function') prev.focus();
       resolve(v);
     };
     const key = (e) => {
-      if (e.isComposing || e.keyCode === 229) return;
-      if (e.key === 'Enter' && field && e.target === field && field.tagName === 'INPUT') {
+      e.stopPropagation(); // ゲームの操作に流さない（ボタン・入力の既定動作はそのまま）
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        done(result(false));
+      } else if (e.key === 'Enter' && field && e.target === field && field.tagName === 'INPUT') {
         // 入力欄でのEnterだけ承認。ボタン上のEnterは、そのボタン自身の動作になる
         e.preventDefault();
         done(result(true));
+      } else if (e.key === 'Tab') {
+        // フォーカスをダイアログ内に閉じ込める
+        const f = [field, no, ok].filter(Boolean);
+        const i = f.indexOf(document.activeElement);
+        e.preventDefault();
+        f[(i + (e.shiftKey ? f.length - 1 : 1) + f.length) % f.length].focus();
       }
     };
     no.addEventListener('click', () => done(result(false)));
     ok.addEventListener('click', () => done(result(true)));
     ov.addEventListener('click', (e) => { if (e.target === ov) done(result(false)); });
+    window.addEventListener('keydown', key, true);
     row.append(no, ok);
     box.append(row);
     ov.append(box);
     document.body.append(ov);
-    closeDialog = activateUiDialog(ov, box, '確認', () => done(result(false)));
-    box.setAttribute('role', 'alertdialog');
-    box.removeAttribute('aria-label'); // 本文を aria-labelledby から読み上げる。
-    ov.addEventListener('keydown', key);
     // 初期フォーカスは入力欄、なければ常に「キャンセル」
     (field || no).focus();
   });
@@ -455,31 +461,23 @@ export function initSocial(opts) {
       pushNews(t);
       if (broadcast) S.net?.news(clean(t, 80));
     },
-    sendEvent: async (record = S.opts.ownEvent?.()) => {
-      if (!S.opts.isChief?.()) throw err('denied');
-      if (!record || !Number.isFinite(record.at) || record.at <= 0 || !(record.ev === null || (record.ev && typeof record.ev === 'object'))) throw err('bad');
-      const body = JSON.stringify(record.ev);
-      if (serverMode()) {
-        let result;
-        try { result = await api('/chief/event', { token: S.opts.roleToken?.() || '', body, at: record.at }); }
-        catch { throw err('net'); }
-        if (!result.ok) throw err(result.error || 'server');
-      } else if (!(await saveChiefEvent(body, '', record.at))) throw err('event_conflict');
-      // The caller commits this record locally only after this acknowledgement.
-      // Broadcasting before that point could announce an event rejected by the server.
-      return { ok: true };
-    },
-    refresh: () => {
-      publish();
+    sendEvent: async () => {
+      const own = S.opts.ownEvent?.();
+      if (own && S.opts.isChief?.()) {
+        const body = JSON.stringify(own.ev);
+        try {
+          if (serverMode()) await api('/chief/event', { token: S.opts.roleToken?.() || '', body, at: own.at });
+          else await saveChiefEvent(body, '', own.at);
+        } catch (e) {
+          console.warn(e);
+        }
+      }
       broadcastChief();
       rebuildTicker();
     },
-    isOpen: () => !S.panel.hidden,
-    close: () => {
-      if (!S.panel.hidden) {
-        S.chatButton.click();
-        S.chatButton.focus({ preventScroll: true });
-      }
+    refresh: () => {
+      publish();
+      rebuildTicker();
     }
   };
   startConnect();
@@ -516,7 +514,7 @@ function startConnect() {
       if (!(await verifyPub('news', n))) return;
       list = list.slice(0, 10).map((x) => clean(x, 80)).filter(Boolean);
       S.chiefNews = { list, at: n.at, body: n.body };
-      try { localStorage.setItem('arkeia-chief-news', JSON.stringify(S.chiefNews)); } catch { /* Optional cache only. */ }
+      localStorage.setItem('arkeia-chief-news', JSON.stringify(S.chiefNews));
       rebuildTicker();
     },
     onChiefEvent: (n) => {
@@ -565,7 +563,7 @@ async function broadcastChief() {
   // 内容が変わった時だけ日時を更新（同じ内容の再配信は受信側で無視される）
   if (!S.chiefNews || S.chiefNews.body !== body) {
     S.chiefNews = { list, at: Date.now(), body };
-    try { localStorage.setItem('arkeia-chief-news', JSON.stringify(S.chiefNews)); } catch { /* Optional cache only. */ }
+    localStorage.setItem('arkeia-chief-news', JSON.stringify(S.chiefNews));
   }
   try {
     S.net.chiefNews(body, await pubSig('news', body, S.chiefNews.at), S.chiefNews.at);
@@ -872,11 +870,8 @@ function buildTicker() {
   S.track = track;
   S.x = window.innerWidth;
   rebuildTicker();
-  const motion = window.matchMedia('(prefers-reduced-motion: reduce)');
-  let frame = 0;
   let last = performance.now();
   const loop = (now) => {
-    if (motion.matches) return;
     const dt = Math.min(0.1, (now - last) / 1000);
     last = now;
     S.x -= dt * 80;
@@ -886,18 +881,9 @@ function buildTicker() {
       rebuildTicker();
     }
     S.track.style.transform = `translateX(${S.x}px)`;
-    frame = requestAnimationFrame(loop);
+    requestAnimationFrame(loop);
   };
-  const updateMotion = () => {
-    cancelAnimationFrame(frame);
-    S.x = motion.matches ? 0 : window.innerWidth;
-    S.track.style.transform = `translateX(${S.x}px)`;
-    S.track.style.willChange = motion.matches ? 'auto' : 'transform';
-    last = performance.now();
-    if (!motion.matches) frame = requestAnimationFrame(loop);
-  };
-  motion.addEventListener?.('change', updateMotion);
-  updateMotion();
+  requestAnimationFrame(loop);
 }
 function rebuildTicker() {
   if (!S?.track) return;
@@ -1026,7 +1012,7 @@ function buildChat() {
   for (const ev of ['keydown', 'keyup']) panel.addEventListener(ev, (e) => e.stopPropagation());
   panel.append(tabs, head, guild, log, form);
   document.body.append(b, panel);
-  Object.assign(S, { panel, head, guildBox: guild, log, inp, form, send, chatButton: b });
+  Object.assign(S, { panel, head, guildBox: guild, log, inp, form, send });
 }
 
 function curChannel() {
@@ -1214,20 +1200,7 @@ function renderOnline() {
   rows.sort((a, b) => (b.me - a.me) || (b.st - a.st) || String(a.name).localeCompare(String(b.name), 'ja'));
   g.append(el('div', 'cp-mem', `接続中 ${rows.length} 人（運営長・運営のみ閲覧可）`));
   for (const p of rows) {
-    const row = el('div', 'row');
-    row.append(el('div', 'cp-mem', `● ${p.name}${p.me ? '（あなた）' : ''}${p.st ? '【運営】' : ''}${p.gname ? `　[${p.gname}]` : ''}${p.pid ? `　ID: ${p.pid}` : ''}`));
-    if (S.opts.isChief?.() && /^[a-z0-9]{8,24}$/.test(p.pid || '')) {
-      const gift = el('button', 'cp-b', '贈る');
-      gift.type = 'button';
-      gift.setAttribute('aria-label', `${p.name}へプレゼントを送る`);
-      gift.addEventListener('click', () => S.opts.openMailbox?.('gift', p.pid));
-      const mail = el('button', 'cp-b', 'メール');
-      mail.type = 'button';
-      mail.setAttribute('aria-label', `${p.name}へシステムメールを送る`);
-      mail.addEventListener('click', () => S.opts.openMailbox?.('system', p.pid));
-      row.append(gift, mail);
-    }
-    g.append(row);
+    g.append(el('div', 'cp-mem', `● ${p.name}${p.me ? '（あなた）' : ''}${p.st ? '【運営】' : ''}${p.gname ? `　[${p.gname}]` : ''}${p.pid ? `　#${String(p.pid).slice(0, 6)}` : ''}`));
   }
 }
 function onlineCount(filter) {

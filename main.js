@@ -1,11 +1,11 @@
 import * as THREE from 'three';
-import { loadModel } from './model-runtime.js?v=direct-texture-20261106c';
-import { Battle, ARENA_R } from './game.js?v=direct-texture-20261106c';
-import { FIGHTERS, STORY, ROSTER, UPGRADES, MAX_LV, STAGES, BGM, APEX_BGM, ENEMY_ROSTER, UPG_CAP, LB_MAX, lbMaxLv, lbMul, lbCost, WEAPONS, ARMORS, SUMMONS, STAT_LABEL, SPECIAL_KEYS, BOSS_ROSTER, currentEvent, sanitizeEvent, EV_FOE_KINDS } from './data.js';
+import { loadModel } from './model-runtime.js?v=draco-fix-v20261107';
+import { Battle, ARENA_R } from './game.js?v=gaien-bgm-20261107b';
+import { FIGHTERS, STORY, ROSTER, UPGRADES, MAX_LV, STAGES, BGM, APEX_BGM, ENEMY_ROSTER, UPG_CAP, LB_MAX, lbMaxLv, lbMul, lbCost, WEAPONS, ARMORS, SUMMONS, STAT_LABEL, SPECIAL_KEYS, BOSS_ROSTER, currentEvent, sanitizeEvent, EV_FOE_KINDS } from './data.js?v=gaien-bgm-20261107b';
 import { sayBattle, setVoiceMuted, stopVoices } from './voice.js';
-import { initSocial, uiConfirm } from './social.js';
+import { initSocial, uiConfirm } from './social.js?v=gaien-bgm-20261107b';
 import { OPERATOR_KEY_SHA256, CHIEF_KEY_SHA256, MAX_KEY_ATTEMPTS, LOCKOUT_MS, SHOP_ITEMS } from './config.js';
-import { connect, issueInvite, redeemInvite, syncPush, syncPullV } from './net.js';
+import { connect, issueInvite, redeemInvite, syncPush, syncPullV } from './net.js?v=gaien-bgm-20261107b';
 import { apiEnabled, api, verifyToken } from './api.js';
 
 const $ = (s) => document.querySelector(s);
@@ -209,12 +209,23 @@ function modelErrorDialog(failedUrls = [...modelErrors.keys()]) {
     if (stillFailed.length) modelErrorDialog(stillFailed);
     else panel.remove();
   });
-  panel.replaceChildren(caption, detail, note, retry);
+  const source = document.createElement('a');
+  source.textContent = 'モデルの公開URLを確認（別タブ）';
+  source.href = new URL(failedUrls[0], document.baseURI).href;
+  source.rel = 'noopener noreferrer';
+  source.target = '_blank';
+  source.style.cssText = 'display:inline-block;margin:8px 12px 0 0;color:#ffd28a;text-decoration:underline';
+  panel.replaceChildren(caption, detail, note, source, retry);
 }
 async function ensureAllModelsReady(requiredKeys = null) {
   // 1 vs 1 doesn't depend on all 20 fighters. Never block it on unused GLBs.
-  const requested = requiredKeys && requiredKeys.length
-    ? [...new Set(requiredKeys.map((key) => FIGHTERS[key]?.model).filter(Boolean))]
+  // 変身先も同時に準備し、通常攻撃で形態が変わった瞬間にGLBがなくなる問題を防止。
+  const requiredExpanded = requiredKeys?.flatMap((key) => {
+    const d = FIGHTERS[key];
+    return [key, d?.manualForm2, d?.manualBase].filter(Boolean);
+  });
+  const requested = requiredExpanded?.length
+    ? [...new Set(requiredExpanded.map((key) => FIGHTERS[key]?.model).filter(Boolean))]
     : modelUrls;
   if (!requested.length) return true;
   await Promise.all(requested.map((url) => byUrl[url] ? true : retrieveModel(url)));
@@ -646,10 +657,85 @@ persist(false); // 起動時の整形だけでは同期の「変更あり」に�
   if (cy) cy.textContent = String(new Date().getFullYear());
 }
 
+// 世界ルームの運営長署名つきガイエン出現フラグ（偽の出現通知はBGMに反映しない）
+let globalGaienBgm = false;
+const gaienConfirmed = new Map();
+const gaienLease = { sig: '', at: 0, pending: null };
+const GA_BGM_DOMAIN = 'arkeia-world-gaien-music-v1:';
+
+// 世界ルームのpresenceには本人の運営長トークンを流さず、
+// /chief/sign で署名された短期BGM許可証だけを載せる。
+// 既存Cloudflare Workersの署名APIを使うため、新しいDBやWorker classは不要。
+function publishGaienLease(active) {
+  if (!active || !chiefUnlocked() || !apiEnabled()) {
+    gaienLease.sig = '';
+    gaienLease.at = 0;
+    return;
+  }
+  if (gaienLease.sig && Date.now() - gaienLease.at < 22000) return;
+  if (gaienLease.pending || !roleState.tok) return;
+  const pid = save.pid;
+  const at = Date.now();
+  gaienLease.pending = (async () => {
+    const h = await sha256(`${GA_BGM_DOMAIN}${pid}:${at}`);
+    const r = await api('/chief/sign', { token: roleState.tok, kind: 'event', h, at });
+    if (!r.ok || !r.sig) return;
+    const d = await verifyToken(r.sig, 'cpub');
+    if (!d || d.k !== 'event' || d.h !== h || d.at !== at) return;
+    gaienLease.sig = r.sig;
+    gaienLease.at = at;
+  })().catch((e) => console.warn('[GAIEN WORLD MUSIC] 署名できません:', e))
+    .finally(() => { gaienLease.pending = null; });
+}
+async function validateGaienPresence(p, sig, at) {
+  try {
+    const d = await verifyToken(sig, 'cpub');
+    if (!d || d.k !== 'event' || d.at !== at || d.exp <= Date.now()) return false;
+    const expected = await sha256(`${GA_BGM_DOMAIN}${p.pid}:${at}`);
+    return d.h === expected;
+  } catch { return false; }
+}
+function refreshGlobalGaienBgm() {
+  if (!apiEnabled()) { globalGaienBgm = false; return; }
+  const peers = Object.values(state?.worldPeers || {});
+  const now = Date.now();
+  const candidates = peers.filter((p) =>
+    p && ['field', 'story', 'op'].includes(p.role) &&
+    p.gaienActive && p.gaienSig && p.gaienAt > 0 &&
+    Math.abs(now - p.gaienAt) < 55000 &&
+    /^[A-Za-z0-9]{8,24}$/.test(p.pid || '')
+  );
+  const active = candidates.some((p) => {
+    const c = gaienConfirmed.get(p.id);
+    return !!(c?.ok && c.sig === p.gaienSig && c.at === p.gaienAt);
+  });
+  if (active !== globalGaienBgm) {
+    globalGaienBgm = active;
+    syncMusicTrack();
+  }
+  // 検証済みでないプレイヤーのpresenceだけを非同期検証。
+  // 検証中の差し替えがあっても、新しい署名の結果と混ぜない。
+  for (const p of candidates.slice(0, 20)) {
+    const current = gaienConfirmed.get(p.id);
+    if (current?.sig === p.gaienSig && current.at === p.gaienAt) continue;
+    const sig = p.gaienSig, at = p.gaienAt, id = p.id;
+    gaienConfirmed.set(id, {sig, at, ok: false, pending: true});
+    validateGaienPresence(p, sig, at).then((ok) => {
+      const latest = gaienConfirmed.get(id);
+      if (!latest || latest.sig !== sig || latest.at !== at) return;
+      gaienConfirmed.set(id, {sig, at, ok});
+      refreshGlobalGaienBgm();
+    });
+  }
+  const seen = new Set(candidates.map(p=>p.id));
+  for (const id of gaienConfirmed.keys()) if (!seen.has(id)) gaienConfirmed.delete(id);
+}
+
+
 // ---------- Audio ----------
 const audio = {
   muted: localStorage.getItem('arkeia-muted') === '1',
-  tracks: {}, current: null, currentKey: null, pools: {}, ctx: null,
+  tracks: {}, current: null, currentKey: null, wanted: 'title', pools: {}, ctx: null,
   unlocked: false,
   volume: Math.max(0, Math.min(100, +(localStorage.getItem('arkeia-bgm-volume') ?? 70))) / 100,
   fadeId: 0
@@ -662,10 +748,11 @@ const MUSIC_FILES = {
   battle: 'battle-theme.mp3',
   event: 'event-theme.mp3',
   boss: 'boss-theme.mp3',
-  zarugureibu: 'zarugureibu-theme.mp3'
+  zarugureibu: 'zarugureibu-theme.mp3',
+  gaien: 'gaien-theme.mp3'
 };
 for (const [name, file] of Object.entries(MUSIC_FILES)) {
-  const a = new Audio('assets/audio/' + file + '?v=20261106a');
+  const a = new Audio('assets/audio/' + file + '?v=20261107-gaien1');
   a.loop = true;
   a.preload = name === 'title' ? 'metadata' : 'none';
   a.volume = audio.volume * .6;
@@ -701,43 +788,63 @@ function setBgmVolume(value) {
   localStorage.setItem('arkeia-bgm-volume', String(Math.round(audio.volume * 100)));
   applyMusicVolume();
 }
+// 音楽はシーンの希望曲と、全世界のガイエン優先曲を分けて管理する。
+// 音楽が未解禁の状態で先に曲名を登録しても、最初のユーザー操作で必ず再生する。
+function shouldForceGaien() {
+  const localFight = state?.battle?.fighters?.some((f) => !f.dead && (f.key === 'gaien' || f.key === 'gaien2'));
+  const field = state?.field;
+  const localField = !!field && [state.myKey, ...(field.o?.partyKeys || [])].some((k) => k === 'gaien' || k === 'gaien2');
+  return !!(localFight || localField || globalGaienBgm);
+}
 function playTrack(name) {
-  const key = musicKey(name);
-  if (!key) return;
+  audio.wanted = name;
+  syncMusicTrack();
+}
+function syncMusicTrack() {
+  const key = shouldForceGaien() ? 'gaien' : musicKey(audio.wanted);
+  if (!key || !audio.tracks[key]) return;
+  const next = audio.tracks[key];
   const oldKey = audio.currentKey;
-  if (audio.current === name || (key === oldKey && oldKey !== null)) {
-    audio.current = name;
+  audio.current = key === 'gaien' ? 'gaien' : audio.wanted;
+  const targetVolume = audio.muted ? 0 : audio.volume * 0.6;
+  // 旧版は「同じ曲名」で早期returnしたため、最初の再生失敗から回復できなかった。
+  if (oldKey === key) {
+    if (audio.muted) { next.pause(); return; }
+    next.volume = targetVolume;
+    if (audio.unlocked && next.paused && next.readyState !== 0) {
+      next.play().catch((e) => console.warn('[BGM] 再生再試行:', key, e));
+    } else if (audio.unlocked && next.paused) {
+      next.load();
+      next.play().catch((e) => console.warn('[BGM] 再生再試行:', key, e));
+    }
     return;
   }
-  audio.current = name;
   audio.currentKey = key;
-  const next = audio.tracks[key];
-  const prev = audio.tracks[oldKey];
+  const previous = audio.tracks[oldKey];
   const token = ++audio.fadeId;
-  // 高速連続遷移で古い曲が残らないよう、前々の曲はすぐ停止。
   for (const [id, track] of Object.entries(audio.tracks)) {
     if (id !== oldKey && id !== key) track.pause();
   }
-  if (!audio.unlocked || audio.muted) {
-    prev?.pause();
-    return;
-  }
-  try { next.currentTime = 0; } catch {}
+  if (!audio.unlocked || audio.muted) { previous?.pause(); return; }
   next.volume = 0;
+  try { next.currentTime = 0; } catch {}
   next.play().catch((err) => {
-    console.warn('[BGM] ブラウザーが再生を拒否しました:', key, err);
+    console.warn('[BGM] 再生できませんでした:', key, err);
     const status = document.getElementById('opt-audio-status');
-    if (status) status.textContent = '自動再生できませんでした。画面を操作して再開してください。';
+    if (status) status.textContent = `BGMを再生できません: ${MUSIC_FILES[key]}（音量設定と公開ファイルを確認）`;
   });
-  const from = prev && !prev.paused ? prev.volume : 0;
+  const from = previous && !previous.paused ? previous.volume : 0;
   const started = performance.now();
   const fade = (time) => {
     if (token !== audio.fadeId) return;
-    const progress = Math.min(1, (time - started) / 380);
-    next.volume = audio.volume * .6 * progress;
-    if (prev && prev !== next) prev.volume = from * (1 - progress);
+    const progress = Math.min(1, (time - started) / 480);
+    next.volume = targetVolume * progress;
+    if (previous && previous !== next) previous.volume = from * (1 - progress);
     if (progress < 1) requestAnimationFrame(fade);
-    else if (prev && prev !== next) { prev.pause(); try { prev.currentTime = 0; } catch {} }
+    else if (previous && previous !== next) {
+      previous.pause();
+      try { previous.currentTime = 0; } catch {}
+    }
   };
   requestAnimationFrame(fade);
 }
@@ -1056,13 +1163,17 @@ function unlockAudio() {
     if (AudioContextCtor) audio.ctx = new AudioContextCtor();
   }
   audio.unlocked = true;
-  audio.ctx?.resume?.();
-  const t = audio.tracks[audio.currentKey];
-  if (t && !audio.muted && t.paused) {
-    t.volume = audio.volume * .6;
-    t.play().catch((err) => console.warn('[BGM] 再生開始に失敗:', err));
-  }
+  audio.ctx?.resume?.().catch?.(() => {});
+  syncMusicTrack();
 }
+// Browser autoplay policies require an actual user interaction before any BGM
+// can be heard. Keyboard, pointer and gamepad/menu interactions all recover it.
+window.addEventListener('pointerdown', () => { if (!audio.unlocked) unlockAudio(); }, { capture: true });
+window.addEventListener('keydown', () => { if (!audio.unlocked) unlockAudio(); }, { capture: true });
+window.addEventListener('focus', () => { if (audio.unlocked && !audio.muted) syncMusicTrack(); });
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden && audio.unlocked && !audio.muted) syncMusicTrack();
+});
 function setMuted(m) {
   audio.muted = !!m;
   setVoiceMuted(audio.muted);
@@ -1072,9 +1183,7 @@ function setMuted(m) {
     if (audio.muted) t.pause();
     else t.volume = audio.volume * .6;
   }
-  if (!audio.muted && audio.unlocked) {
-    audio.tracks[audio.currentKey]?.play().catch((err) => console.warn('[BGM] ミュート解除で再生失敗:', err));
-  }
+  if (!audio.muted && audio.unlocked) syncMusicTrack();
   const button = $('#opt-mute');
   if (button) button.textContent = audio.muted ? '音をオンにする' : '音をミュートする';
   applyMusicVolume();
@@ -1234,8 +1343,11 @@ const state = { mode: null, myKey: null, oppKey: null, chapter: 0, battle: null,
 // オンライン途中乱入時も専用曲を優先し、戦闘中は通常曲へ戻さない。
 setInterval(() => {
   const fighters = state.battle?.fighters;
-  if (!fighters?.length) return;
-  if (fighters.some((f) => f.key === 'bloodfiend') && musicKey(audio.current) !== 'zarugureibu') playTrack('zarugureibu');
+  if (fighters?.some((f) => f.key === 'bloodfiend') &&
+      !fighters.some((f) => f.key === 'gaien' || f.key === 'gaien2') &&
+      musicKey(audio.wanted) !== 'zarugureibu') playTrack('zarugureibu');
+  refreshGlobalGaienBgm();
+  if (audio.unlocked) syncMusicTrack();
 }, 650);
 
 function isScreen(id) {
@@ -1423,6 +1535,9 @@ function enterTitle() {
   playTrack('title');
   refreshTitle();
   show('scr-title');
+  // All active players join the existing shared presence room so a chief's
+  // story appearance can override BGM across menus, fields and battles.
+  ensureWorld().catch((err) => console.warn('[WORLD BGM] 世界ルームへ接続できません:', err));
 }
 
 $('#scr-press').addEventListener('pointerdown', () => {
@@ -1910,7 +2025,10 @@ function beginBattle(boss) {
   const participants = state.battle.fighters.map((f) => f.key);
   const ks = state.battle.fighters.filter((f) => f.team === 1 || state.mode === 'invade').map((f) => f.key);
   const apex = ks.some((k) => k === 'sovereign' || k === 'sovereign2') ? 2 : ks.includes('chief') || ks.includes('gaien') || ks.includes('bloodfiend') ? 1 : 0;
-  if (participants.includes('bloodfiend')) {
+  if (participants.some((k) => k === 'gaien' || k === 'gaien2')) {
+    playTrack('battle');
+    ui.banner({ name: '— ♪ ガイエン専用BGM —' }, '煉殻竜王、降臨');
+  } else if (participants.includes('bloodfiend')) {
     playTrack('zarugureibu');
     ui.banner({ name: '— ♪ ザルグレイヴ専用戦闘曲 —' }, '紅翼の血魔');
   } else if (apex) {
@@ -2266,7 +2384,7 @@ function resetFieldLight() {
 async function enterField() {
   // フィールドは物語でしか使わないので必要になった時だけ読み込む（初回表示を軽く）
   if (!(await ensureAllModelsReady())) return;
-  const { Field } = await import('./field.js?v=direct-texture-20261106c');
+  const { Field } = await import('./field.js?v=draco-fix-v20261107');
   leaveField();
   const ch = STORY[state.chapter];
   const st = stageById(ch.stage);
@@ -2680,7 +2798,7 @@ function netTick(dt) {
   }
   netTimer = 0;
   const me = b.fighters.find((f) => f.isPlayer);
-  state.net.publish({ name: state.online.name, pid: save.pid, prof: profState.key === state.myKey ? profState.tok : '', fk: state.myKey, mode: state.mode, x: me.pos.x, z: me.pos.z, ry: me.facing, hp: me.hp, mv: !!me.moving, ready: true });
+  state.net.publish({ name: state.online.name, pid: save.pid, prof: profState.key === state.myKey ? profState.tok : '', fk: me.key, mode: state.mode, x: me.pos.x, z: me.pos.z, ry: me.facing, hp: me.hp, mv: !!me.moving, ready: true });
   const boss = b.fighters.find((f) => f.netId === 'boss' && !f.remoteAuth);
   if (boss) {
     state.net.boss({ x: boss.pos.x, z: boss.pos.z, ry: boss.facing, hp: boss.hp, mv: !!boss.moving });
@@ -2710,6 +2828,7 @@ function ensureWorld() {
     state.worldPending = connect('world', 'global', {
       onPeers: (p) => {
         state.worldPeers = p;
+        refreshGlobalGaienBgm();
         verifyPeerProfs(p);
         syncWorldRemotes(p);
         refreshFieldRemotes();
@@ -2785,7 +2904,7 @@ async function onInvaded(e) {
   $('#pause').hidden = true;
   const p = state.worldPeers?.[e.from];
   const apexOk = !apiEnabled() || tr === 'chief';
-  const ik = apexOk && ['chief', 'sovereign', 'sovereign2', 'bloodfiend'].includes(p?.fk) && (!apiEnabled() || peerVerified(e.from, p.fk)) ? p.fk : 'seraphel';
+  const ik = apexOk && ['chief', 'sovereign', 'sovereign2', 'bloodfiend', 'gaien', 'gaien2'].includes(p?.fk) && (!apiEnabled() || peerVerified(e.from, p.fk)) ? p.fk : 'seraphel';
   b.add(ik, { team: 1, remote: true, netId: e.from, pos: p ? [p.x, p.z] : [0, -9], facing: Math.PI, name: `乱入者・${e.name}`, ...peerOpts(e.from, ik) });
   b.net = w;
   b.strictNet = apiEnabled();
@@ -2879,7 +2998,18 @@ function worldTick(dt) {
   const me = b?.fighters.find((f) => f.isPlayer);
   const gk = state.myKey || '';
   if (gk) refreshProfile(gk);
-  const base = { name: myName(), pid: save.pid, mode: 'world', ready: false, gw: save.equip[gk] || '', ga: save.armor[gk] || '', prof: profState.key === gk ? profState.tok : '' };
+  // 運営長のガイエンが物語フィールド/戦闘、または乱入中に実際に存在する時だけ
+  // 短期署名を付ける。無権限のpresenceを受けても他プレイヤーのBGMを変えない。
+  const activeKeys = b?.fighters?.filter((f) => !f.dead && f.team === 0).map((f) => f.key)
+    || state.field?.o?.partyKeys || [state.myKey];
+  const gaienHere = (state.mode === 'story' || state.mode === 'invade') &&
+    !!(state.field || b) && activeKeys.some((k) => k === 'gaien' || k === 'gaien2');
+  publishGaienLease(gaienHere);
+  const sealed = gaienHere && gaienLease.sig && Date.now() - gaienLease.at < 55000;
+  const base = { name: myName(), pid: save.pid, mode: 'world', ready: false,
+    gw: save.equip[gk] || '', ga: save.armor[gk] || '',
+    prof: profState.key === gk ? profState.tok : '',
+    gaienActive: !!sealed, gaienSig: sealed ? gaienLease.sig : '', gaienAt: sealed ? gaienLease.at : 0 };
   if (state.mode === 'story' && state.field && !b) {
     const fp = state.field.player;
     w.publish({ ...base, role: 'field', fk: state.myKey, ch: state.chapter, ib: false, x: 0, z: 0, fx: fp.pos.x, fz: fp.pos.z, ry: fp.facing, hp: 1, mv: fp.cur === 'run' });

@@ -1,8 +1,9 @@
 import * as THREE from 'three';
+import { attachGaienWalk } from './gaien-motion.js';
 import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js';
-import { FIGHTERS, ELEMS } from './data.js';
+import { FIGHTERS, ELEMS } from './data.js?v=gaien-bgm-20261107b';
 import { makeGear, animGear } from './gear.js';
-import { instantiateModel, disposeModel, loadModel } from './model-runtime.js?v=direct-texture-20261106c';
+import { instantiateModel, disposeModel, loadModel } from './model-runtime.js?v=draco-fix-v20261107';
 
 // 召喚獣の見た目と性能（HPは使い手の最大HPに比例）
 const SUMMON_DEFS = {
@@ -497,6 +498,7 @@ export class Fighter {
     const instance = instantiateModel(gltf, h, this.tint);
     this.modelInstance = instance;
     this.visual.add(instance.wrapper);
+    this.gaienWalk = attachGaienWalk(instance.model, this.key);
     this.mixer = new THREE.AnimationMixer(instance.model);
     this.clips = {};
     for (const clip of gltf.animations || []) {
@@ -552,6 +554,7 @@ export class Fighter {
   }
 
   update(dt, inp) {
+    this.motionDt = dt;
     if (this.mixer) {
       this.mixer.update(dt);
     }
@@ -664,6 +667,7 @@ export class Fighter {
   }
 
   sync() {
+    this.gaienWalk?.update(this.motionDt ?? (1 / 60), this.dead ? false : (this.moving || this.netMoving ? 'run' : false));
     this.root.position.set(this.pos.x, this.y, this.pos.z);
     this.root.rotation.y = this.facing;
     this.guardMesh.visible = this.guard;
@@ -952,6 +956,11 @@ export class Fighter {
     this.stun = Math.min(stun, 0.12);
     this.inv = Math.max(this.inv, 0.18);
     this.dead = false;
+    this.gaienWalk?.stop();
+    this.gaienWalk = null;
+    // 旧形態のGPU資源を解放し、同じ見た目に関連する共有GLBは残す。
+    disposeModel(this.modelInstance, this.mixer);
+    this.modelInstance = null;
     this.visual.clear();
     this.root.remove(this.ringMesh, this.guardMesh);
     this.visual.rotation.set(0, 0, 0);
@@ -1006,6 +1015,8 @@ export class Fighter {
     }
     disposeModel(this.modelInstance, this.mixer);
     this.modelInstance = null;
+    this.gaienWalk?.stop();
+    this.gaienWalk = null;
     this.visual.clear();
     this.root.remove(this.ringMesh, this.guardMesh);
     this.visual.rotation.set(0, 0, 0);

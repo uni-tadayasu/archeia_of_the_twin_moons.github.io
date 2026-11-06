@@ -21,39 +21,11 @@ function getDb() {
   return dbPromise;
 }
 
-// A room's subscriptions have their own lifetime. Leaving only the presence
-// room leaves old listeners attached when the same room is joined again.
-// Also guard queued callbacks and publishes after the caller has left.
-function scopedRoom(room) {
-  let active = true;
-  const subscriptions = [];
-  const listen = (method, arg, callback) => {
-    const unsubscribe = room[method](arg, (...args) => {
-      if (active) callback(...args);
-    });
-    if (typeof unsubscribe === 'function') subscriptions.push(unsubscribe);
-  };
-  return {
-    subscribePresence: (options, callback) => listen('subscribePresence', options, callback),
-    subscribeTopic: (topic, callback) => listen('subscribeTopic', topic, callback),
-    publishPresence: (data) => { if (active) return room.publishPresence(data); },
-    publishTopic: (topic, data) => { if (active) return room.publishTopic(topic, data); },
-    leaveRoom: () => {
-      if (!active) return;
-      active = false;
-      for (const unsubscribe of subscriptions.splice(0)) {
-        try { unsubscribe(); } catch (err) { console.warn(err); }
-      }
-      room.leaveRoom?.();
-    }
-  };
-}
-
 const num = (v, lim = 1e5) => (Number.isFinite(+v) ? Math.max(-lim, Math.min(lim, +v)) : 0);
-const str = (v, n = 16) => [...String(v ?? '').replace(/[<>&"']/g, '')].slice(0, n).join('');
+const str = (v, n = 16) => String(v ?? '').replace(/[<>&"']/g, '').slice(0, n);
 
 export function sanitizePresence(p) {
-  if (!p || typeof p !== 'object' || Array.isArray(p)) {
+  if (!p || typeof p !== 'object') {
     return null;
   }
   return {
@@ -63,7 +35,10 @@ export function sanitizePresence(p) {
     pid: str(p.pid, 24), fx: num(p.fx, 700), fz: num(p.fz, 700),
     gw: /^w\d{1,2}$/.test(p.gw) ? p.gw : '', ga: /^a\d{1,2}$/.test(p.ga) ? p.ga : '',
     // サーバー署名の戦闘プロフィール（受信側で検証）
-    prof: typeof p.prof === 'string' && /^[A-Za-z0-9_\-.]{20,1500}$/.test(p.prof) ? p.prof : ''
+    prof: typeof p.prof === 'string' && /^[A-Za-z0-9_\-.]{20,1500}$/.test(p.prof) ? p.prof : '',
+    gaienActive: !!p.gaienActive,
+    gaienSig: typeof p.gaienSig === 'string' && /^[A-Za-z0-9_.-]{32,1500}$/.test(p.gaienSig) ? p.gaienSig : '',
+    gaienAt: Number.isSafeInteger(p.gaienAt) && p.gaienAt > 0 ? p.gaienAt : 0
   };
 }
 
@@ -172,7 +147,7 @@ export async function guildBoard() {
 }
 
 // ---- 交流用の常設ルーム（チャット・お知らせ・ギルド） ----
-const txt = (v, n) => [...String(v ?? '').replace(/[\u0000-\u001f<>]/g, '')].slice(0, n).join('');
+const txt = (v, n) => String(v ?? '').replace(/[\u0000-\u001f<>]/g, '').slice(0, n);
 function chatMsg(e, ch) {
   const t = txt(e.t, 120).trim();
   if (!t) return null;
@@ -183,7 +158,7 @@ function chatMsg(e, ch) {
 export async function joinChannel(roomKey, ch, myId, onChat) {
   if (!/^[0-9a-f]{16,64}$/.test(roomKey)) throw new Error('bad room');
   const { db } = await getDb();
-  const room = scopedRoom(db.joinRoom('arkeia', 'ch-' + roomKey));
+  const room = db.joinRoom('arkeia', 'ch-' + roomKey);
   room.subscribeTopic('chat', (e) => {
     if (!e || typeof e !== 'object') return;
     const m = chatMsg(e, ch);
@@ -203,11 +178,11 @@ export async function joinChannel(roomKey, ch, myId, onChat) {
 export async function connectSocial(handlers) {
   const { db, id } = await getDb();
   const myId = id();
-  const room = scopedRoom(db.joinRoom('arkeia', 'social-global'));
+  const room = db.joinRoom('arkeia', 'social-global');
   room.subscribePresence({}, (data) => {
-    const peers = Object.create(null);
-    for (const p of Object.values(data?.peers || {})) {
-      if (!p || typeof p !== 'object' || Array.isArray(p)) continue;
+    const peers = {};
+    for (const p of Object.values(data.peers || {})) {
+      if (!p || typeof p !== 'object') continue;
       const s = { id: str(p.id, 40), pid: str(p.pid, 24), name: str(p.name, 12) || '旅人', gid: /^[A-Za-z0-9]{8}$/.test(p.gid) ? p.gid : '', gname: txt(p.gname, 16), grole: ['master', 'sub', 'officer', 'member'].includes(p.grole) ? p.grole : 'member', gm: str(p.gm, 24), st: p.st === 1 };
       if (s.id) peers[s.id] = s;
     }
@@ -262,10 +237,10 @@ export async function connectSocial(handlers) {
 export async function connect(mode, roomCode, handlers) {
   const { db, id } = await getDb();
   const myId = id();
-  const room = scopedRoom(db.joinRoom('arkeia', `${mode}-${roomCode}`));
+  const room = db.joinRoom('arkeia', `${mode}-${roomCode}`);
   room.subscribePresence({}, (data) => {
-    const peers = Object.create(null);
-    for (const p of Object.values(data?.peers || {})) {
+    const peers = {};
+    for (const p of Object.values(data.peers || {})) {
       const s = sanitizePresence(p);
       if (s && s.id) {
         peers[s.id] = s;
