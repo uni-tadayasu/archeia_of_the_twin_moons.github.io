@@ -58,7 +58,7 @@
       ]}
     </script>
     <link rel="stylesheet" href="./rosebud-game-defaults.css" />
-    <link rel="stylesheet" href="./atelier-ui.css?v=20261106a" />
+    <link rel="stylesheet" href="./site-premium.css" />
     <script src="./rosebud-game-defaults.js" defer></script>
     <script type="importmap">
       {
@@ -306,176 +306,81 @@
     </style>
   
 <style>
-      body::before {
-        content:"";
-        position:fixed;
-        inset:0;
-        pointer-events:none;
-        background:
-          radial-gradient(circle at 18% 14%, rgba(201,166,90,.14), transparent 18%),
-          radial-gradient(circle at 82% 12%, rgba(143,216,255,.12), transparent 16%),
-          radial-gradient(circle at 50% 80%, rgba(255,179,71,.08), transparent 24%),
-          linear-gradient(180deg, rgba(255,255,255,.04), transparent 16%, rgba(0,0,0,.14) 100%);
-        mix-blend-mode:screen;
-        opacity:.85;
-      }
-      .screen {
-        background:
-          linear-gradient(180deg, rgba(8,10,24,.48), rgba(10,12,28,.85)),
-          radial-gradient(circle at 50% 0%, rgba(201,166,90,.15), transparent 34%),
-          radial-gradient(circle at 50% 100%, rgba(79,87,155,.16), transparent 32%);
-      }
-      .screen::before {
-        content:"";
-        position:absolute;
-        inset:12px;
-        border:1px solid rgba(201,166,90,.18);
-        pointer-events:none;
-        clip-path:polygon(18px 0, calc(100% - 18px) 0, 100% 18px, 100% calc(100% - 18px), calc(100% - 18px) 100%, 18px 100%, 0 calc(100% - 18px), 0 18px);
-      }
-      .inner {
-        position:relative;
-        padding:clamp(14px,2vw,24px);
-        border:1px solid rgba(201,166,90,.22);
-        background:
-          linear-gradient(180deg, rgba(31,34,66,.74), rgba(17,19,39,.84)),
-          radial-gradient(circle at top, rgba(244,234,210,.06), transparent 56%);
-        box-shadow:0 24px 60px rgba(0,0,0,.28), inset 0 1px 0 rgba(255,255,255,.04);
-        backdrop-filter: blur(6px);
-      }
-      .inner::before,
-      .inner::after {
-        content:"";
-        position:absolute;
-        width:38px; height:38px;
-        border:1px solid rgba(201,166,90,.38);
-        pointer-events:none;
-      }
-      .inner::before { left:10px; top:10px; border-right:none; border-bottom:none; }
-      .inner::after { right:10px; bottom:10px; border-left:none; border-top:none; }
-      .topbar { padding-bottom:6px; border-bottom:1px solid rgba(201,166,90,.16); }
-      .back, .btn, .menu button {
-        border:1px solid rgba(201,166,90,.35);
-        border-left:4px solid var(--brass);
-        background:linear-gradient(90deg, rgba(38,28,26,.86), rgba(46,39,74,.7));
-        box-shadow: inset 0 1px 0 rgba(255,255,255,.06), 0 10px 24px rgba(0,0,0,.16);
-      }
-      .menu button:hover, .btn:hover, .menu button:focus-visible, .back:hover {
-        background:linear-gradient(90deg, rgba(61,42,31,.95), rgba(68,48,92,.82));
-        box-shadow: inset 0 1px 0 rgba(255,255,255,.1), 0 12px 26px rgba(0,0,0,.24);
-      }
-      h1 {
-        position:relative;
-        padding:0.1em 0 0.22em;
-      }
-      h1::before, h1::after {
-        content:"";
-        position:absolute;
-        top:-14px;
-        width:70px; height:70px;
-        border-radius:50%;
-        opacity:.28;
-        pointer-events:none;
-      }
-      h1::before { left:max(2%, calc(50% - 240px)); background:radial-gradient(circle, rgba(201,166,90,.95) 0, rgba(201,166,90,.3) 40%, transparent 70%); }
-      h1::after { right:max(2%, calc(50% - 240px)); background:radial-gradient(circle, rgba(143,216,255,.95) 0, rgba(143,216,255,.28) 40%, transparent 70%); }
-      .tagline, .foot, .crumb { text-shadow:0 1px 0 rgba(0,0,0,.25); }
-      .tagline { max-width:52ch; line-height:1.8; }
-      .label {
-        display:inline-flex;
-        align-items:center;
-        gap:10px;
-        padding:0 16px 6px;
-        border-bottom:1px solid rgba(201,166,90,.5);
-      }
-      .label::before, .label::after {
-        content:"✦";
-        font-size:.62em;
-        color:var(--ember);
-      }
-      #scr-press {
-        background:
-          radial-gradient(circle at 50% 18%, rgba(201,166,90,.16), transparent 18%),
-          linear-gradient(180deg, rgba(10,10,26,.2), rgba(11,12,28,.9));
-      }
-      #scr-press .inner {
-        background:linear-gradient(180deg, rgba(24,28,58,.38), rgba(12,14,28,.72));
-        min-height:min(68vh,720px);
-        justify-content:center;
-      }
-      .press-hint {
-        padding:.8em 1.4em;
-        border:1px solid rgba(201,166,90,.26);
-        background:rgba(11,12,28,.34);
-      }
-      .menu.wide { gap:12px; }
-      .card {
-        border:1px solid rgba(71,58,38,.18);
-        border-top:5px solid var(--c);
-        border-radius:2px;
-        box-shadow:0 16px 28px rgba(0,0,0,.12);
-      }
-      .card:hover { transform:translateY(-2px); box-shadow:0 18px 32px rgba(0,0,0,.18); }
-      .field, #party-bar, #story-box, .fpanel, #world-panel, #friend-panel, #mail-panel, #guild-panel, #evmaker-panel {
-        background:linear-gradient(180deg, rgba(13,15,34,.82), rgba(17,20,38,.94));
-        border:1px solid rgba(201,166,90,.2);
-        box-shadow:0 16px 34px rgba(0,0,0,.18);
-      }
-      #arkeia-splash {
-        position:fixed;
-        inset:0;
-        z-index:2147483647;
-        display:flex;
-        align-items:center;
-        justify-content:center;
-        background:radial-gradient(circle at 50% 24%, rgba(40,45,95,.52), rgba(2,3,10,.96));
-        color:#f4ead2;
-        transition:opacity 420ms ease;
-      }
-      #arkeia-splash.is-hiding { opacity:0; }
-      #arkeia-splash .splash-card {
-        position:relative;
-        min-width:min(92vw,540px);
-        padding:32px 28px 24px;
-        border:1px solid rgba(201,166,90,.34);
-        background:linear-gradient(180deg, rgba(20,22,46,.92), rgba(9,10,22,.94));
-        box-shadow:0 24px 70px rgba(0,0,0,.4);
-        text-align:center;
-        overflow:hidden;
-      }
-      #arkeia-splash .splash-card::before {
-        content:"";
-        position:absolute;
-        inset:10px;
-        border:1px solid rgba(201,166,90,.14);
-        pointer-events:none;
-      }
-      #arkeia-splash .splash-moons {
-        display:flex; justify-content:center; gap:26px; margin-bottom:18px;
-      }
-      #arkeia-splash .moon { width:74px; height:74px; border-radius:50%; position:relative; box-shadow:0 0 36px rgba(255,255,255,.08); }
-      #arkeia-splash .moon.sun { background:radial-gradient(circle at 35% 35%, #ffe0a6, #c9a65a 55%, rgba(201,166,90,.24) 72%, transparent 73%); }
-      #arkeia-splash .moon.twin { background:radial-gradient(circle at 35% 35%, #d8f1ff, #8fd8ff 55%, rgba(143,216,255,.22) 72%, transparent 73%); }
-      #arkeia-splash .moon::after {
-        content:""; position:absolute; inset:-10px; border:1px solid rgba(201,166,90,.16); border-radius:50%;
-      }
-      #arkeia-splash h2 { margin:0; font-size:clamp(28px,5vw,44px); letter-spacing:.2em; }
-      #arkeia-splash p { margin:10px auto 0; max-width:28em; line-height:1.8; color:#d7cfe6; }
-      #arkeia-splash small { display:block; margin-top:12px; color:#b9b3c9; letter-spacing:.3em; }
-      @media (max-width: 640px) {
-        #arkeia-splash .splash-card { padding:24px 18px 20px; }
-        #arkeia-splash .moon { width:58px; height:58px; }
-      }
-    </style></head>
+    #rosebud-exported-splash {
+        position: fixed;
+        inset: 0;
+        z-index: 2147483647;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: #000;
+        opacity: 1;
+        transition: opacity 500ms ease-in-out;
+    }
+
+    #rosebud-exported-splash.is-hiding {
+        opacity: 0;
+    }
+
+    #rosebud-exported-splash .rosebud-exported-splash__content {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 20px;
+        text-align: center;
+        color: #fff;
+        font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    }
+
+    #rosebud-exported-splash .rosebud-exported-splash__logo {
+        width: 100px;
+        height: 100px;
+        animation: rosebud-exported-splash-breathe 2.4s ease-in-out infinite;
+    }
+
+    #rosebud-exported-splash .rosebud-exported-splash__text {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+        font-size: 16px;
+        line-height: 1.25;
+        letter-spacing: 0.06em;
+    }
+
+    #rosebud-exported-splash .rosebud-exported-splash__text strong {
+        font-weight: 700;
+    }
+
+    #rosebud-exported-splash .rosebud-exported-splash__text span:last-child {
+        opacity: 0.88;
+    }
+
+    @keyframes rosebud-exported-splash-breathe {
+        0%,
+        100% {
+            transform: scale(1);
+        }
+        50% {
+            transform: scale(1.05);
+        }
+    }
+</style></head>
   <body>
-<div id="arkeia-splash" aria-live="polite">
-      <div class="splash-card">
-        <div class="splash-moons"><span class="moon sun" aria-hidden="true"></span><span class="moon twin" aria-hidden="true"></span></div>
-        <h2>双月のアルケイア</h2>
-        <p>灯脈の戦士たちが集い、二つの月の下で運命を分かつ。剣と祈りが交わる戦場へ、まもなく降り立ちます。</p>
-        <small>ARKEIA · TWIN MOONS</small>
-      </div>
+<div id="rosebud-exported-splash" aria-live="polite">
+    <div class="rosebud-exported-splash__content">
+        <img
+            class="rosebud-exported-splash__logo"
+            src="__rosebud/rosebud-icon.png"
+            alt="Rosebud Logo"
+            width="100"
+            height="100"
+        />
+        <div class="rosebud-exported-splash__text" aria-label="Rosebud.AI Make Games">
+            <strong>Rosebud.AI</strong>
+            <span>Make Games</span>
+        </div>
     </div>
+</div>
     <noscript>
       <h1>双月のアルケイア（Arkeia of Twin Moons）</h1>
       <p>ブラウザで遊べる無料の3Dアリーナファンタジーアクション。インストール不要で、PC・スマホ・ゲームパッドに対応。</p>
@@ -492,36 +397,100 @@
     <div id="game-container"></div>
     <main id="ui">
       <section id="scr-press" class="screen on" aria-label="はじまり">
-        <div class="inner">
-          <div class="atelier-overline">KASAI SOLUTIONS　／　FANTASY ACTION RPG</div>
-          <div class="atelier-sigil" aria-hidden="true"><i></i><i></i><span>双</span></div>
-          <h1>双月のアルケイア<span>ARKEIA — THE TWIN MOONS CHRONICLE</span></h1>
-          <p class="tagline">光は一つ、空は二つ。どちらを灯すか、剣で決めよう。</p>
-          <button class="press-hint atelier-start" id="press-hint" type="button">旅をはじめる <span aria-hidden="true">↗</span></button>
-          <div class="atelier-meta" aria-label="ゲームの特徴"><span>物語</span><span>戦闘</span><span>協力</span><span>探索</span></div>
-          <div class="atelier-loading" id="loading" role="status" aria-live="polite">ゲームの準備をしています…</div>
-          <div id="boot-recovery" class="boot-recovery" hidden><strong>起動を確認できませんでした</strong><p id="boot-detail">通信状態を確認して再読み込みしてください。</p><button id="boot-retry" type="button">再読み込みして確認</button></div>
+        <div class="inner press-home">
+          <div class="press-copy">
+            <div class="site-logo-mark">双月のアルケイア</div>
+            <h1>双月のアルケイア<span>ARKEIA · A RONDO UNDER TWIN MOONS</span></h1>
+            <p class="tagline">光と闇、二つの月が交わるとき、世界の運命が再び動き出す。</p>
+            <button id="press-start" class="press-start">ゲームを始める</button>
+            <p class="press-hint" id="press-hint">クリックまたはタップでトップページへ</p>
+            <span id="loading">戦士たちを呼び寄せています…</span>
+          </div>
+          <div class="press-sidecards">
+            <article class="mini-card"><strong>100人以上の戦士</strong><span>個性豊かな剣士・魔導士・王侯・異形たちが参戦</span></article>
+            <article class="mini-card"><strong>100の舞台</strong><span>双月の闘技場から八岐大蛇の祭壇まで、多彩な戦場を探索</span></article>
+            <article class="mini-card"><strong>対戦・協力・物語</strong><span>一人遊びからオンライン共闘まで、気分に合わせて遊べます</span></article>
+          </div>
         </div>
       </section>
 
       <section id="scr-title" class="screen" aria-label="旅の分かれ道">
-        <div class="inner">
-          <div class="topbar"><button class="back" data-to="press">扉の前へ</button><span class="shards" id="title-shards"></span></div>
-          <div class="atelier-overline">双月年代記　／　冒険の目次</div><h1 class="atelier-title-heading" style="font-size:clamp(24px,5vmin,48px)">双月のアルケイア</h1>
-          <div class="atelier-section-line"><span>冒険の扉</span><span>選ぶ物語が、次の一頁になる。</span></div><nav class="menu wide">
-            <button data-go="story">灯脈の旅路<small id="story-sub">全八章の物語。灯をめぐる出会いと剣戟</small></button>
-            <button data-go="event" id="btn-event">週替わりイベント<small id="event-sub">今週のボーナスステージ</small></button>
-            <button data-go="cpu">ひとりで手合わせ<small>好きな相手を選んで一対一</small></button>
-            <button data-go="duo">背中をあずける<small>CPUの相棒と組んで二対二</small></button>
-            <button data-go="online-vs">遠い誰かと剣を交える<small>合言葉でつながるオンライン対戦</small></button>
-            <button data-go="online-coop">遠い誰かと肩を並べる<small>オンライン協力 — 裁定者討伐</small></button>
-            <button id="btn-forge">鍛錬の工房<small>灯晶を注いで戦士を鍛える</small></button>
-            <button id="btn-evmaker" hidden>イベント作成の間<small>運営長専用 — 特別イベントを作って全員に配信</small></button>
-            <button id="btn-invade" hidden>乱入の窓<small>運営専用 — 誰かの物語に裁定者として割り込む</small></button>
-            <button id="btn-shop">灯晶商店<small>特別な戦士を迎える</small></button>
-            <button id="btn-options">旅支度<small>音・CPUの強さ・ゲームパッド・運営の鍵</small></button>
-          </nav>
-          <p class="foot">WASD 移動／J 斬る／K 技A／U 技B／L 奥義／Shift 構え／Space 跳ぶ／Esc 戻る・休む<br>移動しながら技を出すと、別の技に変わります。技の直後にタイミングよく同じ技で「追加技」。<br>ダメージを溜めると「覚醒」（被ダメージ半減）、覚醒中の奥義は「秘奥義」に。</p>
+        <div class="home-shell">
+          <header class="home-header">
+            <div class="home-brand">
+              <span class="brand-mark">✦</span>
+              <div><b>双月のアルケイア</b><small>ARKEIA · A RONDO UNDER TWIN MOONS</small></div>
+            </div>
+            <nav class="home-nav">
+              <button class="nav-link active" data-go="story">トップ</button>
+              <button class="nav-link" data-go="cpu">ゲーム紹介</button>
+              <button class="nav-link" data-go="event">キャラクター</button>
+              <button class="nav-link" data-go="duo">システム</button>
+              <button class="nav-link" data-go="online-coop">サポート</button>
+            </nav>
+            <div class="home-account">
+              <button id="btn-options" class="acct-btn">ログイン設定</button>
+              <button id="btn-shop" class="acct-btn accent">新規鍛錬</button>
+            </div>
+          </header>
+
+          <section class="home-hero">
+            <div class="hero-copy-block">
+              <div class="hero-logo">双月のアルケイア</div>
+              <p class="hero-sub-en">ARKEIA · A RONDO UNDER TWIN MOONS</p>
+              <p class="hero-catch">光と闇、二つの月が交わるとき——<br>世界の運命が、再び動き出す。</p>
+              <button class="home-start" data-go="story">ゲームを始める</button>
+            </div>
+          </section>
+
+          <section class="home-panels">
+            <article class="home-news panel frame">
+              <div class="panel-head"><h2>お知らせ</h2><span class="tiny-link">一覧を見る</span></div>
+              <ul id="home-news-list" class="news-list">
+                <li><span class="tag urgent">重要</span><time>11/06</time><span>大型アップデート「双月の戦域」実装！</span></li>
+                <li><span class="tag update">更新</span><time>11/05</time><span>新キャラクター「ヤマタノオロチ」登場！</span></li>
+                <li><span class="tag event">イベント</span><time>11/03</time><span>期間限定イベント「紅月祭」開催中！</span></li>
+                <li><span class="tag note">告知</span><time>10/30</time><span>メンテナンス完了のお知らせ</span></li>
+              </ul>
+            </article>
+            <article class="home-feature panel frame orochi">
+              <div class="boss-chip">新ボス実装</div>
+              <h2>ヤマタノオロチ降臨</h2>
+              <p>八つの首が、世界を飲み込む——。<br>首欠けの不具合も修正し、正しい姿で出現します。</p>
+              <button class="banner-btn" data-go="event">イベントに挑む</button>
+            </article>
+            <div class="home-sidecol">
+              <article class="side-banner frame pickup">
+                <h3>ピックアップ召喚</h3>
+                <p>期間限定 SSR 巫姫ノエル 登場！</p>
+              </article>
+              <article class="side-banner frame crimson">
+                <h3>イベント開催中</h3>
+                <p>紅月祭 — 限定報酬を入手せよ！</p>
+              </article>
+            </div>
+          </section>
+
+          <section class="home-quicknav">
+            <button data-go="story"><strong>プレイヤーガイド</strong><span id="story-sub">全八章の物語。灯をめぐる出会いと剣戟</span></button>
+            <button data-go="event" id="btn-event"><strong>キャラクター図鑑</strong><span id="event-sub">今週のボーナスステージ</span></button>
+            <button data-go="cpu"><strong>武具・装備</strong><span>ひとりで手合わせ、一対一の鍛錬</span></button>
+            <button data-go="duo"><strong>討伐クエスト</strong><span>相棒と組んで二対二の共闘</span></button>
+            <button data-go="online-coop"><strong>マルチプレイ</strong><span>オンライン協力で強敵に挑む</span></button>
+            <button data-go="online-vs"><strong>ランキング</strong><span>遠い誰かと剣を交える</span></button>
+            <button id="btn-forge"><strong>鍛錬の工房</strong><span>灯晶を注いで戦士を鍛える</span></button>
+            <button id="btn-evmaker" hidden><strong>イベント作成</strong><span>運営長専用の特別配信機能</span></button>
+            <button id="btn-invade" hidden><strong>乱入の窓</strong><span>運営専用の特別乱入機能</span></button>
+          </section>
+
+          <section class="home-status frame">
+            <div class="status-box"><strong id="title-shards">灯晶　0</strong><span>所持している灯晶</span></div>
+            <div class="status-box"><strong id="home-char-count">0 / 0</strong><span>戦士の読み込み状況</span></div>
+            <div class="status-box"><strong id="home-stage-count">0 / 0</strong><span>舞台イラストの読み込み状況</span></div>
+            <div class="status-box"><strong>PC / スマホ</strong><span>ブラウザだけで今すぐプレイ</span></div>
+          </section>
+
+          <p class="foot home-foot">WASD移動／J斬る／K技A／U技B／L奥義／Shift構え／Space跳ぶ／Esc戻る・休む　—　PC・スマホ・ゲームパッド対応</p>
           <p class="foot license">© <span id="copy-year">2025</span> KASAI SOLUTIONS INC. All rights reserved.</p>
         </div>
       </section>
@@ -680,25 +649,45 @@
         </div>
       </div>
     </main>
-    <script src="./boot-guard.js?v=20261106a" defer></script>
-    <script type="module" src="./main.js?v=20261106a"></script>
+    <script type="module" src="main.js"></script>
+    <script src="https://storage.googleapis.com/rosebud_staticfiles/ChatManager.js" defer></script>
+    <script src="https://storage.googleapis.com/rosebud_staticfiles/ProgressLogger.js" defer></script>
+    <script src="https://storage.googleapis.com/rosebud_staticfiles/OGP.js" defer></script>
+  
 <script>
     (() => {
-        const splashRoot = document.getElementById('arkeia-splash');
+        const splashRoot = document.getElementById('rosebud-exported-splash');
         if (!splashRoot) return;
-        let ready = false;
-        let elapsed = false;
-        let hidden = false;
-        const hide = () => {
-          if (hidden || !ready || !elapsed) return;
-          hidden = true;
-          splashRoot.classList.add('is-hiding');
-          window.setTimeout(() => splashRoot.remove(), 420);
+
+        let isReady = false;
+        let isMinimumVisibleTimeElapsed = false;
+        let isHidden = false;
+
+        const maybeHideSplash = () => {
+            if (isHidden || !isReady || !isMinimumVisibleTimeElapsed) return;
+
+            isHidden = true;
+            splashRoot.classList.add('is-hiding');
+            window.setTimeout(() => splashRoot.remove(), 500);
         };
-        const mark = () => { ready = true; hide(); };
-        window.setTimeout(() => { elapsed = true; hide(); }, 800);
-        if (document.readyState === 'complete') mark();
-        else window.addEventListener('load', mark, { once: true });
+
+        const markReady = () => {
+            isReady = true;
+            maybeHideSplash();
+        };
+
+        window.setTimeout(() => {
+            isMinimumVisibleTimeElapsed = true;
+            maybeHideSplash();
+        }, 1000);
+
+        if (document.readyState === 'complete') {
+            markReady();
+        } else {
+            window.addEventListener('load', markReady, { once: true });
+        }
+
+        
     })();
 </script></body>
 </html>

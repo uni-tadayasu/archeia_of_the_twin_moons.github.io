@@ -146,27 +146,15 @@ const assets = {};
 const gltfLoader = new GLTFLoader();
 const modelUrls = [...new Set(Object.values(FIGHTERS).map((d) => d.model))];
 const byUrl = {};
-// A slow or missing GLB must not keep the game in an endless loading state.
-let loadedModels = 0;
-const loadStatus = () => {
-  const el = $('#loading');
-  if (el) el.textContent = `戦士の準備中：${loadedModels} / ${modelUrls.length}（読み込み中もメニューへ進めます）`;
-};
-loadStatus();
 const loadPromise = Promise.allSettled(modelUrls.map((url) =>
-  Promise.race([
-    gltfLoader.loadAsync(url),
-    new Promise((_, reject) => setTimeout(() => reject(new Error(`モデル読み込み時間超過: ${url}`)), 18000))
-  ]).then((g) => { byUrl[url] = g; }, (err) => {
-    console.warn('モデルを読み込めませんでした:', url, err);
-  }).finally(() => { loadedModels++; loadStatus(); })
+  gltfLoader.loadAsync(url).then((g) => {
+    byUrl[url] = g;
+  })
 )).then(() => {
   for (const [k, d] of Object.entries(FIGHTERS)) {
     if (byUrl[d.model]) assets[k] = byUrl[d.model];
   }
-  const failed = modelUrls.length - Object.keys(byUrl).length;
-  const el = $('#loading');
-  if (el) el.textContent = failed ? `準備完了（一部モデル ${failed} 件は未読み込み）` : '準備完了。冒険を始められます。';
+  $('#loading').textContent = '';
 });
 
 // ---------- Save ----------
@@ -1288,6 +1276,10 @@ function refreshTitle() {
   $('#btn-invade').hidden = !operatorUnlocked();
   if ($('#btn-evmaker')) $('#btn-evmaker').hidden = !chiefUnlocked();
   $('#title-shards').textContent = `灯晶　${save.shards}`;
+  const hc = $('#home-char-count');
+  if (hc) hc.textContent = `${SELECT_KEYS().filter((k) => canUse(k)).length} / ${SELECT_KEYS().length}`;
+  const hs = $('#home-stage-count');
+  if (hs) hs.textContent = `${STAGES.filter((s) => !!s.sky).length} / ${STAGES.length}`;
   {
     const { ev, ends } = activeEvent();
     const days = Math.max(0, Math.ceil((ends - Date.now()) / 86400000));
@@ -1304,11 +1296,16 @@ function enterTitle() {
   show('scr-title');
 }
 
-$('#scr-press').addEventListener('pointerdown', (e) => {
-  if (e.target.closest('#boot-recovery')) return;
+$('#scr-press').addEventListener('pointerdown', () => {
   if (isScreen('scr-press')) {
     enterTitle();
   }
+});
+
+$('#press-start')?.addEventListener('click', (e) => {
+  e.stopPropagation();
+  sfx('ui');
+  enterTitle();
 });
 
 document.querySelectorAll('[data-to]').forEach((b) => b.addEventListener('click', () => {
@@ -1372,16 +1369,14 @@ function openSelect(label, crumb, cb, { allowLocked = false, onBack = goTitle } 
     const d = FIGHTERS[k];
     const locked = !canUse(k) && !allowLocked;
     const card = document.createElement('button');
-    card.className = 'card' + (locked ? ' locked' : '');
+    card.className = 'card char-card' + (locked ? ' locked' : '');
     card.style.setProperty('--c', '#' + d.color.toString(16).padStart(6, '0'));
-    const t = document.createElement('em');
-    t.textContent = locked ? '名を封じられし者' : d.title;
-    const n = document.createElement('b');
-    n.textContent = locked ? '？？？' : d.name;
-    const s = document.createElement('small');
-    s.textContent = locked
-      ? (d.shop ? '灯晶商店で迎えられる' : '運営の鍵でのみ目覚める')
-      : `${d.skills.map((x) => x.name).join('／')}\n奥義：${d.over.name}`;
+    const media = document.createElement('div');
+    media.className = 'card-media';
+    const badge = document.createElement('span');
+    badge.className = 'card-badge';
+    badge.textContent = locked ? '封印中' : 'CHARACTER';
+    media.append(badge);
     if (d.face) {
       const img = document.createElement('img');
       img.className = 'face';
@@ -1389,10 +1384,21 @@ function openSelect(label, crumb, cb, { allowLocked = false, onBack = goTitle } 
       img.alt = '';
       img.loading = 'lazy';
       if (d.faceHue) img.style.filter = `hue-rotate(${d.faceHue}deg)`;
-      if (locked) img.style.filter = 'brightness(0)';
-      card.append(img);
+      media.append(img);
     }
-    card.append(t, n, s);
+    const meta = document.createElement('div');
+    meta.className = 'card-meta';
+    const t = document.createElement('em');
+    t.textContent = locked ? '名を封じられし者' : d.title;
+    const n = document.createElement('b');
+    n.textContent = locked ? '？？？' : d.name;
+    const s = document.createElement('small');
+    s.textContent = locked
+      ? (d.shop ? '灯晶商店で迎えられる' : '運営の鍵でのみ目覚める')
+      : `${d.skills.map((x) => x.name).join('／')}
+奥義：${d.over.name}`;
+    meta.append(t, n, s);
+    card.append(media, meta);
     card.disabled = locked;
     card.addEventListener('click', () => {
       sfx('ui');
@@ -1453,8 +1459,14 @@ function openPartySelect(done) {
   for (const k of pool) {
     const d = FIGHTERS[k];
     const card = document.createElement('button');
-    card.className = 'card';
+    card.className = 'card char-card';
     card.style.setProperty('--c', '#' + d.color.toString(16).padStart(6, '0'));
+    const media = document.createElement('div');
+    media.className = 'card-media';
+    const badge = document.createElement('span');
+    badge.className = 'card-badge';
+    badge.textContent = party.includes(k) ? '編成中' : 'PARTY';
+    media.append(badge);
     if (d.face) {
       const img = document.createElement('img');
       img.className = 'face';
@@ -1462,13 +1474,16 @@ function openPartySelect(done) {
       img.alt = '';
       img.loading = 'lazy';
       if (d.faceHue) img.style.filter = `hue-rotate(${d.faceHue}deg)`;
-      card.append(img);
+      media.append(img);
     }
+    const meta = document.createElement('div');
+    meta.className = 'card-meta';
     const t = document.createElement('em');
     t.textContent = d.title;
     const n = document.createElement('b');
     n.textContent = d.name;
-    card.append(t, n);
+    meta.append(t, n);
+    card.append(media, meta);
     card.addEventListener('click', () => {
       sfx('ui');
       if (party.includes(k)) {
@@ -1507,44 +1522,44 @@ function openStageSelect(crumb, onBack) {
   };
   const grid = $('#select-grid');
   grid.replaceChildren();
-  const list = [{ id: 'random', name: '風まかせ', floor: 0xc9a65a, seg: 0 }, ...STAGES];
+  const list = [{ id: 'random', name: '風まかせ', floor: 0xc9a65a, seg: 0, sky: STAGES[0].sky, rim: 0xc9a65a, crystal: 0xfff0b2 }, ...STAGES];
   for (const st of list) {
     const card = document.createElement('button');
-    card.className = 'card';
+    card.className = 'card stage-card';
     card.style.setProperty('--c', '#' + st.floor.toString(16).padStart(6, '0'));
+    const media = document.createElement('div');
+    media.className = 'card-media';
+    const thumb = document.createElement('div');
+    thumb.className = 'sthumb';
+    if (st.sky) thumb.style.backgroundImage = `url(${st.sky})`;
+    else thumb.style.background = 'linear-gradient(135deg,#2f2748,#111a2f)';
+    const badge = document.createElement('span');
+    badge.className = 'card-badge';
+    badge.textContent = st.id === 'random' ? 'RANDOM' : 'STAGE';
+    const floor = document.createElement('span');
+    floor.className = 'stage-floor';
+    const hex = (c) => '#' + c.toString(16).padStart(6, '0');
+    floor.style.background = `radial-gradient(circle, ${hex(st.floor)}, ${hex(st.rim || st.floor)})`;
+    floor.style.boxShadow = `0 0 22px ${hex(st.crystal || st.floor)}`;
+    media.append(thumb, floor, badge);
+    const meta = document.createElement('div');
+    meta.className = 'card-meta';
     const t = document.createElement('em');
     t.textContent = st.seg ? (st.seg > 20 ? '円の舞台' : `${st.seg}つの辺を持つ舞台`) : 'どこへ連れていかれるかは月次第';
     const n = document.createElement('b');
     n.textContent = st.name;
-    const hex = (c) => '#' + c.toString(16).padStart(6, '0');
-    const thumb = document.createElement('div');
-    thumb.className = 'sthumb';
-    if (st.sky) {
-      thumb.style.backgroundImage = `url(${st.sky})`;
-      const fl = document.createElement('i');
-      const segs = Math.min(st.seg, 24);
-      const pts = Array.from({ length: segs }, (_, i) => {
-        const a = (i / segs) * Math.PI * 2 - Math.PI / 2;
-        return `${50 + Math.cos(a) * 46}% ${50 + Math.sin(a) * 46}%`;
-      }).join(',');
-      fl.style.clipPath = `polygon(${pts})`;
-      fl.style.background = `radial-gradient(circle, ${hex(st.floor)}, ${hex(st.rim)})`;
-      fl.style.boxShadow = `0 0 12px ${hex(st.crystal)}`;
-      thumb.append(fl);
-    } else {
-      thumb.textContent = '？';
-    }
-    card.append(thumb, t, n);
+    meta.append(t, n);
     if (st.bgm != null) {
       const s = document.createElement('small');
       s.textContent = `♪ ${BGM[st.bgm % BGM.length].name}`;
-      card.append(s);
+      meta.append(s);
     }
+    card.append(media, meta);
     card.addEventListener('mouseenter', () => st.sky && setStage(st));
     card.addEventListener('focus', () => st.sky && setStage(st));
     card.addEventListener('click', () => {
       sfx('ui');
-      state.stage = st.sky ? st : STAGES[Math.floor(Math.random() * STAGES.length)];
+      state.stage = st.id === 'random' ? STAGES[Math.floor(Math.random() * STAGES.length)] : st;
       startOffline();
     });
     grid.append(card);
@@ -3649,4 +3664,3 @@ renderer.setAnimationLoop((time) => {
 });
 
 show('scr-press');
-window.__arkeiaBootReady = true;
