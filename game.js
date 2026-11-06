@@ -496,7 +496,8 @@ export class Fighter {
     if (!gltf?.scene) {
       throw new Error(`[3D MODEL] ${this.key}: 元のGLBを取得できません。assets/models/ の公開を確認してください。`);
     }
-    const instance = instantiateModel(gltf, h, this.tint);
+    const modelTint = (this.key === 'gaien' || this.key === 'gaien2') ? null : this.tint;
+    const instance = instantiateModel(gltf, h, modelTint);
     this.modelInstance = instance;
     this.visual.add(instance.wrapper);
     this.gaienWalk = attachGaienWalk(instance.model, this.key);

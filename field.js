@@ -58,7 +58,8 @@ const FLOWER_COLS = [0xff5a8a, 0xffd23a, 0xffffff, 0xb070ff, 0x5ab0ff, 0xff8a3a,
 function makeActor(gltf, height, color, tint, own, key = "") {
   const root = new THREE.Group();
   const a = { root, mixer: null, clips: {}, cur: null, act: null };
-  const instance = instantiateModel(gltf, height, tint);
+  const modelTint = (key === 'gaien' || key === 'gaien2') ? null : tint;
+  const instance = instantiateModel(gltf, height, modelTint);
   root.add(instance.wrapper);
   a.model = instance.model;
   a.gaienWalk = attachGaienWalk(instance.model, key);

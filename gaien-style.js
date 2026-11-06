@@ -1,64 +1,65 @@
 const GAIEN_STYLE_KEYS = new Set(['gaien', 'gaien2']);
-
-function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
+const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
 
 export function enhanceGaienModel(model, key) {
   if (!model || !GAIEN_STYLE_KEYS.has(key)) return null;
   const titan = key === 'gaien2';
   const uniforms = [];
-  const touched = new Set();
+  const matsSeen = new Set();
   let time = Math.random() * Math.PI * 2;
+
   model.traverse((obj) => {
     if (!obj.isMesh) return;
     const mats = Array.isArray(obj.material) ? obj.material : [obj.material];
     for (const mat of mats) {
-      if (!mat || touched.has(mat)) continue;
-      touched.add(mat);
-      if (mat.map) mat.map.anisotropy = Math.max(8, mat.map.anisotropy || 1);
-      if (mat.normalMap) mat.normalMap.anisotropy = Math.max(8, mat.normalMap.anisotropy || 1);
-      if (mat.isMeshStandardMaterial || mat.isMeshPhysicalMaterial) {
-        mat.roughness = titan ? clamp((mat.roughness ?? 0.8) * 0.82, 0.28, 0.72) : clamp((mat.roughness ?? 0.82) * 0.9, 0.34, 0.8);
-        mat.metalness = titan ? Math.max(mat.metalness ?? 0, 0.22) : Math.max(mat.metalness ?? 0, 0.1);
-        mat.envMapIntensity = titan ? 1.28 : 0.92;
-        if (mat.normalScale?.setScalar) mat.normalScale.setScalar(titan ? 1.16 : 1.05);
-      }
-      if (mat.emissive?.setHex) mat.emissive.setHex(titan ? 0xff6a18 : 0xff7c24);
-      mat.emissiveIntensity = titan ? 0.62 : 0.3;
+      if (!mat || matsSeen.has(mat)) continue;
+      matsSeen.add(mat);
 
-      const oldCompile = mat.onBeforeCompile?.bind(mat);
-      const oldKey = mat.customProgramCacheKey?.bind(mat);
+      if (mat.map) mat.map.anisotropy = Math.max(12, mat.map.anisotropy || 1);
+      if (mat.normalMap) mat.normalMap.anisotropy = Math.max(12, mat.normalMap.anisotropy || 1);
+      if (mat.roughnessMap) mat.roughnessMap.anisotropy = Math.max(12, mat.roughnessMap.anisotropy || 1);
+      if (mat.metalnessMap) mat.metalnessMap.anisotropy = Math.max(12, mat.metalnessMap.anisotropy || 1);
+      if (mat.emissiveMap) mat.emissiveMap.anisotropy = Math.max(12, mat.emissiveMap.anisotropy || 1);
+
+      if (mat.isMeshStandardMaterial || mat.isMeshPhysicalMaterial) {
+        mat.roughness = titan ? clamp(mat.roughness ?? 0.68, 0.34, 0.74) : clamp(mat.roughness ?? 0.78, 0.42, 0.84);
+        mat.metalness = titan ? clamp(mat.metalness ?? 0.16, 0.08, 0.32) : clamp(mat.metalness ?? 0.09, 0.03, 0.18);
+        mat.envMapIntensity = titan ? 1.22 : 1.0;
+        if (mat.normalScale?.setScalar) mat.normalScale.setScalar(titan ? 1.12 : 1.04);
+      }
+      if (mat.emissive?.setHex) mat.emissive.setHex(titan ? 0xff6820 : 0xff7a2c);
+      mat.emissiveIntensity = titan ? 0.42 : 0.22;
+
+      const baseCompile = mat.onBeforeCompile?.bind(mat);
+      const baseKey = mat.customProgramCacheKey?.bind(mat);
       const uTime = { value: time };
-      const uGlow = { value: titan ? 1.0 : 0.68 };
-      const uHeat = { value: titan ? 1.0 : 0.64 };
-      uniforms.push({ uTime, uGlow, uHeat });
+      const uGlow = { value: titan ? 1.0 : 0.78 };
+      uniforms.push({ uTime, uGlow });
 
       mat.onBeforeCompile = (shader, renderer) => {
-        oldCompile?.(shader, renderer);
-        shader.uniforms.uGaienStyleTime = uTime;
-        shader.uniforms.uGaienStyleGlow = uGlow;
-        shader.uniforms.uGaienStyleHeat = uHeat;
+        baseCompile?.(shader, renderer);
+        shader.uniforms.uGaienFxTime = uTime;
+        shader.uniforms.uGaienFxGlow = uGlow;
         shader.vertexShader = shader.vertexShader
-          .replace('#include <common>', `#include <common>\nvarying vec3 vGaienLocalPos;`)
-          .replace('#include <begin_vertex>', `#include <begin_vertex>\nvGaienLocalPos = position;`);
+          .replace('#include <common>', '#include <common>\nvarying vec3 vGaienLocalPos;')
+          .replace('#include <begin_vertex>', '#include <begin_vertex>\nvGaienLocalPos = position;');
         shader.fragmentShader = shader.fragmentShader
-          .replace('#include <common>', `#include <common>\nuniform float uGaienStyleTime;\nuniform float uGaienStyleGlow;\nuniform float uGaienStyleHeat;\nvarying vec3 vGaienLocalPos;`)
+          .replace('#include <common>', '#include <common>\nuniform float uGaienFxTime;\nuniform float uGaienFxGlow;\nvarying vec3 vGaienLocalPos;')
           .replace('#include <output_fragment>', `
-            float gaienView = 1.0 - max(dot(normalize(normal), normalize(vViewPosition)), 0.0);
-            float gaienRim = pow(clamp(gaienView, 0.0, 1.0), 2.05);
-            float gaienPulse = 0.5 + 0.5 * sin(uGaienStyleTime * 3.4 + vGaienLocalPos.y * 4.2 + vGaienLocalPos.x * 1.6);
-            float gaienChest = smoothstep(-0.25, 0.52, vGaienLocalPos.y) * (1.0 - smoothstep(0.22, 0.96, abs(vGaienLocalPos.x)));
-            float gaienBack = smoothstep(0.02, 0.62, vGaienLocalPos.z);
-            float gaienShell = smoothstep(0.18, 0.95, abs(vGaienLocalPos.x)) * smoothstep(-0.28, 0.48, vGaienLocalPos.y);
-            vec3 gaienFireA = vec3(1.0, 0.40, 0.10);
-            vec3 gaienFireB = vec3(1.0, 0.86, 0.40);
-            vec3 gaienLava = mix(gaienFireA, gaienFireB, gaienPulse);
-            totalEmissiveRadiance += gaienLava * gaienRim * (0.18 + 0.16 * uGaienStyleGlow);
-            totalEmissiveRadiance += gaienLava * gaienChest * uGaienStyleHeat * (0.09 + 0.18 * gaienPulse);
-            totalEmissiveRadiance += gaienLava * gaienBack * uGaienStyleHeat * (0.06 + 0.18 * gaienPulse);
-            totalEmissiveRadiance += gaienLava * gaienShell * gaienBack * (0.04 + 0.08 * uGaienStyleGlow);
+            float gView = 1.0 - max(dot(normalize(normal), normalize(vViewPosition)), 0.0);
+            float gRim = pow(clamp(gView, 0.0, 1.0), 2.2);
+            float gPulse = 0.55 + 0.45 * sin(uGaienFxTime * 3.6 + vGaienLocalPos.y * 4.8 + vGaienLocalPos.x * 1.3);
+            float gChest = smoothstep(-0.24, 0.54, vGaienLocalPos.y) * (1.0 - smoothstep(0.20, 1.00, abs(vGaienLocalPos.x)));
+            float gSpikes = smoothstep(0.10, 0.72, vGaienLocalPos.z) * smoothstep(-0.28, 0.54, vGaienLocalPos.y);
+            vec3 gFireA = vec3(1.0, 0.42, 0.10);
+            vec3 gFireB = vec3(1.0, 0.84, 0.38);
+            vec3 gFire = mix(gFireA, gFireB, gPulse);
+            totalEmissiveRadiance += gFire * gRim * (0.10 + 0.14 * uGaienFxGlow);
+            totalEmissiveRadiance += gFire * gChest * (0.04 + 0.10 * uGaienFxGlow);
+            totalEmissiveRadiance += gFire * gSpikes * (0.03 + 0.08 * uGaienFxGlow);
             #include <output_fragment>`);
       };
-      mat.customProgramCacheKey = () => (oldKey ? oldKey() : '') + (titan ? '-gaien-style-v2' : '-gaien-style-v1');
+      mat.customProgramCacheKey = () => (baseKey ? baseKey() : '') + (titan ? '-gaien-hd-v2' : '-gaien-hd-v1');
       mat.needsUpdate = true;
     }
   });
@@ -67,19 +68,14 @@ export function enhanceGaienModel(model, key) {
     update(delta, moving) {
       const dt = Math.max(0, Math.min(0.1, Number(delta) || 0));
       time += dt;
-      const targetGlow = moving ? (titan ? 1.18 : 0.88) : (titan ? 1.0 : 0.68);
-      const targetHeat = moving ? (titan ? 1.12 : 0.78) : (titan ? 1.0 : 0.64);
-      for (const s of uniforms) {
-        s.uTime.value = time;
-        s.uGlow.value += (targetGlow - s.uGlow.value) * (1 - Math.exp(-5 * dt));
-        s.uHeat.value += (targetHeat - s.uHeat.value) * (1 - Math.exp(-4 * dt));
+      const target = moving ? (titan ? 1.16 : 0.96) : (titan ? 1.0 : 0.78);
+      for (const u of uniforms) {
+        u.uTime.value = time;
+        u.uGlow.value += (target - u.uGlow.value) * (1 - Math.exp(-4.5 * dt));
       }
     },
     stop() {
-      for (const s of uniforms) {
-        s.uGlow.value = titan ? 1.0 : 0.68;
-        s.uHeat.value = titan ? 1.0 : 0.64;
-      }
+      for (const u of uniforms) u.uGlow.value = titan ? 1.0 : 0.78;
     }
   };
 }
