@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js';
 import { FIGHTERS, ELEMS } from './data.js';
 import { makeGear, animGear } from './gear.js';
-import { instantiateModel, disposeModel, loadModel } from './model-runtime.js?v=texture-fetch-20261106b';
+import { instantiateModel, disposeModel, loadModel } from './model-runtime.js?v=direct-texture-20261106c';
 
 // 召喚獣の見た目と性能（HPは使い手の最大HPに比例）
 const SUMMON_DEFS = {

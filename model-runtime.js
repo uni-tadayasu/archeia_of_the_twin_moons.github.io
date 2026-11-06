@@ -3,6 +3,7 @@
 import * as THREE from 'three';
 import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { separateEmbeddedTextures } from './model-image-fix.js?v=direct-texture-20261106c';
 
 const cache = new Map();
 const pending = new Map();
@@ -12,7 +13,7 @@ let active = 0;
 let decoderPromise = null;
 let meshoptPromise = null;
 const BASE = new URL('./', import.meta.url);
-export const MODEL_VERSION = 'texture-fetch-20261106b';
+export const MODEL_VERSION = 'direct-texture-20261106c';
 
 export class ModelLoadError extends Error {
   constructor(url, detail, cause) {
@@ -90,46 +91,94 @@ async function getMeshopt() {
     .catch((error) => { meshoptPromise = null; throw error; });
   return meshoptPromise;
 }
-// Chrome's ImageBitmapLoader internally calls fetch(blob:...) for WebP
-// images stored inside a GLB. Some deployed CSP headers forbid that call even
-// when the original .glb was fetched successfully. HTMLImageElement uses the
-// img-src directive instead, which already permits blob: in this application.
-// Construct GLTFParser while createImageBitmap is temporarily unavailable;
-// GLTFLoader then selects THREE.TextureLoader. The global is restored in the
-// same synchronous call stack, before any awaited work or other events.
-function parseWithImageElements(loader, payload, sourceDir) {
-  if (typeof globalThis.createImageBitmap !== 'function') {
-    return loader.parseAsync(payload, sourceDir);
-  }
-  const own = Object.getOwnPropertyDescriptor(globalThis, 'createImageBitmap');
-  let changed = false;
-  try {
-    if (!own || own.configurable) {
-      Object.defineProperty(globalThis, 'createImageBitmap', {
-        configurable: true, writable: true, enumerable: own?.enumerable ?? true,
-        value: undefined
-      });
-      changed = true;
-    } else if (own.writable) {
-      globalThis.createImageBitmap = undefined;
-      changed = globalThis.createImageBitmap === undefined;
-    }
-    // parseAsync constructs the parser synchronously before it returns.
-    // Do not await here: restore createImageBitmap immediately.
-    return loader.parseAsync(payload, sourceDir);
-  } finally {
-    if (changed) {
-      if (own) Object.defineProperty(globalThis, 'createImageBitmap', own);
-      else delete globalThis.createImageBitmap;
+// Decode the WebP bytes already contained in the GLB. No blob: or data:
+// resource is fetched, so restrictive connect-src policies cannot block
+// the texture like ImageBitmapLoader did.
+async function decodeInMemoryImage(image, i) {
+  const blob = new Blob([image.bytes], { type: image.mime });
+  if (typeof createImageBitmap === 'function') {
+    try {
+      return await createImageBitmap(blob, { imageOrientation: 'flipY', premultiplyAlpha: 'none' });
+    } catch (cause) {
+      // Older browsers may not support the options object.
+      try { return await createImageBitmap(blob); }
+      catch (second) { throw new Error(`内蔵画像${i + 1}の直接デコードに失敗: ${second?.message || second}`, { cause }); }
     }
   }
+  // <img> fallback for browsers without createImageBitmap, still no fetch().
+  const bytes = image.bytes;
+  let encoded = '';
+  const stride = 0x6000;
+  for (let start = 0; start < bytes.length; start += stride) {
+    encoded += String.fromCharCode(...bytes.subarray(start, start + stride));
+  }
+  return await new Promise((resolve, reject) => {
+    const element = new Image();
+    element.onload = () => resolve(element);
+    element.onerror = () => reject(new Error(`内蔵画像${i + 1}を表示できません（img-src の data: 設定を確認）`));
+    element.src = `data:${image.mime};base64,${btoa(encoded)}`;
+  });
 }
-function createGLTFParser(extensions) {
-  const loader = new GLTFLoader(new THREE.LoadingManager());
-  // Decoder setup remains shared; GLBs with only embedded WebP textures don't
-  // need the Draco or Meshopt network requests at all.
-  return loader;
+function samplerSetting(THREE, sampler, texture) {
+  const wraps = { 33071: THREE.ClampToEdgeWrapping, 33648: THREE.MirroredRepeatWrapping, 10497: THREE.RepeatWrapping };
+  const filters = {
+    9728: THREE.NearestFilter, 9729: THREE.LinearFilter,
+    9984: THREE.NearestMipmapNearestFilter, 9985: THREE.LinearMipmapNearestFilter,
+    9986: THREE.NearestMipmapLinearFilter, 9987: THREE.LinearMipmapLinearFilter
+  };
+  texture.wrapS = wraps[sampler?.wrapS ?? 10497];
+  texture.wrapT = wraps[sampler?.wrapT ?? 10497];
+  texture.minFilter = filters[sampler?.minFilter ?? 9987];
+  texture.magFilter = filters[sampler?.magFilter ?? 9729];
 }
+async function restoreInMemoryTextures(gltf, detached) {
+  if (!detached?.images.length || !detached.materials.length) return;
+  const decoded = await Promise.all(detached.images.map(decodeInMemoryImage));
+  const textureCache = new Map();
+  const textureFor = (index, isColor) => {
+    if (!Number.isInteger(index)) return null;
+    const k = `${index}:${isColor ? 'color' : 'linear'}`;
+    if (textureCache.has(k)) return textureCache.get(k);
+    const textureDef = detached.textures[index];
+    if (!textureDef) return null;
+    const bitmap = decoded[textureDef.source];
+    if (!bitmap) return null;
+    const texture = new THREE.Texture(bitmap);
+    texture.flipY = false; // createImageBitmap flips above, as GLTFLoader does.
+    texture.colorSpace = isColor ? THREE.SRGBColorSpace : THREE.NoColorSpace;
+    texture.needsUpdate = true;
+    samplerSetting(THREE, detached.samplers[textureDef.sampler], texture);
+    textureCache.set(k, texture);
+    return texture;
+  };
+  const apply = (material, spec) => {
+    if (!material || !spec) return;
+    material.map = textureFor(spec.baseColor, true);
+    const mr = textureFor(spec.metalRough, false);
+    if (mr) { material.metalnessMap = mr; material.roughnessMap = mr; }
+    material.normalMap = textureFor(spec.normal, false);
+    if (material.normalMap && material.normalScale) material.normalScale.set(spec.normalScale, spec.normalScale);
+    material.aoMap = textureFor(spec.occlusion, false);
+    if (material.aoMap) material.aoMapIntensity = spec.occlusionStrength;
+    material.emissiveMap = textureFor(spec.emissive, true);
+    material.needsUpdate = true;
+  };
+  const materials = detached.materials;
+  gltf.scene.traverse((node) => {
+    if (!node.isMesh) return;
+    // Shipped avatar and summon GLBs have one material; other GLBs can use
+    // GLTFLoader's associations map to recover the original material index.
+    for (const material of Array.isArray(node.material) ? node.material : [node.material]) {
+      const index = gltf.parser?.associations?.get(material)?.materials;
+      apply(material, materials[index ?? 0]);
+    }
+  });
+  // The shared model loader caches the scene, so retain its decoded textures.
+  gltf.userData ||= {};
+  gltf.userData.arkeiaTextures = [...textureCache.values()];
+  gltf.userData.arkeiaDecodedImages = decoded;
+}
+function createGLTFParser() { return new GLTFLoader(new THREE.LoadingManager()); }
 
 export function peekModel(url) { return cache.get(absolute(url).href) || null; }
 export function modelError(url) { return errors.get(absolute(url).href) || null; }
@@ -154,35 +203,23 @@ export function loadModel(url) {
         return loader;
       };
       const sourceDir = new URL('./', key).href;
-      // These source avatars include two WebP images as embedded bufferViews.
-      // Use an <img> decoding path from the start rather than fetch(blob:),
-      // which is restricted on some hosting/CSP combinations.
-      const embeddedImages = (doc.images || []).some((image) =>
+      // All of these 3D assets use embedded WebP bufferViews. Remove only
+      // texture references from an in-memory copy before GLTFLoader.parseAsync
+      // (geometry, UVs, skin and animation bytes are preserved exactly).
+      const hasEmbeddedImages = (doc.images || []).some((image) =>
         Number.isInteger(image.bufferView) && /^image\//.test(image.mimeType || '')
       );
-      let result;
-      try {
-        const loader = await newLoader();
-        const parsed = embeddedImages ? parseWithImageElements(loader, payload, sourceDir) : loader.parseAsync(payload, sourceDir);
-        result = await deadline(parsed, 35000, 'GLB解析タイムアウト');
-      } catch (primary) {
-        // In case the target browser forbids <img> too, try the alternative
-        // parser once, without fetching the already-validated GLB again.
-        try {
-          const loader = await newLoader();
-          const alternate = embeddedImages ? loader.parseAsync(payload, sourceDir) : parseWithImageElements(loader, payload, sourceDir);
-          result = await deadline(alternate, 25000, '内蔵画像の読み込みタイムアウト');
-        } catch (secondary) {
-          throw new Error(`GLB内蔵画像の解析に失敗しました。方式1: ${primary?.message || primary} / 方式2: ${secondary?.message || secondary}。Console の blob: または CSP を確認してください。`);
-        }
-      }
+      const detached = hasEmbeddedImages ? separateEmbeddedTextures(payload, doc) : null;
+      const loader = await newLoader();
+      const result = await deadline(loader.parseAsync(detached ? detached.glb : payload, sourceDir), 50000, 'GLB解析タイムアウト');
+      if (detached) await deadline(restoreInMemoryTextures(result, detached), 35000, '内蔵WebPの直接デコードがタイムアウト');
       let visibleMeshes = 0;
       result.scene?.traverse((node) => {
         if (node.isMesh && node.geometry?.attributes?.position?.count) visibleMeshes++;
       });
       if (!visibleMeshes) throw new Error('GLBには描画できる3D形状がありません');
-      // Do not reject valid meshes merely because an optional WebP texture
-      // is missing; the asset's geometry must remain usable.
+      // The model is returned only when both geometry and the original
+      // painted WebP textures have been restored successfully.
       result.userData ||= {};
       result.userData.arkeiaSource = key;
       cache.set(key, result);
