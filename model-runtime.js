@@ -65,14 +65,11 @@ function documentOf(buffer) {
 async function getDraco() {
   if (!decoderPromise) decoderPromise = (async () => {
     const { DRACOLoader } = await import('three/addons/loaders/DRACOLoader.js');
-    // Prefer the decoder already shipped with the earlier compressed-model update.
-    // A JavaScript decoder avoids requiring unsafe-eval for WebAssembly compilation.
-    let decoderPath = 'https://www.gstatic.com/draco/versioned/decoders/1.5.7/';
-    try {
-      const local = new URL('assets/vendor/draco/draco_decoder.js', BASE);
-      const r = await fetch(local, { method: 'HEAD', signal: AbortSignal.timeout(4000), cache: 'no-cache' });
-      if (r.ok && !/html/i.test(r.headers.get('Content-Type') || '')) decoderPath = new URL('./', local).href;
-    } catch { /* No local decoder: use the version-pinned official distribution. */ }
+    // The exported site does not contain assets/vendor/draco/; probing it
+    // causes 404, then the CDN used to fail because CSP blocked connect-src.
+    // Use the official version-pinned JavaScript decoder directly. index.html
+    // permits www.gstatic.com only as a fetch destination (not unsafe-eval).
+    const decoderPath = 'https://www.gstatic.com/draco/versioned/decoders/1.5.7/';
     return new DRACOLoader().setDecoderPath(decoderPath).setDecoderConfig({ type: 'js' }).setWorkerLimit(2);
   })().catch((error) => { decoderPromise = null; throw error; });
   return decoderPromise;

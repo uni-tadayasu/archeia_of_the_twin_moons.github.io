@@ -1,6 +1,6 @@
 import * as THREE from 'three';
-import { loadModel } from './model-runtime.js?v=model-fetch-v20261107';
-import { Battle, ARENA_R } from './game.js?v=model-fetch-v20261107';
+import { loadModel } from './model-runtime.js?v=draco-fix-v20261107';
+import { Battle, ARENA_R } from './game.js?v=draco-fix-v20261107';
 import { FIGHTERS, STORY, ROSTER, UPGRADES, MAX_LV, STAGES, BGM, APEX_BGM, ENEMY_ROSTER, UPG_CAP, LB_MAX, lbMaxLv, lbMul, lbCost, WEAPONS, ARMORS, SUMMONS, STAT_LABEL, SPECIAL_KEYS, BOSS_ROSTER, currentEvent, sanitizeEvent, EV_FOE_KINDS } from './data.js';
 import { sayBattle, setVoiceMuted, stopVoices } from './voice.js';
 import { initSocial, uiConfirm } from './social.js';
@@ -2272,7 +2272,7 @@ function resetFieldLight() {
 async function enterField() {
   // フィールドは物語でしか使わないので必要になった時だけ読み込む（初回表示を軽く）
   if (!(await ensureAllModelsReady())) return;
-  const { Field } = await import('./field.js?v=model-fetch-v20261107');
+  const { Field } = await import('./field.js?v=draco-fix-v20261107');
   leaveField();
   const ch = STORY[state.chapter];
   const st = stageById(ch.stage);

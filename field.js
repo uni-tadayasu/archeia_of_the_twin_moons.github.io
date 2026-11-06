@@ -1,7 +1,7 @@
 // ストーリーモードのフィールド：町 → 野 → ダンジョン（迷宮）を歩いて目的地へ。
 // 魔物は姿が見える「シンボルエンカウント」。触れると戦闘、目的地の祭壇で章の決戦。
 import * as THREE from 'three';
-import { instantiateModel } from './model-runtime.js?v=model-fetch-v20261107';
+import { instantiateModel } from './model-runtime.js?v=draco-fix-v20261107';
 import { FIGHTERS } from './data.js';
 import { makeGear, animGear, removeGear } from './gear.js';
 

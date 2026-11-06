@@ -1,17 +1,16 @@
-ARKEIA model fetch repair - 2026-11-07
+DRACO loading repair - 2026-11-07
 
-Copy index.html, main.js, game.js, field.js, model-runtime.js and model-transport.js
-into the root folder of your EXISTING published project. Do not delete assets/models.
-Publish changes and hard-refresh the page (Ctrl+Shift+R).
+Cause confirmed in the Chrome console:
+- HEAD /assets/vendor/draco/draco_decoder.js -> HTTP 404
+- Request to www.gstatic.com/draco/versioned/decoders/1.5.7/draco_decoder.js -> blocked by connect-src Content Security Policy
 
-Important: All original assets/models/*.glb files must already be published
-at that site's exact root or project subdirectory. This update does not
-contain the large original GLB files.
+Changes:
+- index.html: allow https://www.gstatic.com in connect-src only; keep wasm-unsafe-eval and all existing restrictions. Bump JS cache version.
+- model-runtime.js: skip nonexistent local decoder and use the pinned official JS decoder.
+- main.js, game.js, field.js: update import version to avoid reusing the stale loader in cache.
 
-If models still fail, click "モデルの公開URLを確認" in the error panel.
-If the URL shows 404, upload the entire assets/models directory from
-your original project. If it shows a browser privacy/CORS block,
-copy the exact URL and error message to identify the host configuration.
+Usage:
+Unzip the five code files into the existing game website root, overwrite those exact files, and publish the changes. Do not delete assets/models/*.glb.
+Refresh Chrome with Ctrl+Shift+R. Do not click a retry button on an old page: the changed CSP is applied only when the page loads again.
 
-The patch uses document.baseURI instead of the transient JS module URL,
-with a fetch-to-XHR fallback; no changes to your saves or server.
+This fixes the specific console diagnostics. End-to-end deployment on the live GitHub Pages site has not been verified.
