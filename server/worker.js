@@ -1,11 +1,85 @@
-// 双月のアルケイア — 認証・検証サーバー（Cloudflare Workers）
-// © KASAI SOLUTIONS INC.
-// 役割：運営/運営長の認証、乱入許可、招待コードの原子的な一回使用、同期セーブの保護、
-//       Stripe 決済通知の検証と購入キャラの解放、戦闘用ステータス（強化・装備・キャラ）の検証と署名。
-// 署名は ECDSA P-256。クライアントは公開鍵（config.js の SERVER_PUBKEY_JWK）で検証します。
-// Game data embedded in this single-file Worker. No relative imports required.
+// Riftfall Arena Cloudflare Worker: single-file bundle of the uploaded complete release.
+// Keeps existing Durable Object exports, including MailStore.
+// Original sources: appearance-data.js, data.js, server/worker.js
+
+// 外見の設計値。描画ライブラリ・DOMに依存しないのでサーバーからも読み込める。
+// 同じ素体を使っていた二人目以降だけに、体形・髪・頭飾り・衣装・得物を割り当てる。
+const PALETTES = [
+  [0x6c2935, 0xc19b53, 0x2c1924, 0xead6b5],
+  [0x273b64, 0xb7c9d4, 0x182235, 0xd4b489],
+  [0x436253, 0xc5a868, 0x273628, 0xe8d6b0],
+  [0x5a3a6b, 0xc4adb9, 0x211a34, 0xe4bdae],
+  [0x9a5837, 0xe2be78, 0x3c2924, 0xb8c5d1],
+  [0x65758b, 0xd2cbbb, 0x293341, 0xf3e5c6],
+  [0x81734c, 0xc5b592, 0x333624, 0xbfd4cb],
+  [0x476d7b, 0xbed8d3, 0x22313d, 0xdec6ab],
+  [0x5e4240, 0xbb8d67, 0x271d24, 0xddd7c5],
+  [0x4d436c, 0xbcad73, 0x211d38, 0xccc4df],
+  [0xa17e42, 0xe4cf92, 0x483727, 0xbfd1d1],
+  [0x5a6a3d, 0xc8b983, 0x282f26, 0xdfc3ac],
+  [0x855769, 0xd4bac7, 0x372733, 0xf0d9bd],
+  [0x346465, 0xbbc9ae, 0x233b3a, 0xe0c5a0],
+  [0x53515a, 0xc8b786, 0x27232c, 0xc6d5df]
+];
+const HEAD_NAMES = ['羽飾り兜', '枝角冠', '高僧帽', '獣耳フード', '広つば帽', '双結い髪', '双角兜', '三日月冠', '波紋の冠', '長い結い髪', '鉄面', '翼飾り冠', '尖りフード', '巻き布と面布', '長い横髪', '光輪冠', '工房の眼鏡', '鱗の冠', '王冠と編み髪'];
+const COAT_NAMES = ['重ね胸甲', '二重法衣', '片肩の外套', '毛皮の肩掛け', '札甲', '長裾の上衣', '骨の胸甲', '結び布', '翼襟の礼装', '薬瓶の革鎧', '大肩甲', '菱紋の胴衣'];
+function hash(s) {
+  let n = 2166136261;
+  for (const c of s) n = Math.imul(n ^ c.charCodeAt(0), 16777619);
+  return n >>> 0;
+}
+const fraction = (seed, offset) => ((seed >>> offset) & 255) / 255;
+
+/** Gives duplicate-derived fighters their own stable, geometry-changing identity. */
+export function assignUniqueAppearances(fighters) {
+  const firstByModel = new Map();
+  const counts = new Map();
+  const originals = [];
+  const changed = [];
+  for (const [id, fighter] of Object.entries(fighters)) {
+    const model = fighter.model;
+    if (!firstByModel.has(model)) {
+      firstByModel.set(model, { id, family: firstByModel.size });
+      originals.push(id);
+      continue;
+    }
+    const source = firstByModel.get(model);
+    const ordinal = counts.get(model) || 0;
+    counts.set(model, ordinal + 1);
+    const seed = hash(`riftfall-appearance-v1:${id}`);
+    const palette = PALETTES[(ordinal * 7 + source.family * 3) % PALETTES.length];
+    const head = (ordinal + source.family * 3) % HEAD_NAMES.length;
+    const coat = (ordinal * 7 + source.family * 5) % COAT_NAMES.length;
+    fighter.appearance = {
+      version: 1, id, source: source.id, family: source.family, ordinal, seed,
+      head, coat, back: (ordinal * 5 + source.family * 2) % 9,
+      weapon: (source.family * 2 + ordinal) % 10,
+      crest: 3 + ((ordinal + source.family) % 5),
+      trim: (ordinal * 3 + source.family) % 6,
+      colors: palette.slice(),
+      // Head / shoulder / waist changes alter real vertices, not merely material hue.
+      shape: [
+        +(0.88 + fraction(seed, 0) * 0.26).toFixed(4),
+        +(0.91 + fraction(seed, 8) * 0.22).toFixed(4),
+        +(0.86 + fraction(seed, 16) * 0.31).toFixed(4),
+        +(0.88 + fraction(seed, 24) * 0.28).toFixed(4),
+        +(0.92 + (ordinal % 7) * 0.025).toFixed(4)
+      ],
+      label: `${HEAD_NAMES[head]}・${COAT_NAMES[coat]}`,
+      modelIdentity: `generated:${id}:v1`
+    };
+    fighter.face = `assets/portraits/${id}.webp?v=20261106-illustrated1`;
+    delete fighter.faceHue;
+    changed.push(id);
+  }
+  return Object.freeze({ originals: Object.freeze(originals), changed: Object.freeze(changed) });
+}
+
+
+
+
 // 戦士データ。skills[0]=技A（立ち）, [1]=技A（移動中）, [2]=技B（立ち）, [3]=技B（移動中）
-const FIGHTERS = {
+export const FIGHTERS = {
   rowen: {
     name: 'ロウエン', title: '灰燼の渡り剣士', model: 'assets/models/hero-swordsman.glb',
     color: 0xffb347, height: 1.8, hp: 1000, speed: 6.2, overGain: 1, light: { dmg: 38, range: 2.1 },
@@ -162,7 +236,7 @@ const FIGHTERS = {
   }
 };
 
-const ROSTER = ['rowen', 'minase', 'garou', 'tsubaki', 'harlan', 'pip', 'velka', 'osric', 'noa', 'kurouga', 'rinfa', 'igna', 'petra'];
+export const ROSTER = ['rowen', 'minase', 'garou', 'tsubaki', 'harlan', 'pip', 'velka', 'osric', 'noa', 'kurouga', 'rinfa', 'igna', 'petra'];
 const BASE_KEYS = ROSTER.slice();
 for (const k of [...BASE_KEYS, 'seraphel']) FIGHTERS[k].face = `assets/face-${k}.webp`;
 FIGHTERS.uninomiya = {
@@ -252,7 +326,7 @@ FIGHTERS.sovereign2 = {
   over: { name: '深淵開闢・緋紫の終焉', kind: 'judgment', visual: 'pillar', finalVisual: 'bigsword', count: 24, spread: 8, radius: 2.8, dmg: 120, delay: 0.7, interval: 0.05, finalDmg: 650, finalRadius: 11, elem: 9, color: 0xff2050, vivid: true }
 };
 // 運営長だけが灯晶で購入できる特別キャラ：血魔ザルグレイヴ（血属性）
-const BLOODFIEND_PRICE = 50000;
+export const BLOODFIEND_PRICE = 50000;
 FIGHTERS.bloodfiend = {
   name: 'ザルグレイヴ', title: '紅翼の血魔（運営長・灯晶限定）', model: 'assets/models/blood-fiend-v2.glb', face: 'assets/face-bloodfiend-v2.webp',
   color: 0xc8102e, height: 1.95, hp: 1500, speed: 6.6, overGain: 1.5, locked: true, special: 'chief', shardPrice: BLOODFIEND_PRICE,
@@ -266,7 +340,7 @@ FIGHTERS.bloodfiend = {
   over: { name: '紅月葬送・血華の宴', kind: 'judgment', visual: 'pillar', finalVisual: 'bigsword', count: 18, spread: 7, radius: 2.6, dmg: 100, delay: 0.7, interval: 0.06, finalDmg: 480, finalRadius: 9.5, elem: 9, color: 0xe0103c, vivid: true }
 };
 // 通常プレイヤーがパーティーに入れられない特別枠
-const SPECIAL_KEYS = ['seraphel', 'chief', 'crimson', 'sovereign', 'bloodfiend'];
+export const SPECIAL_KEYS = ['seraphel', 'chief', 'crimson', 'sovereign', 'bloodfiend'];
 
 // ---------- 決定的な乱数（毎回同じ内容を生成する） ----------
 function rng(seed) {
@@ -303,7 +377,7 @@ function shiftHex(hex, dh, ds = 0, dl = 0) {
 
 // ---------- 技の書：100種 ----------
 // 属性：st=状態異常キー, sn=表示名, sc=表示色
-const ELEMS = [
+export const ELEMS = [
   { n: '炎', c: 0xff4a12, p: 'flame', st: 'burn', sn: '火傷' },
   { n: '氷', c: 0x30d0ff, p: 'ice', st: 'freeze', sn: '凍結' },
   { n: '雷', c: 0xffe010, p: 'orb', st: 'para', sn: '麻痺' },
@@ -349,7 +423,7 @@ const FORMS = [
     ? { name: e.n + '癒結', cost: 28, kind: 'heal', heal: 150, radius: 5 }
     : { name: e.n + '晶棘', cost: 24, kind: 'rain', visual: 'crystal', count: 4, spread: 2, radius: 1.4, dmg: 58, delay: 0.4, interval: 0.1 }
 ];
-const SKILLS = [];
+export const SKILLS = [];
 ELEMS.forEach((e, ei) => FORMS.forEach((fm, fi) => {
   const s = { ...fm(e), color: shiftHex(e.c, (fi - 4.5) * 0.022, 0, ((fi % 3) - 1) * 0.07), elem: ei, shape: ei * 10 + fi, snd: ei * 10 + fi, vivid: true };
   if (s.kind === 'heal') s.color = 0x30ff70;
@@ -421,7 +495,7 @@ function genFighter(r, bi, extra) {
 // ---------- 敵キャラ：100体（選択不可、物語と共闘戦に登場） ----------
 const FOE_PRE = ['朽ちた', '狂える', '影の', '砂喰いの', '氷棺の', '錆鉄の', '夜啼きの', '偽りの', '呪われし', '黄昏の'];
 const FOE_KIND = ['亡霊剣士', '魔女', '鬼', '刺客', '黒騎士', '小鬼', '狩人', '傀儡兵', '堕ちた巫女', '人狼', '破戒僧', '竜騎兵', 'からくり'];
-const ENEMY_ROSTER = [];
+export const ENEMY_ROSTER = [];
 {
   const r = rng(666);
   for (let i = 0; i < 100; i++) {
@@ -439,7 +513,7 @@ const ENEMY_ROSTER = [];
 }
 
 // seg=床の多角形の辺数, pshape=柱の形, cshape=浮遊石の形
-const STAGES = [
+export const STAGES = [
   { id: 'moon', name: '双月の闘技場', sky: 'assets/twin-moon-sky.webp', floor: 0xffffff, seg: 64, rim: 0xc9a65a, pillar: 0x8c8aa0, pshape: 'cyl', crystal: 0x9fe8ff, cshape: 'oct', fog: 0x2a2850, hemi: 0xcfd8ff, sun: 0xfff0d8 },
   { id: 'desert', name: '砂塵の古円', sky: 'assets/desert-dusk-sky.webp', floor: 0xf2c88a, seg: 8, rim: 0xb07a3a, pillar: 0xb08050, pshape: 'box', crystal: 0xffa040, cshape: 'ico', fog: 0x9a5a3a, hemi: 0xffd8b0, sun: 0xffb070 },
   { id: 'frost', name: '霜の書架', sky: 'assets/frost-aurora-sky.webp', floor: 0xbfe6ff, seg: 6, rim: 0xe0f4ff, pillar: 0xdff4ff, pshape: 'spire', crystal: 0x8fe0ff, cshape: 'oct', fog: 0x4a6a8a, hemi: 0xc8f0ff, sun: 0xd8f0ff },
@@ -452,13 +526,13 @@ const STAGES = [
 // ---------- 音楽：100曲（Web Audioで生成） ----------
 const BGM_A = ['暁', '黄昏', '月影', '嵐', '星屑', '灯火', '雪解け', '砂塵', '深淵', '凱旋'];
 const BGM_B = ['の行進', 'の舞曲', 'の円舞', 'の鼓動', 'の追想', 'の戦歌', 'の祈り', 'の疾走', 'の残響', 'の序曲'];
-const BGM = [];
+export const BGM = [];
 for (let i = 0; i < 100; i++) {
   // テンポは136〜175で散らし、10曲に3曲は壮大編成（金管・聖歌隊）に
   BGM.push({ name: BGM_A[i % 10] + BGM_B[Math.floor(i / 10)], seed: 1000 + i * 7919, bpm: 136 + ((i * 17) % 40), epic: i % 10 < 3 });
 }
 // 頂上決戦の専用曲（1=運営長ルミナリアの乱入、2=ヴェスペラ戦）
-const APEX_BGM = {
+export const APEX_BGM = {
   1: { name: '裁定の双月 — 天穹を裂く者', seed: 777001, bpm: 176, apex: 1 },
   2: { name: '冥紫の深淵后 — 緋き終焉', seed: 777777, bpm: 168, apex: 2 }
 };
@@ -488,7 +562,7 @@ const APEX_BGM = {
 }
 
 // ---------- 強化：100種（各5段） ----------
-const MAX_LV = 5;
+export const MAX_LV = 5;
 const UPG_STATS = [
   { id: 'hp', noun: '器', what: '体力の上限', per: 8, sign: '+' },
   { id: 'atk', noun: '刃', what: '与える傷', per: 6, sign: '+' },
@@ -498,23 +572,23 @@ const UPG_STATS = [
 ];
 const UPG_PRE = ['若葉の', '鉄の', '銀の', '金の', '星の', '月の', '竜の', '古の', '祈りの', '嵐の', '焔の', '氷の', '雷の', '風の', '大地の', '深海の', '天空の', '夜明けの', '黄昏の', '永劫の'];
 const FIRST_LABEL = { hp: '生命の器', atk: '刃の冴え', def: '鎧の芯', flux: '灯の巡り', over: '昂りの火' };
-const UPGRADES = [];
+export const UPGRADES = [];
 UPG_PRE.forEach((pre, pi) => UPG_STATS.forEach((s) => {
   const w = pi === 0 ? 1 : 0.25;
   const pct = +(s.per * w).toFixed(2);
   UPGRADES.push({ id: pi === 0 ? s.id : s.id + pi, stat: s.id, w, pct, what: s.what, sign: s.sign, label: pi === 0 ? FIRST_LABEL[s.id] : pre + s.noun, desc: `${s.what} ${s.sign}${pct}%／段` });
 }));
 // ---------- 限界突破：全強化を極めると解放。上限段+5、各強化の効果+20%（1回ごと） ----------
-const LB_MAX = 10;
-const LB_STEP = 5;
-const lbMaxLv = (lb) => MAX_LV + LB_STEP * lb;
-const lbMul = (lb) => 1 + 0.2 * lb;
-const lbCost = (lb) => 5000 * (lb + 1);
+export const LB_MAX = 10;
+export const LB_STEP = 5;
+export const lbMaxLv = (lb) => MAX_LV + LB_STEP * lb;
+export const lbMul = (lb) => 1 + 0.2 * lb;
+export const lbCost = (lb) => 5000 * (lb + 1);
 // ---------- 武器・装備：100種 ----------
 const WEP_TYPES = ['剣', '杖', '大斧', '双刃', '槍', '弓', '錬金瓶', '拳甲', '聖鈴', '雅扇'];
 const WEP_TIER = ['木の', '鉄の', '鋼の', '銀の', '霊銀の', '竜骨の', '月光の', '天星の', '灯脈の', '双月の'];
 const WEP_FOCUS = [['atk'], ['flux', 'over'], ['atk', 'hp'], ['atk', 'over'], ['atk', 'def'], ['atk', 'flux'], ['flux', 'hp'], ['atk', 'def'], ['hp', 'def'], ['over', 'flux']];
-const WEAPONS = [];
+export const WEAPONS = [];
 WEP_TIER.forEach((tier, ti) => WEP_TYPES.forEach((type, yi) => {
   const pow = 1 + ti * 1.1;
   const bonus = {};
@@ -524,7 +598,7 @@ WEP_TIER.forEach((tier, ti) => WEP_TYPES.forEach((type, yi) => {
 // ---------- 防具：100種（装備すると戦闘・ワールドで見た目に反映） ----------
 const ARM_TYPES = ['軽鎧', '重鎧', '法衣', '外套', '胸当て', '肩鎧', '竜鱗鎧', '聖衣', '影装束', '王冠鎧'];
 const ARM_FOCUS = [['def', 'hp'], ['def'], ['flux', 'def'], ['hp', 'over'], ['def', 'atk'], ['def', 'hp'], ['hp', 'def'], ['over', 'flux'], ['atk', 'over'], ['def', 'over']];
-const ARMORS = [];
+export const ARMORS = [];
 WEP_TIER.forEach((tier, ti) => ARM_TYPES.forEach((type, yi) => {
   const pow = 0.8 + ti * 1.0;
   const bonus = {};
@@ -536,14 +610,14 @@ WEAPONS.push({ id: 'w100', name: '草薙の剣', bonus: { atk: 16, over: 9, flux
 ARMORS.push({ id: 'a100', name: '草薙の盾', bonus: { def: 16, hp: 12, over: 5 }, price: 150000, relic: true, desc: '紅玉と黄金で鍛えられた、災いを退ける神盾' });
 // ---------- 召喚獣（運営長・ザルグレイヴ専用。通常攻撃の代わりに発動） ----------
 // HPは使い手の最大HPの60%。倒されるまで使い手の前方に居続け、前からの攻撃を受け止める（倒されると15秒後に再召喚可）
-const SUMMONS = [
+export const SUMMONS = [
   { id: 's0', name: 'ヤマタノオロチ', fighter: 'bloodfiend', chief: true, price: 300000, desc: '八つ首の災竜。前方に居座り、通常攻撃の代わりに一斉に噛みつく。前からの攻撃を受け止める' },
   { id: 's1', name: 'スサノオ', fighter: 'crimson', price: 200000, desc: '翠雷をまとう鎧の荒神。前方に立ちはだかり、通常攻撃の代わりに剛腕で薙ぎ払う。前からの攻撃を受け止める' }
 ];
-const STAT_LABEL = { hp: '体力', atk: '攻撃', def: '守り', flux: '灯力', over: '奥義' };
+export const STAT_LABEL = { hp: '体力', atk: '攻撃', def: '守り', flux: '灯力', over: '奥義' };
 
 // 強化の合計上限（段換算）
-const UPG_CAP = { hp: 25, atk: 25, def: 14, flux: 25, over: 20 };
+export const UPG_CAP = { hp: 25, atk: 25, def: 14, flux: 25, over: 20 };
 
 const STORY_BASE = [
   {
@@ -717,7 +791,7 @@ const ARCS = [
 ];
 // ---------- ボス：全25体（各部の主＋中ボス15体＋ラスボス・セラフェル） ----------
 // 専用の戦士データを作り、属性ごとに固有の技と奥義を持たせる
-const BOSS_ROSTER = [];
+export const BOSS_ROSTER = [];
 function makeBoss(spec, i) {
   const base = FIGHTERS[spec.k];
   const r = rng(9000 + i * 17);
@@ -800,7 +874,7 @@ const chapNo = (n) => {
   const t = Math.floor(n / 10), o = n % 10;
   return n === 100 ? '百' : (t > 1 ? KANJI[t] : '') + (t ? '十' : '') + KANJI[o];
 };
-const STORY = [];
+export const STORY = [];
 {
   const r = rng(4242);
   ARCS.forEach((arc, ai) => {
@@ -916,7 +990,7 @@ const STORY = [];
 
 // ---- 週替わりイベント（ボーナスステージ）：日本時間の月曜0時に切り替わる ----
 // foes: 'mob'=魔物 / 'boss'=ボス / 'roster'=戦士 / 'mirror'=自分の写し / キー名
-const EVENTS = [
+export const EVENTS = [
   { name: '魔物の大行進', desc: '弱めの魔物が6体押し寄せる。まとめて薙ぎ払え！', foes: [['mob', 6]], hp: 0.45, atk: 0.7, ally: 0, first: 600, reward: 120, stage: 2 },
   { name: '巨影の襲来', desc: '巨大化したボスが1体。体力3倍の大物を討て！', foes: [['boss', 1]], hp: 3, atk: 1, scale: 1.6, ally: 1, first: 800, reward: 150, stage: 4 },
   { name: '灯晶の雨', desc: '相棒と二人で魔物3体に挑む。報酬がいつもの3倍！', foes: [['mob', 3]], hp: 0.8, atk: 0.8, ally: 1, first: 500, reward: 180, stage: 1 },
@@ -928,13 +1002,13 @@ const EVENTS = [
 ];
 const WEEK_MS = 7 * 24 * 3600 * 1000;
 // 1970-01-05(月) 0:00 JST を起点にした週番号
-function eventWeek(now = Date.now()) {
+export function eventWeek(now = Date.now()) {
   return Math.floor((now + 9 * 3600 * 1000 - 4 * 24 * 3600 * 1000) / WEEK_MS);
 }
 // ---- 運営長が作る特別イベント（受信データもここで検証） ----
-const EV_FOE_KINDS = { mob: '魔物', boss: 'ボス', roster: '戦士', mirror: '自分の写し' };
+export const EV_FOE_KINDS = { mob: '魔物', boss: 'ボス', roster: '戦士', mirror: '自分の写し' };
 const evNum = (v, lo, hi, d) => { const n = Number(v); return Number.isFinite(n) ? Math.max(lo, Math.min(hi, n)) : d; };
-function sanitizeEvent(e, fighters) {
+export function sanitizeEvent(e, fighters) {
   if (!e || typeof e !== 'object') return null;
   const t = (v, n) => String(v ?? '').replace(/[\u0000-\u001f<>]/g, '').trim().slice(0, n);
   const name = t(e.name, 24);
@@ -952,14 +1026,14 @@ function sanitizeEvent(e, fighters) {
     reward: Math.round(evNum(e.reward, 0, 5000, 100)), stage: Math.round(evNum(e.stage, 0, 20, 0)), at, ends
   };
 }
-function currentEvent(now = Date.now()) {
+export function currentEvent(now = Date.now()) {
   const w = eventWeek(now);
   const ends = (w + 1) * WEEK_MS - 9 * 3600 * 1000 + 4 * 24 * 3600 * 1000;
   return { week: w, ev: EVENTS[((w % EVENTS.length) + EVENTS.length) % EVENTS.length], ends };
 }
 
 // ---- 全戦士共通の回復技（skills[4]。H キー／「癒」ボタン） ----
-const HEAL_SLOT = 4;
+export const HEAL_SLOT = 4;
 for (const [k, f] of Object.entries(FIGHTERS)) {
   if (!f.skills || f.skills.length > HEAL_SLOT) continue;
   while (f.skills.length < HEAL_SLOT) f.skills.push({ ...f.skills[0] });
@@ -992,6 +1066,17 @@ for (const [k, f] of Object.entries(FIGHTERS)) {
     f.pool = [0, 1, 2, 3, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14];
   }
 }
+
+// 元から固有だった20人は維持。素体・顔絵を使い回していた209人だけを固有化。
+export const CHARACTER_APPEARANCES = assignUniqueAppearances(FIGHTERS);
+
+
+// 双月のアルケイア — 認証・検証サーバー（Cloudflare Workers）
+// © KASAI SOLUTIONS INC.
+// 役割：運営/運営長の認証、乱入許可、招待コードの原子的な一回使用、同期セーブの保護、
+//       Stripe 決済通知の検証と購入キャラの解放、戦闘用ステータス（強化・装備・キャラ）の検証と署名。
+// 署名は ECDSA P-256。クライアントは公開鍵（config.js の SERVER_PUBKEY_JWK）で検証します。
+
 
 const enc = new TextEncoder();
 const HEX64 = /^[0-9a-f]{64}$/;
@@ -1047,7 +1132,9 @@ async function sign(env, payload) {
 async function verify(env, tok, type) {
   try {
     if (typeof tok !== 'string' || tok.length > 4000) return null;
-    const [p, s] = tok.split('.');
+    const parts = tok.split('.');
+    if (parts.length !== 2 || !parts.every((part) => /^[A-Za-z0-9_-]+$/.test(part))) return null;
+    const [p, s] = parts;
     const ok = await crypto.subtle.verify({ name: 'ECDSA', hash: 'SHA-256' }, (await keys(env)).pub, unb64u(s), enc.encode(p));
     if (!ok) return null;
     const data = JSON.parse(new TextDecoder().decode(unb64u(p)));
@@ -1168,6 +1255,11 @@ export default {
         case '/chief/sign': return await chiefSign(req, env, H, body);
         case '/chief/event': return await chiefEvent(req, env, H, body);
         case '/chief/current': return await chiefCurrent(req, env, H);
+        case '/chief/mail/send': return await chiefMail(req, env, H, body, 'send');
+        case '/chief/mail/history': return await chiefMail(req, env, H, body, 'history');
+        case '/mail/list': return await playerMail(req, env, H, body, 'list');
+        case '/mail/read': return await playerMail(req, env, H, body, 'read');
+        case '/mail/claim': return await playerMail(req, env, H, body, 'claim');
         default: return json(H, { error: 'not found' }, 404);
       }
     } catch (err) {
@@ -1472,6 +1564,82 @@ async function chiefCurrent(req, env, H) {
   return json(H, { v: r.data?.v || null });
 }
 
+// ---------- 運営長のシステムメール・プレゼント ----------
+// メール本文は MailStore、既読と受取記録は本人の SyncLock に保存する。
+// 受取記録と灯晶・装備は同一トランザクションで確定するため、再送しても二重付与しない。
+const MAIL_ID_RE = /^[0-9a-z]{10}_[0-9a-f]{32}$/;
+const MAIL_REQUEST_RE = /^[A-Za-z0-9_-]{12,64}$/;
+const MAIL_PAGE = 50;
+const MAIL_MAX_SHARDS = 999999; // クライアントのセーブ上限と同じ。超過分を切り捨てない。
+const MAIL_ITEM_IDS = new Set([...WEAPONS, ...ARMORS].map((x) => x.id));
+const mailStub = (env) => env.MAIL_STORE.get(env.MAIL_STORE.idFromName('chief-mail-v1'));
+const mailCursor = (value) => value == null || value === '' ? '' : typeof value === 'string' && MAIL_ID_RE.test(value) ? value : null;
+function mailText(value, max) {
+  if (typeof value !== 'string') return null;
+  const s = value.replace(/\r\n?/g, '\n').normalize('NFC').trim();
+  return s && [...s].length <= max && !/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/.test(s) ? s : null;
+}
+function mailGift(value) {
+  if (value == null) return { shards: 0, items: [] };
+  if (typeof value !== 'object' || Array.isArray(value)) return null;
+  if (Object.keys(value).some((key) => !['shards', 'items'].includes(key))) return null;
+  const shards = value.shards ?? 0, items = value.items ?? [];
+  if (!Number.isSafeInteger(shards) || shards < 0 || shards > MAIL_MAX_SHARDS || !Array.isArray(items) || items.length > 10) return null;
+  if (items.some((id) => typeof id !== 'string' || !MAIL_ITEM_IDS.has(id))) return null;
+  return { shards, items: [...new Set(items)].sort() };
+}
+async function chiefMail(req, env, H, body, op) {
+  if ((await verify(env, body.token, 'role'))?.r !== 'chief') return json(H, { error: 'denied' }, 403);
+  if (!env.MAIL_STORE) return json(H, { error: 'mail_not_ready' }, 503);
+  if (await limited(env, req, 'mail-' + op, op === 'send' ? 60 : 120, 3600000)) return json(H, { error: 'limit' }, 429);
+  if (op === 'history') {
+    const cursor = mailCursor(body.cursor);
+    if (cursor === null) return json(H, { error: 'bad' }, 400);
+    const r = await doCall(mailStub(env), { op, cursor });
+    return json(H, r.data, r.status);
+  }
+  const requestId = body.requestId, recipient = body.recipient;
+  const title = mailText(body.title, 80), text = mailText(body.body, 2000), gift = mailGift(body.gift);
+  const expiresAt = body.expiresAt;
+  if (typeof requestId !== 'string' || !MAIL_REQUEST_RE.test(requestId) ||
+      typeof recipient !== 'string' || (recipient !== 'all' && !PID_RE.test(recipient)) ||
+      !title || /\n/.test(title) || !text || !gift || !Number.isSafeInteger(expiresAt) || expiresAt <= 0) {
+    return json(H, { error: 'bad' }, 400);
+  }
+  if (recipient !== 'all') {
+    const found = await doCall(env.PID_BIND.get(env.PID_BIND.idFromName(recipient)), { op: 'lookup' });
+    if (found.status !== 200) return json(H, { error: 'server' }, 500);
+    if (!found.data?.registered) return json(H, { error: 'recipient_notfound' }, 404);
+  }
+  const message = { recipient, title, body: text, gift, expiresAt, kind: gift.shards || gift.items.length ? 'gift' : 'system', senderName: '運営長' };
+  const digest = await sha256(JSON.stringify(message));
+  const r = await doCall(mailStub(env), { op, requestId, digest, message });
+  return json(H, r.data, r.status);
+}
+async function playerMail(req, env, H, body, op) {
+  if (!env.MAIL_STORE) return json(H, { error: 'mail_not_ready' }, 503);
+  if (await limited(env, req, 'mail-user', 240, 600000)) return json(H, { error: 'limit' }, 429);
+  const me = await whoAmI(env, body.code);
+  if (!me) return json(H, { error: 'nosync' }, 403);
+  const sync = env.SYNC_LOCK.get(env.SYNC_LOCK.idFromName(me.h));
+  if (op === 'list') {
+    const cursor = mailCursor(body.cursor);
+    if (cursor === null) return json(H, { error: 'bad' }, 400);
+    const r = await doCall(mailStub(env), { op, pid: me.pid, cursor });
+    if (r.status !== 200) return json(H, r.data, r.status);
+    const messages = r.data.messages;
+    const state = await doCall(sync, { op: 'mail-state', pid: me.pid, ids: messages.map((m) => m.id) });
+    if (state.status !== 200) return json(H, state.data, state.status);
+    const states = state.data.states || {};
+    return json(H, { ...r.data, pid: me.pid, messages: messages.map((m) => ({ ...m, ...(states[m.id] || { readAt: 0, claimedAt: 0 }) })) });
+  }
+  if (typeof body.id !== 'string' || !MAIL_ID_RE.test(body.id)) return json(H, { error: 'bad' }, 400);
+  const r = await doCall(mailStub(env), { op: 'get', pid: me.pid, id: body.id });
+  if (r.status !== 200) return json(H, r.data, r.status);
+  const result = await doCall(sync, { op: 'mail-' + op, pid: me.pid, mail: r.data.message });
+  return json(H, result.data, result.status);
+}
+
 // ---------- Durable Objects ----------
 // pid ↔ 同期コードの固定（最初の1件だけ）
 export class PidBind {
@@ -1479,12 +1647,68 @@ export class PidBind {
     this.state = state;
   }
   async fetch(req) {
-    const { h } = await req.json();
+    const { h, op } = await req.json();
     return this.state.blockConcurrencyWhile(async () => {
       const cur = await this.state.storage.get('h');
+      if (op === 'lookup') return new Response(JSON.stringify({ registered: !!cur }));
+      if (typeof h !== 'string' || !HEX64.test(h)) return new Response('bad', { status: 400 });
       if (!cur) await this.state.storage.put('h', h);
       else if (cur !== h) return new Response('bound', { status: 409 });
       return new Response('ok');
+    });
+  }
+}
+// 配信済みメールは1件ずつ保存。全員宛と個別宛の索引から50件ずつページ取得する。
+// 送信IDと本文ハッシュも原子的に保存し、通信切断後の同じ送信を重複配信しない。
+export class MailStore {
+  constructor(state) { this.state = state; }
+  async fetch(req) {
+    const b = await req.json();
+    return this.state.blockConcurrencyWhile(async () => {
+      const storage = this.state.storage;
+      const out = (v, status = 200) => new Response(JSON.stringify(v), { status });
+      const now = Date.now();
+      const view = (m) => ({ ...m, expired: m.expiresAt <= now });
+      if (b.op === 'send') {
+        const prior = await storage.get('request:' + b.requestId);
+        if (prior) {
+          if (prior.digest !== b.digest) return out({ error: 'send_conflict' }, 409);
+          const message = await storage.get('m:' + prior.id);
+          if (!message) return out({ error: 'server' }, 500);
+          return out({ ok: true, duplicate: true, id: message.id, message: view(message) });
+        }
+        if (!(b.message.expiresAt > now + 60000 && b.message.expiresAt <= now + 90 * DAY)) return out({ error: 'bad' }, 400);
+        const id = now.toString(36).padStart(10, '0') + '_' + crypto.randomUUID().replace(/-/g, '');
+        const message = { ...b.message, id, createdAt: now };
+        const prefix = message.recipient === 'all' ? 'a:' : 'p:' + message.recipient + ':';
+        await writeTogether(storage, [
+          ['m:' + id, message], [prefix + id, id], ['request:' + b.requestId, { id, digest: b.digest }]
+        ]);
+        return out({ ok: true, duplicate: false, id, message: view(message) });
+      }
+      if (b.op === 'get') {
+        const message = await storage.get('m:' + b.id);
+        if (!message) return out({ error: 'notfound' }, 404);
+        if (message.recipient !== 'all' && message.recipient !== b.pid) return out({ error: 'mail_recipient' }, 403);
+        return out({ ok: true, message: view(message) });
+      }
+      if (b.op === 'list' || b.op === 'history') {
+        const options = (prefix) => ({ prefix, reverse: true, limit: MAIL_PAGE + 1, ...(b.cursor ? { end: prefix + b.cursor } : {}) });
+        let candidates;
+        if (b.op === 'history') {
+          candidates = [...(await storage.list(options('m:'))).values()];
+        } else {
+          const global = await storage.list(options('a:'));
+          const personal = await storage.list(options('p:' + b.pid + ':'));
+          const ids = [...new Set([...global.values(), ...personal.values()])];
+          const rows = ids.length ? await storage.get(ids.map((id) => 'm:' + id)) : new Map();
+          candidates = [...rows.values()].filter((m) => m.recipient === 'all' || m.recipient === b.pid);
+        }
+        candidates.sort((a, b) => a.id < b.id ? 1 : a.id > b.id ? -1 : 0);
+        const page = candidates.slice(0, MAIL_PAGE);
+        return out({ ok: true, messages: page.map(view), nextCursor: candidates.length > MAIL_PAGE ? page.at(-1).id : null, serverTime: now });
+      }
+      return out({ error: 'bad' }, 400);
     });
   }
 }
@@ -1705,12 +1929,58 @@ export class SyncLock {
     this.state = state;
   }
   async fetch(req) {
-    const { data, base, op, amt, gid, opId, wid } = await req.json();
+    const { data, base, op, amt, gid, opId, wid, pid, mail, ids } = await req.json();
     return this.state.blockConcurrencyWhile(async () => {
       const store = this.state.storage;
       const row = (await store.get('row')) || null;
       const res = (x, status = 200) => new Response(JSON.stringify(x), { status });
       if (op === 'get') return res({ row });
+      if (['mail-state', 'mail-read', 'mail-claim'].includes(op)) {
+        let save;
+        try { save = JSON.parse(row?.data || 'null'); } catch { save = null; }
+        if (!save || typeof pid !== 'string' || save.pid !== pid || !PID_RE.test(pid)) return res({ error: 'nosync' }, 403);
+        if (op === 'mail-state') {
+          if (!Array.isArray(ids) || ids.length > MAIL_PAGE || ids.some((id) => typeof id !== 'string' || !MAIL_ID_RE.test(id))) return res({ error: 'bad' }, 400);
+          const keys = ids.flatMap((id) => ['mail:read:' + id, 'mail:claim:' + id]);
+          const saved = keys.length ? await store.get(keys) : new Map();
+          return res({ ok: true, states: Object.fromEntries(ids.map((id) => [id, {
+            readAt: saved.get('mail:read:' + id) || 0,
+            claimedAt: saved.get('mail:claim:' + id)?.claimedAt || 0
+          }])) });
+        }
+        if (!mail || !MAIL_ID_RE.test(String(mail.id || '')) || (mail.recipient !== 'all' && mail.recipient !== pid)) return res({ error: 'mail_recipient' }, 403);
+        const readKey = 'mail:read:' + mail.id;
+        const readAt = (await store.get(readKey)) || Date.now();
+        if (op === 'mail-read') {
+          await store.put(readKey, readAt);
+          return res({ ok: true, id: mail.id, readAt });
+        }
+        const receiptKey = 'mail:claim:' + mail.id;
+        const prior = await store.get(receiptKey);
+        // 過去の残高ではなく最新セーブを返す。再送が遅れても、その後の消費や別の受取を戻さない。
+        if (prior) return res({ ok: true, id: mail.id, pid, duplicate: true, receipt: prior, data: row.data, ver: row.ver, shards: save.shards });
+        if (!(Number.isSafeInteger(mail.expiresAt) && mail.expiresAt > Date.now())) return res({ error: 'expired' }, 410);
+        const gift = mailGift(mail.gift);
+        if (!gift || (!gift.shards && !gift.items.length)) return res({ error: 'no_gift' }, 409);
+        const current = save.shards;
+        if (!Number.isSafeInteger(current) || current < 0) return res({ error: 'wealth' }, 422);
+        if (current + gift.shards > MAIL_MAX_SHARDS) return res({ error: 'wallet_full' }, 409);
+        const owned = new Set(Array.isArray(save.owned) ? save.owned : []);
+        const awarded = gift.items.filter((id) => !owned.has(id));
+        awarded.forEach((id) => owned.add(id));
+        const now = Date.now(), ver = (row.ver || 0) + 1;
+        save.shards = current + gift.shards;
+        save.owned = [...owned];
+        save.syncAt = now;
+        const serialized = JSON.stringify(save);
+        if (serialized.length > 200000) return res({ error: 'too large' }, 413);
+        const receipt = { id: mail.id, shards: gift.shards, items: awarded, claimedAt: now, ver };
+        await writeTogether(store, [
+          ['row', { ...row, data: serialized, ver, wealth: wealthOf(save), wid: '' }],
+          [receiptKey, receipt], [readKey, readAt]
+        ]);
+        return res({ ok: true, id: mail.id, pid, duplicate: false, receipt, data: serialized, ver, shards: save.shards });
+      }
       if (op === 'spend-status') return res({ exists: typeof opId === 'string' && !!(await store.get('op:' + opId)) });
       if (op === 'spend' || op === 'refund') {
         // 操作IDは金額とギルドに固定し、返金も元の記録と一緒に確定する。
