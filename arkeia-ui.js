@@ -446,11 +446,13 @@
     if(!spec) return;
     // Replace only the former Glacial Lance. Other Valgard skills are untouched.
     Object.assign(spec,{
+      // Original character-specific name and artwork; not source-game data/audio.
       name:'蒼天雷裁《アストラル・ジャッジメント》',
-      kind:'astral_judgment_painted', elem:2, color:0xb5b5ff,
-      cost:29,castTime:2.05,dmg:76,radius:4.6,
+      kind:'astral_judgment_painted', elem:2, color:0xc1ccff,
+      cost:38,castTime:2.7,dmg:1280,radius:4.6,
+      hitCount:8,windHits:6,lightHits:2,
       visual:'painted_judgment',vivid:true,
-      description:'天上に双重の星紋を描き、蒼紫の雷を降らせ、最後に光の裁剣で敵を討つ独創術'
+      description:'広域を打つ初撃から対象へ集中する六重の風雷、二重の光の断罪。全8段、最後に巨大な光剣を落とす上位魔法'
     });
     const TAU=Math.PI*2, maxConcurrent=2;
     const isTouch=typeof matchMedia==='function'&&matchMedia('(pointer:coarse)').matches;
@@ -472,7 +474,8 @@
     function stagePaint(id){
       const different={
         earth:[512,512],heaven:[512,512],boltA:[288,768],boltB:[288,768],
-        boltC:[288,768],sword:[384,896],nova:[512,512],mist:[512,512]
+        boltC:[288,768],sword:[384,896],nova:[512,512],mist:[512,512],
+        storm:[512,512],pillar:[256,768]
       };
       const [w,h]=different[id];
       const {c,g}=canvasOf(w,h);
@@ -526,6 +529,46 @@
         }
         g.fillStyle=beam(0,0,75,[[0,'rgba(244,251,255,.96)'],[.18,'rgba(163,224,255,.6)'],[1,'rgba(141,119,255,0)']]);
         g.fillRect(-75,-75,150,150);
+      }else if(id==='storm'){
+        // A unique spiral storm painted with 2D calligraphic arcs and luminous filaments.
+        const cx=256,cy=256;
+        g.fillStyle=beam(cx,cy,252,[[0,'rgba(188,223,255,.27)'],[.34,'rgba(119,82,236,.18)'],[.7,'rgba(84,104,208,.09)'],[1,'rgba(53,39,108,0)']]);
+        g.fillRect(0,0,512,512);
+        for(let i=0;i<38;i++){
+          const rr=50+i*4.6, start=(i*.371+r()*.22)*TAU, sweep=1.45+r()*.78;
+          g.save();g.strokeStyle=i%3?'rgba(155,193,255,.47)':'rgba(250,245,255,.8)';
+          g.lineWidth=.9+r()*4.3;g.shadowColor='#8d97ff';g.shadowBlur=5+r()*18;
+          g.beginPath();g.arc(cx,cy,rr,start,start+sweep);g.stroke();g.restore();
+        }
+        for(let i=0;i<110;i++){
+          const a=r()*TAU,rr=40+Math.sqrt(r())*188;
+          g.save();g.translate(cx+Math.cos(a)*rr,cy+Math.sin(a)*rr);
+          g.rotate(a+Math.PI/2);
+          g.globalAlpha=.18+r()*.55;g.fillStyle=i%3?'#c9d9ff':'#f9fbff';
+          g.beginPath();g.moveTo(-1,-1);g.quadraticCurveTo(4,-5,10+r()*15,0);
+          g.quadraticCurveTo(4,4,-1,1);g.fill();g.restore();
+        }
+      }else if(id==='pillar'){
+        // Wide luminous ray rendered as transparent painted light, not 3D polygons.
+        const grd=g.createLinearGradient(0,0,256,0);
+        grd.addColorStop(0,'rgba(107,67,201,0)');
+        grd.addColorStop(.16,'rgba(113,96,242,.19)');
+        grd.addColorStop(.31,'rgba(106,187,255,.55)');
+        grd.addColorStop(.46,'rgba(253,255,255,.93)');
+        grd.addColorStop(.55,'rgba(253,255,255,.97)');
+        grd.addColorStop(.72,'rgba(143,201,255,.62)');
+        grd.addColorStop(.88,'rgba(129,106,229,.18)');
+        grd.addColorStop(1,'rgba(72,48,176,0)');
+        g.fillStyle=grd;g.fillRect(0,0,256,768);
+        for(let i=0;i<16;i++){
+          const x=42+r()*170;
+          g.save();g.globalAlpha=.18+r()*.42;g.lineWidth=1.2+r()*2.7;
+          g.strokeStyle=i%3?'#e5faff':'#9eafff';
+          g.shadowColor='#bcd5ff';g.shadowBlur=12;
+          g.beginPath();g.moveTo(x+r()*18,0);
+          g.bezierCurveTo(x-38+r()*25,222,x+35-r()*25,530,x-20+r()*35,768);
+          g.stroke();g.restore();
+        }
       }else if(id.startsWith('bolt')){
         const rr=rnd((id==='boltA'?11:id==='boltB'?23:37)*24637);
         const points=[];
@@ -585,6 +628,21 @@
         }
         g.beginPath();g.moveTo(0,109);g.lineTo(18,127);g.lineTo(0,151);g.lineTo(-18,127);g.closePath();g.fill();
         g.restore();
+        // Five feathery light flares and arcing thunder around the guardian sword.
+        g.save();g.translate(cx,0);
+        for(const side of [-1,1]){
+          g.strokeStyle='rgba(241,248,255,.72)';g.lineWidth=3;
+          g.shadowColor='#adbdff';g.shadowBlur=15;
+          g.beginPath();g.moveTo(side*35,264);
+          g.quadraticCurveTo(side*108,170,side*148,187);
+          g.quadraticCurveTo(side*119,242,side*45,292);g.stroke();
+          g.beginPath();g.moveTo(side*25,336);g.quadraticCurveTo(side*75,460,side*52,587);g.stroke();
+          for(let i=0;i<4;i++){
+            g.beginPath();g.moveTo(side*(25+i*6),273+i*31);
+            g.lineTo(side*(88+i*5),230+i*35);g.stroke();
+          }
+        }
+        g.restore();
       }else if(id==='nova'){
         const cx=256,cy=256;
         g.fillStyle=beam(cx,cy,248,[[0,'rgba(255,255,255,.99)'],[.1,'rgba(209,249,255,.98)'],[.26,'rgba(105,206,255,.78)'],[.5,'rgba(116,101,239,.47)'],[1,'rgba(95,97,196,0)']]);
@@ -619,7 +677,7 @@
     }
     function warmup(){
       if(prewarmScheduled)return;prewarmScheduled=true;
-      const order=['earth','heaven','boltA','boltB','boltC','sword','nova','mist'];
+      const order=['earth','heaven','storm','boltA','boltB','boltC','sword','nova','mist','pillar'];
       let cursor=0;
       const step=(deadline)=>{
         let made=0;
@@ -636,117 +694,144 @@
     }
     warmup();
     function perform(b,f,net){
-      if(!b?.fx || b.ended) return;
+      if(!b?.fx || b.ended || !f || f.dead)return;
       const target=(net && Number.isFinite(net.tx)&&Number.isFinite(net.tz))
         ? {pos:new THREE.Vector3(net.tx,0,net.tz)}
         : typeof b.nearestEnemy==='function'?b.nearestEnemy(f):null;
       const fw=typeof f.forward==='function'?f.forward():new THREE.Vector3(Math.sin(f.facing||0),0,Math.cos(f.facing||0));
       const x=target?.pos?.x??f.pos.x+fw.x*5;
       const z=target?.pos?.z??f.pos.z+fw.z*5;
-      // On low-memory devices, a simultaneous extra cast still hits without allocating FX.
+      // Eight strikes: first wide-area wind shock, five focused wind/lightning
+      // pulses, then two holy-light judgments. These values are adapted to this
+      // game's HP system, not copied from the source title's damage tables.
+      const WIND={kind:'judgment-wind',elem:3,color:0xa3b9ff};
+      const LIGHT={kind:'judgment-light',elem:5,color:0xe5eeff};
+      const attacks=[
+        {at:.72,all:true, radius:31,dmg:110,stun:1.65,kb:0,spec:WIND},
+        {at:1.14,radius:3.4,dmg:72,stun:.7,kb:0,spec:WIND},
+        {at:1.39,radius:3.4,dmg:72,stun:.7,kb:0,spec:WIND},
+        {at:1.64,radius:3.4,dmg:72,stun:.7,kb:0,spec:WIND},
+        {at:1.89,radius:3.4,dmg:72,stun:.7,kb:0,spec:WIND},
+        {at:2.14,radius:3.4,dmg:72,stun:.75,kb:0,spec:WIND},
+        {at:2.72,radius:4.3,dmg:170,stun:.9,kb:0,spec:LIGHT},
+        {at:3.22,radius:5.9,dmg:640,stun:1.3,kb:12,spec:LIGHT}
+      ];
+      const fire=(attack)=>{
+        if(f.remoteAuth || b.ended || f.dead || typeof b.strikeAt!=='function')return;
+        b.strikeAt(f,x,z,attack.radius,attack.dmg,attack.stun,attack.kb,attack.spec);
+      };
+      // Low-resource fallback keeps every hit, even without costly textures.
       if(active>=maxConcurrent){
-        if(!f.remoteAuth && typeof b.strikeAt==='function')
-          b.strikeAt(f,x,z,3.2,205,.6,5,{kind:'judgment',elem:2,color:0xb6b5ff});
-        b.fxPop?.(new THREE.Vector3(x,1.2,z),2,8,5,.48,{grow:2,op:.8});
+        let elapsed=0,next=0;
+        b.addEffect(dt=>{
+          elapsed+=clamp(Number(dt)||0,0,.07);
+          while(next<attacks.length && elapsed>=attacks[next].at){fire(attacks[next]);next++;}
+          return next<attacks.length;
+        });
+        b.fxPop?.(new THREE.Vector3(x,1.1,z),2,8,5.5,.55,{grow:2,op:.82});
         return;
       }
-      const base=new THREE.Group();b.fx.add(base);active++;
+      const root=new THREE.Group();b.fx.add(root);active++;
       const mats=[],shapes=[];
       const add=(id,pos,sx,sy,flat=false,opacity=1,additive=true)=>{
-        const texture=tex(id);
-        if(!texture)return null;
+        const texture=tex(id);if(!texture)return null;
         const opts={map:texture,color:0xffffff,transparent:true,opacity,depthWrite:false,
-          depthTest:!flat?false:true,blending:additive?THREE.AdditiveBlending:THREE.NormalBlending,
+          depthTest:flat,blending:additive?THREE.AdditiveBlending:THREE.NormalBlending,
           fog:false,side:THREE.DoubleSide};
         const mat=flat?new THREE.MeshBasicMaterial(opts):new THREE.SpriteMaterial(opts);
         const obj=flat?new THREE.Mesh(new THREE.PlaneGeometry(1,1),mat):new THREE.Sprite(mat);
         obj.position.copy(pos);obj.scale.set(sx,sy,1);
         obj.renderOrder=flat?5:6;
         if(flat)obj.rotation.x=-Math.PI/2;
-        base.add(obj);mats.push(mat);if(flat)shapes.push(obj.geometry);
+        root.add(obj);mats.push(mat);if(flat)shapes.push(obj.geometry);
         return obj;
       };
-      const floor=add('earth',new THREE.Vector3(x,.085,z),5.5,5.5,true,0);
-      const sky=add('heaven',new THREE.Vector3(x,10,z),7.8,7.8,false,0);
-      const sword=add('sword',new THREE.Vector3(x,13,z),4.8,11.2,false,0,false);
-      const boltDefs=[[-1.45,-.1,.96,'boltA'],[1.32,.72,1.22,'boltB'],[-.38,1.5,1.54,'boltC'],[.95,-1.25,1.84,'boltA']];
-      const bolts=boltDefs.map(([ox,oz,at,id],i)=>({at,done:false,
-        obj:add(id,new THREE.Vector3(x+ox,4.6,z+oz),2.9,9.0,false,0)}));
-      const bloom=add('nova',new THREE.Vector3(x,1.15,z),1.9,1.9,false,0);
+      const ground=add('earth',new THREE.Vector3(x,.08,z),8.3,8.3,true,0);
+      const storm=add('storm',new THREE.Vector3(x,.12,z),13.4,13.4,true,0);
+      const heaven=add('heaven',new THREE.Vector3(x,12,z),11,11,false,0);
+      const sword=add('sword',new THREE.Vector3(x,16,z),6.8,15.8,false,0,false);
+      const beam=add('pillar',new THREE.Vector3(x,6,z),6.1,16.8,false,0);
+      const bolts=[[-1.4,.1,'boltA'],[1.45,.85,'boltB'],[-.7,-1.2,'boltC'],[1.1,-1,'boltA'],[.25,1.3,'boltB']].map(([ox,oz,id])=>
+        add(id,new THREE.Vector3(x+ox,5.1,z+oz),3.3,10.4,false,0));
+      const flare=add('nova',new THREE.Vector3(x,1.1,z),2,2,false,0);
       const halo=add('nova',new THREE.Vector3(x,.13,z),3,3,true,0);
-      const mist=add('mist',new THREE.Vector3(x,2.4,z),8,4,false,0);
-      if(!floor||!sky||!sword||!bloom||!halo||!mist){
-        base.removeFromParent();for(const m of mats)m.dispose();for(const g of shapes)g.dispose();
-        active=Math.max(0,active-1);
-        if(!f.remoteAuth && typeof b.strikeAt==='function')
-          b.strikeAt(f,x,z,3.2,205,.6,5,{kind:'judgment',elem:2,color:0xb6b5ff});
-        return;
-      }
-      // Ordinary gameplay sounds reused; no copyrighted audio or voice lines.
-      if(f.isPlayer) b.ui.cutin?.(f,'蒼天雷裁','ASTRAL VERDICT');
-      b.ui.sfx?.('zap');
-      b.flashLight?.(new THREE.Vector3(x,2.4,z),0x9daaff,1.15,.48);
-      let t=0,impact=false,cleaned=false;
-      const DURATION=3.75;
-      const hit=(px,pz,radius,dmg,stun=0.45)=>{
-        if(!f.remoteAuth&&!b.ended && !f.dead && typeof b.strikeAt==='function'){
-          // Preserve normal armor, hit callbacks, status and multiplayer validation.
-          b.strikeAt(f,px,pz,radius,dmg,stun,6,{kind:'judgment',elem:2,color:0xb6b5ff});
-        }
-      };
-      function cleanup(){
+      const mist=add('mist',new THREE.Vector3(x,2.7,z),10.4,6.2,false,0);
+      let cleaned=false,elapsed=0,next=0,hit1=false,hit7=false,hit8=false;
+      const cleanup=()=>{
         if(cleaned)return;cleaned=true;
         b.__astralFxCleanups?.delete(cleanup);
-        base.removeFromParent();for(const m of mats)m.dispose();for(const g of shapes)g.dispose();
+        root.removeFromParent();for(const m of mats)m.dispose();for(const g of shapes)g.dispose();
         active=Math.max(0,active-1);
-      }
+      };
       (b.__astralFxCleanups ||= new Set()).add(cleanup);
+      if(!ground||!storm||!heaven||!sword||!beam||!flare||!halo||!mist||bolts.some(v=>!v)){
+        cleanup();let time=0,i=0;
+        b.addEffect(dt=>{
+          time+=clamp(Number(dt)||0,0,.07);
+          while(i<attacks.length&&time>=attacks[i].at){fire(attacks[i]);i++;}
+          return i<attacks.length;
+        });
+        return;
+      }
+      if(f.isPlayer)b.ui.cutin?.(f,'蒼天雷裁','ASTRAL JUDGMENT');
+      b.ui.sfx?.('zap');b.flashLight?.(new THREE.Vector3(x,2.5,z),0x9daaff,1.3,.55);
+      const DURATION=4.65;
       b.addEffect(dt=>{
         if(cleaned)return false;
-        if(!base.parent || b.ended){cleanup();return false;}
-        t+=clamp(Number(dt)||0,0,.065);
-        const entry=clamp(t/.76,0,1);
-        const opening=1-Math.pow(1-entry,3);
-        floor.material.opacity=.9*(1-clamp((t-2.5)/1.05,0,1));
-        floor.scale.setScalar(5.5*(.26+.74*opening));
-        floor.rotation.z+=dt*.28;
-        sky.material.opacity=.84*opening*(1-clamp((t-2.66)/.75,0,1));
-        sky.scale.setScalar(7.8*(.42+.58*opening));
-        sky.material.rotation+=dt*.26;
-        sword.material.opacity=clamp((t-.68)/.32,0,1)*(1-clamp((t-2.55)/.4,0,1));
-        sword.position.y=13-Math.pow(clamp((t-1.20)/1.20,0,1),2.4)*10.3;
-        sword.scale.set(4.8*(1+.06*Math.sin(t*9)),11.2,1);
-        for(const bolt of bolts){
-          if(!bolt.obj)continue;
-          const phase=(t-bolt.at);
-          if(phase>=0 && phase<.35){
-            bolt.obj.material.opacity=.94*(1-clamp((phase-.10)/.24,0,1));
-            bolt.obj.scale.set(2.75+phase*1.2,9.3+phase*1.9,1);
-            if(phase<.07)bolt.obj.position.x=x+Math.sin(t*47+bolt.at)*.15+(bolt.at-.9)*1.2;
-          }else bolt.obj.material.opacity=0;
-          if(!bolt.done && phase>=.075){
-            bolt.done=true;
-            const idx=bolts.indexOf(bolt),q=boltDefs[idx];
-            hit(x+q[0],z+q[1],1.75,idx<2?46:60,.36);
-            b.fxPop?.(new THREE.Vector3(x+q[0],1.5,z+q[1]),2,1,1.8,.27,{grow:1.5,op:.74});
-            b.ui.sfx?.('zap');
+        if(!root.parent){cleanup();return false;}
+        dt=clamp(Number(dt)||0,0,.065);
+        elapsed+=dt;
+        const t=elapsed;
+        const entry=1-Math.pow(1-clamp(t/.76,0,1),3);
+        ground.material.opacity=.88*entry*(1-clamp((t-3.15)/1.1,0,1));
+        ground.scale.setScalar(8.3*(.23+.77*entry));ground.rotation.z+=dt*.32;
+        storm.material.opacity=.73*clamp((t-.18)/.65,0,1)*(1-clamp((t-3.24)/.95,0,1));
+        storm.rotation.z-=dt*1.28;storm.scale.setScalar(12+1.4*Math.sin(t*1.3));
+        heaven.material.opacity=.83*entry*(1-clamp((t-3.35)/.86,0,1));
+        heaven.material.rotation+=dt*.16;
+        sword.material.opacity=clamp((t-1.05)/.48,0,1)*(1-clamp((t-3.34)/.55,0,1));
+        const fall=1-Math.pow(1-clamp((t-2.37)/.87,0,1),3);
+        sword.position.y=16-fall*14.8;
+        sword.scale.set(6.8*(1+.05*Math.sin(t*6)),15.8,1);
+        beam.material.opacity=clamp((t-2.66)/.13,0,.78)*(1-clamp((t-3.48)/.66,0,1));
+        beam.scale.set(6.1+fall*2.2,16.8,1);
+        for(let i=0;i<bolts.length;i++){
+          const flash=t-attacks[i+1].at;
+          bolts[i].material.opacity=flash>=-.065 && flash<.32 ?
+            .98*(1-clamp((flash-.065)/.24,0,1)):0;
+          if(flash>=-.06&&flash<.26){
+            bolts[i].scale.set(3.1+flash*.7,10.4+flash*1.7,1);
+            bolts[i].position.x=x+[-1.4,1.45,-.7,1.1,.25][i]+Math.sin(t*47+i*19)*.15;
           }
         }
-        if(!impact && t>=2.42){
-          impact=true;
-          hit(x,z,4.2,235,.85);
-          b.ui.flash?.();b.ui.sfx?.('burst');
-          b.shake=Math.max(b.shake||0,.92);
-          b.flashLight?.(new THREE.Vector3(x,1.7,z),0xd9efff,1.9,.42);
-          b.fxPop?.(new THREE.Vector3(x,1.2,z),2,8,10,.65,{grow:2.2,op:.88});
+        // Explicit attack schedule makes exactly 8 hit events, without mesh collisions.
+        while(next<attacks.length&&t>=attacks[next].at){
+          const i=next++,a=attacks[i];fire(a);
+          if(i===0){
+            hit1=true;b.ui.flash?.();b.ui.sfx?.('burst');
+            b.flashLight?.(new THREE.Vector3(x,1.25,z),0x9abaff,1.9,.3);
+            b.shake=Math.max(b.shake||0,.35);
+            b.fxPop?.(new THREE.Vector3(x,1.3,z),3,8,8.8,.7,{grow:2,op:.68});
+          }else if(i<=5){
+            b.ui.sfx?.('zap');
+            b.fxPop?.(new THREE.Vector3(x,1.2,z),2,1,2.4,.22,{grow:1.55,op:.72});
+          }else if(i===6){
+            hit7=true;b.ui.sfx?.('zap');b.shake=Math.max(b.shake||0,.47);
+            b.flashLight?.(new THREE.Vector3(x,1.6,z),0xf8f4ff,1.5,.35);
+          }else{
+            hit8=true;b.ui.flash?.();b.ui.sfx?.('burst');
+            b.shake=Math.max(b.shake||0,1.05);
+            b.flashLight?.(new THREE.Vector3(x,2.2,z),0xffffff,2.2,.5);
+            b.fxPop?.(new THREE.Vector3(x,1.3,z),5,8,12.5,.65,{grow:2.6,op:.96});
+          }
         }
-        const k=clamp((t-2.4)/1.35,0,1);
-        bloom.material.opacity=impact?.84*Math.pow(1-k,1.7):0;
-        bloom.scale.set(1.9+11.5*k,1.9+11.5*k,1);
-        halo.material.opacity=impact?.78*Math.pow(1-k,1.4):0;
-        halo.scale.set(3+11*k,3+11*k,1);
-        mist.material.opacity=.46*clamp((t-1.15)/.6,0,1)*(1-k);
-        mist.scale.set(8+3*k,4+2*k,1);
+        const post=clamp((t-3.22)/1.4,0,1);
+        flare.material.opacity=hit8?.97*Math.pow(1-post,1.3):hit7?.2:0;
+        flare.scale.set(2+15*post,2+15*post,1);
+        halo.material.opacity=hit8?.94*Math.pow(1-post,1.4):hit1?.14:0;
+        halo.scale.set(4+14*post,4+14*post,1);
+        mist.material.opacity=.48*clamp((t-.55)/.8,0,1)*(1-clamp((t-3.2)/1.45,0,1));
+        mist.scale.set(10.4+4*post,6.2+3*post,1);
         if(t>=DURATION){cleanup();return false;}
         return true;
       });
