@@ -449,25 +449,39 @@
     Object.assign(spec,{
       name:'蒼天雷裁《アストラル・ジャッジメント》',
       kind:'astral_judgment_painted', elem:2, color:0xffb25d,
-      cost:39,castTime:2.85,dmg:3800,radius:4.8,
+      cost:39,castTime:2.85,dmg:5400,radius:4.8,
       hitCount:12,windHits:10,lightHits:2,
       visual:'painted_judgment',vivid:true,
-      description:'必ず狙った敵を捉え、十重の雷衝で空へ打ち上げた後、橙色の巨大断罪剣で貫き、最後に大爆発を起こす究極術'
+      description:'十重の雷衝で空へ打ち上げ、橙色の巨大断罪剣で貫き、大爆発を起こす上位術（基本総威力5400）'
     });
     // Former ice fang shockwave -> shining spear homage.
     Object.assign(spearSpec,{
       name:'光牢剣陣《ルミナス・レギオン》',
       kind:'shining_spear_painted', elem:5, color:0xd8f1ff,
-      cost:24, castTime:1.55, dmg:2630, radius:3.8,
+      cost:24, castTime:1.55, dmg:3300, radius:3.8,
       hitCount:9, visual:'painted_shining_spear', vivid:true,
-      description:'敵を強制的に宙へ拘束し、周囲から光の剣群で貫いた後、最後に爆発で断罪する光槍術'
+      description:'敵を強制的に宙へ拘束し、八重の光剣と最後の爆裂で断罪する光槍術（基本総威力3300）'
     });
     // 奥義: 二つの彩色天体が衝突し、灼熱と極寒の摩擦による連続攻撃。
     Object.assign(FIGHTERS.valgard.over,{
       name:'双星崩滅《ツイン・カタクリズム》',kind:'last_vanisher_painted',
-      elem:2,color:0xffa85f,cost:0,castTime:2.15,dmg:5340,
-      radius:7.5,hitCount:15,description:'青い天体と橙の天体が激突。14段の連続摩擦と終極爆裂'
+      elem:2,color:0xffa85f,cost:0,castTime:2.15,dmg:8100,
+      radius:7.5,hitCount:15,description:'青い天体と橙の天体が激突。14段の連続摩擦と終極爆裂（基本総威力8100）'
     });
+    // Rear warp / forbidden ice spell / lesser healing, all in the same boss-tier scale.
+    // These are original damage properties used by the base combat engine.
+    Object.assign(FIGHTERS.valgard.skills[1], {
+      dmg:1500, stun:.7, kb:9,
+      description:'瞬時に敵の背後へ転移し、氷鋼の一撃を叩き込む。単発の高威力攻撃'
+    });
+    Object.assign(FIGHTERS.valgard.skills[3], {
+      dmg:310, count:10, spread:3.2, radius:2.8,
+      finalDmg:1500, finalRadius:7.8,
+      description:'集中する十重の氷晶と最後の極寒の一撃。近距離で多段命中する禁呪'
+    });
+    if(FIGHTERS.valgard.skills[4]?.kind === 'heal') {
+      Object.assign(FIGHTERS.valgard.skills[4], {heal:900, radius:5.5});
+    }
     // 秘奥義 is NOT derived from the damaging over; this independently heals the caster.
     FIGHTERS.valgard.hi={
       name:'蒼星再誕《アース・リジェネシス》',kind:'blue_earth_painted',
@@ -962,23 +976,39 @@
       if(target?.visual) target.visual.position.y=0;
     }
     function guaranteedHit(b,f,target,attack){
-      if(!target||target.dead)return;
-      if(typeof target.receive==='function'){
-        const dx=(target.pos?.x||0)-(f.pos?.x||0),dz=(target.pos?.z||0)-(f.pos?.z||0);
-        const len=Math.hypot(dx,dz)||1,kb=Number(attack.kb)||0;
-        const attackStat=clamp(Number(f.atkMul)||1,.5,8);
-        target.receive(Math.round((Number(attack.dmg)||0)*attackStat), Number(attack.stun)||0, dx/len*kb, dz/len*kb);
-      }else if(typeof b.strikeAt==='function' && target.pos){
-        b.strikeAt(f,target.pos.x,target.pos.z,attack.radius||2.2,attack.dmg,attack.stun||0,attack.kb||0,attack.spec||attack);
+      if(!target || target.dead || !target.pos || typeof target.receive !== 'function')return 0;
+      // Only the local simulation can change health. Remote entities are cosmetic.
+      if(f.remoteAuth || target.remoteAuth)return 0;
+      const dx=target.pos.x-f.pos.x,dz=target.pos.z-f.pos.z;
+      const len=Math.hypot(dx,dz)||1,kb=Number(attack.kb)||0;
+      const attackStat=clamp(Number(f.atkMul)||1,.5,8);
+      let incoming=Math.max(0,Math.round((Number(attack.dmg)||0)*attackStat));
+      if(!attack.finisher){
+        // Multi-stage cinema: keep the target alive until the last sword / blast.
+        // This avoids a weak foe ending the battle before the finale can appear.
+        const def=Math.max(.02,Number(target.defMul)||1);
+        const effect=def*(target.status?.curse?1.3:1)*(target.awakened>0?.5:1);
+        const safe=Math.max(0,Math.floor((Math.max(0,target.hp-1)-.5)/Math.max(.02,effect)));
+        incoming=Math.min(incoming,safe);
       }
+      if(incoming<=0){
+        target.stun=Math.max(Number(target.stun)||0,Math.min(.65,Number(attack.stun)||.28));
+        target.guard=false;
+        target.vel?.set?.(0,0,0);
+        return 0;
+      }
+      const dealt=target.receive(incoming,Number(attack.stun)||0,dx/len*kb,dz/len*kb);
+      if(attack.showDamage && Number(dealt)>0)
+        b.ui?.popup?.(target.pos,Math.round(dealt),attack.finisher?'#ffdfac':'#c5eaff');
+      return dealt;
     }
-    function performShiningSpear(b,f,net){
+    function performShiningSpear(b,f,net,scale=1){
       if(!b?.fx || b.ended || !f || f.dead)return;
       const target=findTarget(b,f,net); if(!target) return;
       const x=target.pos.x,z=target.pos.z;
       const HOLY={kind:'shining-spear',elem:5,color:0xf5fbff};
-      const hits=[...Array(8)].map((_,i)=>({at:.70+i*.14,dmg:170,stun:.42,kb:0,spec:HOLY,radius:2.1}))
-        .concat([{at:2.08,dmg:1270,stun:1.2,kb:10,spec:HOLY,radius:4.8}]);
+      const hits=[...Array(8)].map((_,i)=>({at:.70+i*.14,dmg:225,stun:.42,kb:0,spec:HOLY,radius:2.1,showDamage:i%2===0}))
+        .concat([{at:2.08,dmg:1500,stun:1.2,kb:10,spec:HOLY,radius:4.8,finisher:true,showDamage:true}]);
       const root=new THREE.Group(); b.fx.add(root);
       const mats=[], geos=[];
       const add=(id,pos,sx,sy,flat=false,opacity=1,additive=true)=>{
@@ -1021,7 +1051,7 @@
           s.scale.set(3.2,8.2+Math.sin(t*8+i)*.2,1);
         });
         while(next<hits.length && t>=hits[next].at){
-          const idx=next++, attack=hits[idx]; guaranteedHit(b,f,target,attack);
+          const idx=next++, attack=hits[idx]; guaranteedHit(b,f,target,{...attack,dmg:Math.round(attack.dmg*scale)});
           if(idx<8){ b.ui.sfx?.('zap'); b.fxPop?.(new THREE.Vector3(target.pos.x,1.4+lift,target.pos.z),5,1,2.0,.22,{grow:1.55,op:.84}); }
           else { b.ui.flash?.(); b.ui.sfx?.('burst'); b.fxPop?.(new THREE.Vector3(target.pos.x,1.2,target.pos.z),5,8,8.8,.58,{grow:2.4,op:.92}); b.flashLight?.(new THREE.Vector3(target.pos.x,2.2,target.pos.z),0xffffff,1.9,.42); b.shake=Math.max(b.shake||0,.9); }
         }
@@ -1032,7 +1062,7 @@
         return true;
       });
     }
-    function perform(b,f,net){
+    function perform(b,f,net,scale=1){
       if(!b?.fx || b.ended || !f || f.dead)return;
       const target=findTarget(b,f,net);
       const fw=typeof f.forward==='function'?f.forward():new THREE.Vector3(Math.sin(f.facing||0),0,Math.cos(f.facing||0));
@@ -1041,9 +1071,9 @@
       const SWORD={kind:'judgment-sword',elem:5,color:0xffb25d};
       const EXPLODE={kind:'judgment-burst',elem:5,color:0xffdf9f};
       const attacks=[];
-      for(let i=0;i<10;i++)attacks.push({at:.68+i*.13,dmg:170,stun:.42,kb:0,spec:THUNDER,radius:2.4});
-      attacks.push({at:2.18,dmg:650,stun:.78,kb:0,spec:SWORD,radius:3.0});
-      attacks.push({at:2.54,dmg:1450,stun:1.28,kb:12,spec:EXPLODE,radius:6.0});
+      for(let i=0;i<10;i++)attacks.push({at:.68+i*.13,dmg:255,stun:.42,kb:0,spec:THUNDER,radius:2.4,showDamage:i%3===0});
+      attacks.push({at:2.18,dmg:1000,stun:.78,kb:0,spec:SWORD,radius:3.0,showDamage:true});
+      attacks.push({at:2.54,dmg:1850,stun:1.28,kb:12,spec:EXPLODE,radius:6.0,finisher:true,showDamage:true});
       const root=new THREE.Group(); b.fx.add(root); active++;
       const mats=[], shapes=[];
       const add=(id,pos,sx,sy,flat=false,opacity=1,additive=true)=>{
@@ -1103,7 +1133,7 @@
         if(pillar){ pillar.material.opacity=.64*clamp((t-.5)/.4,0,1)*(1-clamp((t-2.62)/.55,0,1)); }
         while(next<attacks.length && t>=attacks[next].at){
           const i=next++, attack=attacks[i];
-          if(target) guaranteedHit(b,f,target,attack); else if(typeof b.strikeAt==='function') b.strikeAt(f,x,z,attack.radius,attack.dmg,attack.stun,attack.kb,attack.spec);
+          if(target) guaranteedHit(b,f,target,{...attack,dmg:Math.round(attack.dmg*scale)}); else if(typeof b.strikeAt==='function') b.strikeAt(f,x,z,attack.radius,attack.dmg,attack.stun,attack.kb,attack.spec);
           if(i<10){
             b.ui.sfx?.('zap'); b.fxPop?.(new THREE.Vector3((target?.pos?.x||x),1.4+lift,(target?.pos?.z||z)),2,1,2.3,.18,{grow:1.6,op:.78}); b.shake=Math.max(b.shake||0,.2);
           }else if(i===10){
@@ -1128,8 +1158,8 @@
       const FRICTION={kind:'last-vanisher-friction',elem:2,color:0xffa55e};
       const FINAL={kind:'last-vanisher-blast',elem:5,color:0xffe7ac};
       // 14 hot-and-cold friction pulses followed by one devastating crash.
-      const hits=Array.from({length:14},(_,i)=>({at:1.01+i*.16,dmg:235,stun:.42,kb:0,spec:FRICTION,radius:4.2}));
-      hits.push({at:3.42,dmg:2050,stun:1.3,kb:13,spec:FINAL,radius:7.5});
+      const hits=Array.from({length:14},(_,i)=>({at:1.01+i*.16,dmg:375,stun:.42,kb:0,spec:FRICTION,radius:4.2,showDamage:i%3===0}));
+      hits.push({at:3.42,dmg:2850,stun:1.3,kb:13,spec:FINAL,radius:7.5,finisher:true,showDamage:true});
       const root=new THREE.Group();b.fx.add(root);const mats=[],geos=[];
       const add=(id,pos,w,h,flat=false)=>{
         const texture=tex(id);if(!texture)return null;
@@ -1282,16 +1312,16 @@
     }
     const previous=Battle.prototype.executeCast;
     Battle.prototype.executeCast=function(f,slot,net){
-      const selectedAstral=!!f && f.key==='valgard' && slot==='s2' && f.def?.skills?.[2]?.kind==='astral_judgment_painted';
-      const selectedSpear=!!f && f.key==='valgard' && slot==='s0' && f.def?.skills?.[0]?.kind==='shining_spear_painted';
+      const selectedAstral=!!f && f.key==='valgard' && (slot==='s2'||slot==='f2') && f.def?.skills?.[2]?.kind==='astral_judgment_painted';
+      const selectedSpear=!!f && f.key==='valgard' && (slot==='s0'||slot==='f0') && f.def?.skills?.[0]?.kind==='shining_spear_painted';
       const selectedLast=!!f && f.key==='valgard' && slot==='over' && f.def?.over?.kind==='last_vanisher_painted';
       const selectedBlue=!!f && f.key==='valgard' && slot==='hi' && f.def?.hi?.kind==='blue_earth_painted';
       const outcome=previous.call(this,f,slot,net);
       if(f?.key==='valgard' && !f.remoteAuth && !this.net && (slot==='over'||slot==='hi'||/^[sf]\d+$/.test(slot))){
         sayValgardLine(selectedAstral?'力の違いを見せてやる':selectedSpear?'これはよけられまい':'これでどうだ');
       }
-      if(selectedSpear)performShiningSpear(this,f,net);
-      if(selectedAstral)perform(this,f,net);
+      if(selectedSpear)performShiningSpear(this,f,net,slot==='f0'?.65:1);
+      if(selectedAstral)perform(this,f,net,slot==='f2'?.65:1);
       if(selectedLast)performLastVanisher(this,f,net);
       if(selectedBlue)performBlueEarth(this,f);
       return outcome;
@@ -2063,7 +2093,7 @@
         hp:maxHp,maxHp,dead:false,__retired:false,remoteAuth:false,
         isPlayer:false,inv:0,guard:false,status:{},stun:0,action:null,y:0,
         facing:owner.facing,vel:new THREE.Vector3(),
-        over:0,og:0,awakened:0,defMul:owner.defMul,atkMul:owner.atkMul*.46,
+        over:0,og:0,awakened:0,defMul:owner.defMul,atkMul:owner.atkMul*.65,
         focus:b.nearestEnemy(owner),attackIn:.26,fxIn:1.2,rig,animTime:0,attackPulse:0,
         forward(){return new THREE.Vector3(Math.sin(this.facing),0,Math.cos(this.facing));},
         receive(damage,stun,kx,kz){
@@ -2116,7 +2146,7 @@
             if(dist<ECHO_RANGE+(target.radius||.4)&&echo.attackIn<=0){
               echo.attackIn=.86;
               echo.attackPulse=.30;
-              b.meleeHit(echo,ECHO_RANGE,(owner.def?.light?.dmg||66)*.58,.3,3.1,null,
+              b.meleeHit(echo,ECHO_RANGE,420,.3,3.1,null,
                 {kind:'echo',elem:1,color:ICE});
               // Capped low-cost hand-painted impact, never a new fighter/model.
               b.fxPop?.(echo.pos.clone().setY(1.18),1,6,2.25,.25,{grow:1.45,op:.85});
