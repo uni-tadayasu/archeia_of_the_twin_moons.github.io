@@ -85,7 +85,7 @@ export function sayBattle(f, kind = 'skill', _attackName = '', important = false
   if (owner === 'valgard' && (cue === 'skill' || cue === 'over' || cue === 'hi')) {
     const name = String(_attackName || '');
     const isAstral = /アストラル[・･\s]*ジャッジメント|蒼天雷裁|astral[\s-]*judgment/i.test(name);
-    const isSpear = /シャイニング[・･\s]*スピア|凍牙・光槍封陣|shining[\s-]*spear/i.test(name);
+    const isSpear = /光牢剣陣|ルミナス[・･\s]*レギオン|シャイニング[・･\s]*スピア|凍牙・光槍封陣|shining[\s-]*spear/i.test(name);
     playValgardLine(isAstral ? 'astral' : isSpear ? 'spear' : 'other', f);
     return;
   }

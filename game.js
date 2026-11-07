@@ -105,25 +105,210 @@ const ST_ELEM = Object.fromEntries(ELEMS.map((e, i) => [e.st, i]));
 
 export const ARENA_R = 13;
 
-// ---- 追加技：技を出した直後にタイミングよく同じ技を押すと派生する（全戦士×各技＝数百種） ----
-const FOLLOW_NAMES = ['追の型', '連閃', '返し刃', '裂破', '重ね撃ち', '穿ち', '狂い咲き', '終の型', '翻り', '轟連', '双牙', '残光', '烈衝', '螺旋', '天翔'];
+// --- Universal illustrated volumetric casting circle: transparent painted CG, no faceted meshes. ---
+// A few flat image layers create perceived depth; no tessellated crystals / spheres / physical polygons.
+let CAST_ART = null;
+function castArtTextures() {
+  if (CAST_ART) return CAST_ART;
+  if (typeof document === 'undefined') return null;
+  const graphics = (size, painter) => {
+    const c = document.createElement('canvas'); c.width=c.height=size;
+    const g=c.getContext('2d'); if (!g) return null;
+    painter(g,size); const t=new THREE.CanvasTexture(c);
+    t.colorSpace=THREE.SRGBColorSpace;
+    t.minFilter=THREE.LinearMipmapLinearFilter; t.magFilter=THREE.LinearFilter;
+    t.anisotropy=2;
+    return t;
+  };
+  const TAU=2*Math.PI;
+  const symbols=graphics(768,(g,n)=>{
+    const mid=n/2; g.translate(mid,mid);g.lineCap='round';g.lineJoin='round';
+    const haze=g.createRadialGradient(0,0,9,0,0,366);
+    haze.addColorStop(0,'rgba(255,255,255,.21)');
+    haze.addColorStop(.36,'rgba(220,244,255,.12)');
+    haze.addColorStop(.76,'rgba(132,199,255,.06)');
+    haze.addColorStop(1,'rgba(60,145,255,0)');
+    g.fillStyle=haze;g.fillRect(-384,-384,768,768);
+    for(let layer=0;layer<6;layer++){
+      const r=[298,273,232,184,137,77][layer];
+      g.save();g.lineWidth=[3.4,1.6,4,1.9,2.8,2.1][layer];
+      g.strokeStyle=layer%2?'rgba(221,241,255,.62)':'rgba(255,255,255,.90)';
+      g.shadowColor='rgba(149,206,255,.82)';g.shadowBlur=12;
+      g.setLineDash(layer%2?[10,13]:[34,9]);
+      g.beginPath();g.arc(0,0,r,layer*.2,TAU-layer*.13);g.stroke();g.restore();
+    }
+    const npts=12;
+    for(let i=0;i<npts;i++){
+      const theta=i*TAU/npts;
+      g.save();g.rotate(theta);
+      g.strokeStyle='rgba(234,249,255,.83)';g.lineWidth=2.5;g.shadowColor='#a8e0ff';g.shadowBlur=9;
+      g.beginPath();g.moveTo(0,-272);g.lineTo(-12,-253);g.lineTo(0,-224);g.lineTo(12,-253);g.closePath();g.stroke();
+      g.beginPath();g.moveTo(-5,-310);g.lineTo(0,-329);g.lineTo(5,-310);g.stroke();
+      g.restore();
+    }
+    // Multiple etched star polygons appear painted; their transparent backing hides any 3D facets.
+    for(const [count,radius,shift] of [[8,204,3],[7,152,2],[6,112,2],[5,61,2]]){
+      g.beginPath();let i=0;
+      for(let a=0;a<=count;a++){
+        const th=((i*shift)%count)*TAU/count-Math.PI/2;
+        const x=Math.cos(th)*radius,y=Math.sin(th)*radius;
+        a?g.lineTo(x,y):g.moveTo(x,y);i++;
+      }
+      g.strokeStyle='rgba(239,249,255,.79)';g.lineWidth=2.2;g.shadowColor='#8cd1ff';g.shadowBlur=8;g.stroke();
+    }
+    // Fine calligraphic orbital runes.
+    for(let i=0;i<64;i++){
+      const a=i*TAU/64,r=243+(i%3)*3;
+      g.save();g.translate(Math.cos(a)*r,Math.sin(a)*r);g.rotate(a);
+      g.strokeStyle='rgba(227,246,255,.72)';g.lineWidth=1.15;
+      g.beginPath();g.moveTo(-7,-4);g.quadraticCurveTo(0,-13,7,0);
+      g.lineTo(0,9);g.lineTo(-3,1);g.stroke();g.restore();
+    }
+    const core=g.createRadialGradient(0,0,0,0,0,96);
+    core.addColorStop(0,'rgba(255,255,255,.87)');core.addColorStop(.13,'rgba(247,255,255,.7)');
+    core.addColorStop(.38,'rgba(181,229,255,.32)');core.addColorStop(1,'rgba(80,140,255,0)');
+    g.fillStyle=core;g.fillRect(-96,-96,192,192);
+  });
+  const rim=graphics(512,(g,n)=>{
+    const mid=n/2;
+    g.translate(mid,mid);g.lineCap='round';
+    for(let k=0;k<5;k++){
+      const r=70+k*40;const ca=k%2?'rgba(231,250,255,.50)':'rgba(255,255,255,.85)';
+      g.strokeStyle=ca;g.lineWidth=10-k;g.shadowColor='#d0edff';g.shadowBlur=30;
+      g.beginPath();g.arc(0,0,r,k*.4,TAU*.72+k*.2);g.stroke();
+    }
+    for(let k=0;k<28;k++){
+      const a=k*TAU/28,r=150+(k%4)*12;
+      g.save();g.rotate(a);g.fillStyle='rgba(248,254,255,.58)';
+      g.beginPath();g.moveTo(0,-r);g.lineTo(6,-r+30);g.lineTo(0,-r+62);g.lineTo(-6,-r+30);g.fill();g.restore();
+    }
+  });
+  const aura=graphics(384,(g,n)=>{
+    const cx=n/2,cy=n/2;
+    let rnd=52741;const random=()=>{rnd=(Math.imul(rnd,1664525)+1013904223)>>>0;return rnd/4294967296;};
+    for(let k=0;k<46;k++){
+      const x=cx+(random()-.5)*150, y=40+random()*304;
+      const width=15+random()*62, height=65+random()*120;
+      const gr=g.createRadialGradient(x,y,0,x,y,height);
+      gr.addColorStop(0,'rgba(240,252,255,.32)');gr.addColorStop(.22,'rgba(171,231,255,.21)');
+      gr.addColorStop(.68,'rgba(134,190,255,.08)');gr.addColorStop(1,'rgba(127,185,255,0)');
+      g.fillStyle=gr;g.save();g.globalAlpha=.34+random()*.45;
+      g.fillRect(x-width,y-height,width*2,height*2);g.restore();
+    }
+    const col=g.createLinearGradient(0,0,n,0);
+    col.addColorStop(0,'rgba(207,247,255,0)');col.addColorStop(.3,'rgba(207,247,255,.12)');
+    col.addColorStop(.5,'rgba(255,255,255,.32)');col.addColorStop(.7,'rgba(207,247,255,.12)');
+    col.addColorStop(1,'rgba(207,247,255,0)');
+    g.fillStyle=col;g.fillRect(0,60,n,n-120);
+  });
+  CAST_ART={symbols,rim,aura,flat:new THREE.PlaneGeometry(1,1)};
+  return CAST_ART;
+}
+// Prewarm only when the browser is idle, never repeatedly in the hot combat loop.
+if (typeof requestIdleCallback === 'function') requestIdleCallback(()=>{try{castArtTextures();}catch(e){console.warn('[CastArt]',e);}}, {timeout:2400});
+function beginChantCircle(b,f,spec,duration,stamp) {
+  if (!f?.root || !b?.fx || f.dead) return null;
+  const art=castArtTextures(); if(!art?.symbols || !art?.rim || !art?.aura) return null;
+  const c=spec?.color ?? f.def?.color ?? 0x9ddfff;
+  const root=new THREE.Group();root.name='illustrated-chant-circle';f.root.add(root);
+  const mats=[]; const nodes=[];
+  const mat=(map,opacity=.7)=>{
+    const m=new THREE.MeshBasicMaterial({map,color:c,transparent:true,opacity,
+      blending:THREE.AdditiveBlending,depthWrite:false,depthTest:false,side:THREE.DoubleSide,fog:false});
+    mats.push(m); return m;
+  };
+  const disk=new THREE.Mesh(art.flat,mat(art.symbols,.0));
+  disk.rotation.x=-Math.PI/2;disk.scale.set(5.0,5.0,1);disk.position.y=.067;disk.renderOrder=12;
+  root.add(disk);nodes.push(disk);
+  const rim=new THREE.Mesh(art.flat,mat(art.rim,0));
+  rim.rotation.x=-Math.PI/2;rim.scale.set(6.2,6.2,1);rim.position.y=.10;rim.renderOrder=13;
+  root.add(rim);nodes.push(rim);
+  const sky=new THREE.Mesh(art.flat,mat(art.rim,0));
+  sky.rotation.x=-Math.PI/2;sky.scale.set(2.8,2.8,1);sky.position.y=2.15;sky.renderOrder=14;
+  root.add(sky);nodes.push(sky);
+  const columns=[];
+  const maxCols=(typeof matchMedia==='function' && matchMedia('(pointer:coarse)').matches)?2:4;
+  for(let i=0;i<maxCols;i++){
+    const sprite=new THREE.Sprite(new THREE.SpriteMaterial({map:art.aura,color:c,transparent:true,opacity:0,
+      blending:THREE.AdditiveBlending,depthWrite:false,depthTest:false,fog:false}));
+    mats.push(sprite.material);sprite.position.set(Math.cos(i*2*Math.PI/maxCols)*.84,1.45,Math.sin(i*2*Math.PI/maxCols)*.84);
+    sprite.scale.set(1.8,3.4,1);sprite.renderOrder=15;root.add(sprite);columns.push(sprite);
+  }
+  let time=0,cleaned=false;
+  const clean=()=>{ if(cleaned)return;cleaned=true; b.__chantArtCleanups?.delete(clean);
+    root.removeFromParent();for(const m of mats)m.dispose(); };
+  (b.__chantArtCleanups ||= new Set()).add(clean);
+  b.addEffect(dt=>{
+    if(cleaned) return false;
+    if(f.chantToken!==stamp || f.dead || b.ended || f.action?.type!=='chant'){clean();return false;}
+    time+=Math.max(0,Math.min(Number(dt)||0,.12));
+    const p=Math.min(1,time/Math.max(.12,duration));
+    const rise=1-Math.pow(1-Math.min(1,time/.42),3);
+    const boost=.64+.36*Math.sin(time*5.2)*Math.sin(time*2.3);
+    disk.material.opacity=.74*rise*(.82+.18*p);
+    disk.scale.setScalar(4.5+1.2*p);
+    disk.rotation.z+=dt*(.34+.18*p);
+    rim.material.opacity=.62*rise*(.8+.2*boost);
+    rim.rotation.z-=dt*(.61+.27*p);
+    rim.scale.setScalar(5.5+.8*p);
+    sky.material.opacity=.35*rise*(.9+.1*boost);
+    sky.rotation.z+=dt*.28;
+    sky.position.y=2.15+.12*Math.sin(time*2.8);
+    for(let i=0;i<columns.length;i++){
+      const s=columns[i];const q=time*1.5+i*2*Math.PI/columns.length;
+      s.material.opacity=(.14+.08*Math.sin(q*1.7))*rise;
+      s.position.y=1.35+.22*Math.sin(q);
+      s.scale.set(1.5+.4*p,3.5+.45*Math.sin(q),1);
+    }
+    return true;
+  });
+  return clean;
+}
+
+
+// ---- 全キャラクター追加技：元技の動作を保つ軽い進化・アレンジ版 ----
+// Special/normal/enemy characters all use this generic factory. Results are cached per fighter definition.
+const EVOLVED_FORMS = {
+  projectile: ['星穿', '連光', '流星', '双奏', '追閃'],
+  dash: ['瞬迅', '閃迅', '残影', '裂光', '天穿'],
+  shockwave: ['広奏', '連環', '光輪', '鳴動', '渦舞'],
+  rain: ['星雨', '連奏', '散華', '天雨', '流光'],
+  judgment: ['天響', '二重奏', '星裁', '蒼響', '極光'],
+  implode: ['深淵', '連環', '双渦', '重閃', '凝光'],
+  heal: ['恵光', '清奏', '光環', '再輝', '連祈']
+};
 const FOLLOW_CACHE = new WeakMap();
-const FOLLOW_HOLD = 0.45, FOLLOW_MAX = 1.5; // 長押しで派生するまでの秒数
+const FOLLOW_HOLD = 0.45, FOLLOW_MAX = 1.5;
 export function followSpec(def, i) {
   const base = def?.skills?.[i];
   if (!base) return null;
   let m = FOLLOW_CACHE.get(def);
   if (!m) FOLLOW_CACHE.set(def, (m = {}));
-  if (m[i]) return m[i];
-  let h = i * 7;
-  for (const c of base.name) h = (h * 31 + c.charCodeAt(0)) >>> 0;
-  const s = { ...base, name: `${base.name}・${FOLLOW_NAMES[h % FOLLOW_NAMES.length]}`, cost: Math.ceil((base.cost || 0) * 0.5), follow: true };
-  if (s.dmg) s.dmg = Math.round(s.dmg * 1.35);
-  if (s.count) s.count = Math.min(9, s.count + 1 + (h % 2));
-  if (s.radius) s.radius = +(s.radius * 1.25).toFixed(2);
-  if (s.heal) s.heal = Math.round(s.heal * 1.3);
-  if (s.kind === 'shockwave') s.double = true;
-  if (s.speed) s.speed *= 1.15;
+  // Modifications to the base skill invalidate only that cached variant.
+  if (m[i]?.__evolvedSourceName === base.name && m[i]?.__evolvedSourcePower === base.dmg) return m[i];
+  let h = (i + 23) * 997;
+  for (const ch of base.name) h = (Math.imul(h, 31) + ch.codePointAt(0)) >>> 0;
+  const forms = EVOLVED_FORMS[base.kind] || ['追奏', '深化', '極彩', '双奏', '残光'];
+  const extra = forms[h % forms.length];
+  const s = { ...base, name: `${base.name}・${extra}`,
+    follow: true, evolvedFollow: true,
+    cost: Math.max(0, Math.ceil((base.cost || 0) * 0.56)),
+    __evolvedSourceName: base.name, __evolvedSourcePower: base.dmg
+  };
+  // Each follow-up is a recognizably stronger variation, not a separate overpowering ultimate.
+  if (Number.isFinite(s.dmg) && s.dmg > 0) s.dmg = Math.round(s.dmg * (1.15 + (h % 3) * .02));
+  if (Number.isFinite(s.finalDmg) && s.finalDmg > 0) s.finalDmg = Math.round(s.finalDmg * 1.13);
+  if (Number.isFinite(s.count) && s.count > 0) s.count = Math.min(24, Math.ceil(s.count + 1));
+  if (Number.isFinite(s.radius) && s.radius > 0) s.radius = +(s.radius * 1.12).toFixed(2);
+  if (Number.isFinite(s.speed) && s.speed > 0) s.speed = +(s.speed * 1.09).toFixed(2);
+  if (Number.isFinite(s.heal) && s.heal > 0) s.heal = Math.round(s.heal * 1.18);
+  if (Number.isFinite(s.stun) && s.stun >= 0) s.stun = +(s.stun + .07).toFixed(2);
+  if (Number.isFinite(s.interval) && s.interval > 0) s.interval = +(s.interval * .94).toFixed(3);
+  if (Number.isFinite(s.spreadAng) && s.spreadAng > 0) s.spreadAng = +(s.spreadAng * 1.1).toFixed(3);
+  if (Number.isFinite(s.spread) && s.spread > 0) s.spread = +(s.spread * 1.1).toFixed(2);
+  // Avoid doubling all shockwave hits: the evolved halo is VISUAL, not a duplicate damage event.
+  if (s.kind === 'shockwave') s.double = !!base.double;
+  if (s.kind === 'heal') s.cost = Math.max(0, Math.ceil((base.cost || 0) * .60));
   m[i] = s;
   return s;
 }
@@ -1372,6 +1557,8 @@ export class Battle {
     }
     this.ui.callout?.(f, `詠唱 ${duration.toFixed(1)}秒：${spec.name}`);
     this.ui.chant?.(f, spec, duration, duration);
+    // Begin the player's volumetric painted magic circle at CHANT START, not after the spell fires.
+    beginChantCircle(this, f, spec, duration, stamp);
     let remain = duration;
     let flare = 0;
     this.addEffect((dt) => {
@@ -1467,7 +1654,7 @@ export class Battle {
       this.ui.sfx('skill', spec);
     } else {
       this.ui.sfx('skill', spec);
-      this.ui.callout(f, spec.follow ? `追加技！ ${spec.name}` : spec.name);
+      this.ui.callout(f, spec.follow ? `進化追加技！ ${spec.name}` : spec.name);
     }
     if (!f.remoteAuth) {
       f.action = spec.kind === 'dash'
@@ -1480,6 +1667,14 @@ export class Battle {
       }
     }
     this.castFx(f, spec.color, spec);
+    if (spec.evolvedFollow) {
+      // Elegant alternate variant (painted textures via current fxPop override), not more polygon geometry.
+      const p = new THREE.Vector3(f.pos.x, .09, f.pos.z);
+      const el = elOf(spec, 5);
+      this.fxPop(p, el, 5, 4.1, .7, {flat:true,spin:3.4,grow:1.24,op:.76});
+      this.fxPop(p.clone().setY(1.25),el,9,2.6,.52,{spin:2.7,rise:.35,grow:1.7,op:.64});
+      this.flashLight?.(p.clone().setY(1), spec.color || 0xbddfff, .65, .23);
+    }
     // 技の具現化：狙った地点にも属性の立体エフェクトと閃光を出す
     {
       const tp = new THREE.Vector3(tx, 0.6, tz);
@@ -2673,6 +2868,8 @@ export class Battle {
   }
 
   dispose() {
+    for (const clean of [...(this.__chantArtCleanups||[])]) clean();
+    this.__chantArtCleanups?.clear();
     for (const f of this.fighters) {
       this.scene.remove(f.root);
       if (f.redMats) f.endAwaken();
