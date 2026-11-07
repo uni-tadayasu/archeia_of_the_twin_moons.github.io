@@ -918,7 +918,7 @@
    * Normal sword attack becomes one autonomous, targetable ice duplicate.
    * Independent lightweight ice fighter proxy: no new Fighter, GLB, mixer,
    * or Battle.fighters mutations, preventing repeated heavy clone creation.
-   * The ice circle starts on one press, persists for 6s, and cancels on hit.
+   * The ice circle starts on one press, persists for 30s, and cancels on hit.
    */
   import('./game.js?v=audio-cast-20261107d').then(combat => {
     installValgardIceEcho(combat.Battle, combat.Fighter);
@@ -1011,11 +1011,8 @@
           sealTexture.colorSpace=THREE.SRGBColorSpace;
           sealTexture.minFilter=THREE.LinearMipmapLinearFilter;
         }
-        // Re-use the actual character illustration: a lightweight ice duplicate
-        // avoids copying the expensive iron-warlord skeleton for every summon.
-        const portrait=new THREE.TextureLoader().load('assets/face-valgard.webp');
-        portrait.colorSpace=THREE.SRGBColorSpace;
-        return { THREE, texture, portrait, sealTexture };
+        // No external avatar texture or GLB is downloaded for the echo.
+        return { THREE, texture, sealTexture };
       });
       return assetPromise;
     }
@@ -1029,6 +1026,67 @@
     // caused the old combat/fighter loop to treat the effect as a full actor.
     const ECHO_RANGE=2.35, ECHO_SPEED=7.3;
     const ECHO_RESPAWN=1.25;
+    // One compact geometry/material palette is shared by every ice echo.
+    // Model is fully 3D, but neither GLB loading, GPU skinning, skeleton cloning
+    // nor an AnimationMixer can occur during battle. <500 triangles per echo.
+    let ice3dPalette=null;
+    function buildIce3d(THREE, root) {
+      if (!ice3dPalette) {
+        const makeMat=(color,emissive)=>new THREE.MeshLambertMaterial({color,emissive,emissiveIntensity:.24});
+        ice3dPalette={
+          geos:{ box:new THREE.BoxGeometry(1,1,1), spike:new THREE.ConeGeometry(1,1,5),
+            disk:new THREE.CylinderGeometry(1,1,1,6), crystal:new THREE.TetrahedronGeometry(1)},
+          mats:{shadow:makeMat(0x16344f,0x081c2a), metal:makeMat(0x398aaa,0x0c4660),
+            ice:makeMat(0xa7ebff,0x236b97), shine:makeMat(0xe3ffff,0x4aa2c0)}
+        };
+      }
+      const {geos,mats}=ice3dPalette;
+      const model=new THREE.Group();root.add(model);
+      const part=(parent,geo,mat,x,y,z,sx,sy,sz,rx=0,ry=0,rz=0)=>{
+        const m=new THREE.Mesh(geos[geo],mats[mat]);
+        m.position.set(x,y,z);m.scale.set(sx,sy,sz);
+        m.rotation.set(rx,ry,rz);
+        m.frustumCulled=true; // No shadow map passes for disposable minion.
+        parent.add(m);return m;
+      };
+      const core=new THREE.Group();model.add(core);
+      part(core,'box','shadow',0,1.25,0,.76,.78,.46); // dark under-armor
+      part(core,'box','metal',0,1.58,0,.89,.73,.51); // high cuirass
+      part(core,'box','ice',0,1.67,.27,.54,.51,.09); // breastplate
+      part(core,'crystal','shine',0,1.64,.365,.17,.26,.11); // frost crest
+      part(core,'box','shadow',0,1.04,0,.64,.26,.44); // belt
+      part(core,'box','ice',0,1.06,.28,.43,.14,.1); // buckle
+      const head=new THREE.Group();head.position.y=2.10;core.add(head);
+      part(head,'box','shadow',0,0,0,.53,.51,.48);
+      part(head,'box','metal',0,.24,-.02,.61,.18,.51); // helmet brow
+      part(head,'box','ice',0,.06,.257,.49,.12,.045); // eye visor
+      part(head,'spike','shine',0,.52,0,.22,.51,.24); // center plume
+      for(const side of [-1,1]){
+        part(head,'spike','ice',side*.35,.29,-.08,.18,.6,.2,0,0,side*-.38); // horn
+        part(core,'box','metal',side*.64,1.79,0,.48,.32,.52,0,0,side*.18); // pauldron
+        part(core,'spike','shine',side*.87,1.9,0,.23,.54,.25,0,0,side*-.48); // pauldron shard
+        const leg=new THREE.Group();leg.position.set(side*.23,.86,0);model.add(leg);
+        part(leg,'box','shadow',0,-.31,0,.27,.66,.31);
+        part(leg,'box','metal',0,-.66,.05,.34,.39,.38); // armored boot
+        part(leg,'spike','ice',0,-.75,.23,.21,.2,.3,Math.PI/2);
+      }
+      const left=new THREE.Group(),right=new THREE.Group();
+      left.position.set(-.64,1.78,0);right.position.set(.64,1.78,0);
+      core.add(left,right);
+      for(const [pivot,side] of [[left,-1],[right,1]]){
+        part(pivot,'box','shadow',0,-.29,0,.31,.55,.33,0,0,side*.1);
+        part(pivot,'box','metal',0,-.51,.09,.33,.3,.37);
+        part(pivot,'spike','ice',side*.08,-.54,.26,.23,.39,.24,Math.PI*.48,0,side*.12);
+      }
+      // Right arm carries a small crystalline blade; 3D attack swing rotates this pivot.
+      part(right,'spike','shine',.02,-.78,.35,.14,.8,.22,Math.PI*.45);
+      // Transparent-looking silhouette without expensive transparency sorting.
+      for(const side of [-1,1]){
+        part(core,'spike','metal',side*.41,.88,-.24,.23,.95,.33,Math.PI,0,side*.16);
+      }
+      model.scale.setScalar(.92);
+      return {model,core,left,right};
+    }
     function echoes(b){return (b.__valgardEchoes ||= new Set());}
     function disposeEcho(b,echo,shatter=false){
       if(!echo || echo.__retired)return;
@@ -1062,12 +1120,8 @@
       const distance=Math.hypot(start.x,start.z);
       if(distance>11.8)start.multiplyScalar(11.8/distance);
       const owned=[],root=new THREE.Group();
-      // Shared textures, but per-echo materials/geometries are disposed on death.
-      const portraitMat=new THREE.SpriteMaterial({map:runtime.portrait||null,color:0xb8edff,
-        transparent:true,opacity:.89,depthWrite:false,depthTest:true,fog:false});
-      const portrait=new THREE.Sprite(portraitMat);
-      portrait.position.y=1.12;portrait.scale.set(2.08,2.34,1);
-      root.add(portrait);owned.push(portraitMat);
+      // Shared 3D armor meshes: no GLB, skinned mesh, mixer, or per-spawn heavy geometry.
+      const rig=buildIce3d(THREE,root);
       if(runtime.texture){
         const auraMat=new THREE.SpriteMaterial({map:runtime.texture,color:0x8ce3ff,
           transparent:true,opacity:.54,blending:THREE.AdditiveBlending,depthWrite:false,fog:false});
@@ -1102,7 +1156,7 @@
         isPlayer:false,inv:0,guard:false,status:{},stun:0,action:null,y:0,
         facing:owner.facing,vel:new THREE.Vector3(),
         over:0,og:0,awakened:0,defMul:owner.defMul,atkMul:owner.atkMul*.46,
-        focus:b.nearestEnemy(owner),attackIn:.26,fxIn:.6,hpBar,fill,
+        focus:b.nearestEnemy(owner),attackIn:.26,fxIn:1.2,hpBar,fill,rig,animTime:0,attackPulse:0,
         forward(){return new THREE.Vector3(Math.sin(this.facing),0,Math.cos(this.facing));},
         receive(damage,stun,kx,kz){
           if(this.dead||this.__retired)return 0;
@@ -1154,6 +1208,7 @@
             }
             if(dist<ECHO_RANGE+(target.radius||.4)&&echo.attackIn<=0){
               echo.attackIn=.86;
+              echo.attackPulse=.30;
               b.meleeHit(echo,ECHO_RANGE,(owner.def?.light?.dmg||66)*.58,.3,3.1,null,
                 {kind:'echo',elem:1,color:ICE});
               // Capped low-cost hand-painted impact, never a new fighter/model.
@@ -1166,6 +1221,18 @@
       if(distance>12.2)echo.pos.multiplyScalar(12.2/distance);
       echo.root.position.copy(echo.pos);
       echo.root.rotation.y=echo.facing;
+      // Animated 3D armor, entirely CPU-light: no animation mixer or bones.
+      echo.animTime+=dt;
+      echo.attackPulse=Math.max(0,(echo.attackPulse||0)-dt);
+      const rig=echo.rig;
+      if(rig){
+        const moving=!!target&&echo.stun<=0&&echo.pos.distanceTo(target.pos)>ECHO_RANGE*.78;
+        rig.core.position.y=(moving?.035:.018)*Math.sin(echo.animTime*10);
+        rig.left.rotation.x=moving?Math.sin(echo.animTime*9)*.24:0;
+        rig.right.rotation.x=echo.attackPulse>0
+          ?-1.65*Math.sin((1-echo.attackPulse/.30)*Math.PI)
+          :moving?-Math.sin(echo.animTime*9)*.24:0;
+      }
       const ratio=Math.max(0,Math.min(1,echo.hp/Math.max(1,echo.maxHp)));
       echo.fill.scale.x=Math.max(.001,ratio);
       echo.fill.position.x=-.84*(1-ratio);
@@ -1176,8 +1243,8 @@
       if(aura)aura.material.opacity=.47+.08*Math.sin(seconds*4.5);
       if(floor)floor.rotation.z=seconds*.9;
       if(echo.fxIn<=0){
-        echo.fxIn=.62;
-        b.fxPop?.(echo.pos.clone().setY(.55),1,7,.87,.35,{rise:.65,grow:1.3,op:.36});
+        echo.fxIn=1.35;
+        b.fxPop?.(echo.pos.clone().setY(.55),1,7,.87,.35,{rise:.65,grow:1.3,op:.32});
       }
     }
     function showIceFX(b, pos, power = 1, breaking = false) {
@@ -1235,10 +1302,10 @@
     };
 
     // -------------------- VALGARD FROST SEAL --------------------
-    // Single-press ability: 6 seconds of autonomous freezing. Releasing the
+    // Single-press ability: 30 seconds of autonomous freezing. Releasing the
     // key does not cancel it. Additional key-downs cannot bypass cooldown.
     const GLYPH_RADIUS=4.1;
-    const SEAL_DURATION=6.0;
+    const SEAL_DURATION=30.0;
     const SEAL_COOLDOWN=3.0;
     const FREEZE_IMMUNITY=2.5;
     function thawTarget(t,owner=null){
@@ -1305,7 +1372,7 @@
       seal.mat.opacity=.7+.16*Math.sin((now-seal.started)*5);
       seal.root.rotation.z+=dt*.55;
       if(seal.fx<=0){
-        seal.fx=.32;
+        seal.fx=.72;
         const p=this.pos.clone().setY(.2+Math.random()*1.05);
         p.x+=(Math.random()-.5)*GLYPH_RADIUS*1.3;
         p.z+=(Math.random()-.5)*GLYPH_RADIUS*1.3;
@@ -1372,7 +1439,7 @@
           const cooldown=mine&&!active?Math.max(0,Math.ceil((actor.__iceSealCooldownUntil||0)-now)):0;
           const text=!mine?'構':active?`結界${remaining}秒`:cooldown?`待機${cooldown}秒`:'氷結陣';
           if(guard.textContent!==text){guard.textContent=text;guard.style.fontSize=mine?'clamp(9px,2.2vmin,12px)':'';}
-          guard.setAttribute('aria-label',!mine?'ガード':active?`氷結封印陣：残り${remaining}秒`:cooldown?`氷結封印陣：あと${cooldown}秒で再発動可能`:'氷結封印陣：1回押すと6秒自動展開');
+          guard.setAttribute('aria-label',!mine?'ガード':active?`氷結封印陣：残り${remaining}秒`:cooldown?`氷結封印陣：あと${cooldown}秒で再発動可能`:'氷結封印陣：1回押すと30秒自動展開');
           guard.setAttribute('aria-pressed',mine&&!!active?'true':'false');
         }
       }
