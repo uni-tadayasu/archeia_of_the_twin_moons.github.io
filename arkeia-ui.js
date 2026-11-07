@@ -1408,12 +1408,41 @@
     const GLYPH_RADIUS=4.1;
     const SEAL_DURATION=30.0;
     const FREEZE_IMMUNITY=2.5;
+    function applySealVisual(t){
+      if(!t?.visual || t.__iceSealVisual || !runtime?.THREE) return;
+      const swaps=[];
+      t.visual.traverse(node=>{
+        if(!node?.isMesh || !node.material) return;
+        const originals=Array.isArray(node.material)?node.material:[node.material];
+        const clones=originals.map(src=>{
+          const m=src.clone();
+          if(m.color) m.color.lerp(new runtime.THREE.Color(0xb8f4ff),0.74);
+          if('transparent' in m) m.transparent=true;
+          if('opacity' in m) m.opacity=Math.min(m.opacity ?? 1,0.92);
+          if(m.emissive){m.emissive.setHex(0x67dfff);m.emissiveIntensity=Math.max(0.42,m.emissiveIntensity||0);} 
+          return m;
+        });
+        swaps.push([node,node.material,clones]);
+        node.material=Array.isArray(node.material)?clones:clones[0];
+      });
+      t.__iceSealVisual=swaps;
+    }
+    function clearSealVisual(t){
+      const swaps=t?.__iceSealVisual;
+      if(!swaps) return;
+      for(const [node,original,clones] of swaps){
+        node.material=original;
+        for(const m of clones) m?.dispose?.();
+      }
+      t.__iceSealVisual=null;
+    }
     function thawTarget(t,owner=null){
       if(!t?.__iceSealOwner||(owner&&t.__iceSealOwner!==owner))return;
       if(t.status)delete t.status.freeze;
       // Undo only the seal's remaining restraint, without altering other DOTs.
       if((t.stun||0)>0)t.stun=Math.min(t.stun,.04);
       t.__iceSealOwner=null;
+      clearSealVisual(t);
       t.__iceSealImmuneUntil=performance.now()/1000+FREEZE_IMMUNITY;
       t.battle?.fxPop?.(t.pos.clone().setY(1.2),1,8,1.8,.28,{grow:1.55,op:.55});
     }
@@ -1483,10 +1512,23 @@
         if(now<(target.__iceSealImmuneUntil||0))continue;
         const d=Math.hypot(target.pos.x-this.pos.x,target.pos.z-this.pos.z);
         if(d>GLYPH_RADIUS+(target.radius||.4))continue;
+        if(target.__iceSealOwner===this && target.status?.freeze>0){
+          applySealVisual(target);
+          target.stun=Math.max(target.stun,.25);
+          target.guard=false;
+          target.action=null;
+          target.vel?.set?.(0,0,0);
+          continue;
+        }
         if(target.status?.freeze>0)continue;
         target.applyStatus?.('freeze');
         if(target.status?.freeze>0){
           target.__iceSealOwner=this;
+          applySealVisual(target);
+          target.stun=Math.max(target.stun,.25);
+          target.guard=false;
+          target.action=null;
+          target.vel?.set?.(0,0,0);
           this.battle.fxPop?.(target.pos.clone().setY(1.1),1,2,2.1,.32,{grow:1.5,op:.6});
           this.battle.ui.popup?.(target.pos,'氷結封印','#a6f4ff');
         }
@@ -1499,6 +1541,24 @@
       const received=receiveWithEcho.apply(this,args);
       if(received>0 && this.__iceSealOwner)thawTarget(this);
       return received;
+    };
+    const genericFighterUpdate=Fighter.prototype.update;
+    Fighter.prototype.update=function(dt,input){
+      if(this.__iceSealOwner && this.status?.freeze>0){
+        const locked={...(input||{}),mx:0,mz:0,guard:false,attack:false,skill:false,skill2:false,heal:false,over:false,jump:false,skillIdx:null};
+        this.action=null;
+        this.guard=false;
+        this.stun=Math.max(this.stun,.25);
+        this.vel?.set?.(0,0,0);
+        const out=genericFighterUpdate.call(this,dt,locked);
+        this.action=null;
+        this.guard=false;
+        this.vel?.set?.(0,0,0);
+        applySealVisual(this);
+        return out;
+      }
+      if(this.__iceSealVisual && !(this.__iceSealOwner && this.status?.freeze>0)) clearSealVisual(this);
+      return genericFighterUpdate.call(this,dt,input);
     };
 
     const updateOriginal=Battle.prototype.update;
@@ -1517,7 +1577,12 @@
       for(const echo of [...(this.__valgardEchoes||[])])tickEcho(this,echo,rawDt);
       // Detect naturally expired freeze so later hits do not clear unrelated stuns.
       for(const target of this.fighters){
-        if(target.__iceSealOwner&&!target.status?.freeze)target.__iceSealOwner=null;
+        if(target.__iceSealOwner && !target.status?.freeze){
+          target.__iceSealOwner=null;
+          clearSealVisual(target);
+        } else if(target.__iceSealOwner && target.status?.freeze>0){
+          applySealVisual(target);
+        }
       }
       const labels=(this.__valgardUiClock=(this.__valgardUiClock||0)+Math.max(0,rawDt||0));
       if(labels>.3){
@@ -1547,6 +1612,7 @@
       for(const f of this.fighters||[]){
         if(f.__iceSeal)stopSeal(f,false);
         if(f.__iceSealOwner)f.__iceSealOwner=null;
+        clearSealVisual(f);
         f.__iceEchoQueued=false;
       }
       for(const echo of [...(this.__valgardEchoes||[])])disposeEcho(this,echo,false);
