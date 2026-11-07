@@ -363,7 +363,64 @@
           group.add(sprite);
         }
       }
+
       return outcome;
+    };
+    function warpFx(b,pos,color,elem,arriving=false){
+      if(!b?.fx||!pos)return;
+      const p=pos.clone();
+      spawn(b,new THREE.Vector3(p.x,.08,p.z),elem,5,3.8,.34,{flat:true,grow:arriving?2.2:.7,spin:arriving?7:-7,op:.92});
+      spawn(b,new THREE.Vector3(p.x,.12,p.z),elem,4,2.35,.48,{flat:true,grow:3.05,spin:arriving?-9:9,op:.7});
+      spawn(b,p.clone().add(new THREE.Vector3(0,1.18,0)),elem,2,3.3,.4,{grow:arriving?1.9:1.3,op:.82});
+      for(let i=0;i<3;i++)spawn(b,p.clone().add(new THREE.Vector3(0,.45+i*.5,0)),elem,i%2?7:3,1.2+i*.52,.24+i*.08,{delay:i*.03,grow:1.9,rise:arriving?.95:1.35,spin:(i%2?-1:1)*(arriving?4:6),op:.58});
+      b.flashLight?.(p,color,arriving?1.25:1.05,.16);
+    }
+    const originalExecuteCast=Battle.prototype.executeCast;
+    if(typeof originalExecuteCast==='function')Battle.prototype.executeCast=function(f,slot,net){
+      const isValgard=f&&String(f.key||'').toLowerCase()==='valgard';
+      const result=originalExecuteCast.call(this,f,slot,net);
+      if(!isValgard||!f?.action||f.action.type!=='dash')return result;
+      const dashSpec=f.action.spec||{};
+      const foes=typeof this.enemiesOf==='function'?this.enemiesOf(f):[];
+      let target=null;
+      if(net&&Number.isFinite(net.tx)&&Number.isFinite(net.tz)&&foes.length){
+        let best=Infinity;
+        for(const foe of foes){
+          const dx=(foe.pos?.x||0)-net.tx,dz=(foe.pos?.z||0)-net.tz;
+          const dist=dx*dx+dz*dz;
+          if(dist<best){best=dist;target=foe;}
+        }
+      }
+      if(!target&&typeof this.nearestEnemy==='function')target=this.nearestEnemy(f);
+      const color=dashSpec.color??f.def?.color??0x9b6cff;
+      const elem=element(dashSpec,6);
+      const source=f.pos.clone();
+      warpFx(this,source,color,elem,false);
+      if(target){
+        const tf=typeof target.forward==='function'?target.forward():new THREE.Vector3(Math.sin(target.facing||0),0,Math.cos(target.facing||0));
+        const backStep=Math.max(1.05,(target.radius||.45)+(f.radius||.45)+.22);
+        const dest=target.pos.clone().addScaledVector(tf,-backStep);
+        const face=target.pos.clone().sub(dest).setY(0);
+        f.pos.copy(dest);
+        f.netTarget?.copy?.(dest);
+        if(f.root?.position)f.root.position.set(dest.x,f.y||0,dest.z);
+        if(face.lengthSq()>1e-4){
+          f.facing=Math.atan2(face.x,face.z);
+          if(f.root)f.root.rotation.y=f.facing;
+        }
+        if(f.visual){f.visual.position.y=0;f.visual.rotation.y=0;}
+        f.vel?.set?.(0,0,0);
+        f.action=null;
+        warpFx(this,dest,color,elem,true);
+        spawn(this,source.clone().lerp(dest,.5).setY(1.18),elem,2,3.2,.18,{grow:1.3,op:.74});
+        this.afterimage?.(f,color);
+        this.shake=Math.max(this.shake||0,.32);
+        this.applyHit?.(f,target,dashSpec.dmg??0,dashSpec.stun??.55,dashSpec.kb??9,dest,dashSpec);
+      }else{
+        f.vel?.set?.(0,0,0);
+        f.action=null;
+      }
+      return result;
     };
   }
 
