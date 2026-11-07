@@ -424,6 +424,350 @@
     };
   }
 
+
+  /* VALGARD — ORIGINAL CELESTIAL THUNDER JUDGMENT
+   * A new self-authored 2D-CG spell, not a recreation of copyrighted art,
+   * speech, motion sequences or game data. Original celestial sigils,
+   * branching blue-violet lightning and a painted suspended sword of light.
+   * All gameplay collision stays in Battle.strikeAt; no physical 3D FX geometry.
+   */
+  Promise.all([
+    import('three'),
+    import('./game.js?v=audio-cast-20261107d'),
+    import('./data.js?v=audio-cast-20261107d')
+  ]).then(([THREE,combat,data]) => {
+    installAstralJudgment(THREE,combat.Battle,data.FIGHTERS);
+  }).catch(error=>console.warn('[Arkeia] Original celestial judgment unavailable.',error));
+
+  function installAstralJudgment(THREE,Battle,FIGHTERS){
+    if(!Battle || !FIGHTERS?.valgard || Battle.prototype.__astralJudgment20261107) return;
+    Battle.prototype.__astralJudgment20261107=true;
+    const spec=FIGHTERS.valgard.skills?.[2];
+    if(!spec) return;
+    // Replace only the former Glacial Lance. Other Valgard skills are untouched.
+    Object.assign(spec,{
+      name:'蒼天雷裁《アストラル・ジャッジメント》',
+      kind:'astral_judgment_painted', elem:2, color:0xb5b5ff,
+      cost:29,castTime:2.05,dmg:76,radius:4.6,
+      visual:'painted_judgment',vivid:true,
+      description:'天上に双重の星紋を描き、蒼紫の雷を降らせ、最後に光の裁剣で敵を討つ独創術'
+    });
+    const TAU=Math.PI*2, maxConcurrent=2;
+    const isTouch=typeof matchMedia==='function'&&matchMedia('(pointer:coarse)').matches;
+    const S=isTouch?.75:1;
+    const textures={};
+    let active=0,prewarmScheduled=false;
+    const clamp=(v,min,max)=>Math.max(min,Math.min(max,v));
+    function rnd(seed){
+      let k=seed>>>0;
+      return ()=>{k=(Math.imul(k,1664525)+1013904223)>>>0;return k/4294967296;};
+    }
+    function canvasOf(w,h){
+      const c=document.createElement('canvas');
+      c.width=Math.max(32,Math.round(w*S));c.height=Math.max(32,Math.round(h*S));
+      const g=c.getContext('2d');
+      if(g)g.scale(c.width/w,c.height/h);
+      return {c,g};
+    }
+    function stagePaint(id){
+      const different={
+        earth:[512,512],heaven:[512,512],boltA:[288,768],boltB:[288,768],
+        boltC:[288,768],sword:[384,896],nova:[512,512],mist:[512,512]
+      };
+      const [w,h]=different[id];
+      const {c,g}=canvasOf(w,h);
+      if(!g) return null;
+      const r=rnd(id==='sword'?11903:id.charCodeAt(0)*3107+21913);
+      g.lineCap='round';g.lineJoin='round';
+      const beam=(x,y,ra,stops)=>{
+        const gr=g.createRadialGradient(x,y,1,x,y,ra);
+        stops.forEach(([v,color])=>gr.addColorStop(v,color));return gr;
+      };
+      if(id==='earth'||id==='heaven'){
+        const sky=id==='heaven',cx=256,cy=256;
+        const scale=sky?.96:1;
+        g.translate(cx,cy);g.scale(scale,scale);
+        g.fillStyle=beam(0,0,245,[[0,sky?'rgba(238,248,255,.28)':'rgba(129,205,255,.25)'],[.55,'rgba(88,77,197,.09)'],[1,'rgba(30,28,90,0)']]);
+        g.fillRect(-256,-256,512,512);
+        for(let ring=0;ring<5;ring++){
+          const rad=63+ring*34;
+          g.save();g.shadowBlur=18+ring*2;g.shadowColor=ring%2?'#b3a1ff':'#75d7ff';
+          g.strokeStyle=ring%2?'rgba(240,232,255,.84)':'rgba(129,227,255,.75)';
+          g.lineWidth=ring%2?2.4:4.1;
+          g.setLineDash(ring%2?[3,9]:[30,8]);
+          g.beginPath();g.arc(0,0,rad,0,TAU);g.stroke();g.restore();
+        }
+        // Unique star tribunal: 12-sides, alternating curving glyphs, rather than runes from the source.
+        for(let layer=0;layer<3;layer++){
+          const n=layer===0?12:layer===1?8:5,rr=[166,117,56][layer];
+          g.save();g.lineWidth=layer===0?2:3;
+          g.strokeStyle=layer===0?'rgba(122,206,255,.92)':'rgba(249,236,255,.78)';
+          g.shadowColor='#65bbff';g.shadowBlur=9;
+          g.beginPath();
+          for(let i=0;i<=n;i++){
+            const a=TAU*i/n-Math.PI/2;
+            const x=Math.cos(a)*rr,y=Math.sin(a)*rr;
+            i?g.lineTo(x,y):g.moveTo(x,y);
+          }
+          g.stroke();g.restore();
+        }
+        for(let i=0;i<24;i++){
+          const a=TAU*i/24;
+          g.save();g.translate(Math.cos(a)*203,Math.sin(a)*203);g.rotate(a);
+          g.strokeStyle=i%2?'rgba(229,237,255,.85)':'rgba(137,231,255,.88)';
+          g.lineWidth=1.8;
+          g.beginPath();g.moveTo(-9,0);g.lineTo(0,-9-(i%3)*3);g.lineTo(9,0);g.lineTo(0,9+(i%3)*3);g.closePath();g.stroke();g.restore();
+        }
+        for(let i=0;i<55;i++){
+          const a=r()*TAU,rr=46+r()*180;
+          const x=Math.cos(a)*rr,y=Math.sin(a)*rr;
+          g.fillStyle=i%2?'rgba(253,251,255,.75)':'rgba(96,200,255,.7)';
+          g.beginPath();g.arc(x,y,.65+r()*1.8,0,TAU);g.fill();
+        }
+        g.fillStyle=beam(0,0,75,[[0,'rgba(244,251,255,.96)'],[.18,'rgba(163,224,255,.6)'],[1,'rgba(141,119,255,0)']]);
+        g.fillRect(-75,-75,150,150);
+      }else if(id.startsWith('bolt')){
+        const rr=rnd((id==='boltA'?11:id==='boltB'?23:37)*24637);
+        const points=[];
+        for(let i=0;i<=16;i++){
+          const t=i/16;
+          points.push([144+(rr()-.5)*(64+48*Math.sin(t*Math.PI)),10+t*742]);
+        }
+        const draw=(pts,width,color,blur)=>{
+          g.save();g.lineWidth=width;g.strokeStyle=color;
+          g.shadowColor=color;g.shadowBlur=blur;
+          g.beginPath();pts.forEach(([x,y],i)=>i?g.lineTo(x,y):g.moveTo(x,y));g.stroke();g.restore();
+        };
+        draw(points,28,'rgba(96,90,255,.23)',45);
+        draw(points,13,'rgba(67,184,255,.69)',24);
+        draw(points,5,'rgba(235,247,255,.96)',12);
+        for(let i=2;i<15;i+=3){
+          const [bx,by]=points[i],sgn=i%2?-1:1;
+          const fork=[[bx,by],[bx+sgn*(36+rr()*25),by+55],[bx+sgn*(60+rr()*35),by+130]];
+          draw(fork,7,'rgba(129,163,255,.65)',16);
+          draw(fork,2,'rgba(250,250,255,.90)',7);
+        }
+        g.fillStyle=beam(144,745,85,[[0,'rgba(255,255,255,.9)'],[.21,'rgba(155,215,255,.65)'],[1,'rgba(108,142,255,0)']]);
+        g.fillRect(52,655,184,113);
+      }else if(id==='sword'){
+        const cx=192;
+        // A wholly new celestial keyblade silhouette made of light, not a 3D mesh.
+        const halo=beam(cx,383,180,[[0,'rgba(210,230,255,.85)'],[.22,'rgba(126,192,255,.45)'],[.58,'rgba(112,82,230,.15)'],[1,'rgba(91,74,210,0)']]);
+        g.fillStyle=halo;g.fillRect(0,35,384,760);
+        g.save();g.translate(cx,0);
+        // Looming floating aurora eye above the hilt.
+        g.strokeStyle='rgba(206,231,255,.90)';g.lineWidth=3;g.shadowBlur=26;g.shadowColor='#8fceff';
+        g.beginPath();g.ellipse(0,97,50,17,0,0,TAU);g.stroke();
+        g.beginPath();g.ellipse(0,97,72,25,-.05,0,TAU);g.stroke();
+        const blade=g.createLinearGradient(-44,0,44,0);
+        blade.addColorStop(0,'rgba(74,80,220,.05)');
+        blade.addColorStop(.20,'rgba(72,177,255,.77)');
+        blade.addColorStop(.47,'rgba(252,253,255,1)');
+        blade.addColorStop(.57,'rgba(220,245,255,1)');
+        blade.addColorStop(.85,'rgba(64,98,231,.8)');
+        blade.addColorStop(1,'rgba(74,72,195,.05)');
+        g.fillStyle=blade;g.shadowColor='#a4e5ff';g.shadowBlur=40;
+        g.beginPath();g.moveTo(-28,250);g.lineTo(-39,435);g.lineTo(-26,604);
+        g.quadraticCurveTo(-19,698,0,830);g.quadraticCurveTo(19,698,26,604);
+        g.lineTo(39,435);g.lineTo(28,250);g.closePath();g.fill();
+        g.shadowBlur=12;g.fillStyle='rgba(246,252,255,.94)';
+        g.beginPath();g.moveTo(-5,259);g.lineTo(-10,544);g.lineTo(0,782);g.lineTo(10,544);g.lineTo(5,259);g.closePath();g.fill();
+        // Asymmetric prism-clasped guard: independent original design.
+        g.fillStyle=blade;g.shadowBlur=21;
+        g.beginPath();g.moveTo(-20,251);g.lineTo(-115,237);g.lineTo(-144,204);
+        g.lineTo(-114,265);g.lineTo(-44,292);g.lineTo(0,267);
+        g.lineTo(46,296);g.lineTo(116,270);g.lineTo(146,198);
+        g.lineTo(113,233);g.lineTo(19,251);g.closePath();g.fill();
+        g.fillStyle='#a9e6ff';g.fillRect(-9,152,18,96);
+        for(let i=0;i<5;i++){
+          g.strokeStyle='rgba(244,250,255,.82)';g.lineWidth=3;
+          g.beginPath();g.moveTo(-12,164+i*14);g.lineTo(12,171+i*14);g.stroke();
+        }
+        g.beginPath();g.moveTo(0,109);g.lineTo(18,127);g.lineTo(0,151);g.lineTo(-18,127);g.closePath();g.fill();
+        g.restore();
+      }else if(id==='nova'){
+        const cx=256,cy=256;
+        g.fillStyle=beam(cx,cy,248,[[0,'rgba(255,255,255,.99)'],[.1,'rgba(209,249,255,.98)'],[.26,'rgba(105,206,255,.78)'],[.5,'rgba(116,101,239,.47)'],[1,'rgba(95,97,196,0)']]);
+        g.fillRect(0,0,512,512);
+        for(let i=0;i<32;i++){
+          const a=TAU*i/32,rr=228;
+          g.save();g.translate(cx,cy);g.rotate(a);
+          const lg=g.createLinearGradient(0,0,rr,0);
+          lg.addColorStop(0,'rgba(245,253,255,.8)');lg.addColorStop(1,'rgba(133,153,245,0)');
+          g.fillStyle=lg;g.beginPath();g.moveTo(0,-(i%2?3:5));g.lineTo(rr,0);g.lineTo(0,i%2?3:5);g.fill();g.restore();
+        }
+        g.strokeStyle='rgba(215,242,255,.97)';g.lineWidth=5;g.shadowColor='#8ecbff';g.shadowBlur=13;
+        g.beginPath();g.arc(cx,cy,169,0,TAU);g.stroke();
+      }else if(id==='mist'){
+        const cx=256,cy=256;
+        for(let i=0;i<120;i++){
+          const x=r()*512,y=r()*512,ra=16+r()*66;
+          g.globalAlpha=.05+r()*.12;
+          g.fillStyle=beam(x,y,ra,[[0,r()<.5?'rgba(155,213,255,.62)':'rgba(200,180,255,.62)'],[1,'rgba(65,130,237,0)']]);
+          g.fillRect(x-ra,y-ra,ra*2,ra*2);
+        }
+        g.globalAlpha=1;
+      }
+      const t=new THREE.CanvasTexture(c);t.colorSpace=THREE.SRGBColorSpace;
+      t.minFilter=THREE.LinearMipmapLinearFilter;
+      t.magFilter=THREE.LinearFilter;t.generateMipmaps=true;
+      return t;
+    }
+    function tex(id){
+      if(!textures[id])textures[id]=stagePaint(id);
+      return textures[id];
+    }
+    function warmup(){
+      if(prewarmScheduled)return;prewarmScheduled=true;
+      const order=['earth','heaven','boltA','boltB','boltC','sword','nova','mist'];
+      let cursor=0;
+      const step=(deadline)=>{
+        let made=0;
+        while(cursor<order.length && made<2 && (!deadline||deadline.timeRemaining()>3)){
+          tex(order[cursor++]);made++;
+        }
+        if(cursor<order.length) schedule(step);
+      };
+      schedule(step);
+    }
+    function schedule(fn){
+      if(typeof requestIdleCallback==='function')requestIdleCallback(fn,{timeout:2000});
+      else setTimeout(()=>fn({timeRemaining:()=>50}),30);
+    }
+    warmup();
+    function perform(b,f,net){
+      if(!b?.fx || b.ended) return;
+      const target=(net && Number.isFinite(net.tx)&&Number.isFinite(net.tz))
+        ? {pos:new THREE.Vector3(net.tx,0,net.tz)}
+        : typeof b.nearestEnemy==='function'?b.nearestEnemy(f):null;
+      const fw=typeof f.forward==='function'?f.forward():new THREE.Vector3(Math.sin(f.facing||0),0,Math.cos(f.facing||0));
+      const x=target?.pos?.x??f.pos.x+fw.x*5;
+      const z=target?.pos?.z??f.pos.z+fw.z*5;
+      // On low-memory devices, a simultaneous extra cast still hits without allocating FX.
+      if(active>=maxConcurrent){
+        if(!f.remoteAuth && typeof b.strikeAt==='function')
+          b.strikeAt(f,x,z,3.2,205,.6,5,{kind:'judgment',elem:2,color:0xb6b5ff});
+        b.fxPop?.(new THREE.Vector3(x,1.2,z),2,8,5,.48,{grow:2,op:.8});
+        return;
+      }
+      const base=new THREE.Group();b.fx.add(base);active++;
+      const mats=[],shapes=[];
+      const add=(id,pos,sx,sy,flat=false,opacity=1,additive=true)=>{
+        const texture=tex(id);
+        if(!texture)return null;
+        const opts={map:texture,color:0xffffff,transparent:true,opacity,depthWrite:false,
+          depthTest:!flat?false:true,blending:additive?THREE.AdditiveBlending:THREE.NormalBlending,
+          fog:false,side:THREE.DoubleSide};
+        const mat=flat?new THREE.MeshBasicMaterial(opts):new THREE.SpriteMaterial(opts);
+        const obj=flat?new THREE.Mesh(new THREE.PlaneGeometry(1,1),mat):new THREE.Sprite(mat);
+        obj.position.copy(pos);obj.scale.set(sx,sy,1);
+        obj.renderOrder=flat?5:6;
+        if(flat)obj.rotation.x=-Math.PI/2;
+        base.add(obj);mats.push(mat);if(flat)shapes.push(obj.geometry);
+        return obj;
+      };
+      const floor=add('earth',new THREE.Vector3(x,.085,z),5.5,5.5,true,0);
+      const sky=add('heaven',new THREE.Vector3(x,10,z),7.8,7.8,false,0);
+      const sword=add('sword',new THREE.Vector3(x,13,z),4.8,11.2,false,0,false);
+      const boltDefs=[[-1.45,-.1,.96,'boltA'],[1.32,.72,1.22,'boltB'],[-.38,1.5,1.54,'boltC'],[.95,-1.25,1.84,'boltA']];
+      const bolts=boltDefs.map(([ox,oz,at,id],i)=>({at,done:false,
+        obj:add(id,new THREE.Vector3(x+ox,4.6,z+oz),2.9,9.0,false,0)}));
+      const bloom=add('nova',new THREE.Vector3(x,1.15,z),1.9,1.9,false,0);
+      const halo=add('nova',new THREE.Vector3(x,.13,z),3,3,true,0);
+      const mist=add('mist',new THREE.Vector3(x,2.4,z),8,4,false,0);
+      if(!floor||!sky||!sword||!bloom||!halo||!mist){
+        base.removeFromParent();for(const m of mats)m.dispose();for(const g of shapes)g.dispose();
+        active=Math.max(0,active-1);
+        if(!f.remoteAuth && typeof b.strikeAt==='function')
+          b.strikeAt(f,x,z,3.2,205,.6,5,{kind:'judgment',elem:2,color:0xb6b5ff});
+        return;
+      }
+      // Ordinary gameplay sounds reused; no copyrighted audio or voice lines.
+      if(f.isPlayer) b.ui.cutin?.(f,'蒼天雷裁','ASTRAL VERDICT');
+      b.ui.sfx?.('zap');
+      b.flashLight?.(new THREE.Vector3(x,2.4,z),0x9daaff,1.15,.48);
+      let t=0,impact=false,cleaned=false;
+      const DURATION=3.75;
+      const hit=(px,pz,radius,dmg,stun=0.45)=>{
+        if(!f.remoteAuth&&!b.ended && !f.dead && typeof b.strikeAt==='function'){
+          // Preserve normal armor, hit callbacks, status and multiplayer validation.
+          b.strikeAt(f,px,pz,radius,dmg,stun,6,{kind:'judgment',elem:2,color:0xb6b5ff});
+        }
+      };
+      function cleanup(){
+        if(cleaned)return;cleaned=true;
+        b.__astralFxCleanups?.delete(cleanup);
+        base.removeFromParent();for(const m of mats)m.dispose();for(const g of shapes)g.dispose();
+        active=Math.max(0,active-1);
+      }
+      (b.__astralFxCleanups ||= new Set()).add(cleanup);
+      b.addEffect(dt=>{
+        if(cleaned)return false;
+        if(!base.parent || b.ended){cleanup();return false;}
+        t+=clamp(Number(dt)||0,0,.065);
+        const entry=clamp(t/.76,0,1);
+        const opening=1-Math.pow(1-entry,3);
+        floor.material.opacity=.9*(1-clamp((t-2.5)/1.05,0,1));
+        floor.scale.setScalar(5.5*(.26+.74*opening));
+        floor.rotation.z+=dt*.28;
+        sky.material.opacity=.84*opening*(1-clamp((t-2.66)/.75,0,1));
+        sky.scale.setScalar(7.8*(.42+.58*opening));
+        sky.material.rotation+=dt*.26;
+        sword.material.opacity=clamp((t-.68)/.32,0,1)*(1-clamp((t-2.55)/.4,0,1));
+        sword.position.y=13-Math.pow(clamp((t-1.20)/1.20,0,1),2.4)*10.3;
+        sword.scale.set(4.8*(1+.06*Math.sin(t*9)),11.2,1);
+        for(const bolt of bolts){
+          if(!bolt.obj)continue;
+          const phase=(t-bolt.at);
+          if(phase>=0 && phase<.35){
+            bolt.obj.material.opacity=.94*(1-clamp((phase-.10)/.24,0,1));
+            bolt.obj.scale.set(2.75+phase*1.2,9.3+phase*1.9,1);
+            if(phase<.07)bolt.obj.position.x=x+Math.sin(t*47+bolt.at)*.15+(bolt.at-.9)*1.2;
+          }else bolt.obj.material.opacity=0;
+          if(!bolt.done && phase>=.075){
+            bolt.done=true;
+            const idx=bolts.indexOf(bolt),q=boltDefs[idx];
+            hit(x+q[0],z+q[1],1.75,idx<2?46:60,.36);
+            b.fxPop?.(new THREE.Vector3(x+q[0],1.5,z+q[1]),2,1,1.8,.27,{grow:1.5,op:.74});
+            b.ui.sfx?.('zap');
+          }
+        }
+        if(!impact && t>=2.42){
+          impact=true;
+          hit(x,z,4.2,235,.85);
+          b.ui.flash?.();b.ui.sfx?.('burst');
+          b.shake=Math.max(b.shake||0,.92);
+          b.flashLight?.(new THREE.Vector3(x,1.7,z),0xd9efff,1.9,.42);
+          b.fxPop?.(new THREE.Vector3(x,1.2,z),2,8,10,.65,{grow:2.2,op:.88});
+        }
+        const k=clamp((t-2.4)/1.35,0,1);
+        bloom.material.opacity=impact?.84*Math.pow(1-k,1.7):0;
+        bloom.scale.set(1.9+11.5*k,1.9+11.5*k,1);
+        halo.material.opacity=impact?.78*Math.pow(1-k,1.4):0;
+        halo.scale.set(3+11*k,3+11*k,1);
+        mist.material.opacity=.46*clamp((t-1.15)/.6,0,1)*(1-k);
+        mist.scale.set(8+3*k,4+2*k,1);
+        if(t>=DURATION){cleanup();return false;}
+        return true;
+      });
+    }
+    const previousDispose=Battle.prototype.dispose;
+    Battle.prototype.dispose=function(...args){
+      for(const clean of [...(this.__astralFxCleanups||[])])clean();
+      this.__astralFxCleanups?.clear();
+      return previousDispose?.apply(this,args);
+    };
+    const previous=Battle.prototype.executeCast;
+    Battle.prototype.executeCast=function(f,slot,net){
+      // Exact original skill slot only; long-press followups and other spellcasters unchanged.
+      const selected=!!f && f.key==='valgard' && slot==='s2'
+        && f.def?.skills?.[2]?.kind==='astral_judgment_painted';
+      const outcome=previous.call(this,f,slot,net);
+      if(selected)perform(this,f,net);
+      return outcome;
+    };
+  }
+
   function installPaintedWorld(THREE,Field){
     if(!Field||Field.prototype.__illustratedCG)return;
     Field.prototype.__illustratedCG=true;
@@ -1179,16 +1523,8 @@
         root.add(floor);owned.push(floorGeo,floorMat);
         root.userData.iceAura=aura;root.userData.iceFloor=floor;
       }
-      const hpBar=new THREE.Group(); hpBar.position.y=2.65;
-      const bgGeo=new THREE.PlaneGeometry(1.75,.2);
-      const bgMat=new THREE.MeshBasicMaterial({color:0x082c42,opacity:.9,transparent:true,depthWrite:false,depthTest:false});
-      const bg=new THREE.Mesh(bgGeo,bgMat);
-      const hpGeo=new THREE.PlaneGeometry(1.68,.13);
-      const hpMat=new THREE.MeshBasicMaterial({color:0xb5f5ff,depthWrite:false,depthTest:false});
-      const fill=new THREE.Mesh(hpGeo,hpMat);fill.position.z=.014;
-      bg.renderOrder=fill.renderOrder=100;
-      hpBar.add(bg,fill);root.add(hpBar);
-      owned.push(bgGeo,bgMat,hpGeo,hpMat);
+      // One-hit ephemeral ice duplicate: do not construct or render any HP bar.
+      // This also removes 2 meshes, 2 geometries and 2 materials per summon.
       root.position.copy(start);b.scene.add(root);
       const maxHp=1;
       const echo={
@@ -1198,7 +1534,7 @@
         isPlayer:false,inv:0,guard:false,status:{},stun:0,action:null,y:0,
         facing:owner.facing,vel:new THREE.Vector3(),
         over:0,og:0,awakened:0,defMul:owner.defMul,atkMul:owner.atkMul*.46,
-        focus:b.nearestEnemy(owner),attackIn:.26,fxIn:1.2,hpBar,fill,rig,animTime:0,attackPulse:0,
+        focus:b.nearestEnemy(owner),attackIn:.26,fxIn:1.2,rig,animTime:0,attackPulse:0,
         forward(){return new THREE.Vector3(Math.sin(this.facing),0,Math.cos(this.facing));},
         receive(damage,stun,kx,kz){
           if(this.dead||this.__retired)return 0;
@@ -1283,10 +1619,6 @@
           }
         }
       }
-      const ratio=Math.max(0,Math.min(1,echo.hp/Math.max(1,echo.maxHp)));
-      echo.fill.scale.x=Math.max(.001,ratio);
-      echo.fill.position.x=-.84*(1-ratio);
-      echo.hpBar.quaternion.copy(b.camera.quaternion);
       const seconds=b.fxClock||0;
       const aura=echo.root.userData.iceAura;
       const floor=echo.root.userData.iceFloor;
