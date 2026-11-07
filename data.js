@@ -1021,6 +1021,41 @@ for (const f of Object.values(FIGHTERS)) {
   if (f.faceHue != null) f.faceHue = 0;
 }
 
+// ARK-20261107-PORTRAIT-NEW
+// Newly illustrated character portraits supplied for 13 model archetypes.
+// Select / party select use FIGHTERS[key].face. These art assets never alter GLBs.
+const NEW_MODEL_PORTRAITS = {
+  'hero-swordsman.glb': ['assets/portraits/hero-swordsman-01.webp', 'assets/portraits/hero-swordsman-02.webp'],
+  'mage-weaver.glb': ['assets/portraits/mage-weaver-01.webp', 'assets/portraits/mage-weaver-02.webp', 'assets/portraits/mage-weaver-03.webp'],
+  'brute-axe.glb': ['assets/portraits/brute-axe-01.webp', 'assets/portraits/brute-axe-02.webp'],
+  'shinobi-twin.glb': ['assets/portraits/shinobi-twin-01.webp', 'assets/portraits/shinobi-twin-02.webp', 'assets/portraits/shinobi-twin-03.webp', 'assets/portraits/shinobi-twin-04.webp', 'assets/portraits/shinobi-twin-05.webp'],
+  'old-knight.glb': ['assets/portraits/old-knight-01.webp', 'assets/portraits/old-knight-02.webp', 'assets/portraits/old-knight-03.webp', 'assets/portraits/old-knight-04.webp', 'assets/portraits/old-knight-05.webp', 'assets/portraits/old-knight-06.webp', 'assets/portraits/old-knight-07.webp'],
+  'alchemist-boy.glb': ['assets/portraits/alchemist-boy-01.webp', 'assets/portraits/alchemist-boy-02.webp', 'assets/portraits/alchemist-boy-03.webp'],
+  'ranger-archer.glb': ['assets/portraits/ranger-archer-01.webp', 'assets/portraits/ranger-archer-02.webp'],
+  'dark-mercenary.glb': ['assets/portraits/dark-mercenary-01.webp', 'assets/portraits/dark-mercenary-02.webp', 'assets/portraits/dark-mercenary-03.webp'],
+  'bell-priestess.glb': ['assets/portraits/bell-priestess-01.webp', 'assets/portraits/bell-priestess-02.webp', 'assets/portraits/bell-priestess-03.webp', 'assets/portraits/bell-priestess-04.webp'],
+  'wolf-warrior.glb': ['assets/portraits/wolf-warrior-01.webp', 'assets/portraits/wolf-warrior-02.webp', 'assets/portraits/wolf-warrior-03.webp', 'assets/portraits/wolf-warrior-04.webp'],
+  'monk-brawler.glb': ['assets/portraits/monk-brawler-01.webp', 'assets/portraits/monk-brawler-02.webp'],
+  'dragoon-lancer.glb': ['assets/portraits/dragoon-lancer-01.webp', 'assets/portraits/dragoon-lancer-02.webp', 'assets/portraits/dragoon-lancer-03.webp', 'assets/portraits/dragoon-lancer-04.webp'],
+  'clockwork-puppeteer.glb': ['assets/portraits/clockwork-puppeteer-01.webp', 'assets/portraits/clockwork-puppeteer-02.webp', 'assets/portraits/clockwork-puppeteer-03.webp'],
+};
+for (const [id, fighter] of Object.entries(FIGHTERS)) {
+  if (!fighter?.model) continue;
+  const modelName = fighter.model.substring(fighter.model.lastIndexOf('/') + 1);
+  const variants = NEW_MODEL_PORTRAITS[modelName];
+  if (!variants?.length) continue; // Special characters keep their own art.
+  if (fighter.face && !fighter.originalSelectFace) fighter.originalSelectFace = fighter.face;
+  const generated = /^([gm])(\d+)$/.exec(id);
+  const sequence = generated
+    ? Math.floor(Number(generated[2]) / 13) + (generated[1] === 'm' ? 2 : 1)
+    : 0;
+  fighter.face = variants[sequence % variants.length];
+  fighter.faceHue = 0;
+}
+
+// Valgard's new illustration replaces the previous generic ice crest.
+if (FIGHTERS.valgard) FIGHTERS.valgard.face = 'assets/face-valgard.webp?v=portrait-new-20261107b';
+
 const bound = (x, lo, hi) => Math.max(lo, Math.min(hi, Number(x) || 0));
 // Centralized damage budget. Standard / elite / bosses / chief characters
 // retain unique attributes but are prevented from extreme outliers.

@@ -3,7 +3,7 @@
 import * as THREE from 'three';
 import { attachValgardMotion } from './valgard-motion.js?v=valgard-exact-20261107';
 import { instantiateModel } from './model-runtime.js?v=valgard-exact-20261107';
-import { FIGHTERS } from './data.js?v=balance-cast-20261107';
+import { FIGHTERS } from './data.js?v=portrait-new-20261107b';
 import { makeGear, animGear, removeGear } from './gear.js';
 
 function rng(seed) {

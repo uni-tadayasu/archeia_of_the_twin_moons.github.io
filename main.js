@@ -1,10 +1,10 @@
 import * as THREE from 'three';
 import { loadModel } from './model-runtime.js?v=valgard-exact-20261107';
-import { Battle, ARENA_R } from './game.js?v=balance-cast-20261107';
-import { FIGHTERS, spellCastTime, STORY, ROSTER, UPGRADES, MAX_LV, STAGES, BGM, APEX_BGM, ENEMY_ROSTER, UPG_CAP, LB_MAX, lbMaxLv, lbMul, lbCost, WEAPONS, ARMORS, SUMMONS, STAT_LABEL, SPECIAL_KEYS, BOSS_ROSTER, currentEvent, sanitizeEvent, EV_FOE_KINDS } from './data.js?v=balance-cast-20261107';
+import { Battle, ARENA_R } from './game.js?v=portrait-new-20261107b';
+import { FIGHTERS, spellCastTime, STORY, ROSTER, UPGRADES, MAX_LV, STAGES, BGM, APEX_BGM, ENEMY_ROSTER, UPG_CAP, LB_MAX, lbMaxLv, lbMul, lbCost, WEAPONS, ARMORS, SUMMONS, STAT_LABEL, SPECIAL_KEYS, BOSS_ROSTER, currentEvent, sanitizeEvent, EV_FOE_KINDS } from './data.js?v=portrait-new-20261107b';
 import { sayBattle, setVoiceMuted, stopVoices } from './voice.js';
 import { initSocial, uiConfirm } from './social.js?v=valgard-exact-20261107';
-import { initMailbox } from './mailbox.js?v=balance-cast-20261107';
+import { initMailbox } from './mailbox.js?v=portrait-new-20261107b';
 import { OPERATOR_KEY_SHA256, CHIEF_KEY_SHA256, MAX_KEY_ATTEMPTS, LOCKOUT_MS, SHOP_ITEMS } from './config.js';
 import { connect, issueInvite, redeemInvite, syncPush, syncPullV } from './net.js?v=valgard-exact-20261107';
 import { apiEnabled, api, verifyToken } from './api.js';
@@ -1630,7 +1630,15 @@ function openSelect(label, crumb, cb, { allowLocked = false, onBack = goTitle } 
       img.alt = `${d.name}のキャラクターイラスト`;
       img.decoding = 'async';
       img.loading = 'lazy';
-      img.onerror = () => { img.style.display = 'none'; card.title = '対応画像を読み込めませんでした'; };
+      img.onerror = () => {
+        if (d.originalSelectFace && !img.dataset.oldArtFallback) {
+          img.dataset.oldArtFallback = '1';
+          img.src = d.originalSelectFace;
+          return;
+        }
+        img.style.display = 'none';
+        card.title = 'キャラクター画像が読み込めませんでした';
+      };
       // Use the portrait painted for this character's actual GLB model.
       if (locked) img.style.filter = 'brightness(0)';
       card.append(img);
@@ -1706,7 +1714,15 @@ function openPartySelect(done) {
       img.alt = `${d.name}のキャラクターイラスト`;
       img.decoding = 'async';
       img.loading = 'lazy';
-      img.onerror = () => { img.style.display = 'none'; card.title = '対応画像を読み込めませんでした'; };
+      img.onerror = () => {
+        if (d.originalSelectFace && !img.dataset.oldArtFallback) {
+          img.dataset.oldArtFallback = '1';
+          img.src = d.originalSelectFace;
+          return;
+        }
+        img.style.display = 'none';
+        card.title = 'キャラクター画像が読み込めませんでした';
+      };
       // Use the portrait painted for this character's actual GLB model.
       card.append(img);
     }
@@ -2416,7 +2432,7 @@ function resetFieldLight() {
 async function enterField() {
   // フィールドは物語でしか使わないので必要になった時だけ読み込む（初回表示を軽く）
   if (!(await ensureAllModelsReady())) return;
-  const { Field } = await import('./field.js?v=balance-cast-20261107');
+  const { Field } = await import('./field.js?v=portrait-new-20261107b');
   leaveField();
   const ch = STORY[state.chapter];
   const st = stageById(ch.stage);

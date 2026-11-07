@@ -1,6 +1,6 @@
 // 運営長の配信と受信箱。配信・既読・受け取りの確定は、常に認証済みサーバーの応答を待つ。
 import { apiEnabled, api } from './api.js';
-import { WEAPONS, ARMORS } from './data.js?v=balance-cast-20261107';
+import { WEAPONS, ARMORS } from './data.js?v=portrait-new-20261107b';
 
 const ITEM_LIST = [...WEAPONS, ...ARMORS];
 const ITEM_NAMES = new Map(ITEM_LIST.map(x => [x.id, x.name]));
