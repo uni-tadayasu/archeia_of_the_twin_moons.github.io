@@ -1,7 +1,7 @@
 // 交流機能：画面上部のお知らせテロップ・世界／ギルド／フレンド／運営会議チャット・ギルド
 // サーバー（config.js の API_BASE）設定時：ギルドの存在・役職・除名・寄付・チャンネル参加資格・運営長の署名はすべてサーバーで検証。
 // 未設定時：端末内判定の簡易モード（改ざん耐性なし。寄付は不正防止のため停止）。
-import { connectSocial, saveChiefEvent, loadChiefEvent, guildDonors, guildBoard, joinChannel } from './net.js?v=gaien-bgm-20261107b';
+import { connectSocial, saveChiefEvent, loadChiefEvent, guildDonors, guildBoard, joinChannel } from './net.js?v=valgard-ice-20261107';
 import { apiEnabled, api, verifyToken } from './api.js';
 
 const serverMode = () => apiEnabled();

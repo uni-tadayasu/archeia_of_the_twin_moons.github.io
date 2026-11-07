@@ -36,9 +36,9 @@ export function sanitizePresence(p) {
     gw: /^w\d{1,2}$/.test(p.gw) ? p.gw : '', ga: /^a\d{1,2}$/.test(p.ga) ? p.ga : '',
     // サーバー署名の戦闘プロフィール（受信側で検証）
     prof: typeof p.prof === 'string' && /^[A-Za-z0-9_\-.]{20,1500}$/.test(p.prof) ? p.prof : '',
-    gaienActive: !!p.gaienActive,
-    gaienSig: typeof p.gaienSig === 'string' && /^[A-Za-z0-9_.-]{32,1500}$/.test(p.gaienSig) ? p.gaienSig : '',
-    gaienAt: Number.isSafeInteger(p.gaienAt) && p.gaienAt > 0 ? p.gaienAt : 0
+    valgardActive: !!p.valgardActive,
+    valgardSig: typeof p.valgardSig === 'string' && /^[A-Za-z0-9_.-]{32,1500}$/.test(p.valgardSig) ? p.valgardSig : '',
+    valgardAt: Number.isSafeInteger(p.valgardAt) && p.valgardAt > 0 ? p.valgardAt : 0
   };
 }
 

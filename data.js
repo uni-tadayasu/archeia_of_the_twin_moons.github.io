@@ -246,30 +246,20 @@ FIGHTERS.sovereign2 = {
   over: { name: '深淵開闢・緋紫の終焉', kind: 'judgment', visual: 'pillar', finalVisual: 'bigsword', count: 24, spread: 8, radius: 2.8, dmg: 120, delay: 0.7, interval: 0.05, finalDmg: 650, finalRadius: 11, elem: 9, color: 0xff2050, vivid: true }
 };
 
-// 運営長専用：ガイエン（通常近接で進化前/進化後を切り替えられる炎覇竜）
-FIGHTERS.gaien = {
-  name: 'ガイエン', title: '煉殻竜王（運営長・第一形態）', model: 'assets/models/flame-shell-king.glb', face: 'assets/face-gaien.webp',
-  color: 0xff9a36, height: 2.15, hp: 1750, speed: 5.9, overGain: 1.45, locked: true, special: 'chief', manualFormSwap: true, manualForm2: 'gaien2',
-  light: { dmg: 72, range: 2.7, color: 0xffa24a },
+// 運営長専用・単一形態：氷鋼覇王ヴァルガルド。旧炎竜の進化/炎系を廃止。
+FIGHTERS.valgard = {
+  name: 'ヴァルガルド', title: '氷鋼の覇王（運営長専用）',
+  model: 'assets/models/iron-warlord.glb', face: 'assets/face-valgard.webp',
+  color: 0x8cdcff, height: 2.06, hp: 1850, speed: 5.8, overGain: 1.65,
+  locked: true, special: 'chief',
+  light: { dmg: 66, range: 2.6, color: 0xb8efff },
   skills: [
-    { name: '灼皇息《フレア・ブレス》', cost: 20, kind: 'projectile', visual: 'flame', count: 5, spreadAng: 0.16, dmg: 60, speed: 17, radius: 0.82, elem: 0, color: 0xff6a20, vivid: true },
-    { name: '紅蓮突進', cost: 22, kind: 'dash', dmg: 150, speed: 18, dur: 0.34, elem: 0, color: 0xff7a28, vivid: true },
-    { name: '熔殻震波', cost: 24, kind: 'shockwave', dmg: 165, radius: 7.2, elem: 0, color: 0xffb040, vivid: true },
-    { name: '火山落星', cost: 28, kind: 'rain', visual: 'nova', count: 5, spread: 3.2, radius: 2.2, dmg: 88, delay: 0.45, interval: 0.12, elem: 0, color: 0xff5418, vivid: true }
+    { name: '凍牙・氷鋼砕', cost: 21, kind: 'shockwave', dmg: 160, radius: 6.3, elem: 1, color: 0x89e7ff, vivid: true },
+    { name: '白銀氷鎧突', cost: 19, kind: 'dash', dmg: 145, speed: 19, dur: 0.34, elem: 1, color: 0xb4efff, vivid: true },
+    { name: '零度氷槍陣', cost: 22, kind: 'projectile', visual: 'ice', count: 6, spreadAng: 0.2, dmg: 72, speed: 21, radius: 0.65, elem: 1, color: 0x64d5ff, vivid: true },
+    { name: '氷葬流星群', cost: 27, kind: 'rain', visual: 'crystal', count: 10, spread: 3.4, radius: 1.7, dmg: 74, delay: 0.38, interval: 0.065, elem: 1, color: 0xc6f4ff, vivid: true }
   ],
-  over: { name: '終焔天壊《インフェルノ・ドミニオン》', kind: 'judgment', visual: 'nova', count: 10, spread: 5.5, radius: 2.5, dmg: 90, delay: 0.65, interval: 0.08, finalDmg: 430, finalRadius: 8.5, elem: 0, color: 0xff4a18, vivid: true }
-};
-FIGHTERS.gaien2 = {
-  name: 'ガイエン', title: '極焔覇皇（運営長・第二形態）', model: 'assets/models/flame-shell-titan.glb', face: 'assets/face-gaien2.webp',
-  color: 0xff5e20, height: 2.45, hp: 2250, speed: 6.2, overGain: 1.75, locked: true, special: 'chief', hidden: true, manualFormSwap: true, manualBase: 'gaien',
-  light: { dmg: 96, range: 3.0, color: 0xff7426 },
-  skills: [
-    { name: '覇炎獄竜砲《メガ・フレア》', cost: 18, kind: 'projectile', visual: 'flame', count: 7, spreadAng: 0.18, dmg: 82, speed: 19, radius: 0.92, elem: 0, color: 0xff5414, vivid: true },
-    { name: '獄炎王撃', cost: 22, kind: 'dash', dmg: 185, speed: 20, dur: 0.36, elem: 0, color: 0xff6a18, vivid: true },
-    { name: '爆焔咆哮', cost: 24, kind: 'shockwave', dmg: 220, radius: 8.6, elem: 0, color: 0xffb030, vivid: true },
-    { name: '焔王流星群', cost: 28, kind: 'rain', visual: 'nova', count: 7, spread: 3.5, radius: 2.6, dmg: 110, delay: 0.4, interval: 0.1, elem: 0, color: 0xff4010, vivid: true }
-  ],
-  over: { name: '滅界皇焔《アポカリプス・ブレス》', kind: 'judgment', visual: 'nova', count: 14, spread: 6.5, radius: 2.8, dmg: 110, delay: 0.7, interval: 0.07, finalDmg: 560, finalRadius: 9.5, elem: 0, color: 0xff3410, vivid: true }
+  over: { name: '極氷皇界《エターナル・ゼロ》', kind: 'judgment', visual: 'crystal', finalVisual: 'pillar', count: 14, spread: 7, radius: 2.3, dmg: 92, delay: 0.65, interval: 0.08, finalDmg: 450, finalRadius: 8.8, elem: 1, color: 0x70ddff, vivid: true }
 };
 // 運営長だけが灯晶で購入できる特別キャラ：血魔ザルグレイヴ（血属性）
 export const BLOODFIEND_PRICE = 50000;
@@ -286,7 +276,7 @@ FIGHTERS.bloodfiend = {
   over: { name: '紅月葬送・血華の宴', kind: 'judgment', visual: 'pillar', finalVisual: 'bigsword', count: 18, spread: 7, radius: 2.6, dmg: 100, delay: 0.7, interval: 0.06, finalDmg: 480, finalRadius: 9.5, elem: 9, color: 0xe0103c, vivid: true }
 };
 // 通常プレイヤーがパーティーに入れられない特別枠
-export const SPECIAL_KEYS = ['seraphel', 'chief', 'crimson', 'sovereign', 'bloodfiend', 'gaien'];
+export const SPECIAL_KEYS = ['seraphel', 'chief', 'crimson', 'sovereign', 'bloodfiend', 'valgard'];
 
 // ---------- 決定的な乱数（毎回同じ内容を生成する） ----------
 function rng(seed) {
@@ -894,7 +884,7 @@ export const STORY = [];
 
 // ---- 最強格：宇邇宮とセラフェルを全戦士（ボス含む）の頂点に据える ----
 {
-  const others = Object.entries(FIGHTERS).filter(([k]) => k !== 'uninomiya' && k !== 'seraphel' && k !== 'chief' && k !== 'sovereign' && k !== 'sovereign2' && k !== 'bloodfiend').map(([, f]) => f);
+  const others = Object.entries(FIGHTERS).filter(([k]) => k !== 'uninomiya' && k !== 'seraphel' && k !== 'chief' && k !== 'sovereign' && k !== 'sovereign2' && k !== 'bloodfiend' && k !== 'valgard').map(([, f]) => f);
   const top = (fn) => Math.max(...others.map((f) => fn(f) || 0));
   const maxHp = top((f) => f.hp), maxSpd = top((f) => f.speed), maxOg = top((f) => f.overGain);
   const maxLight = top((f) => f.light?.dmg * (f.light?.shots || 1));
@@ -989,6 +979,9 @@ for (const [k, f] of Object.entries(FIGHTERS)) {
     cost: v ? 22 : 30, kind: 'heal', heal: Math.round((f.hp || 300) * (v ? 0.3 : 0.2)), radius: v ? 9 : 5, elem: v ? 5 : 7, vivid: true
   }, 7));
 }
+
+// ヴァルガルド専用の氷晶回復
+if (FIGHTERS.valgard?.skills?.[HEAL_SLOT]) Object.assign(FIGHTERS.valgard.skills[HEAL_SLOT], { name: '氷晶の再生', elem: 1, color: 0x91e4ff });
 
 // ---- ヴェスペラ：全10属性の最上級技（skills[5..14]）。技ボタンを押すたびに順に繰り出す ----
 {

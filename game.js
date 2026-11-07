@@ -1,10 +1,9 @@
 import * as THREE from 'three';
-import { attachGaienWalk } from './gaien-motion.js?v=gaien-evolve-20261107b';
-import { enhanceGaienModel } from './gaien-style.js';
+import { attachValgardMotion } from './valgard-motion.js?v=valgard-ice-20261107';
 import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js';
-import { FIGHTERS, ELEMS } from './data.js?v=gaien-bgm-20261107b';
+import { FIGHTERS, ELEMS } from './data.js?v=valgard-ice-20261107';
 import { makeGear, animGear } from './gear.js';
-import { instantiateModel, disposeModel, loadModel } from './model-runtime.js?v=gaien-true-uv-20261107';
+import { instantiateModel, disposeModel, loadModel } from './model-runtime.js?v=valgard-ice-20261107';
 
 // 召喚獣の見た目と性能（HPは使い手の最大HPに比例）
 const SUMMON_DEFS = {
@@ -496,14 +495,14 @@ export class Fighter {
     if (!gltf?.scene) {
       throw new Error(`[3D MODEL] ${this.key}: 元のGLBを取得できません。assets/models/ の公開を確認してください。`);
     }
-    const modelTint = (this.key === 'gaien' || this.key === 'gaien2') ? null : this.tint;
+    const modelTint = (this.key === 'valgard') ? null : this.tint;
     const instance = instantiateModel(gltf, h, modelTint);
     this.modelInstance = instance;
     this.visual.add(instance.wrapper);
-    this.gaienWalk = attachGaienWalk(instance.model, this.key);
-    this.gaienStyle = enhanceGaienModel(instance.model, this.key);
+    this.valgardMotion = attachValgardMotion(instance.model, this.key);
     this.mixer = new THREE.AnimationMixer(instance.model);
     this.clips = {};
+    instance.model.userData.valgardAnimatedRig = !!(gltf.animations?.length);
     for (const clip of gltf.animations || []) {
       const n = clip.name.toLowerCase();
       for (const key of ['idle', 'walk', 'run', 'jump']) {
@@ -561,11 +560,9 @@ export class Fighter {
     if (this.mixer) {
       this.mixer.update(dt);
     }
-    this.gaienStyle?.update(dt, this.dead ? false : (this.moving || this.netMoving));
     if (this.gear) animGear(this.gear, dt, !!this.action, this.vel.lengthSq() > 0.5);
     if (this.summonCd > 0) this.summonCd -= dt;
-    if (this.formSwapCd > 0) this.formSwapCd = Math.max(0, this.formSwapCd - dt);
-    // 召喚獣の更新とガイエンの形態切替クールダウンは独立させる。
+    // 召喚獣の更新と、戦闘中の通常操作は独立させる。
     if (this.summonCd <= 0 && this.summonId && !this.summon && !this.dead && !this.remoteAuth) this.battle.spawnSummon(this);
     this.inv = Math.max(0, this.inv - dt);
     this.comboWindow = Math.max(0, this.comboWindow - dt);
@@ -671,11 +668,11 @@ export class Fighter {
   }
 
   sync() {
-    this.gaienWalk?.update(this.motionDt ?? (1 / 60), this.dead ? false : (this.moving || this.netMoving ? 'run' : false), this.action);
+    this.valgardMotion?.update(this.motionDt ?? (1 / 60), this.dead ? false : (this.moving || this.netMoving ? 'run' : false), this.action);
     this.root.position.set(this.pos.x, this.y, this.pos.z);
     this.root.rotation.y = this.facing;
     this.guardMesh.visible = this.guard;
-    if ((!this.mixer || !this.clips.idle) && !this.gaienWalk && this.visual.children[0]) {
+    if ((!this.mixer || !this.clips.idle) && !this.valgardMotion && this.visual.children[0]) {
       const bob = (this.moving || this.netMoving) && !this.dead;
       this.visual.children[0].position.y = (this.baseY ??= this.visual.children[0].position.y) + (bob ? Math.abs(Math.sin(performance.now() / 70)) * 0.12 : 0);
     }
@@ -740,9 +737,6 @@ export class Fighter {
   }
 
   startLight() {
-    // ガイエンの最初の通常近接攻撃で第二形態へ移行する。
-    // 以降の連撃では第一形態へ戻さず、同一戦闘中は進化形態を保持する。
-    if (this.key === 'gaien' && !this.remoteAuth) this.requestGaienEvolution();
     this.combo = this.comboWindow > 0 ? (this.combo + 1) % 3 : 0;
     this.faceNearest(4);
     this.action = { type: 'light', t: 0, dur: this.combo === 2 ? 0.42 : 0.32, hitAt: 0.13, hit: false, step: this.combo };
@@ -854,8 +848,6 @@ export class Fighter {
       if (!a.hit && a.t >= a.hitAt) {
         a.hit = true;
         const big = a.step === 2;
-        // ガイエンの進化判定は startLight() で1回だけ行う。
-        // ヒット時に再び呼ぶと連撃で進化前へ戻るため、ここでは切り替えない。
         const curL = this.def.light;
         if (this.summonId && this.battle.summonStrike(this, big)) {
           // 召喚獣が通常攻撃の代わりに攻撃
@@ -937,101 +929,6 @@ export class Fighter {
     return dmg;
   }
 
-  // 通常近接攻撃で初回のみ進化。
-  // 第二形態のGLBがまだ準備できていなくても自動取得し、完了後に切り替える。
-  requestGaienEvolution() {
-    if (this.key !== 'gaien' || this.remoteAuth || this.dead || this.battle?.ended) return false;
-    if (this.battle.assets?.gaien2?.scene) return this.manualFormSwap();
-    if (this.gaienEvolutionPending) return false;
-    const form = FIGHTERS.gaien2;
-    if (!form?.model) return false;
-    const battle = this.battle;
-    this.battle.ui.popup?.(this.pos, '極焔覇皇へ進化準備中…', '#ffbf65');
-    this.gaienEvolutionPending = loadModel(form.model)
-      .then((gltf) => {
-        // 先に描画可能なモデルを確保し、それから形態を確定する。
-        if (!gltf?.scene) throw new Error('第二形態の3Dモデルがありません');
-        battle.assets.gaien2 = gltf;
-        if (this.battle === battle && !battle.ended && this.root?.parent && !this.dead && !this.remoteAuth && this.key === 'gaien') {
-          this.manualFormSwap();
-        }
-      })
-      .catch((error) => {
-        console.error('[GAIEN] evolution model load failed:', error);
-        if (this.battle === battle && this.root?.parent && !battle.ended) {
-          this.battle.ui.popup?.(this.pos, '進化モデルの読み込み失敗。もう一度近接攻撃', '#ff8282');
-        }
-      })
-      .finally(() => { this.gaienEvolutionPending = null; });
-    return false;
-  }
-
-  // 第二形態への一方向進化。進化後の通常攻撃は進化を解除しない。
-  manualFormSwap() {
-    const nk = this.key === 'gaien' ? 'gaien2' : null;
-    if (!nk || this.remoteAuth || this.dead || this.battle?.ended || this.formSwapCd > 0 || !FIGHTERS[nk]) return false;
-    // 変身先を予め準備できていない場合は、形態だけ更新して棒状になることを防ぐ。
-    if (!this.battle.assets?.[nk]?.scene) {
-      if (this.isPlayer) this.battle.ui.popup?.(this.pos, '変身先の3Dモデルを読込中', '#ffc080');
-      return false;
-    }
-    this.formSwapCd = 0.65;
-    const hpRate = Math.max(0.08, Math.min(1, this.hp / Math.max(1, this.maxHp || 1)));
-    const flux = this.flux;
-    const over = this.over;
-    const stun = this.stun;
-    const act = this.action;
-    this.key = nk;
-    this.def = FIGHTERS[nk];
-    this.name = this.def.name;
-    const u = this.upg;
-    this.atkMul = (1 + 0.06 * (u.atk || 0)) * (this.def.power || 1) * this.balAtk;
-    this.defMul = (1 - 0.05 * (u.def || 0)) * (this.def.armor || 1) * this.balDef;
-    this.fluxRate = 7 * (1 + 0.12 * (u.flux || 0)) * (this.def.fluxMul || 1);
-    this.og = this.def.overGain * (1 + 0.1 * (u.over || 0));
-    this.maxHp = Math.round(this.def.hp * this.hpMul * (1 + 0.08 * (u.hp || 0)));
-    this.hp = Math.max(1, Math.round(this.maxHp * hpRate));
-    this.flux = Math.min(100, Math.max(flux, 36));
-    this.over = over;
-    this.stun = Math.min(stun, 0.12);
-    this.inv = Math.max(this.inv, 0.18);
-    this.dead = false;
-    if (this.redMats) {
-      for (const [part, original, temporary] of this.redMats) {
-        part.material = original;
-        temporary.dispose();
-      }
-      this.redMats = null;
-    }
-    this.gaienWalk?.stop();
-    this.gaienWalk = null;
-    this.gaienStyle?.stop?.();
-    this.gaienStyle = null;
-    // 旧形態のGPU資源を解放し、同じ見た目に関連する共有GLBは残す。
-    disposeModel(this.modelInstance, this.mixer);
-    this.modelInstance = null;
-    this.visual.clear();
-    this.root.remove(this.ringMesh, this.guardMesh);
-    this.visual.rotation.set(0, 0, 0);
-    this.visual.position.set(0, 0, 0);
-    this.mixer?.stopAllAction();
-    this.mixer = null;
-    this.curAnim = null;
-    this.curAction = null;
-    this.baseY = undefined;
-    this.radius = 0.45 * this.scale * (this.def.height / 1.8);
-    this.buildModel(this.battle.assets[nk]);
-    this.action = act;
-    if (this.awakened > 0) {
-      this.redMats = null;
-      this.applyRed();
-    }
-    this.battle.transformFx(this);
-    this.battle.shake = Math.max(this.battle.shake || 0, 0.8);
-    this.battle.ui.popup?.(this.pos, '進化完了！極焔覇皇', '#ff9a3a');
-    return true;
-  }
-
   // 体力が半分を切ったら第二形態へ変身（form2 を持つ戦士のみ・1回だけ）
   checkTransform(force = false) {
     if (this.transformed || !this.def.form2) return false;
@@ -1066,10 +963,8 @@ export class Fighter {
     }
     disposeModel(this.modelInstance, this.mixer);
     this.modelInstance = null;
-    this.gaienWalk?.stop();
-    this.gaienWalk = null;
-    this.gaienStyle?.stop?.();
-    this.gaienStyle = null;
+    this.valgardMotion?.stop();
+    this.valgardMotion = null;
     this.visual.clear();
     this.root.remove(this.ringMesh, this.guardMesh);
     this.visual.rotation.set(0, 0, 0);

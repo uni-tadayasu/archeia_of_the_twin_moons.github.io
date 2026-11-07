@@ -1,10 +1,9 @@
 // ストーリーモードのフィールド：町 → 野 → ダンジョン（迷宮）を歩いて目的地へ。
 // 魔物は姿が見える「シンボルエンカウント」。触れると戦闘、目的地の祭壇で章の決戦。
 import * as THREE from 'three';
-import { attachGaienWalk } from './gaien-motion.js';
-import { enhanceGaienModel } from './gaien-style.js';
-import { instantiateModel } from './model-runtime.js?v=gaien-true-uv-20261107';
-import { FIGHTERS } from './data.js?v=gaien-bgm-20261107b';
+import { attachValgardMotion } from './valgard-motion.js?v=valgard-ice-20261107';
+import { instantiateModel } from './model-runtime.js?v=valgard-ice-20261107';
+import { FIGHTERS } from './data.js?v=valgard-ice-20261107';
 import { makeGear, animGear, removeGear } from './gear.js';
 
 function rng(seed) {
@@ -58,14 +57,14 @@ const FLOWER_COLS = [0xff5a8a, 0xffd23a, 0xffffff, 0xb070ff, 0x5ab0ff, 0xff8a3a,
 function makeActor(gltf, height, color, tint, own, key = "") {
   const root = new THREE.Group();
   const a = { root, mixer: null, clips: {}, cur: null, act: null };
-  const modelTint = (key === 'gaien' || key === 'gaien2') ? null : tint;
+  const modelTint = (key === 'valgard') ? null : tint;
   const instance = instantiateModel(gltf, height, modelTint);
   root.add(instance.wrapper);
   a.model = instance.model;
-  a.gaienWalk = attachGaienWalk(instance.model, key);
-  a.gaienStyle = enhanceGaienModel(instance.model, key);
+  a.valgardMotion = attachValgardMotion(instance.model, key);
   own.push(...instance.materials);
   a.mixer = new THREE.AnimationMixer(instance.model);
+  instance.model.userData.valgardAnimatedRig = !!(gltf.animations?.length);
   for (const clip of gltf.animations || []) {
     const n = clip.name.toLowerCase();
     for (const k of ['idle', 'walk', 'run']) if (n.includes(k) && !a.clips[k]) a.clips[k] = clip;
@@ -1551,8 +1550,7 @@ export class Field {
     for (const a of [p, ...this.followers, ...this.npcs, ...this.syms, this.boss]) {
       if (a.far) continue;
       a.mixer?.update(dt);
-      a.gaienWalk?.update(dt, a.cur === 'run' || a.cur === 'walk' ? (a.cur === 'run' ? 'run' : 'walk') : false);
-      a.gaienStyle?.update(dt, a.cur === 'run' || a.cur === 'walk');
+      a.valgardMotion?.update(dt, a.cur === 'run' || a.cur === 'walk' ? (a.cur === 'run' ? 'run' : 'walk') : false);
       if (a.gear) animGear(a.gear, dt, false, a.cur === 'run');
       a.root.position.copy(a.pos);
       a.root.rotation.y = a.facing;
@@ -1689,8 +1687,7 @@ export class Field {
       if (a.far) continue;
       a.play(a.mv ? 'run' : 'idle');
       a.mixer?.update(dt);
-      a.gaienWalk?.update(dt, a.mv ? 'run' : false);
-      a.gaienStyle?.update(dt, !!a.mv);
+      a.valgardMotion?.update(dt, a.mv ? 'run' : false);
       if (a.gear) animGear(a.gear, dt, false, a.mv);
       a.root.position.copy(a.pos);
       a.root.rotation.y = a.facing;

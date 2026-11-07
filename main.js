@@ -1,11 +1,11 @@
 import * as THREE from 'three';
-import { loadModel } from './model-runtime.js?v=gaien-true-uv-20261107';
-import { Battle, ARENA_R } from './game.js?v=gaien-evolve-20261107b';
-import { FIGHTERS, STORY, ROSTER, UPGRADES, MAX_LV, STAGES, BGM, APEX_BGM, ENEMY_ROSTER, UPG_CAP, LB_MAX, lbMaxLv, lbMul, lbCost, WEAPONS, ARMORS, SUMMONS, STAT_LABEL, SPECIAL_KEYS, BOSS_ROSTER, currentEvent, sanitizeEvent, EV_FOE_KINDS } from './data.js?v=gaien-bgm-20261107b';
+import { loadModel } from './model-runtime.js?v=valgard-ice-20261107';
+import { Battle, ARENA_R } from './game.js?v=valgard-ice-20261107';
+import { FIGHTERS, STORY, ROSTER, UPGRADES, MAX_LV, STAGES, BGM, APEX_BGM, ENEMY_ROSTER, UPG_CAP, LB_MAX, lbMaxLv, lbMul, lbCost, WEAPONS, ARMORS, SUMMONS, STAT_LABEL, SPECIAL_KEYS, BOSS_ROSTER, currentEvent, sanitizeEvent, EV_FOE_KINDS } from './data.js?v=valgard-ice-20261107';
 import { sayBattle, setVoiceMuted, stopVoices } from './voice.js';
-import { initSocial, uiConfirm } from './social.js?v=gaien-bgm-20261107b';
+import { initSocial, uiConfirm } from './social.js?v=valgard-ice-20261107';
 import { OPERATOR_KEY_SHA256, CHIEF_KEY_SHA256, MAX_KEY_ATTEMPTS, LOCKOUT_MS, SHOP_ITEMS } from './config.js';
-import { connect, issueInvite, redeemInvite, syncPush, syncPullV } from './net.js?v=gaien-bgm-20261107b';
+import { connect, issueInvite, redeemInvite, syncPush, syncPullV } from './net.js?v=valgard-ice-20261107';
 import { apiEnabled, api, verifyToken } from './api.js';
 
 const $ = (s) => document.querySelector(s);
@@ -657,37 +657,37 @@ persist(false); // 起動時の整形だけでは同期の「変更あり」に�
   if (cy) cy.textContent = String(new Date().getFullYear());
 }
 
-// 世界ルームの運営長署名つきガイエン出現フラグ（偽の出現通知はBGMに反映しない）
-let globalGaienBgm = false;
-const gaienConfirmed = new Map();
-const gaienLease = { sig: '', at: 0, pending: null };
-const GA_BGM_DOMAIN = 'arkeia-world-gaien-music-v1:';
+// 世界ルームの運営長署名つきヴァルガルド出現フラグ（偽の出現通知はBGMに反映しない）
+let globalValgardBgm = false;
+const valgardConfirmed = new Map();
+const valgardLease = { sig: '', at: 0, pending: null };
+const GA_BGM_DOMAIN = 'arkeia-world-valgard-music-v1:';
 
 // 世界ルームのpresenceには本人の運営長トークンを流さず、
 // /chief/sign で署名された短期BGM許可証だけを載せる。
 // 既存Cloudflare Workersの署名APIを使うため、新しいDBやWorker classは不要。
-function publishGaienLease(active) {
+function publishValgardLease(active) {
   if (!active || !chiefUnlocked() || !apiEnabled()) {
-    gaienLease.sig = '';
-    gaienLease.at = 0;
+    valgardLease.sig = '';
+    valgardLease.at = 0;
     return;
   }
-  if (gaienLease.sig && Date.now() - gaienLease.at < 22000) return;
-  if (gaienLease.pending || !roleState.tok) return;
+  if (valgardLease.sig && Date.now() - valgardLease.at < 22000) return;
+  if (valgardLease.pending || !roleState.tok) return;
   const pid = save.pid;
   const at = Date.now();
-  gaienLease.pending = (async () => {
+  valgardLease.pending = (async () => {
     const h = await sha256(`${GA_BGM_DOMAIN}${pid}:${at}`);
     const r = await api('/chief/sign', { token: roleState.tok, kind: 'event', h, at });
     if (!r.ok || !r.sig) return;
     const d = await verifyToken(r.sig, 'cpub');
     if (!d || d.k !== 'event' || d.h !== h || d.at !== at) return;
-    gaienLease.sig = r.sig;
-    gaienLease.at = at;
-  })().catch((e) => console.warn('[GAIEN WORLD MUSIC] 署名できません:', e))
-    .finally(() => { gaienLease.pending = null; });
+    valgardLease.sig = r.sig;
+    valgardLease.at = at;
+  })().catch((e) => console.warn('[VALGARD WORLD MUSIC] 署名できません:', e))
+    .finally(() => { valgardLease.pending = null; });
 }
-async function validateGaienPresence(p, sig, at) {
+async function validateValgardPresence(p, sig, at) {
   try {
     const d = await verifyToken(sig, 'cpub');
     if (!d || d.k !== 'event' || d.at !== at || d.exp <= Date.now()) return false;
@@ -695,40 +695,40 @@ async function validateGaienPresence(p, sig, at) {
     return d.h === expected;
   } catch { return false; }
 }
-function refreshGlobalGaienBgm() {
-  if (!apiEnabled()) { globalGaienBgm = false; return; }
+function refreshGlobalValgardBgm() {
+  if (!apiEnabled()) { globalValgardBgm = false; return; }
   const peers = Object.values(state?.worldPeers || {});
   const now = Date.now();
   const candidates = peers.filter((p) =>
     p && ['field', 'story', 'op'].includes(p.role) &&
-    p.gaienActive && p.gaienSig && p.gaienAt > 0 &&
-    Math.abs(now - p.gaienAt) < 55000 &&
+    p.valgardActive && p.valgardSig && p.valgardAt > 0 &&
+    Math.abs(now - p.valgardAt) < 55000 &&
     /^[A-Za-z0-9]{8,24}$/.test(p.pid || '')
   );
   const active = candidates.some((p) => {
-    const c = gaienConfirmed.get(p.id);
-    return !!(c?.ok && c.sig === p.gaienSig && c.at === p.gaienAt);
+    const c = valgardConfirmed.get(p.id);
+    return !!(c?.ok && c.sig === p.valgardSig && c.at === p.valgardAt);
   });
-  if (active !== globalGaienBgm) {
-    globalGaienBgm = active;
+  if (active !== globalValgardBgm) {
+    globalValgardBgm = active;
     syncMusicTrack();
   }
   // 検証済みでないプレイヤーのpresenceだけを非同期検証。
   // 検証中の差し替えがあっても、新しい署名の結果と混ぜない。
   for (const p of candidates.slice(0, 20)) {
-    const current = gaienConfirmed.get(p.id);
-    if (current?.sig === p.gaienSig && current.at === p.gaienAt) continue;
-    const sig = p.gaienSig, at = p.gaienAt, id = p.id;
-    gaienConfirmed.set(id, {sig, at, ok: false, pending: true});
-    validateGaienPresence(p, sig, at).then((ok) => {
-      const latest = gaienConfirmed.get(id);
+    const current = valgardConfirmed.get(p.id);
+    if (current?.sig === p.valgardSig && current.at === p.valgardAt) continue;
+    const sig = p.valgardSig, at = p.valgardAt, id = p.id;
+    valgardConfirmed.set(id, {sig, at, ok: false, pending: true});
+    validateValgardPresence(p, sig, at).then((ok) => {
+      const latest = valgardConfirmed.get(id);
       if (!latest || latest.sig !== sig || latest.at !== at) return;
-      gaienConfirmed.set(id, {sig, at, ok});
-      refreshGlobalGaienBgm();
+      valgardConfirmed.set(id, {sig, at, ok});
+      refreshGlobalValgardBgm();
     });
   }
   const seen = new Set(candidates.map(p=>p.id));
-  for (const id of gaienConfirmed.keys()) if (!seen.has(id)) gaienConfirmed.delete(id);
+  for (const id of valgardConfirmed.keys()) if (!seen.has(id)) valgardConfirmed.delete(id);
 }
 
 
@@ -749,10 +749,10 @@ const MUSIC_FILES = {
   event: 'event-theme.mp3',
   boss: 'boss-theme.mp3',
   zarugureibu: 'zarugureibu-theme.mp3',
-  gaien: 'gaien-theme.mp3'
+  valgard: 'valgard-theme.mp3'
 };
 for (const [name, file] of Object.entries(MUSIC_FILES)) {
-  const a = new Audio('assets/audio/' + file + '?v=20261107-gaien1');
+  const a = new Audio('assets/audio/' + file + '?v=20261107-valgard1');
   a.loop = true;
   a.preload = name === 'title' ? 'metadata' : 'none';
   a.volume = audio.volume * .6;
@@ -788,24 +788,24 @@ function setBgmVolume(value) {
   localStorage.setItem('arkeia-bgm-volume', String(Math.round(audio.volume * 100)));
   applyMusicVolume();
 }
-// 音楽はシーンの希望曲と、全世界のガイエン優先曲を分けて管理する。
+// 音楽はシーンの希望曲と、全世界のヴァルガルド優先曲を分けて管理する。
 // 音楽が未解禁の状態で先に曲名を登録しても、最初のユーザー操作で必ず再生する。
-function shouldForceGaien() {
-  const localFight = state?.battle?.fighters?.some((f) => !f.dead && (f.key === 'gaien' || f.key === 'gaien2'));
+function shouldForceValgard() {
+  const localFight = state?.battle?.fighters?.some((f) => !f.dead && (f.key === 'valgard'));
   const field = state?.field;
-  const localField = !!field && [state.myKey, ...(field.o?.partyKeys || [])].some((k) => k === 'gaien' || k === 'gaien2');
-  return !!(localFight || localField || globalGaienBgm);
+  const localField = !!field && [state.myKey, ...(field.o?.partyKeys || [])].some((k) => k === 'valgard');
+  return !!(localFight || localField || globalValgardBgm);
 }
 function playTrack(name) {
   audio.wanted = name;
   syncMusicTrack();
 }
 function syncMusicTrack() {
-  const key = shouldForceGaien() ? 'gaien' : musicKey(audio.wanted);
+  const key = shouldForceValgard() ? 'valgard' : musicKey(audio.wanted);
   if (!key || !audio.tracks[key]) return;
   const next = audio.tracks[key];
   const oldKey = audio.currentKey;
-  audio.current = key === 'gaien' ? 'gaien' : audio.wanted;
+  audio.current = key === 'valgard' ? 'valgard' : audio.wanted;
   const targetVolume = audio.muted ? 0 : audio.volume * 0.6;
   // 旧版は「同じ曲名」で早期returnしたため、最初の再生失敗から回復できなかった。
   if (oldKey === key) {
@@ -1344,9 +1344,9 @@ const state = { mode: null, myKey: null, oppKey: null, chapter: 0, battle: null,
 setInterval(() => {
   const fighters = state.battle?.fighters;
   if (fighters?.some((f) => f.key === 'bloodfiend') &&
-      !fighters.some((f) => f.key === 'gaien' || f.key === 'gaien2') &&
+      !fighters.some((f) => f.key === 'valgard') &&
       musicKey(audio.wanted) !== 'zarugureibu') playTrack('zarugureibu');
-  refreshGlobalGaienBgm();
+  refreshGlobalValgardBgm();
   if (audio.unlocked) syncMusicTrack();
 }, 650);
 
@@ -1516,7 +1516,7 @@ function canUse(k) {
   if (d.locked) return operatorUnlocked();
   return true;
 }
-const SELECT_KEYS = () => [...ROSTER, 'seraphel', 'chief', 'sovereign', 'bloodfiend', 'gaien', 'crimson'];
+const SELECT_KEYS = () => [...ROSTER, 'seraphel', 'chief', 'sovereign', 'bloodfiend', 'valgard', 'crimson'];
 function refreshTitle() {
   $('#btn-invade').hidden = !operatorUnlocked();
   if ($('#btn-evmaker')) $('#btn-evmaker').hidden = !chiefUnlocked();
@@ -2024,10 +2024,10 @@ function beginBattle(boss) {
   // 添付の実音源を再生。ザルグレイヴが戦闘に参加したときは敵味方を問わず最優先。
   const participants = state.battle.fighters.map((f) => f.key);
   const ks = state.battle.fighters.filter((f) => f.team === 1 || state.mode === 'invade').map((f) => f.key);
-  const apex = ks.some((k) => k === 'sovereign' || k === 'sovereign2') ? 2 : ks.includes('chief') || ks.includes('gaien') || ks.includes('bloodfiend') ? 1 : 0;
-  if (participants.some((k) => k === 'gaien' || k === 'gaien2')) {
-    playTrack('battle');
-    ui.banner({ name: '— ♪ ガイエン専用BGM —' }, '煉殻竜王、降臨');
+  const apex = ks.some((k) => k === 'sovereign' || k === 'sovereign2') ? 2 : ks.includes('chief') || ks.includes('valgard') || ks.includes('bloodfiend') ? 1 : 0;
+  if (participants.some((k) => k === 'valgard')) {
+    playTrack('valgard');
+    ui.banner({ name: '— ♪ ヴァルガルド専用BGM —' }, '氷鋼覇王、降臨');
   } else if (participants.includes('bloodfiend')) {
     playTrack('zarugureibu');
     ui.banner({ name: '— ♪ ザルグレイヴ専用戦闘曲 —' }, '紅翼の血魔');
@@ -2384,7 +2384,7 @@ function resetFieldLight() {
 async function enterField() {
   // フィールドは物語でしか使わないので必要になった時だけ読み込む（初回表示を軽く）
   if (!(await ensureAllModelsReady())) return;
-  const { Field } = await import('./field.js?v=gaien-true-uv-20261107');
+  const { Field } = await import('./field.js?v=valgard-ice-20261107');
   leaveField();
   const ch = STORY[state.chapter];
   const st = stageById(ch.stage);
@@ -2828,7 +2828,7 @@ function ensureWorld() {
     state.worldPending = connect('world', 'global', {
       onPeers: (p) => {
         state.worldPeers = p;
-        refreshGlobalGaienBgm();
+        refreshGlobalValgardBgm();
         verifyPeerProfs(p);
         syncWorldRemotes(p);
         refreshFieldRemotes();
@@ -2904,15 +2904,15 @@ async function onInvaded(e) {
   $('#pause').hidden = true;
   const p = state.worldPeers?.[e.from];
   const apexOk = !apiEnabled() || tr === 'chief';
-  const ik = apexOk && ['chief', 'sovereign', 'sovereign2', 'bloodfiend', 'gaien', 'gaien2'].includes(p?.fk) && (!apiEnabled() || peerVerified(e.from, p.fk)) ? p.fk : 'seraphel';
+  const ik = apexOk && ['chief', 'sovereign', 'sovereign2', 'bloodfiend', 'valgard'].includes(p?.fk) && (!apiEnabled() || peerVerified(e.from, p.fk)) ? p.fk : 'seraphel';
   b.add(ik, { team: 1, remote: true, netId: e.from, pos: p ? [p.x, p.z] : [0, -9], facing: Math.PI, name: `乱入者・${e.name}`, ...peerOpts(e.from, ik) });
   b.net = w;
   b.strictNet = apiEnabled();
   buildHud();
   ui.flash();
   sfx('burst');
-  const apex = ik === 'sovereign' || ik === 'sovereign2' ? 2 : ik === 'chief' || ik === 'bloodfiend' || ik === 'gaien' ? 1 : 0;
-  playTrack(ik === 'bloodfiend' ? 'zarugureibu' : apex ? 'apex:' + apex : 'boss');
+  const apex = ik === 'sovereign' || ik === 'sovereign2' ? 2 : ik === 'chief' || ik === 'bloodfiend' || ik === 'valgard' ? 1 : 0;
+  playTrack(ik === 'valgard' ? 'valgard' : ik === 'bloodfiend' ? 'zarugureibu' : apex ? 'apex:' + apex : 'boss');
   if (apex) ui.cutin(b.fighters[b.fighters.length - 1], FIGHTERS[ik].name, '運営長、降臨');
   ui.banner({ name: '— 空が裂けた —' }, apex ? '運営長が降りてきた！' : '裁定者が降りてきた！');
 }
@@ -2939,7 +2939,7 @@ function renderInvadeList() {
 
 $('#invade-who').addEventListener('click', () => {
   sfx('ui');
-  const order = chiefUnlocked() ? ['seraphel', 'chief', 'sovereign', 'bloodfiend', 'gaien'] : ['seraphel'];
+  const order = chiefUnlocked() ? ['seraphel', 'chief', 'sovereign', 'bloodfiend', 'valgard'] : ['seraphel'];
   state.invadeKey = order[(order.indexOf(state.invadeKey) + 1) % order.length];
   $('#invade-who').textContent = `乱入する姿：${FIGHTERS[state.invadeKey].name}`;
 });
@@ -2974,7 +2974,7 @@ async function startInvade(p) {
   w.invade({ to: p.id, from: w.myId, name: '運営', tk });
   setStage(stageById(STORY[p.ch]?.stage));
   const b = makeBattle(w);
-  const ik = ['chief', 'sovereign', 'bloodfiend', 'gaien'].includes(state.invadeKey) && chiefUnlocked() ? state.invadeKey : 'seraphel';
+  const ik = ['chief', 'sovereign', 'bloodfiend', 'valgard'].includes(state.invadeKey) && chiefUnlocked() ? state.invadeKey : 'seraphel';
   b.add(ik, { team: 0, player: true, awk: save.awk, netId: w.myId, pos: [0, -9], name: FIGHTERS[ik].name + '（運営）', upg: upgFor(ik), gear: gearFor(ik) });
   b.add(peerKeyOf(p.id, p.fk), { team: 1, remote: true, netId: p.id, pos: [p.x, p.z], name: p.name, gear: { w: p.gw, a: p.ga }, ...peerOpts(p.id, peerKeyOf(p.id, p.fk)) });
   b.strictNet = apiEnabled();
@@ -2998,18 +2998,18 @@ function worldTick(dt) {
   const me = b?.fighters.find((f) => f.isPlayer);
   const gk = state.myKey || '';
   if (gk) refreshProfile(gk);
-  // 運営長のガイエンが物語フィールド/戦闘、または乱入中に実際に存在する時だけ
+  // 運営長のヴァルガルドが物語フィールド/戦闘、または乱入中に実際に存在する時だけ
   // 短期署名を付ける。無権限のpresenceを受けても他プレイヤーのBGMを変えない。
   const activeKeys = b?.fighters?.filter((f) => !f.dead && f.team === 0).map((f) => f.key)
     || state.field?.o?.partyKeys || [state.myKey];
-  const gaienHere = (state.mode === 'story' || state.mode === 'invade') &&
-    !!(state.field || b) && activeKeys.some((k) => k === 'gaien' || k === 'gaien2');
-  publishGaienLease(gaienHere);
-  const sealed = gaienHere && gaienLease.sig && Date.now() - gaienLease.at < 55000;
+  const valgardHere = (state.mode === 'story' || state.mode === 'invade') &&
+    !!(state.field || b) && activeKeys.some((k) => k === 'valgard');
+  publishValgardLease(valgardHere);
+  const sealed = valgardHere && valgardLease.sig && Date.now() - valgardLease.at < 55000;
   const base = { name: myName(), pid: save.pid, mode: 'world', ready: false,
     gw: save.equip[gk] || '', ga: save.armor[gk] || '',
     prof: profState.key === gk ? profState.tok : '',
-    gaienActive: !!sealed, gaienSig: sealed ? gaienLease.sig : '', gaienAt: sealed ? gaienLease.at : 0 };
+    valgardActive: !!sealed, valgardSig: sealed ? valgardLease.sig : '', valgardAt: sealed ? valgardLease.at : 0 };
   if (state.mode === 'story' && state.field && !b) {
     const fp = state.field.player;
     w.publish({ ...base, role: 'field', fk: state.myKey, ch: state.chapter, ib: false, x: 0, z: 0, fx: fp.pos.x, fz: fp.pos.z, ry: fp.facing, hp: 1, mv: fp.cur === 'run' });
