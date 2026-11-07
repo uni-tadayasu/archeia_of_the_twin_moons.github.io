@@ -449,19 +449,31 @@
     Object.assign(spec,{
       name:'蒼天雷裁《アストラル・ジャッジメント》',
       kind:'astral_judgment_painted', elem:2, color:0xffb25d,
-      cost:39,castTime:2.85,dmg:1420,radius:4.8,
+      cost:39,castTime:2.85,dmg:3800,radius:4.8,
       hitCount:12,windHits:10,lightHits:2,
       visual:'painted_judgment',vivid:true,
       description:'必ず狙った敵を捉え、十重の雷衝で空へ打ち上げた後、橙色の巨大断罪剣で貫き、最後に大爆発を起こす究極術'
     });
     // Former ice fang shockwave -> shining spear homage.
     Object.assign(spearSpec,{
-      name:'凍牙《シャイニング・スピア》',
+      name:'光牢剣陣《ルミナス・レギオン》',
       kind:'shining_spear_painted', elem:5, color:0xd8f1ff,
-      cost:24, castTime:1.55, dmg:980, radius:3.8,
+      cost:24, castTime:1.55, dmg:2630, radius:3.8,
       hitCount:9, visual:'painted_shining_spear', vivid:true,
       description:'敵を強制的に宙へ拘束し、周囲から光の剣群で貫いた後、最後に爆発で断罪する光槍術'
     });
+    // 奥義: 二つの彩色天体が衝突し、灼熱と極寒の摩擦による連続攻撃。
+    Object.assign(FIGHTERS.valgard.over,{
+      name:'双星崩滅《ツイン・カタクリズム》',kind:'last_vanisher_painted',
+      elem:2,color:0xffa85f,cost:0,castTime:2.15,dmg:5340,
+      radius:7.5,hitCount:15,description:'青い天体と橙の天体が激突。14段の連続摩擦と終極爆裂'
+    });
+    // 秘奥義 is NOT derived from the damaging over; this independently heals the caster.
+    FIGHTERS.valgard.hi={
+      name:'蒼星再誕《アース・リジェネシス》',kind:'blue_earth_painted',
+      elem:7,color:0xa5e8ff,cost:0,castTime:2.45,
+      heal:0,radius:0,hi:true,description:'蒼き星の祝福でヴァルガルド自身のHPを完全回復'
+    };
     const TAU=Math.PI*2, maxConcurrent=2;
     const isTouch=typeof matchMedia==='function'&&matchMedia('(pointer:coarse)').matches;
     const S=isTouch?.75:1;
@@ -487,7 +499,8 @@
         celestialGate:[640,640],swordWings:[768,512],
         stormThreads:[512,512],sparkVeil:[512,512],
         shockHalo:[512,512],bladeWake:[384,896],
-        sacredFlares:[512,512]
+        sacredFlares:[512,512],
+        planetWarm:[512,512],planetCold:[512,512],planetEarth:[512,512],friction:[512,512]
       };
       const [w,h]=different[id];
       const {c,g}=canvasOf(w,h);
@@ -541,6 +554,82 @@
         }
         g.fillStyle=beam(0,0,75,[[0,'rgba(244,251,255,.96)'],[.18,'rgba(163,224,255,.6)'],[1,'rgba(141,119,255,0)']]);
         g.fillRect(-75,-75,150,150);
+      }else if(id==='planetWarm'||id==='planetCold'||id==='planetEarth'){
+        // Original hand-painted CG planets. A 2D billboard, no expensive sphere geometry.
+        const hot=id==='planetWarm', earth=id==='planetEarth', cx=256,cy=256,R=185;
+        const glow=hot?['rgba(255,164,63,.40)','rgba(255,101,18,0)']:
+          earth?['rgba(124,226,255,.42)','rgba(73,172,255,0)']:
+            ['rgba(98,228,255,.44)','rgba(66,104,244,0)'];
+        g.fillStyle=beam(cx,cy,251,[[0,glow[0]],[.65,glow[0]],[1,glow[1]]]);
+        g.fillRect(0,0,512,512);
+        g.save(); g.beginPath();g.arc(cx,cy,R,0,TAU);g.clip();
+        const inner=g.createRadialGradient(174,143,9,259,267,286);
+        if(hot){
+          inner.addColorStop(0,'#fff2b3');inner.addColorStop(.26,'#ffc76c');
+          inner.addColorStop(.54,'#e77835');inner.addColorStop(.85,'#a33e23');inner.addColorStop(1,'#43183e');
+        }else if(earth){
+          inner.addColorStop(0,'#c8f6ff');inner.addColorStop(.18,'#7bc8ea');
+          inner.addColorStop(.55,'#167abb');inner.addColorStop(.8,'#074577');inner.addColorStop(1,'#06162d');
+        }else{
+          inner.addColorStop(0,'#ffffff');inner.addColorStop(.22,'#b4f7ff');
+          inner.addColorStop(.55,'#429cda');inner.addColorStop(.83,'#20468d');inner.addColorStop(1,'#131c54');
+        }
+        g.fillStyle=inner;g.fillRect(cx-R,cy-R,R*2,R*2);
+        if(earth){
+          // Stylized hand-drawn continental silhouettes and inlaid island chains.
+          g.fillStyle='#50b987';g.strokeStyle='#a5e1a1';g.lineWidth=2;
+          const polygons=[
+            [[112,177],[156,129],[199,119],[225,149],[212,178],[180,196],[171,235],[140,246],[121,222]],
+            [[203,236],[230,234],[257,272],[250,309],[232,360],[211,383],[197,345],[205,297]],
+            [[301,155],[347,145],[387,177],[417,217],[391,244],[352,229],[329,261],[287,243],[274,201]],
+            [[355,287],[388,303],[403,340],[375,363],[337,336]],
+          ];
+          polygons.forEach((vertices,k)=>{
+            g.beginPath(); vertices.forEach(([x,y],i)=>i?g.lineTo(x,y):g.moveTo(x,y));g.closePath();
+            g.fillStyle=k%2?'#429d6f':'#5cbd7f';g.fill();g.stroke();
+          });
+          // Painted weather fronts and thin cirrus over a blue planet.
+          for(let i=0;i<27;i++){
+            const yy=94+i*13,x=118+Math.sin(i*.75)*28;
+            g.globalAlpha=.19+r()*.4;g.strokeStyle=i%3?'#ffffff':'#c9f9ff';
+            g.lineWidth=1.6+r()*3.4;g.beginPath();g.moveTo(x,yy);
+            g.bezierCurveTo(x+90,yy-25,x+180,yy+24,420,yy-12);g.stroke();
+          }
+          g.globalAlpha=1;
+        }else{
+          // Thin turbulent atmospheric bands and stylized glacial/lava cracks.
+          for(let i=0;i<40;i++){
+            const yy=92+i*9.1,x=90+(r()-.5)*40;
+            g.globalAlpha=.10+r()*.30;g.lineWidth=1+r()*6;
+            g.strokeStyle=hot?(i%3?'#ffdf86':'#ff623a'):(i%3?'#d5faff':'#6bd7ff');
+            g.beginPath();g.moveTo(x,yy);
+            g.bezierCurveTo(x+92,yy-22-r()*17,x+200,yy+23+r()*13,x+331,yy-8);g.stroke();
+          }
+          g.globalAlpha=1;
+          for(let i=0;i<17;i++){
+            const x=120+r()*260,y=112+r()*260,sz=5+r()*18;
+            g.strokeStyle=hot?'rgba(255,239,190,.54)':'rgba(228,251,255,.53)';
+            g.lineWidth=1.1+r()*1.7;g.beginPath();g.arc(x,y,sz,r()*TAU,r()*TAU+2.3);g.stroke();
+          }
+        }
+        const night=g.createLinearGradient(90,145,430,395);
+        night.addColorStop(0,'rgba(1,7,28,0)');night.addColorStop(.67,'rgba(1,7,28,.08)');
+        night.addColorStop(1,'rgba(2,5,22,.57)');g.fillStyle=night;g.fillRect(62,60,390,397);
+        g.restore();g.strokeStyle=hot?'rgba(255,234,174,.94)':earth?'rgba(157,237,255,.83)':'rgba(204,249,255,.9)';
+        g.lineWidth=3.7;g.shadowColor=hot?'#ffb957':'#9adfff';g.shadowBlur=25;
+        g.beginPath();g.arc(cx,cy,R,0,TAU);g.stroke();
+      }else if(id==='friction'){
+        // Illustrated friction plasma / sparks between the two opposing planets.
+        g.fillStyle=beam(256,256,252,[[0,'rgba(255,255,239,.94)'],[.09,'rgba(255,225,144,.83)'],
+          [.28,'rgba(242,156,97,.57)'],[.54,'rgba(137,205,255,.23)'],[1,'rgba(66,79,207,0)']]);
+        g.fillRect(0,0,512,512);
+        for(let i=0;i<64;i++){
+          const a=(i/64)*TAU, len=70+r()*182, start=25+r()*38;
+          g.save();g.translate(256,256);g.rotate(a);
+          g.globalAlpha=.2+r()*.67;g.strokeStyle=i%2?'#ffc37d':'#b8eaff';
+          g.lineWidth=1+r()*6;g.shadowColor=i%2?'#ffc084':'#8ccfff';g.shadowBlur=11;
+          g.beginPath();g.moveTo(start,0);g.quadraticCurveTo(len*.51,-10+r()*20,len,0);g.stroke();g.restore();
+        }
       }else if(id==='storm'){
         // A unique spiral storm painted with 2D calligraphic arcs and luminous filaments.
         const cx=256,cy=256;
@@ -832,7 +921,8 @@
     function warmup(){
       if(prewarmScheduled)return;prewarmScheduled=true;
       const order=['earth','heaven','storm','celestialGate','swordWings','boltA','boltB','boltC',
-        'sparkVeil','stormThreads','shockHalo','bladeWake','sacredFlares','sword','nova','mist','pillar'];
+        'sparkVeil','stormThreads','shockHalo','bladeWake','sacredFlares','sword','nova','mist','pillar',
+        'planetWarm','planetCold','planetEarth','friction'];
       let cursor=0;
       const step=(deadline)=>{
         let made=0;
@@ -876,7 +966,8 @@
       if(typeof target.receive==='function'){
         const dx=(target.pos?.x||0)-(f.pos?.x||0),dz=(target.pos?.z||0)-(f.pos?.z||0);
         const len=Math.hypot(dx,dz)||1,kb=Number(attack.kb)||0;
-        target.receive(Number(attack.dmg)||0, Number(attack.stun)||0, dx/len*kb, dz/len*kb);
+        const attackStat=clamp(Number(f.atkMul)||1,.5,8);
+        target.receive(Math.round((Number(attack.dmg)||0)*attackStat), Number(attack.stun)||0, dx/len*kb, dz/len*kb);
       }else if(typeof b.strikeAt==='function' && target.pos){
         b.strikeAt(f,target.pos.x,target.pos.z,attack.radius||2.2,attack.dmg,attack.stun||0,attack.kb||0,attack.spec||attack);
       }
@@ -886,8 +977,8 @@
       const target=findTarget(b,f,net); if(!target) return;
       const x=target.pos.x,z=target.pos.z;
       const HOLY={kind:'shining-spear',elem:5,color:0xf5fbff};
-      const hits=[...Array(8)].map((_,i)=>({at:.70+i*.14,dmg:68,stun:.42,kb:0,spec:HOLY,radius:2.1}))
-        .concat([{at:2.08,dmg:436,stun:1.2,kb:10,spec:HOLY,radius:4.8}]);
+      const hits=[...Array(8)].map((_,i)=>({at:.70+i*.14,dmg:170,stun:.42,kb:0,spec:HOLY,radius:2.1}))
+        .concat([{at:2.08,dmg:1270,stun:1.2,kb:10,spec:HOLY,radius:4.8}]);
       const root=new THREE.Group(); b.fx.add(root);
       const mats=[], geos=[];
       const add=(id,pos,sx,sy,flat=false,opacity=1,additive=true)=>{
@@ -909,8 +1000,9 @@
       const swords=[0,1,2,3,4,5,6,7].map(i=>add('sword',new THREE.Vector3(x,3.0,z),3.2,8.2,false,0,false));
       for(const s of swords){ if(s?.material?.color) s.material.color.setHex(0xf7faff); }
       let cleaned=false,elapsed=0,next=0;
-      const cleanup=()=>{ if(cleaned)return; cleaned=true; releaseTarget(target); root.removeFromParent(); for(const m of mats)m.dispose(); for(const g of geos)g.dispose(); };
-      if(f.isPlayer)b.ui.cutin?.(f,'凍牙','SHINING SPEAR');
+      const cleanup=()=>{ if(cleaned)return; cleaned=true; releaseTarget(target); b.__astralFxCleanups?.delete(cleanup);root.removeFromParent(); for(const m of mats)m.dispose(); for(const g of geos)g.dispose(); };
+      (b.__astralFxCleanups ||= new Set()).add(cleanup);
+      if(f.isPlayer)b.ui.cutin?.(f,'光牢剣陣','LUMINOUS LEGION');
       b.ui.sfx?.('zap');
       b.addEffect(dt=>{
         if(cleaned)return false;
@@ -924,8 +1016,8 @@
         swords.forEach((s,i)=>{
           if(!s)return; const appear=t-(.52+i*.07); const ang=(Math.PI*2*i/8)+t*.18;
           const rr=Math.max(.5,4.8-appear*6.4); const yy=2.1+lift+(i%2?.35:-.1);
-          s.position.set(Math.cos(ang)*rr,yy,Math.sin(ang)*rr);
-          s.lookAt(0,yy,0); s.material.opacity=appear>-.08 && appear<.42 ? .95*(1-clamp((appear-.02)/.32,0,1)) : 0;
+          s.position.set(x+Math.cos(ang)*rr,yy,z+Math.sin(ang)*rr);
+          s.material.opacity=appear>-.08 && appear<.42 ? .95*(1-clamp((appear-.02)/.32,0,1)) : 0;
           s.scale.set(3.2,8.2+Math.sin(t*8+i)*.2,1);
         });
         while(next<hits.length && t>=hits[next].at){
@@ -949,9 +1041,9 @@
       const SWORD={kind:'judgment-sword',elem:5,color:0xffb25d};
       const EXPLODE={kind:'judgment-burst',elem:5,color:0xffdf9f};
       const attacks=[];
-      for(let i=0;i<10;i++)attacks.push({at:.68+i*.13,dmg:i<9?55:70,stun:.42,kb:0,spec:THUNDER,radius:2.4});
-      attacks.push({at:2.18,dmg:210,stun:.78,kb:0,spec:SWORD,radius:3.0});
-      attacks.push({at:2.54,dmg:645,stun:1.28,kb:12,spec:EXPLODE,radius:6.0});
+      for(let i=0;i<10;i++)attacks.push({at:.68+i*.13,dmg:170,stun:.42,kb:0,spec:THUNDER,radius:2.4});
+      attacks.push({at:2.18,dmg:650,stun:.78,kb:0,spec:SWORD,radius:3.0});
+      attacks.push({at:2.54,dmg:1450,stun:1.28,kb:12,spec:EXPLODE,radius:6.0});
       const root=new THREE.Group(); b.fx.add(root); active++;
       const mats=[], shapes=[];
       const add=(id,pos,sx,sy,flat=false,opacity=1,additive=true)=>{
@@ -1002,7 +1094,7 @@
         bolts.forEach((b0,i)=>{
           if(!b0)return; const local=t-(.62+i*.13); b0.material.opacity=local>=-.05 && local<.26 ? .98*(1-clamp((local-.02)/.18,0,1)) : 0;
           const angle=(i/10)*Math.PI*2+t*1.2, rr=.45+i*.05;
-          b0.position.x=Math.cos(angle)*rr; b0.position.z=Math.sin(angle)*rr; b0.position.y=5.8+lift*.45;
+          b0.position.x=x+Math.cos(angle)*rr; b0.position.z=z+Math.sin(angle)*rr; b0.position.y=5.8+lift*.45;
         });
         const drop=1-Math.pow(1-clamp((t-1.86)/.46,0,1),3);
         if(sword){ sword.material.opacity=clamp((t-1.45)/.3,0,1)*(1-clamp((t-2.72)/.35,0,1)); sword.position.y=23.0-drop*20.3; }
@@ -1025,6 +1117,138 @@
         if(flare){ flare.material.opacity=(next>=12)?.98*Math.pow(1-post,1.45):(next>=11?.15:0); flare.scale.set(3+16*post,3+16*post,1); }
         if(t>=DURATION){ cleanup(); return false; }
         return true;
+      });
+    }
+
+    function performLastVanisher(b,f,net){
+      if(!b?.fx || b.ended || !f || f.dead)return;
+      const target=findTarget(b,f,net);
+      const fw=typeof f.forward==='function'?f.forward():new THREE.Vector3(Math.sin(f.facing||0),0,Math.cos(f.facing||0));
+      const x=target?.pos?.x??(f.pos.x+fw.x*4.5),z=target?.pos?.z??(f.pos.z+fw.z*4.5);
+      const FRICTION={kind:'last-vanisher-friction',elem:2,color:0xffa55e};
+      const FINAL={kind:'last-vanisher-blast',elem:5,color:0xffe7ac};
+      // 14 hot-and-cold friction pulses followed by one devastating crash.
+      const hits=Array.from({length:14},(_,i)=>({at:1.01+i*.16,dmg:235,stun:.42,kb:0,spec:FRICTION,radius:4.2}));
+      hits.push({at:3.42,dmg:2050,stun:1.3,kb:13,spec:FINAL,radius:7.5});
+      const root=new THREE.Group();b.fx.add(root);const mats=[],geos=[];
+      const add=(id,pos,w,h,flat=false)=>{
+        const texture=tex(id);if(!texture)return null;
+        const options={map:texture,transparent:true,opacity:0,color:0xffffff,depthWrite:false,
+          depthTest:false,side:THREE.DoubleSide,blending:THREE.AdditiveBlending,fog:false};
+        const material=flat?new THREE.MeshBasicMaterial(options):new THREE.SpriteMaterial(options);
+        const object=flat?new THREE.Mesh(new THREE.PlaneGeometry(1,1),material):new THREE.Sprite(material);
+        object.position.copy(pos);object.scale.set(w,h,1);object.renderOrder=9;
+        if(flat)object.rotation.x=-Math.PI/2;
+        root.add(object);mats.push(material);if(flat)geos.push(object.geometry);return object;
+      };
+      const sky=add('planetCold',new THREE.Vector3(x+1.1,15,z),9.1,9.1);
+      const fire=add('planetWarm',new THREE.Vector3(x-1.1,.45,z),9.1,9.1);
+      const energy=add('friction',new THREE.Vector3(x,4.5,z),9.8,9.8);
+      const storm=add('stormThreads',new THREE.Vector3(x,.11,z),11.7,11.7,true);
+      const sigil=add('earth',new THREE.Vector3(x,.075,z),9.4,9.4,true);
+      const flash=add('nova',new THREE.Vector3(x,4.4,z),4.2,4.2);
+      const halo=add('shockHalo',new THREE.Vector3(x,.17,z),4.3,4.3,true);
+      let elapsed=0,next=0,cleaned=false;
+      const clean=()=>{
+        if(cleaned)return;cleaned=true;releaseTarget(target);
+        b.__astralFxCleanups?.delete(clean);root.removeFromParent();
+        for(const m of mats)m.dispose();for(const g of geos)g.dispose();
+      };
+      (b.__astralFxCleanups ||= new Set()).add(clean);
+      b.ui.cutin?.(f,'双星崩滅','TWIN CATACLYSM');
+      b.ui.sfx?.('burst');
+      b.addEffect(dt=>{
+        if(cleaned)return false;
+        if(!root.parent){clean();return false;}
+        elapsed+=clamp(Number(dt)||0,0,.065);const t=elapsed;
+        const xp=target?.pos?.x??x,zp=target?.pos?.z??z;
+        root.position.set(xp-x,0,zp-z);
+        const clash=clamp((t-.10)/.95,0,1),grind=clamp((t-1.02)/.22,0,1);
+        const vanish=1-clamp((t-3.46)/.8,0,1);
+        if(target&&!target.dead && t<3.42)holdTarget(target,.28*Math.sin(t*22),.36);
+        if(sky){sky.material.opacity=.96*clamp(t/.28,0,1)*vanish;
+          sky.position.y=15-clash*10.4+.13*Math.sin(t*10)*grind;
+          sky.position.x=x+1.2*(1-clash);sky.material.rotation+=dt*.35;
+        }
+        if(fire){fire.material.opacity=.95*clamp(t/.28,0,1)*vanish;
+          fire.position.y=.55+clash*3.85-.13*Math.sin(t*11)*grind;
+          fire.position.x=x-1.2*(1-clash);fire.material.rotation-=dt*.42;
+        }
+        if(energy){energy.material.opacity=.83*grind*vanish;
+          energy.material.rotation+=dt*3.2;energy.scale.set(9.8*(.79+.19*Math.sin(t*18)),9.8*(.83+.13*Math.cos(t*14)),1);
+        }
+        if(storm){storm.material.opacity=.7*clamp((t-.16)/.58,0,1)*vanish;
+          storm.rotation.z+=dt*2.7;storm.scale.setScalar(11.7*(.77+.2*clash));
+        }
+        if(sigil){sigil.material.opacity=.52*clamp(t/.44,0,1)*vanish;sigil.rotation.z-=dt*.73;}
+        while(next<hits.length && t>=hits[next].at){
+          const index=next++,hit=hits[index];
+          if(target)guaranteedHit(b,f,target,hit);
+          else b.strikeAt?.(f,x,z,hit.radius,hit.dmg,hit.stun,hit.kb,hit.spec);
+          if(index<14){
+            if(index%2===0)b.ui.sfx?.('zap');
+            b.flashLight?.(new THREE.Vector3(xp,3.3,zp),index%2?0x77d6ff:0xff9d50,.8,.17);
+            if(index%3===0)b.fxPop?.(new THREE.Vector3(xp,4.1,zp),index%2?1:0,1,2.1,.22,{grow:2.2,op:.68});
+          }else{
+            b.ui.flash?.();b.ui.sfx?.('burst');b.shake=Math.max(b.shake||0,1.15);
+            b.flashLight?.(new THREE.Vector3(xp,3.6,zp),0xffeac6,2.2,.54);
+            b.fxPop?.(new THREE.Vector3(xp,2.4,zp),0,8,13.6,.72,{grow:2.4,op:.95});
+            b.fxPop?.(new THREE.Vector3(xp,.16,zp),5,4,9.3,.65,{flat:true,grow:3.3,op:.83});
+          }
+        }
+        const post=clamp((t-3.42)/1.0,0,1);
+        if(flash){flash.material.opacity=(next>=15)?.97*Math.pow(1-post,1.2):0;
+          flash.scale.set(4.2+23*post,4.2+23*post,1);
+        }
+        if(halo){halo.material.opacity=(next>=15)?.94*Math.pow(1-post,1.35):0;
+          halo.scale.setScalar(4.3+24*post);
+        }
+        if(t>=4.65){clean();return false;}return true;
+      });
+    }
+    function performBlueEarth(b,f){
+      if(!b?.fx || b.ended || !f || f.dead)return;
+      const healed=Math.max(0,Math.round(f.maxHp-f.hp));
+      f.hp=f.maxHp; // Full restoration immediately, independent of skill strength.
+      b.ui.popup?.(f.pos,'HP完全回復 ＋'+healed.toLocaleString('ja-JP'),'#b8f6ff');
+      const root=new THREE.Group();b.fx.add(root);const mats=[],geos=[];
+      const add=(id,pos,w,h,flat=false)=>{
+        const map=tex(id);if(!map)return null;
+        const opts={map,transparent:true,opacity:0,color:0xffffff,depthWrite:false,
+          depthTest:false,blending:THREE.AdditiveBlending,side:THREE.DoubleSide,fog:false};
+        const material=flat?new THREE.MeshBasicMaterial(opts):new THREE.SpriteMaterial(opts);
+        const obj=flat?new THREE.Mesh(new THREE.PlaneGeometry(1,1),material):new THREE.Sprite(material);
+        obj.position.copy(pos);obj.scale.set(w,h,1);obj.renderOrder=flat?5:-12;
+        if(flat)obj.rotation.x=-Math.PI/2;
+        root.add(obj);mats.push(material);if(flat)geos.push(obj.geometry);return obj;
+      };
+      // The illustrated Earth dominates the background behind the healer.
+      const homeX=f.pos.x,homeZ=f.pos.z;
+      const planet=add('planetEarth',new THREE.Vector3(homeX,7,homeZ-4),17.8,17.8);
+      const ring=add('heaven',new THREE.Vector3(f.pos.x,.06,f.pos.z),7.5,7.5,true);
+      const glow=add('nova',new THREE.Vector3(f.pos.x,2.7,f.pos.z),6.2,8.1);
+      const halo=add('shockHalo',new THREE.Vector3(f.pos.x,.08,f.pos.z),3.1,3.1,true);
+      let elapsed=0,cleaned=false;
+      const clean=()=>{if(cleaned)return;cleaned=true;b.__astralFxCleanups?.delete(clean);
+        root.removeFromParent();for(const m of mats)m.dispose();for(const g of geos)g.dispose();};
+      (b.__astralFxCleanups ||= new Set()).add(clean);
+      b.ui.cutin?.(f,'蒼星再誕','EARTH REGENESIS');
+      b.ui.sfx?.('skill',{elem:7,color:0x8de8ff});
+      b.flashLight?.(f.pos.clone().setY(2),0x96ecff,1.6,.65);
+      b.addEffect(dt=>{
+        if(cleaned)return false;
+        elapsed+=clamp(Number(dt)||0,0,.065);const t=elapsed;
+        root.position.set(f.pos.x-homeX,0,f.pos.z-homeZ);
+        const inK=clamp(t/.65,0,1),outK=1-clamp((t-2.65)/.85,0,1);
+        if(planet){planet.material.opacity=.89*inK*outK;planet.material.rotation+=dt*.08;
+          planet.scale.set(17.8*(.82+.18*inK),17.8*(.82+.18*inK),1);
+        }
+        if(ring){ring.material.opacity=.81*inK*outK;ring.rotation.z+=dt*.9;
+          ring.scale.setScalar(7.5*(.65+.5*inK));
+        }
+        if(glow){glow.material.opacity=.55*inK*outK;glow.material.rotation-=dt*.15;}
+        if(halo){halo.material.opacity=.48*inK*outK;halo.scale.setScalar(3.1+7*clamp(t/3,0,1));}
+        if(t>=3.6){clean();return false;}return true;
       });
     }
     const previousDispose=Battle.prototype.dispose;
@@ -1060,12 +1284,16 @@
     Battle.prototype.executeCast=function(f,slot,net){
       const selectedAstral=!!f && f.key==='valgard' && slot==='s2' && f.def?.skills?.[2]?.kind==='astral_judgment_painted';
       const selectedSpear=!!f && f.key==='valgard' && slot==='s0' && f.def?.skills?.[0]?.kind==='shining_spear_painted';
+      const selectedLast=!!f && f.key==='valgard' && slot==='over' && f.def?.over?.kind==='last_vanisher_painted';
+      const selectedBlue=!!f && f.key==='valgard' && slot==='hi' && f.def?.hi?.kind==='blue_earth_painted';
       const outcome=previous.call(this,f,slot,net);
       if(f?.key==='valgard' && !f.remoteAuth && !this.net && (slot==='over'||slot==='hi'||/^[sf]\d+$/.test(slot))){
         sayValgardLine(selectedAstral?'力の違いを見せてやる':selectedSpear?'これはよけられまい':'これでどうだ');
       }
       if(selectedSpear)performShiningSpear(this,f,net);
       if(selectedAstral)perform(this,f,net);
+      if(selectedLast)performLastVanisher(this,f,net);
+      if(selectedBlue)performBlueEarth(this,f);
       return outcome;
     };
   }

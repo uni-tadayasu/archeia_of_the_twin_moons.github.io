@@ -130,6 +130,7 @@ export function followSpec(def, i) {
 // ---- 秘奥義：覚醒中に放つ奥義 ----
 const HI_CACHE = new WeakMap();
 export function hiSpec(def) {
+  if (def?.hi && typeof def.hi === 'object') return def.hi; // independent character-specific secret art
   if (!def?.over) return null;
   if (HI_CACHE.has(def)) return HI_CACHE.get(def);
   const o = def.over;
