@@ -916,20 +916,17 @@
 
   /* VALGARD / ICE ECHO 2026-11-07
    * Normal sword attack becomes one autonomous, targetable ice duplicate.
-   * The ice duplicate is now a low-cost painted impostor of Valgard.
-   * Avoid duplicate GLB skeleton/mixer allocations in the frame loop.
-   * Adds a cancel-on-hit glacial seal in place of guard (offline only).
+   * Independent lightweight ice fighter proxy: no new Fighter, GLB, mixer,
+   * or Battle.fighters mutations, preventing repeated heavy clone creation.
+   * The ice circle starts on one press, persists for 6s, and cancels on hit.
    */
-  Promise.all([
-    import('./game.js?v=audio-cast-20261107d'),
-    import('./model-runtime.js?v=valgard-exact-20261107')
-  ]).then(([combat, modelRuntime]) => {
-    installValgardIceEcho(combat.Battle, combat.Fighter, modelRuntime.disposeModel);
+  import('./game.js?v=audio-cast-20261107d').then(combat => {
+    installValgardIceEcho(combat.Battle, combat.Fighter);
   }).catch(error => console.warn('[Arkeia] Valgard ice echo unavailable:', error));
 
-  function installValgardIceEcho(Battle, Fighter, disposeModel) {
-    if (!Battle || !Fighter || Battle.prototype.__valgardIceEchoV1) return;
-    Battle.prototype.__valgardIceEchoV1 = true;
+  function installValgardIceEcho(Battle, Fighter) {
+    if (!Battle || !Fighter || Battle.prototype.__valgardIceEchoV2) return;
+    Battle.prototype.__valgardIceEchoV2 = true;
     const ICE = 0x9ceaff;
     const HP_RATIO = 0.60;
     const MAX_ACTIVE = 2;
@@ -1027,30 +1024,162 @@
     let runtime = null;
     iceAssets().then(value => { runtime = value; }).catch(() => {});
 
-    const ordinaryBuildModel=Fighter.prototype.buildModel;
-    Fighter.prototype.buildModel=function(gltf){
-      if(!this.battle?.__buildingIceEcho || !runtime?.THREE)
-        return ordinaryBuildModel.call(this,gltf);
-      const THREE=runtime.THREE,h=this.def.height*this.scale;
-      this.modelInstance=null;this.valgardMotion=null;this.mixer=null;
-      this.clips={};this.gear=null;this.curAnim=null;
-      const portraitMat=new THREE.SpriteMaterial({map:runtime.portrait,color:0xbcecff,
-        transparent:true,opacity:.86,depthWrite:false,depthTest:true,fog:false});
+    // ICE ECHO v2: independent lightweight combat proxy. Never insert an
+    // impostor into Battle.fighters or instantiate a Fighter/GLB/mixer: that
+    // caused the old combat/fighter loop to treat the effect as a full actor.
+    const ECHO_RANGE=2.35, ECHO_SPEED=7.3;
+    const ECHO_RESPAWN=1.25;
+    function echoes(b){return (b.__valgardEchoes ||= new Set());}
+    function disposeEcho(b,echo,shatter=false){
+      if(!echo || echo.__retired)return;
+      echo.__retired=true;
+      echo.dead=true;
+      if(echo.owner?.__iceEcho===echo){
+        echo.owner.__iceEcho=null;
+        echo.owner.__iceEchoReadyAt=performance.now()/1000+ECHO_RESPAWN;
+      }
+      b.__valgardEchoes?.delete(echo);
+      echo.root?.removeFromParent();
+      for(const asset of echo.owned||[])asset?.dispose?.();
+      echo.owned=[];
+      if(shatter){
+        showIceFX(b,echo.pos,0.85,true);
+        b.ui.popup?.(echo.pos,'氷分身が砕け散った','#b9f5ff');
+      }
+    }
+    function createEcho(owner){
+      const b=owner?.battle,THREE=runtime?.THREE;
+      if(!b || !THREE || b.ended || b.net || owner.dead || owner.stun>0 || !b.fighters.includes(owner))return;
+      if(owner.__iceEcho && !owner.__iceEcho.dead && !owner.__iceEcho.__retired){
+        owner.__iceEcho.focus=b.nearestEnemy(owner);
+        return;
+      }
+      if(performance.now()/1000<(owner.__iceEchoReadyAt||0))return;
+      const group=echoes(b);
+      if(group.size>=2)return;
+      const fwd=owner.forward();
+      const start=owner.pos.clone().addScaledVector(new THREE.Vector3(fwd.z,0,-fwd.x),1.5);
+      const distance=Math.hypot(start.x,start.z);
+      if(distance>11.8)start.multiplyScalar(11.8/distance);
+      const owned=[],root=new THREE.Group();
+      // Shared textures, but per-echo materials/geometries are disposed on death.
+      const portraitMat=new THREE.SpriteMaterial({map:runtime.portrait||null,color:0xb8edff,
+        transparent:true,opacity:.89,depthWrite:false,depthTest:true,fog:false});
       const portrait=new THREE.Sprite(portraitMat);
-      portrait.position.y=h*.53;
-      portrait.scale.set(h*.96,h*1.14,1);
-      this.visual.add(portrait);
-      const floorGeo=new THREE.RingGeometry(.61,.76,40);
-      const floorMat=new THREE.MeshBasicMaterial({color:0x65d6ff,transparent:true,opacity:.77,
-        side:THREE.DoubleSide,depthWrite:false,blending:THREE.AdditiveBlending});
-      this.ringMesh=new THREE.Mesh(floorGeo,floorMat);
-      this.ringMesh.rotation.x=-Math.PI/2;this.ringMesh.position.y=.025;
-      this.root.add(this.ringMesh);
-      this.guardMesh=new THREE.Group();this.guardMesh.visible=false;
-      this.root.add(this.guardMesh);
-      this.__iceActorOwned={portraitMat,floorMat,floorGeo};
-    };
-
+      portrait.position.y=1.12;portrait.scale.set(2.08,2.34,1);
+      root.add(portrait);owned.push(portraitMat);
+      if(runtime.texture){
+        const auraMat=new THREE.SpriteMaterial({map:runtime.texture,color:0x8ce3ff,
+          transparent:true,opacity:.54,blending:THREE.AdditiveBlending,depthWrite:false,fog:false});
+        const aura=new THREE.Sprite(auraMat);
+        aura.position.y=1.13;aura.scale.set(3.2,3.65,1);
+        root.add(aura);owned.push(auraMat);
+        const floorGeo=new THREE.PlaneGeometry(2.45,2.45);
+        const floorMat=new THREE.MeshBasicMaterial({map:runtime.texture,color:0xb0f2ff,
+          transparent:true,opacity:.7,side:THREE.DoubleSide,
+          blending:THREE.AdditiveBlending,depthWrite:false});
+        const floor=new THREE.Mesh(floorGeo,floorMat);
+        floor.rotation.x=-Math.PI/2;floor.position.y=.05;
+        root.add(floor);owned.push(floorGeo,floorMat);
+        root.userData.iceAura=aura;root.userData.iceFloor=floor;
+      }
+      const hpBar=new THREE.Group(); hpBar.position.y=2.65;
+      const bgGeo=new THREE.PlaneGeometry(1.75,.2);
+      const bgMat=new THREE.MeshBasicMaterial({color:0x082c42,opacity:.9,transparent:true,depthWrite:false,depthTest:false});
+      const bg=new THREE.Mesh(bgGeo,bgMat);
+      const hpGeo=new THREE.PlaneGeometry(1.68,.13);
+      const hpMat=new THREE.MeshBasicMaterial({color:0xb5f5ff,depthWrite:false,depthTest:false});
+      const fill=new THREE.Mesh(hpGeo,hpMat);fill.position.z=.014;
+      bg.renderOrder=fill.renderOrder=100;
+      hpBar.add(bg,fill);root.add(hpBar);
+      owned.push(bgGeo,bgMat,hpGeo,hpMat);
+      root.position.copy(start);b.scene.add(root);
+      const maxHp=Math.max(1,Math.round(owner.maxHp*HP_RATIO));
+      const echo={
+        key:'valgard-ice-echo',name:'氷分身・ヴァルガルド',owner,root,owned,
+        team:owner.team,pos:start,def:owner.def,scale:.92,radius:.45,
+        hp:maxHp,maxHp,dead:false,__retired:false,remoteAuth:false,
+        isPlayer:false,inv:0,guard:false,status:{},stun:0,action:null,y:0,
+        facing:owner.facing,vel:new THREE.Vector3(),
+        over:0,og:0,awakened:0,defMul:owner.defMul,atkMul:owner.atkMul*.46,
+        focus:b.nearestEnemy(owner),attackIn:.26,fxIn:.6,hpBar,fill,
+        forward(){return new THREE.Vector3(Math.sin(this.facing),0,Math.cos(this.facing));},
+        receive(damage,stun,kx,kz){
+          if(this.dead||this.__retired)return 0;
+          const taken=Math.max(0,Math.round(Math.max(0,Number(damage)||0)*this.defMul));
+          if(!taken)return 0;
+          this.hp=Math.max(0,this.hp-taken);
+          this.stun=Math.max(this.stun,Math.max(0,Number(stun)||0));
+          this.vel.set(Number(kx)||0,0,Number(kz)||0);
+          if(this.hp===0)this.dead=true;
+          return taken;
+        },
+        applyStatus(key){
+          if(this.dead||this.__retired)return;
+          if(key==='freeze'||key==='petrify'){this.status[key]=Math.max(this.status[key]||0,1.2);this.stun=Math.max(this.stun,1.2);}
+          else if(key==='slow'||key==='para'||key==='blind'||key==='silence')this.status[key]=2;
+        }
+      };
+      owner.__iceEcho=echo;group.add(echo);
+      showIceFX(b,start,.68);
+      b.ui.popup?.(start,`氷分身 HP ${maxHp}`,'#a2eeff');
+      b.ui.sfx?.('skill',{elem:1,color:ICE});
+    }
+    function tickEcho(b,echo,dt){
+      if(!echo || echo.__retired)return;
+      const owner=echo.owner;
+      if(!owner||owner.dead||!b.fighters.includes(owner)||b.ended){disposeEcho(b,echo,false);return;}
+      if(echo.dead||echo.hp<=0){disposeEcho(b,echo,true);return;}
+      dt=Math.min(.05,Math.max(0,Number(dt)||0));
+      for(const key of Object.keys(echo.status)){
+        echo.status[key]-=dt;
+        if(echo.status[key]<=0)delete echo.status[key];
+      }
+      echo.stun=Math.max(0,echo.stun-dt);
+      echo.attackIn=Math.max(0,echo.attackIn-dt);
+      echo.fxIn-=dt;
+      const valid=target=>target&&!target.dead&&target.hp>0&&target.team!==echo.team&&b.fighters.includes(target);
+      const target=valid(echo.focus)?echo.focus:b.nearestEnemy(echo);
+      echo.focus=target;
+      if(target){
+        const dx=target.pos.x-echo.pos.x,dz=target.pos.z-echo.pos.z;
+        const dist=Math.hypot(dx,dz);
+        if(dist>.0001){
+          echo.facing=Math.atan2(dx,dz);
+          if(echo.stun<=0&&!echo.status.freeze&&!echo.status.petrify){
+            if(dist>ECHO_RANGE*.73){
+              const speed=Math.min(ECHO_SPEED*dt,Math.max(0,dist-ECHO_RANGE*.7));
+              echo.pos.x+=dx/dist*speed;
+              echo.pos.z+=dz/dist*speed;
+            }
+            if(dist<ECHO_RANGE+(target.radius||.4)&&echo.attackIn<=0){
+              echo.attackIn=.86;
+              b.meleeHit(echo,ECHO_RANGE,(owner.def?.light?.dmg||66)*.58,.3,3.1,null,
+                {kind:'echo',elem:1,color:ICE});
+              // Capped low-cost hand-painted impact, never a new fighter/model.
+              b.fxPop?.(echo.pos.clone().setY(1.18),1,6,2.25,.25,{grow:1.45,op:.85});
+            }
+          }
+        }
+      }
+      const distance=Math.hypot(echo.pos.x,echo.pos.z);
+      if(distance>12.2)echo.pos.multiplyScalar(12.2/distance);
+      echo.root.position.copy(echo.pos);
+      echo.root.rotation.y=echo.facing;
+      const ratio=Math.max(0,Math.min(1,echo.hp/Math.max(1,echo.maxHp)));
+      echo.fill.scale.x=Math.max(.001,ratio);
+      echo.fill.position.x=-.84*(1-ratio);
+      echo.hpBar.quaternion.copy(b.camera.quaternion);
+      const seconds=b.fxClock||0;
+      const aura=echo.root.userData.iceAura;
+      const floor=echo.root.userData.iceFloor;
+      if(aura)aura.material.opacity=.47+.08*Math.sin(seconds*4.5);
+      if(floor)floor.rotation.z=seconds*.9;
+      if(echo.fxIn<=0){
+        echo.fxIn=.62;
+        b.fxPop?.(echo.pos.clone().setY(.55),1,7,.87,.35,{rise:.65,grow:1.3,op:.36});
+      }
+    }
     function showIceFX(b, pos, power = 1, breaking = false) {
       if (!b || !pos) return;
       const THREE = runtime?.THREE;
@@ -1068,229 +1197,75 @@
       if (breaking) b.shake=Math.max(b.shake||0,.22);
     }
 
-    function addVisuals(clone) {
-      if (!runtime?.THREE) return;
-      const THREE = runtime.THREE;
-      const ice = new THREE.Color(ICE);
-      // instantiateModel() already gave this fighter private material clones.
-      // Never recolor the cached source or another character's material.
-      for(const mat of clone.modelInstance?.materials || []){
-        mat.color?.lerp(ice,.64);
-        if(mat.emissive){mat.emissive.copy(ice).multiplyScalar(.55);mat.emissiveIntensity=.48;}
-        mat.transparent=true;mat.opacity=Math.min(1,mat.opacity??1)*.82;
-        mat.depthWrite=false;
-        if('metalness' in mat)mat.metalness=Math.min(.1,mat.metalness??0);
-        if('roughness' in mat)mat.roughness=Math.max(.56,mat.roughness??.6);
-        mat.needsUpdate=true;
-      }
-      if(clone.ringMesh?.material?.color)clone.ringMesh.material.color.setHex(ICE);
-      if(clone.__iceActorOwned?.portraitMat?.color)
-        clone.__iceActorOwned.portraitMat.color.setHex(0xa6e4ff);
-      const owned=[];
-      const texture=runtime.texture;
-      if(texture){
-        const glowMat=new THREE.SpriteMaterial({map:texture,color:0x92e7ff,transparent:true,opacity:.5,
-          blending:THREE.AdditiveBlending,depthWrite:false,depthTest:true,fog:false});
-        const aura=new THREE.Sprite(glowMat);
-        aura.scale.set(3.2,3.8,1);aura.position.y=1.05;
-        clone.root.add(aura);owned.push({mesh:aura,material:glowMat});
-        const floorMat=new THREE.MeshBasicMaterial({map:texture,color:0x8be6ff,transparent:true,opacity:.65,
-          side:THREE.DoubleSide,depthWrite:false,blending:THREE.AdditiveBlending});
-        const floorGeo=new THREE.PlaneGeometry(2.7,2.7);
-        const floor=new THREE.Mesh(floorGeo,floorMat);
-        floor.rotation.x=-Math.PI/2;floor.position.y=.035;
-        clone.root.add(floor);owned.push({mesh:floor,material:floorMat,geometry:floorGeo});
-        clone.__iceAura=aura; clone.__iceFloor=floor;
-      }
-      const health = new THREE.Group();
-      health.position.y=(clone.def?.height || 2.06)*clone.scale+.48;
-      const bgGeo=new THREE.PlaneGeometry(1.75,.2);
-      const bgMat=new THREE.MeshBasicMaterial({color:0x061d34,transparent:true,opacity:.88,depthTest:false,depthWrite:false});
-      const bg=new THREE.Mesh(bgGeo,bgMat);
-      const barGeo=new THREE.PlaneGeometry(1.68,.13);
-      const barMat=new THREE.MeshBasicMaterial({color:0x9defff,transparent:true,opacity:.98,depthTest:false,depthWrite:false});
-      const fill=new THREE.Mesh(barGeo,barMat);fill.position.z=.01;
-      bg.renderOrder=fill.renderOrder=100;
-      health.add(bg,fill);clone.root.add(health);
-      owned.push({mesh:bg,material:bgMat,geometry:bgGeo},{mesh:fill,material:barMat,geometry:barGeo});
-      clone.__iceHealth={group:health,fill};
-      clone.__iceVisuals=owned;
-    }
 
-    function releaseVisuals(clone){
-      if (clone.__iceVisualsReleased) return;
-      clone.__iceVisualsReleased = true;
-      for (const entry of clone.__iceVisuals || []){
-        entry.mesh.removeFromParent();
-        entry.material?.dispose();
-        entry.geometry?.dispose();
-      }
-      clone.__iceVisuals=[];
-    }
-
-    function retire(b,clone){
-      releaseVisuals(clone);
-      if (clone.__iceOwner?.__iceEcho===clone) clone.__iceOwner.__iceEcho=null;
-      const idx=b.fighters.indexOf(clone);
-      if(idx>=0)b.fighters.splice(idx,1);
-      clone.valgardMotion?.stop?.();
-      if(clone.redMats)clone.endAwaken();
-      disposeModel?.(clone.modelInstance,clone.mixer);
-      clone.modelInstance=null;
-      clone.root.removeFromParent();
-      clone.ringMesh?.material?.dispose?.();
-      clone.guardMesh?.material?.dispose?.();
-      if(clone.__iceActorOwned && !clone.__iceActorFreed){
-        clone.__iceActorFreed=true;
-        for(const resource of Object.values(clone.__iceActorOwned))resource?.dispose?.();
-      }
-      clone.__iceRetired=true;
-    }
-
+    // Normal slash summons/re-aims; no Fighter is constructed for the echo.
     const startLightOriginal=Fighter.prototype.startLight;
-    function createEcho(owner){
-      const b=owner?.battle;
-      if(!b || b.ended || owner.dead || owner.stun>0 || !b.fighters.includes(owner))return;
-      if(owner.__iceEcho && !owner.__iceEcho.dead && !owner.__iceEcho.__iceRetired)return;
-      if(b.fighters.filter(f=>f.__isValgardIceEcho&&!f.dead).length>=MAX_ACTIVE)return;
-      const THREE=runtime?.THREE;if(!THREE)return;
-      const forward=owner.forward();
-      const right=new THREE.Vector3(forward.z,0,-forward.x);
-      const start=owner.pos.clone().addScaledVector(right,1.55);
-      const radius=Math.hypot(start.x,start.z);
-      if(radius>11.7)start.multiplyScalar(11.7/radius);
-      let clone;
-      // A render-only portrait is created instead of a heavy 3D GLB skeleton.
-      // Do this *after* Battle.update's fighter loop, never from inside it.
-      b.__buildingIceEcho=true;
-      try {
-        clone=b.add('valgard',{
-          team:owner.team,cpu:.95,pos:[start.x,start.z],facing:owner.facing,
-          name:'氷分身・ヴァルガルド',upg:owner.upg,scale:.92,tint:ICE,
-          hpMul:owner.hpMul,atkMul:.45,defMul:1.0,gear:{w:'',a:''}
-        });
-      } catch(e) {
-        console.warn('[Arkeia] Ice echo creation aborted safely:',e);
-        b.ui.popup?.(owner.pos,'氷分身を呼び出せませんでした','#9deeff');
-        return;
-      } finally { b.__buildingIceEcho=false; }
-      clone.__isValgardIceEcho=true;
-      clone.__iceOwner=owner;
-      clone.__iceFocus=b.nearestEnemy(owner);
-      clone.__iceAttackWait=0;
-      clone.__iceTime=0;
-      clone.__iceDestroyed=false;
-      clone.__iceRetired=false;
-      clone.__iceVisualsReleased=false;
-      clone.maxHp=Math.max(1,Math.round(owner.maxHp*HP_RATIO));
-      clone.hp=clone.maxHp;
-      clone.atkMul=owner.atkMul*.46;
-      clone.defMul=owner.defMul;
-      clone.over=0;clone.awk=0;clone.flux=0;
-      owner.__iceEcho=clone;
-      addVisuals(clone);
-      showIceFX(b,start,1.1);
-      b.ui.popup?.(clone.pos,`氷分身！ HP ${clone.maxHp}`,'#a2eeff');
-      b.ui.sfx?.('skill',{elem:1,color:ICE});
-    }
     Fighter.prototype.startLight=function(...args){
-      // Keep the normal slash for the autonomous duplicate itself. Never let it recursively summon.
-      if(this.key!=='valgard'||this.__isValgardIceEcho||this.remoteAuth||this.battle?.net || !runtime?.THREE)
+      if(this.key!=='valgard'||this.__isValgardIceEcho||this.remoteAuth||this.battle?.net||!runtime?.THREE)
         return startLightOriginal.apply(this,args);
-      if(this.dead||this.stun>0||this.battle?.ended)return;
-      this.faceNearest?.(9);
-      this.action={type:'cast',t:0,dur:.43};
-      this.vel.set(0,0,0);
       const b=this.battle;
-      showIceFX(b,this.pos,.72);
+      if(this.dead||this.stun>0||b?.ended)return;
+      const now=performance.now()/1000;
+      this.faceNearest?.(9);
+      this.action={type:'cast',t:0,dur:.4};
+      this.vel.set(0,0,0);
       const active=this.__iceEcho;
-      if(active&&!active.dead&&!active.__iceRetired){
-        active.__iceFocus=b.nearestEnemy(this);
-        showIceFX(b,active.pos,.58);
-        b.ui.popup?.(this.pos,'氷分身・追尾指令','#a2eeff');
+      if(active&&!active.dead&&!active.__retired){
+        active.focus=b.nearestEnemy(this);
+        if(now>(this.__iceEchoCommandAt||0)){
+          b.ui.popup?.(this.pos,'氷分身・追尾指令','#b4edff');
+          this.__iceEchoCommandAt=now+.85;
+        }
         return;
       }
       this.__iceEcho=null;
-      if(this.__iceEchoQueued)return;
-      if(b.fighters.filter(f=>f.__isValgardIceEcho&&!f.dead).length>=MAX_ACTIVE){
-        b.ui.popup?.(this.pos,'氷分身はこれ以上召喚できない','#a2eeff');
-        return;
-      }
+      if(this.__iceEchoQueued||now<(this.__iceEchoReadyAt||0))return;
       this.__iceEchoQueued=true;
     };
-
-    const aiOriginal=Battle.prototype.aiInput;
-    Battle.prototype.aiInput=function(f,dt){
-      if(!f?.__isValgardIceEcho)return aiOriginal.call(this,f,dt);
-      const target=f.__iceFocus&&!f.__iceFocus.dead&&f.__iceFocus.team!==f.team
-        ? f.__iceFocus : this.nearestEnemy(f);
-      f.__iceFocus=target;
-      if(!target)return {mx:0,mz:0};
-      const dx=target.pos.x-f.pos.x,dz=target.pos.z-f.pos.z;
-      const d=Math.hypot(dx,dz)||.001;
-      const speed=d>2.05?1:0;
-      f.__iceAttackWait=Math.max(0,(f.__iceAttackWait||0)-dt);
-      const inp={mx:dx/d*speed,mz:dz/d*speed};
-      if(d < 2.75 && f.__iceAttackWait<=0 && !f.action){
-        inp.attack=true;
-        f.__iceAttackWait=.74;
-      }
-      return inp;
-    };
-
-    const swingOriginal=Battle.prototype.swingFx;
-    Battle.prototype.swingFx=function(f){
-      const result=swingOriginal.call(this,f);
-      if(f?.__isValgardIceEcho){
-        const pos=f.pos.clone().setY(1.3+f.y);
-        this.fxPop?.(pos,1,6,3.7,.28,{grow:1.65,spin:2.6});
-        this.fxPop?.(pos,1,1,1.7,.20,{grow:1.4,op:.87});
-        this.flashLight?.(pos,ICE,.45,.13);
-      }
-      return result;
-    };
-
-    const receiveOriginal=Fighter.prototype.receive;
-    Fighter.prototype.receive=function(...args){
-      const result=receiveOriginal.apply(this,args);
-      if(this.__isValgardIceEcho){
-        this.awk=0; // Ice copies do not turn into red awakened characters.
-        if(this.awakened>0)this.endAwaken?.();
-        if(result>0)this.battle?.fxPop?.(this.pos.clone().setY(1.1),1,7,1.35,.22,{grow:1.55,op:.58});
+    // Include the proxy in enemy targeting/hits, but NEVER in Battle.fighters.
+    // The original 3D fighter update / resurrection / camera loops stay untouched.
+    const originalEnemiesOf=Battle.prototype.enemiesOf;
+    Battle.prototype.enemiesOf=function(actor){
+      const result=originalEnemiesOf.call(this,actor);
+      if(this.net||!actor)return result;
+      for(const echo of this.__valgardEchoes||[]){
+        if(!echo.__retired&&!echo.dead&&echo.hp>0&&echo.team!==actor.team)result.push(echo);
       }
       return result;
     };
 
     // -------------------- VALGARD FROST SEAL --------------------
+    // Single-press ability: 6 seconds of autonomous freezing. Releasing the
+    // key does not cancel it. Additional key-downs cannot bypass cooldown.
     const GLYPH_RADIUS=4.1;
-    const FREEZE_IMMUNITY=2.5; // Avoid an endless re-freeze after a hit.
-    const SEAL_INTERRUPT_COOLDOWN=3;
+    const SEAL_DURATION=6.0;
+    const SEAL_COOLDOWN=3.0;
+    const FREEZE_IMMUNITY=2.5;
     function thawTarget(t,owner=null){
-      if(!t || !t.__iceSealOwner || (owner && t.__iceSealOwner!==owner))return;
+      if(!t?.__iceSealOwner||(owner&&t.__iceSealOwner!==owner))return;
       if(t.status)delete t.status.freeze;
-      t.stun=Math.min(Math.max(0,t.stun||0),.04);
+      // Undo only the seal's remaining restraint, without altering other DOTs.
+      if((t.stun||0)>0)t.stun=Math.min(t.stun,.04);
       t.__iceSealOwner=null;
       t.__iceSealImmuneUntil=performance.now()/1000+FREEZE_IMMUNITY;
-      t.battle?.fxPop?.(t.pos.clone().setY(1.2),1,8,2.1,.32,{grow:1.8,op:.6});
+      t.battle?.fxPop?.(t.pos.clone().setY(1.2),1,8,1.8,.28,{grow:1.55,op:.55});
     }
     function stopSeal(f,interrupted=false){
       const seal=f?.__iceSeal;
       if(!seal)return;
-      if(interrupted){
-        f.__iceSealInterrupted=true;
-        f.__iceSealCooldownUntil=performance.now()/1000+SEAL_INTERRUPT_COOLDOWN;
-        for(const t of f.battle?.fighters||[])thawTarget(t,f);
-      }
       seal.root.removeFromParent();
       seal.mat.dispose();seal.geo.dispose();
       f.__iceSeal=null;
+      // A broken seal thaws its prisoners immediately.
       if(interrupted){
-        f.battle?.ui.popup?.(f.pos,'氷結陣・解除','#a8eaff');
-        showIceFX(f.battle,f.pos,.62,true);
+        f.__iceSealCooldownUntil=Math.max(f.__iceSealCooldownUntil||0,performance.now()/1000+SEAL_COOLDOWN);
+        for(const target of f.battle?.fighters||[])thawTarget(target,f);
+        f.battle?.ui.popup?.(f.pos,'氷結封印陣・解除','#a8eaff');
+        f.battle?.fxPop?.(f.pos.clone().setY(1),1,8,2.3,.28,{grow:1.5,op:.45});
       }
     }
-    function startSeal(f){
-      const THREE=runtime?.THREE;if(!THREE || !runtime?.sealTexture)return;
+    function startSeal(f,now){
+      const THREE=runtime?.THREE;if(!THREE||!runtime?.sealTexture)return false;
       const geo=new THREE.PlaneGeometry(GLYPH_RADIUS*2,GLYPH_RADIUS*2);
       const mat=new THREE.MeshBasicMaterial({map:runtime.sealTexture,color:0xc7f5ff,
         transparent:true,opacity:.86,side:THREE.DoubleSide,blending:THREE.AdditiveBlending,
@@ -1298,47 +1273,46 @@
       const root=new THREE.Mesh(geo,mat);
       root.rotation.x=-Math.PI/2;root.position.y=.065;root.renderOrder=4;
       f.root.add(root);
-      f.__iceSeal={root,mat,geo,tick:0,fx:0};
-      f.battle?.ui.popup?.(f.pos,'氷結封印陣','#bcf5ff');
-      showIceFX(f.battle,f.pos,.55);
+      f.__iceSeal={root,mat,geo,started:now,expires:now+SEAL_DURATION,fx:0};
+      f.__iceSealCooldownUntil=now+SEAL_DURATION+SEAL_COOLDOWN;
+      f.battle?.ui.popup?.(f.pos,`氷結封印陣：${SEAL_DURATION}秒持続`,'#bcf5ff');
+      f.battle?.fxPop?.(f.pos.clone().setY(.1),1,5,4.8,.56,{flat:true,grow:1.2,spin:2.5,op:.8});
+      f.battle?.flashLight?.(f.pos.clone().setY(.8),ICE,.95,.22);
+      return true;
     }
     const updateFighterOriginal=Fighter.prototype.update;
     Fighter.prototype.update=function(dt,input){
       if(this.key!=='valgard'||this.__isValgardIceEcho||this.remoteAuth||this.battle?.net)
         return updateFighterOriginal.call(this,dt,input);
       const now=performance.now()/1000;
-      const holding=!!input?.guard && !this.dead;
-      if(!holding)this.__iceSealInterrupted=false;
-      const canCast=holding && !this.__iceSealInterrupted && now>=(this.__iceSealCooldownUntil||0)
-        && this.stun<=0 && !this.dead && this.y<=.08 && !this.action;
-      if(holding){
-        // Guard is an ice circle, not the standard damage-reduction stance.
-        input={...input,guard:false,mx:0,mz:0,attack:false,skill:false,
-          skill2:false,heal:false,jump:false,over:false,skillIdx:null};
-      }
-      const result=updateFighterOriginal.call(this,dt,input);
+      const pressed=!!input?.guard;
+      const edge=pressed&&!this.__iceSealGuardWasDown;
+      this.__iceSealGuardWasDown=pressed;
+      // Never enter the engine's ordinary damage-reduction guard stance.
+      if(pressed)input={...input,guard:false};
+      const beforeHp=this.hp;
+      const outcome=updateFighterOriginal.call(this,dt,input);
       this.guard=false;
       if(this.guardMesh)this.guardMesh.visible=false;
-      if(!canCast || this.dead){
-        if(this.__iceSeal)stopSeal(this,false);
-        return result;
+      if(this.__iceSeal&&(this.dead||this.hp<beforeHp))stopSeal(this,true);
+      if(this.__iceSeal&&now>=this.__iceSeal.expires)stopSeal(this,false);
+      if(edge&&!this.dead&&this.stun<=0&&this.y<=.15&&now>=(this.__iceSealCooldownUntil||0)){
+        startSeal(this,now);
       }
-      if(!this.__iceSeal)startSeal(this);
       const seal=this.__iceSeal;
-      if(!seal)return result;
-      seal.tick+=Math.min(.08,Math.max(0,dt));
-      seal.fx-=dt;
-      seal.mat.opacity=.7+.16*Math.sin(seal.tick*4);
-      seal.root.rotation.z+=dt*.5;
+      if(!seal)return outcome;
+      seal.fx-=(Math.max(0,dt)||0);
+      seal.mat.opacity=.7+.16*Math.sin((now-seal.started)*5);
+      seal.root.rotation.z+=dt*.55;
       if(seal.fx<=0){
-        seal.fx=.22;
-        const p=this.pos.clone().setY(.2+Math.random()*1.35);
-        p.x+=(Math.random()-.5)*GLYPH_RADIUS;
-        p.z+=(Math.random()-.5)*GLYPH_RADIUS;
-        this.battle.fxPop?.(p,1,7,1.1,.46,{rise:.65,grow:1.45,op:.48});
+        seal.fx=.32;
+        const p=this.pos.clone().setY(.2+Math.random()*1.05);
+        p.x+=(Math.random()-.5)*GLYPH_RADIUS*1.3;
+        p.z+=(Math.random()-.5)*GLYPH_RADIUS*1.3;
+        this.battle.fxPop?.(p,1,7,.8,.37,{rise:.52,grow:1.35,op:.33});
       }
       for(const target of this.battle.enemiesOf(this)){
-        if(!target || target.dead || target.remoteAuth || target.awakened>0)continue;
+        if(!target||target.dead||target.remoteAuth||target.awakened>0)continue;
         if(now<(target.__iceSealImmuneUntil||0))continue;
         const d=Math.hypot(target.pos.x-this.pos.x,target.pos.z-this.pos.z);
         if(d>GLYPH_RADIUS+(target.radius||.4))continue;
@@ -1346,11 +1320,11 @@
         target.applyStatus?.('freeze');
         if(target.status?.freeze>0){
           target.__iceSealOwner=this;
-          this.battle.fxPop?.(target.pos.clone().setY(1.1),1,2,2.4,.33,{grow:1.8});
+          this.battle.fxPop?.(target.pos.clone().setY(1.1),1,2,2.1,.32,{grow:1.5,op:.6});
           this.battle.ui.popup?.(target.pos,'氷結封印','#a6f4ff');
         }
       }
-      return result;
+      return outcome;
     };
     // Ice effects break when a frozen enemy is struck. The caster loses the
     // circle when damaged, so guarding no longer grants damage reduction.
@@ -1364,94 +1338,57 @@
 
     const updateOriginal=Battle.prototype.update;
     Battle.prototype.update=function(rawDt,playerInput){
-      // Keep the touch attack label accurate when switching characters.
-      const touchAttack=document.querySelector('#tbtns button[data-act="attack"]');
-      if(touchAttack){
-        const actor=this.fighters.find(f=>f.isPlayer && !f.__isValgardIceEcho);
-        const iceMode=actor?.key==='valgard' && !this.net;
-        const label=iceMode?'氷分身':'斬';
-        if(touchAttack.textContent!==label){
-          touchAttack.textContent=label;
-          touchAttack.style.fontSize=iceMode?'clamp(9px,2.2vmin,12px)':'';
-          touchAttack.setAttribute('aria-label',iceMode?'氷分身を召喚・追尾指示':'通常攻撃');
-        }
-      }
-      for(const clone of this.fighters){
-        if(!clone.__isValgardIceEcho || clone.__iceRetired)continue;
-        const owner=clone.__iceOwner;
-        if(!clone.dead && (!owner || owner.dead || !this.fighters.includes(owner))){
-          clone.dead=true;clone.hp=0;
-        }
-      }
-      const touchGuard=document.querySelector('#tbtns button[data-act="guard"]');
-      if(touchGuard){
-        const actor=this.fighters.find(f=>f.isPlayer && !f.__isValgardIceEcho);
-        const text=actor?.key==='valgard' && !this.net?'氷結陣':'構';
-        if(touchGuard.textContent!==text){
-          touchGuard.textContent=text;
-          touchGuard.setAttribute('aria-label',text==='氷結陣'?'氷結封印陣：近くの相手を凍結させる':'ガード');
-          touchGuard.style.fontSize=text==='氷結陣'?'clamp(9px,2.2vmin,12px)':'';
-        }
+      // Retire echoes before AI target selection if their owner is defeated.
+      for(const echo of [...(this.__valgardEchoes||[])]){
+        if(echo.owner.dead||echo.hp<=0||echo.dead)disposeEcho(this,echo,!echo.owner.dead);
       }
       const result=updateOriginal.call(this,rawDt,playerInput);
-      // Resolve summon requests only after the base combat step has finished.
-      for(const owner of [...this.fighters]){
-        if(!owner.__iceEchoQueued)continue;
-        owner.__iceEchoQueued=false;
-        createEcho(owner);
+      for(const owner of this.fighters){
+        if(owner.key==='valgard'&&owner.__iceEchoQueued){
+          owner.__iceEchoQueued=false;
+          createEcho(owner);
+        }
       }
-      for(const clone of [...this.fighters]){
-        if(!clone.__isValgardIceEcho||clone.__iceRetired)continue;
-        if(clone.dead){
-          if(!clone.__iceDestroyed){
-            clone.__iceDestroyed=true;
-            clone.__iceOwner && (clone.__iceOwner.__iceEcho=null);
-            showIceFX(this,clone.pos,1.2,true);
-            this.ui.popup?.(clone.pos,'氷分身が砕け散った','#b9f5ff');
-            clone.root.visible=false;
-          }
-          clone.__iceTime+=rawDt;
-          if(clone.__iceTime>=.9)retire(this,clone);
-          continue;
+      for(const echo of [...(this.__valgardEchoes||[])])tickEcho(this,echo,rawDt);
+      // Detect naturally expired freeze so later hits do not clear unrelated stuns.
+      for(const target of this.fighters){
+        if(target.__iceSealOwner&&!target.status?.freeze)target.__iceSealOwner=null;
+      }
+      const labels=(this.__valgardUiClock=(this.__valgardUiClock||0)+Math.max(0,rawDt||0));
+      if(labels>.3){
+        this.__valgardUiClock=0;
+        const actor=this.fighters.find(f=>f.isPlayer);
+        const mine=actor?.key==='valgard'&&!this.net;
+        const attack=document.querySelector('#tbtns button[data-act="attack"]');
+        if(attack){
+          const text=mine?'氷分身':'斬';
+          if(attack.textContent!==text){attack.textContent=text;attack.setAttribute('aria-label',mine?'氷分身を召喚・追尾指示':'通常攻撃');attack.style.fontSize=mine?'clamp(9px,2.2vmin,12px)':'';}
         }
-        if(clone.__iceHealth){
-          const ratio=Math.max(0,Math.min(1,clone.hp/Math.max(1,clone.maxHp)));
-          const fill=clone.__iceHealth.fill;
-          fill.scale.x=Math.max(.001,ratio);
-          fill.position.x=-(1-ratio)*.84;
-          clone.__iceHealth.group.quaternion.copy(this.camera.quaternion);
-        }
-        if(clone.__iceAura){
-          clone.__iceAura.material.opacity=.39+.14*Math.sin((this.fxClock||0)*6);
-          clone.__iceAura.material.rotation=(this.fxClock||0)*.16;
-        }
-        if(clone.__iceFloor)clone.__iceFloor.rotation.z=(this.fxClock||0)*.85;
-        clone.__iceMote=(clone.__iceMote||0)-rawDt;
-        if(clone.__iceMote<=0){
-          clone.__iceMote=.17+Math.random()*.1;
-          const p=clone.pos.clone().setY(.5+Math.random()*1.7);
-          p.x+=(Math.random()-.5)*1.0; p.z+=(Math.random()-.5)*1.0;
-          this.fxPop?.(p,1,7,.9,.48,{rise:.7,grow:1.55,op:.5});
+        const guard=document.querySelector('#tbtns button[data-act="guard"]');
+        if(guard){
+          const now=performance.now()/1000;
+          const active=actor?.__iceSeal;
+          const remaining=active?Math.max(0,Math.ceil(active.expires-now)):0;
+          const cooldown=mine&&!active?Math.max(0,Math.ceil((actor.__iceSealCooldownUntil||0)-now)):0;
+          const text=!mine?'構':active?`結界${remaining}秒`:cooldown?`待機${cooldown}秒`:'氷結陣';
+          if(guard.textContent!==text){guard.textContent=text;guard.style.fontSize=mine?'clamp(9px,2.2vmin,12px)':'';}
+          guard.setAttribute('aria-label',!mine?'ガード':active?`氷結封印陣：残り${remaining}秒`:cooldown?`氷結封印陣：あと${cooldown}秒で再発動可能`:'氷結封印陣：1回押すと6秒自動展開');
+          guard.setAttribute('aria-pressed',mine&&!!active?'true':'false');
         }
       }
       return result;
     };
-
     const disposeOriginal=Battle.prototype.dispose;
     Battle.prototype.dispose=function(...args){
       for(const f of this.fighters||[]){
         if(f.__iceSeal)stopSeal(f,false);
-        if(f.__iceSealOwner)thawTarget(f);
-        if(!f.__isValgardIceEcho)continue;
-        releaseVisuals(f);
-        if(f.__iceOwner?.__iceEcho===f)f.__iceOwner.__iceEcho=null;
-        if(f.__iceActorOwned&&!f.__iceActorFreed){
-          f.__iceActorFreed=true;
-          for(const resource of Object.values(f.__iceActorOwned))resource?.dispose?.();
-        }
+        if(f.__iceSealOwner)f.__iceSealOwner=null;
+        f.__iceEchoQueued=false;
       }
+      for(const echo of [...(this.__valgardEchoes||[])])disposeEcho(this,echo,false);
       return disposeOriginal.apply(this,args);
     };
+
   }
 
 })();
