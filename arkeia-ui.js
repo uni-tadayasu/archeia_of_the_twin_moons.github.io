@@ -514,7 +514,8 @@
         stormThreads:[512,512],sparkVeil:[512,512],
         shockHalo:[512,512],bladeWake:[384,896],
         sacredFlares:[512,512],
-        planetWarm:[512,512],planetCold:[512,512],planetEarth:[512,512],friction:[512,512]
+        planetWarm:[512,512],planetCold:[512,512],planetEarth:[512,512],friction:[512,512],
+        iceCrown:[512,512],iceBurst:[512,512],warpRing:[512,512],royalSlash:[640,320],healBloom:[512,512]
       };
       const [w,h]=different[id];
       const {c,g}=canvasOf(w,h);
@@ -912,6 +913,59 @@
           g.lineTo(cx+Math.cos(a)*rb,cy+Math.sin(a)*rb);
           g.lineTo(cx+Math.cos(a+.015)*ra,cy+Math.sin(a+.015)*ra);g.closePath();g.fill();g.restore();
         }
+      }else if(id==='iceCrown'){
+        const cx=256,cy=256;
+        g.fillStyle=beam(cx,cy,220,[[0,'rgba(237,251,255,.96)'],[.22,'rgba(183,238,255,.80)'],[.58,'rgba(79,176,255,.22)'],[1,'rgba(18,52,108,0)']]);
+        g.fillRect(0,0,512,512);
+        g.save();g.translate(cx,cy);
+        for(let i=0;i<14;i++){
+          g.rotate(TAU/14);
+          g.fillStyle=i%2?'rgba(229,251,255,.93)':'rgba(150,226,255,.88)';
+          g.beginPath();g.moveTo(0,-198);g.lineTo(18,-82);g.lineTo(-18,-82);g.closePath();g.fill();
+        }
+        g.restore();
+        g.strokeStyle='rgba(237,250,255,.92)';g.lineWidth=8;g.setLineDash([24,10]);
+        g.beginPath();g.arc(cx,cy,152,0,TAU);g.stroke();
+        g.setLineDash([]);g.strokeStyle='rgba(96,202,255,.65)';g.lineWidth=18;
+        g.beginPath();g.arc(cx,cy,116,0,TAU);g.stroke();
+      }else if(id==='iceBurst'){
+        g.translate(256,256);
+        for(let i=0;i<22;i++){
+          const a=(i/22)*TAU, len=120+(i%4)*26;
+          g.save(); g.rotate(a);
+          const gr=g.createLinearGradient(0,-12,len,12);
+          gr.addColorStop(0,'rgba(255,255,255,.98)'); gr.addColorStop(.45,'rgba(179,240,255,.86)'); gr.addColorStop(1,'rgba(56,153,255,0)');
+          g.fillStyle=gr; g.beginPath();
+          g.moveTo(0,-10); g.lineTo(len,0); g.lineTo(0,10); g.lineTo(48,0); g.closePath(); g.fill();
+          g.restore();
+        }
+        g.setTransform(1,0,0,1,0,0);
+        g.fillStyle=beam(256,256,94,[[0,'rgba(255,255,255,.96)'],[.45,'rgba(174,237,255,.65)'],[1,'rgba(0,0,0,0)']]);
+        g.fillRect(0,0,512,512);
+      }else if(id==='warpRing'){
+        for(let i=0;i<3;i++){
+          const r0=70+i*55; g.strokeStyle=i%2?'rgba(176,236,255,.82)':'rgba(93,173,255,.75)'; g.lineWidth=18-i*4;
+          g.setLineDash(i%2?[12,10]:[30,14]); g.beginPath(); g.arc(256,256,r0,0,TAU); g.stroke();
+        }
+        g.setLineDash([]); g.strokeStyle='rgba(244,252,255,.90)'; g.lineWidth=6; g.beginPath(); g.arc(256,256,56,0,TAU); g.stroke();
+        g.fillStyle=beam(256,256,190,[[0,'rgba(255,255,255,.26)'],[.56,'rgba(133,221,255,.12)'],[1,'rgba(0,0,0,0)']]); g.fillRect(0,0,512,512);
+      }else if(id==='royalSlash'){
+        g.translate(320,160); g.rotate(-.18);
+        for(let k=0;k<3;k++){
+          g.strokeStyle=k===0?'rgba(255,255,255,.96)':(k===1?'rgba(154,227,255,.85)':'rgba(61,146,255,.45)');
+          g.lineWidth=k===0?22:(k===1?40:68);
+          g.beginPath(); g.moveTo(-250,-42+k*2); g.bezierCurveTo(-120,-92,40,16,270,22+k*5); g.stroke();
+        }
+        g.setTransform(1,0,0,1,0,0);
+        g.fillStyle=beam(338,170,170,[[0,'rgba(255,255,255,.45)'],[.35,'rgba(157,232,255,.22)'],[1,'rgba(0,0,0,0)']]); g.fillRect(0,0,640,320);
+      }else if(id==='healBloom'){
+        g.translate(256,256);
+        for(let i=0;i<10;i++){
+          g.rotate(TAU/10); g.fillStyle=i%2?'rgba(212,248,255,.90)':'rgba(130,214,255,.82)';
+          g.beginPath(); g.moveTo(0,-18); g.bezierCurveTo(50,-120,88,-154,0,-220); g.bezierCurveTo(-88,-154,-50,-120,0,-18); g.fill();
+        }
+        g.setTransform(1,0,0,1,0,0);
+        g.fillStyle=beam(256,256,210,[[0,'rgba(255,255,255,.85)'],[.35,'rgba(165,240,255,.55)'],[1,'rgba(0,0,0,0)']]); g.fillRect(0,0,512,512);
       }
       else if(id==='mist'){
         const cx=256,cy=256;
@@ -936,7 +990,7 @@
       if(prewarmScheduled)return;prewarmScheduled=true;
       const order=['earth','heaven','storm','celestialGate','swordWings','boltA','boltB','boltC',
         'sparkVeil','stormThreads','shockHalo','bladeWake','sacredFlares','sword','nova','mist','pillar',
-        'planetWarm','planetCold','planetEarth','friction'];
+        'planetWarm','planetCold','planetEarth','friction','iceCrown','iceBurst','warpRing','royalSlash','healBloom'];
       let cursor=0;
       const step=(deadline)=>{
         let made=0;
@@ -1236,6 +1290,100 @@
         if(t>=4.65){clean();return false;}return true;
       });
     }
+
+    function showCastingCircle(b,f,slot){
+      if(!b?.fx || !f || f.dead) return;
+      const root=new THREE.Group(); b.fx.add(root);
+      const mats=[], geos=[];
+      const add=(id,pos,w,h,flat=false,op=1,color=0xffffff,additive=true)=>{
+        const map=tex(id); if(!map) return null;
+        const opts={map,transparent:true,opacity:op,color,depthWrite:false,depthTest:flat,blending:additive?THREE.AdditiveBlending:THREE.NormalBlending,side:THREE.DoubleSide,fog:false};
+        const material=flat?new THREE.MeshBasicMaterial(opts):new THREE.SpriteMaterial(opts);
+        const obj=flat?new THREE.Mesh(new THREE.PlaneGeometry(1,1),material):new THREE.Sprite(material);
+        obj.position.copy(pos); obj.scale.set(w,h,1); obj.renderOrder=flat?5:8; if(flat)obj.rotation.x=-Math.PI/2;
+        root.add(obj); mats.push(material); if(flat)geos.push(obj.geometry); return obj;
+      };
+      const baseX=f.pos.x, baseZ=f.pos.z;
+      const spec=(slot==='over')?f.def?.over:(slot==='hi')?f.def?.hi:/^[sf](\d+)$/.test(slot)?f.def?.skills?.[+slot.slice(1)]:null;
+      const dur=clamp((Number(spec?.castTime)||1.2)+0.35, .8, 3.2);
+      const ring=add('heaven',new THREE.Vector3(baseX,.08,baseZ),4.7,4.7,true,0,0xdff7ff);
+      const gate=add('celestialGate',new THREE.Vector3(baseX,2.8,baseZ),7.1,7.1,false,0,0xffffff,false);
+      const mist=add('mist',new THREE.Vector3(baseX,1.8,baseZ),5.3,4.1,false,0,0xffffff,true);
+      let elapsed=0, cleaned=false;
+      const clean=()=>{ if(cleaned)return; cleaned=true; root.removeFromParent(); for(const m of mats)m.dispose(); for(const g of geos)g.dispose(); };
+      b.addEffect(dt=>{
+        if(cleaned)return false;
+        elapsed+=clamp(Number(dt)||0,0,.065);
+        root.position.set(f.pos.x-baseX,0,f.pos.z-baseZ);
+        const fadeIn=clamp(elapsed/.18,0,1), fadeOut=1-clamp((elapsed-(dur-.35))/.35,0,1);
+        if(ring){ ring.material.opacity=.64*fadeIn*fadeOut; ring.rotation.z+=dt*.9; ring.scale.setScalar(4.7*(.84+.18*fadeIn)); }
+        if(gate){ gate.material.opacity=.42*fadeIn*fadeOut; gate.material.rotation+=dt*.13; gate.position.y=2.8+.15*Math.sin(elapsed*3); }
+        if(mist){ mist.material.opacity=.18*fadeIn*fadeOut; mist.position.y=1.8+.10*Math.sin(elapsed*5); }
+        if(elapsed>=dur||f.dead){ clean(); return false; }
+        return true;
+      });
+    }
+    function performValgardCinematic(b,f,slot,net){
+      if(!b?.fx || !f || f.dead || b.ended) return;
+      const mode=(slot==='s1'||slot==='f1')?'warp':(slot==='s3'||slot==='f3')?'ice':(slot==='s4'||slot==='f4')?'heal':null;
+      if(!mode) return;
+      const target=(mode==='warp'||mode==='ice')?findTarget(b,f,net):null;
+      const root=new THREE.Group(); b.fx.add(root);
+      const mats=[], geos=[];
+      const add=(id,pos,w,h,flat=false,op=1,color=0xffffff,additive=true)=>{
+        const map=tex(id); if(!map) return null;
+        const opts={map,transparent:true,opacity:op,color,depthWrite:false,depthTest:flat,blending:additive?THREE.AdditiveBlending:THREE.NormalBlending,side:THREE.DoubleSide,fog:false};
+        const material=flat?new THREE.MeshBasicMaterial(opts):new THREE.SpriteMaterial(opts);
+        const obj=flat?new THREE.Mesh(new THREE.PlaneGeometry(1,1),material):new THREE.Sprite(material);
+        obj.position.copy(pos); obj.scale.set(w,h,1); obj.renderOrder=flat?5:8; if(flat)obj.rotation.x=-Math.PI/2;
+        root.add(obj); mats.push(material); if(flat)geos.push(obj.geometry); return obj;
+      };
+      let a1=null,a2=null,a3=null,a4=null;
+      if(mode==='warp'){
+        const pos=target?.pos||f.pos;
+        a1=add('warpRing',new THREE.Vector3(f.pos.x,.1,f.pos.z),3.2,3.2,true,0);
+        a2=add('warpRing',new THREE.Vector3(pos.x,.1,pos.z),3.6,3.6,true,0);
+        a3=add('royalSlash',new THREE.Vector3(pos.x,1.35,pos.z),7.6,3.8,false,0);
+        a4=add('bladeWake',new THREE.Vector3(pos.x,1.8,pos.z),4.8,7.4,false,0);
+      }else if(mode==='ice'){
+        const pos=target?.pos || new THREE.Vector3(f.pos.x+(Math.sin(f.facing||0)*3.5),0,f.pos.z+(Math.cos(f.facing||0)*3.5));
+        a1=add('iceCrown',new THREE.Vector3(pos.x,3.2,pos.z),6.2,6.2,false,0);
+        a2=add('iceBurst',new THREE.Vector3(pos.x,1.6,pos.z),6.8,6.8,false,0);
+        a3=add('pillar',new THREE.Vector3(pos.x,3.6,pos.z),4.2,12.8,false,0,0xcdefff);
+        a4=add('shockHalo',new THREE.Vector3(pos.x,.12,pos.z),3.2,3.2,true,0,0xd9f7ff);
+      }else if(mode==='heal'){
+        a1=add('healBloom',new THREE.Vector3(f.pos.x,2.7,f.pos.z),8.2,8.2,false,0);
+        a2=add('planetEarth',new THREE.Vector3(f.pos.x,6.8,f.pos.z-3.6),11.8,11.8,false,0);
+        a3=add('shockHalo',new THREE.Vector3(f.pos.x,.12,f.pos.z),3.6,3.6,true,0,0xbef5ff);
+      }
+      let elapsed=0, cleaned=false;
+      const clean=()=>{ if(cleaned)return; cleaned=true; root.removeFromParent(); for(const m of mats)m.dispose(); for(const g of geos)g.dispose(); };
+      b.addEffect(dt=>{
+        if(cleaned)return false;
+        elapsed+=clamp(Number(dt)||0,0,.065);
+        const t=elapsed, fadeIn=clamp(t/.22,0,1), fadeOut=1-clamp((t-1.15)/.42,0,1);
+        if(mode==='warp'){
+          const pos=target?.pos||f.pos;
+          if(a1){ a1.material.opacity=.84*fadeIn*fadeOut; a1.position.set(f.pos.x,.1,f.pos.z); a1.scale.setScalar(3.2+.9*t); a1.rotation.z+=dt*1.6; }
+          if(a2){ a2.material.opacity=.9*clamp((t-.08)/.18,0,1)*fadeOut; a2.position.set(pos.x,.1,pos.z); a2.scale.setScalar(3.6+1.2*t); a2.rotation.z-=dt*1.9; }
+          if(a3){ a3.material.opacity=.98*clamp((t-.16)/.14,0,1)*(1-clamp((t-.68)/.28,0,1)); a3.position.set(pos.x,1.35,pos.z); }
+          if(a4){ a4.material.opacity=.75*clamp((t-.2)/.12,0,1)*(1-clamp((t-.7)/.28,0,1)); a4.position.set(pos.x,1.8,pos.z); }
+        }else if(mode==='ice'){
+          const pos=target?.pos || new THREE.Vector3(f.pos.x+(Math.sin(f.facing||0)*3.5),0,f.pos.z+(Math.cos(f.facing||0)*3.5));
+          if(a1){ a1.material.opacity=.82*fadeIn*fadeOut; a1.material.rotation+=dt*.22; a1.position.set(pos.x,3.2,pos.z); }
+          if(a2){ a2.material.opacity=.9*clamp((t-.18)/.25,0,1)*(1-clamp((t-.9)/.28,0,1)); a2.position.set(pos.x,1.6,pos.z); a2.scale.setScalar(6.8*(.8+.25*Math.sin(t*10))); }
+          if(a3){ a3.material.opacity=.45*clamp((t-.08)/.2,0,1)*fadeOut; a3.position.set(pos.x,3.6,pos.z); }
+          if(a4){ a4.material.opacity=.88*clamp((t-.14)/.14,0,1)*(1-clamp((t-.96)/.3,0,1)); a4.position.set(pos.x,.12,pos.z); a4.scale.setScalar(3.2+5.8*clamp((t-.2)/.9,0,1)); }
+        }else if(mode==='heal'){
+          if(a1){ a1.material.opacity=.82*fadeIn*fadeOut; a1.material.rotation+=dt*.1; a1.position.set(f.pos.x,2.7,f.pos.z); }
+          if(a2){ a2.material.opacity=.78*fadeIn*fadeOut; a2.material.rotation+=dt*.06; a2.position.set(f.pos.x,6.8,f.pos.z-3.6); }
+          if(a3){ a3.material.opacity=.64*fadeIn*fadeOut; a3.position.set(f.pos.x,.12,f.pos.z); a3.scale.setScalar(3.6+5*clamp(t/1.3,0,1)); }
+        }
+        if(t>=1.6 || f.dead){ clean(); return false; }
+        return true;
+      });
+    }
+
     function performBlueEarth(b,f){
       if(!b?.fx || b.ended || !f || f.dead)return;
       const healed=Math.max(0,Math.round(f.maxHp-f.hp));
@@ -1302,8 +1450,8 @@
         if(now<nextLineAt)return;
         nextLineAt=now+1050;
         const utterance=new SpeechSynthesisUtterance(line);
-        utterance.lang='ja-JP';utterance.rate=.87;utterance.pitch=.68;
-        utterance.volume=volume*.87;
+        utterance.lang='ja-JP';utterance.rate=.82;utterance.pitch=.58;
+        utterance.volume=volume*.92;
         const options=window.speechSynthesis.getVoices?.()||[];
         const japanese=options.filter(v=>/^ja(?:-|_)/i.test(v.lang||''));
         if(japanese.length)utterance.voice=japanese.find(v=>v.localService)||japanese[0];
@@ -1317,8 +1465,12 @@
       const selectedLast=!!f && f.key==='valgard' && slot==='over' && f.def?.over?.kind==='last_vanisher_painted';
       const selectedBlue=!!f && f.key==='valgard' && slot==='hi' && f.def?.hi?.kind==='blue_earth_painted';
       const outcome=previous.call(this,f,slot,net);
+      if(f && !f.remoteAuth && !this.net && (slot==='over'||slot==='hi'||/^[sf]\d+$/.test(slot))){
+        showCastingCircle(this,f,slot);
+      }
       if(f?.key==='valgard' && !f.remoteAuth && !this.net && (slot==='over'||slot==='hi'||/^[sf]\d+$/.test(slot))){
         sayValgardLine(selectedAstral?'力の違いを見せてやる':selectedSpear?'これはよけられまい':'これでどうだ');
+        performValgardCinematic(this,f,slot,net);
       }
       if(selectedSpear)performShiningSpear(this,f,net,slot==='f0'?.65:1);
       if(selectedAstral)perform(this,f,net,slot==='f2'?.65:1);
