@@ -914,11 +914,13 @@
   }
 
 
-  /* VALGARD / ICE ECHO 2026-11-07
-   * Normal sword attack becomes one autonomous, targetable ice duplicate.
-   * Independent lightweight ice fighter proxy: no new Fighter, GLB, mixer,
-   * or Battle.fighters mutations, preventing repeated heavy clone creation.
-   * A tap maintains the circle for a full 30s even under enemy attacks; no cooldown.
+  /* VALGARD / ORIGINAL 3D MODEL ICE ECHO 2026-11-07
+   * One-hit ice decoy uses the *actual in-game Valgard GLB mesh hierarchy*.
+   * Preparation is scheduled during idle time, never at the attack keypress.
+   * Geometry, textures and mesh buffers are reused; only lightweight blue
+   * materials and a separate skeleton (when present) are copied once per battle.
+   * Echo is still an independent proxy, NEVER an extra core Fighter.
+   * Ice seal / frozen enemies / 30s duration are unchanged.
    */
   import('./game.js?v=audio-cast-20261107d').then(combat => {
     installValgardIceEcho(combat.Battle, combat.Fighter);
@@ -929,17 +931,20 @@
     Battle.prototype.__valgardIceEchoV2 = true;
     const ICE = 0x9ceaff;
     const HP_RATIO = 0.60;
-    const MAX_ACTIVE = 2;
-    const THREE_MODULE = import('three');
+    const MAX_ACTIVE = 1;
+    const THREE_MODULE = Promise.all([
+      import('three'),
+      import('three/addons/utils/SkeletonUtils.js')
+    ]).then(([THREE, SkeletonUtils]) => ({THREE, SkeletonUtils}));
     let assetPromise = null;
 
     function iceAssets() {
       if (assetPromise) return assetPromise;
-      assetPromise = THREE_MODULE.then(THREE => {
+      assetPromise = THREE_MODULE.then(({THREE, SkeletonUtils}) => {
         const canvas = document.createElement('canvas');
         canvas.width = canvas.height = 256;
         const g = canvas.getContext('2d');
-        if (!g) return { THREE, texture: null };
+        if (!g) return { THREE, SkeletonUtils, texture: null, sealTexture: null };
         const c = 128, TAU = Math.PI * 2;
         const aura = g.createRadialGradient(c,c,6,c,c,124);
         aura.addColorStop(0,'rgba(233,254,255,.83)');
@@ -1011,181 +1016,117 @@
           sealTexture.colorSpace=THREE.SRGBColorSpace;
           sealTexture.minFilter=THREE.LinearMipmapLinearFilter;
         }
-        // No external avatar texture or GLB is downloaded for the echo.
-        return { THREE, texture, sealTexture };
+        // Original Valgard mesh and textures already exist in the battle's cached model.
+        return { THREE, SkeletonUtils, texture, sealTexture };
       });
       return assetPromise;
     }
-    // This is invoked after the same 'three' import has settled, so model creation
-    // remains synchronous at the moment the attack key is pressed.
+    // Source geometry preparation is deferred until browser idle time.
+    // The attack handler never clones the original 3D model.
     let runtime = null;
     iceAssets().then(value => { runtime = value; }).catch(() => {});
 
-    // ICE ECHO v2: independent lightweight combat proxy. Never insert an
-    // impostor into Battle.fighters or instantiate a Fighter/GLB/mixer: that
-    // caused the old combat/fighter loop to treat the effect as a full actor.
+    // Real Valgard GLB / blue ice echo. Never construct a fake armor shape.
     const ECHO_RANGE=2.35, ECHO_SPEED=7.3;
     const ECHO_RESPAWN=1.25;
-    // Valgard's ice echo: icy black-steel armor, horned crown, white fur,
-    // crystalline chest/eyes, broad spiked pauldrons, cloak and frozen halberd.
-    // Parts are BAKED ONCE into one/two geometries per animated body segment;
-    // only <= 12 draw calls per echo. No GLB, bones, mixers or GPU skinning.
-    let ice3dPalette=null;
-    function buildIce3d(THREE,root) {
-      if(!ice3dPalette){
-        const C={
-          shadow:0x101b2d, armor:0x28354b, iron:0x43536b,
-          rim:0xb6c9d9, silver:0xe8f1fc, blue:0x21558e,
-          cloak:0x122b5d, fur:0xe8f4ff, furDark:0x99b2cd,
-          glacial:0x53cdfb, glint:0xc8fbff, deep:0x0b1730
-        };
-        const geos={
-          box:new THREE.BoxGeometry(1,1,1),
-          spike:new THREE.ConeGeometry(1,.999,5),
-          disk:new THREE.CylinderGeometry(1,1,1,7),
-          crystal:new THREE.TetrahedronGeometry(1),
-        };
-        const B={core:[],head:[],left:[],right:[],legL:[],legR:[]};
-        const A=(group,geo,col,x,y,z,w,h,d,rx=0,ry=0,rz=0,light=false)=>{
-          B[group].push({geo,col:C[col]??col,x,y,z,w,h,d,rx,ry,rz,light});
-        };
-        // Entire body / breastplate: broad blackened steel with silver seams.
-        A('core','box','deep',0,1.25,-.015,.84,.88,.50);
-        A('core','box','armor',0,1.49,.015,1.01,.82,.61);
-        A('core','box','iron',0,1.70,.08,1.14,.33,.62);
-        A('core','box','rim',0,1.91,.12,1.17,.07,.65);
-        A('core','box','rim',-.48,1.53,.34,.09,.65,.07,0,0,-.16);
-        A('core','box','rim', .48,1.53,.34,.09,.65,.07,0,0, .16);
-        A('core','box','shadow',0,1.11,.02,.73,.24,.53);
-        A('core','box','silver',0,1.16,.30,.29,.14,.13);
-        A('core','crystal','glacial',0,1.59,.385,.33,.50,.14,0,0,0,true);
-        A('core','crystal','glint',0,1.69,.50,.13,.23,.09,0,0,0,true);
-        A('core','box','blue',0,1.04,.27,.49,.14,.10);
-        A('core','crystal','glacial',0,1.04,.37,.15,.19,.08,0,0,0,true);
-        // Winglike pointed faulds and the iconic white arctic fur collar.
-        for(const side of [-1,1]){
-          A('core','box','armor',side*.34,.77,.03,.38,.59,.43,0,0,side*.13);
-          A('core','box','rim',side*.54,.80,.33,.09,.57,.11,0,0,side*.22);
-          A('core','spike','iron',side*.55,.61,-.25,.30,.82,.25,Math.PI,0,side*.27);
-          A('core','box','cloak',side*.60,1.10,-.41,.33,1.70,.12,.03,0,-side*.22);
-          A('core','spike','cloak',side*.83,.55,-.46,.31,1.09,.19,Math.PI,0,side*.18);
-          A('core','box','rim',side*.35,1.85,-.26,.44,.10,.30,0,0,side*-.15);
+    function makeOriginalBlueCopy(owner){
+      const rt=runtime, original=owner?.modelInstance?.wrapper;
+      if(!rt?.THREE || !original) return null;
+      // Source scene is already loaded and placed on the real Valgard.
+      // Shared buffers/textures + no new GLB fetch or 3D geometry generation.
+      let skinned=false,sourceMeshCount=0;
+      original.traverse(node=>{
+        if(node.isSkinnedMesh)skinned=true;
+        if(node.isMesh)sourceMeshCount++;
+      });
+      if(sourceMeshCount<1) return null;
+      const clone=skinned
+        ? rt.SkeletonUtils.clone(original)
+        : original.clone(true);
+      const materialCache=new Map(),materials=[];
+      const frostColor=new rt.THREE.Color(0x60d6ff);
+      const frostGlow=new rt.THREE.Color(0x276da5);
+      const blueMaterial=source=>{
+        if(!source) return source;
+        if(materialCache.has(source))return materialCache.get(source);
+        const material=source.clone();
+        // Every body/armor/fur/weapon part receives a full icy-blue tint,
+        // retaining all actual textures and the exact geometry silhouette.
+        if(material.color) material.color.copy(frostColor);
+        if(material.emissive){
+          material.emissive.copy(frostGlow);
+          material.emissiveIntensity=Math.max(.24,Math.min(.48,material.emissiveIntensity||.32));
         }
-        for(let i=0;i<10;i++){
-          const a=(i/10)*Math.PI*2;
-          A('core','spike',i%4?'fur':'furDark',Math.sin(a)*.63,1.94,Math.cos(a)*.39,
-             .20,.36,.19,Math.sin(a)*.16,0,Math.cos(a)*-.20);
-        }
-        A('core','box','cloak',0,.88,-.47,.70,1.47,.105,.08,0,0);
-        A('core','spike','blue',0,.20,-.51,.38,.45,.20,Math.PI);
-        // Viking-style closed helm with an elaborate 6-part horned crown.
-        A('head','box','shadow',0,-.02,0,.59,.55,.51);
-        A('head','box','armor',0,.21,-.055,.69,.25,.60);
-        A('head','box','rim',0,.30,.23,.68,.09,.10);
-        A('head','box','silver',0,-.065,.277,.10,.38,.09);
-        A('head','box','iron',0,-.22,.23,.55,.14,.12);
-        for(const side of [-1,1]){
-          A('head','box','glacial',side*.17,.03,.307,.21,.060,.06,0,0,side*.07,true);
-          A('head','spike','armor',side*.39,.36,-.09,.23,.51,.23,0,0,side*-.62);
-          A('head','spike','rim',side*.63,.58,-.08,.18,.43,.19,0,0,side*-.83);
-          A('head','spike','iron',side*.88,.71,-.11,.23,.54,.21,0,0,side*.65);
-          A('head','spike','silver',side*.30,.42,.17,.14,.30,.13,0,0,side*.21);
-        }
-        for(let i=-1;i<=1;i++)A('head','spike',i?'rim':'glacial',i*.19,.54,.18,.12,.48,.15,0,0,i*-.21,i===0);
-        // Heavy gauntlets with exaggerated 3-layer shoulder armour.
-        for(const side of [-1,1]){
-          const k=side===-1?'left':'right';
-          A(k,'box','deep',0,-.33,0,.34,.69,.39,0,0,side*-.06);
-          A(k,'box','iron',0,.02,0,.67,.33,.67,0,0,side*-.14);
-          A(k,'box','armor',side*.09,.12,.04,.72,.32,.68,0,0,side*-.16);
-          A(k,'box','rim',side*.13,.28,.09,.78,.10,.66,0,0,side*-.17);
-          A(k,'spike','armor',side*.37,.33,-.08,.34,.83,.33,0,0,side*-.65);
-          A(k,'spike','silver',side*.51,.44,-.06,.19,.52,.24,0,0,side*-.78);
-          A(k,'box','armor',0,-.56,.04,.39,.35,.45);
-          A(k,'box','rim',0,-.63,.30,.44,.06,.12);
-          A(k,'box','iron',0,-.84,.04,.43,.24,.47);
-          for(let j=-1;j<=1;j++)A(k,'spike','rim',j*.105,-.93,.26,.08,.23,.12,Math.PI/2);
-        }
-        // Left-hand ice halberd / huge axe to echo Valgard's original pose.
-        A('left','disk','shadow',-.12,-.47,.33,.075,2.75,.075,0,0,-.10);
-        A('left','box','rim',-.10,-.36,.33,.20,.14,.16);
-        A('left','box','iron',-.14,.47,.33,.53,.14,.20);
-        A('left','spike','armor',-.52,.62,.33,.50,.75,.23,0,0, .86);
-        A('left','spike','glacial',-.82,.84,.32,.43,.74,.20,0,0,1.15,true);
-        A('left','spike','silver', .26,.62,.33,.40,.71,.22,0,0,-.85);
-        A('left','spike','glacial', .51,.82,.33,.25,.55,.18,0,0,-1.1,true);
-        A('left','crystal','glint',-.12,1.04,.33,.14,.37,.15,0,0,0,true);
-        // Right-hand clawed ice gauntlet, stronger than a plain sword.
-        for(let j=-1;j<=1;j++)A('right','spike','glacial',j*.15,-1.02,.24,.12,.48,.17,Math.PI*.61,0,j*.18,true);
-        A('right','crystal','glint',0,-.42,.34,.13,.20,.10,0,0,0,true);
-        // Boots and pointed greaves are separate pivots for light gait motion.
-        for(const side of [-1,1]){
-          const k=side===-1?'legL':'legR';
-          A(k,'box','deep',0,-.28,0,.33,.62,.40);
-          A(k,'box','armor',0,-.38,.14,.36,.41,.48);
-          A(k,'box','rim',0,-.24,.37,.29,.07,.07);
-          A(k,'box','iron',0,-.67,.08,.39,.34,.50);
-          A(k,'box','rim',0,-.80,.28,.40,.07,.49);
-          A(k,'spike','armor',0,-.46,.38,.25,.38,.23,Math.PI*.49);
-          A(k,'crystal','glacial',0,-.26,.41,.13,.18,.08,0,0,0,true);
-        }
-        function bake(list,light){
-          const xyz=[],normal=[],rgb=[];
-          for(const part of list){
-            if(part.light!==light)continue;
-            const base=geos[part.geo];
-            const copy=base.clone();
-            copy.scale(part.w,part.h,part.d);
-            if(part.rx)copy.rotateX(part.rx);
-            if(part.ry)copy.rotateY(part.ry);
-            if(part.rz)copy.rotateZ(part.rz);
-            copy.translate(part.x,part.y,part.z);
-            const flat=copy.index?copy.toNonIndexed():copy;
-            const p=flat.getAttribute('position'),n=flat.getAttribute('normal');
-            const col=new THREE.Color(part.col);
-            for(let v=0;v<p.count;v++){
-              xyz.push(p.getX(v),p.getY(v),p.getZ(v));
-              if(n)normal.push(n.getX(v),n.getY(v),n.getZ(v));
-              rgb.push(col.r,col.g,col.b);
-            }
-            if(flat!==copy)flat.dispose();
-            copy.dispose();
-          }
-          if(!xyz.length)return null;
-          const merged=new THREE.BufferGeometry();
-          merged.setAttribute('position',new THREE.Float32BufferAttribute(xyz,3));
-          merged.setAttribute('normal',new THREE.Float32BufferAttribute(normal,3));
-          merged.setAttribute('color',new THREE.Float32BufferAttribute(rgb,3));
-          merged.computeBoundingSphere();
-          return merged;
-        }
-        const baked={};
-        for(const [name,list] of Object.entries(B)){
-          baked[name]=[bake(list,false),bake(list,true)];
-        }
-        for(const g of Object.values(geos))g.dispose();
-        ice3dPalette={baked,mats:[
-          new THREE.MeshLambertMaterial({vertexColors:true,side:THREE.DoubleSide,emissive:0x071b2d,emissiveIntensity:.27}),
-          new THREE.MeshBasicMaterial({vertexColors:true,side:THREE.DoubleSide,
-            transparent:true,opacity:.92,depthWrite:false,blending:THREE.AdditiveBlending})
-        ]};
+        if(material.metalness!=null)material.metalness=Math.min(.32,material.metalness);
+        if(material.roughness!=null)material.roughness=Math.max(.48,material.roughness);
+        // Opaque where original was opaque: no transparent overdraw on many meshes.
+        material.depthWrite=true;
+        materialCache.set(source,material);
+        materials.push(material);
+        return material;
+      };
+      clone.traverse(node=>{
+        if(!node.isMesh)return;
+        node.material=Array.isArray(node.material)
+          ? node.material.map(blueMaterial)
+          : blueMaterial(node.material);
+        node.castShadow=false;
+        node.receiveShadow=false;
+        if(node.isSkinnedMesh)node.frustumCulled=false;
+      });
+      // Match the source skeleton pose without creating a second AnimationMixer.
+      const sourceBones=[],destBones=[];
+      if(skinned){
+        original.traverse(node=>{if(node.isBone)sourceBones.push(node)});
+        clone.traverse(node=>{if(node.isBone)destBones.push(node)});
       }
-      const model=new THREE.Group();root.add(model);
-      const core=new THREE.Group();model.add(core);
-      const head=new THREE.Group();head.position.y=2.08;core.add(head);
-      const left=new THREE.Group(),right=new THREE.Group();
-      left.position.set(-.71,1.79,0);right.position.set(.71,1.79,0);
-      core.add(left,right);
-      const legL=new THREE.Group(),legR=new THREE.Group();
-      legL.position.set(-.27,.89,0);legR.position.set(.27,.89,0);
-      model.add(legL,legR);
-      for(const [name,pivot] of Object.entries({core,head,left,right,legL,legR})){
-        const [solid,glowing]=ice3dPalette.baked[name];
-        if(solid)pivot.add(new THREE.Mesh(solid,ice3dPalette.mats[0]));
-        if(glowing){const m=new THREE.Mesh(glowing,ice3dPalette.mats[1]);m.renderOrder=2;pivot.add(m);}
-      }
-      model.scale.setScalar(.88);
-      return {model,core,head,left,right,legs:[legL,legR]};
+      clone.userData.isAuthenticValgardIceCopy=true;
+      return {
+        model:clone,materials,meshCount:sourceMeshCount,
+        bones:sourceBones.length===destBones.length
+          ? sourceBones.map((bone,i)=>[bone,destBones[i]]) : [],
+        poseIn:.1,
+        basePosition:clone.position.clone(),
+        baseRotation:clone.rotation.clone()
+      };
+    }
+    function scheduleEchoModel(owner){
+      if(!owner || owner.__iceEchoBlueCopy || owner.__iceEchoPreparing ||
+        owner.__iceEchoModelFailed || owner.remoteAuth || owner.battle?.net)return;
+      owner.__iceEchoPreparing=true;
+      // Defer the single exact skeleton copy out of the gameplay key handler.
+      Promise.resolve(iceAssets()).then(value=>{
+        runtime=value;
+        const work=()=>{
+          try{
+            const b=owner.battle;
+            if(b?.ended || !b?.fighters?.includes(owner) || owner.dead)return;
+            owner.__iceEchoBlueCopy=makeOriginalBlueCopy(owner);
+            if(!owner.__iceEchoBlueCopy)throw Error('Valgard source model unavailable');
+          }catch(error){
+            owner.__iceEchoModelFailed=true;
+            console.warn('[Valgard ice echo] Real model could not be prepared',error);
+          }finally{owner.__iceEchoPreparing=false;}
+        };
+        if(typeof requestIdleCallback==='function')requestIdleCallback(work,{timeout:800});
+        else setTimeout(work,0);
+      }).catch(error=>{
+        owner.__iceEchoPreparing=false;
+        owner.__iceEchoModelFailed=true;
+        console.warn('[Valgard ice echo] Preload failed',error);
+      });
+    }
+    function buildIce3d(THREE,root,owner){
+      const cache=owner?.__iceEchoBlueCopy;
+      if(!cache?.model)return null;
+      root.add(cache.model);
+      cache.model.position.copy(cache.basePosition);
+      cache.model.rotation.copy(cache.baseRotation);
+      return {
+        native:true,model:cache.model,core:cache.model,
+        baseY:cache.basePosition.y,baseRotZ:cache.baseRotation.z,
+        sourceBones:cache.bones,poseIn:cache.poseIn
+      };
     }
     function echoes(b){return (b.__valgardEchoes ||= new Set());}
     function disposeEcho(b,echo,shatter=false){
@@ -1214,14 +1155,15 @@
       }
       if(performance.now()/1000<(owner.__iceEchoReadyAt||0))return;
       const group=echoes(b);
-      if(group.size>=2)return;
+      if(group.size>=MAX_ACTIVE)return;
       const fwd=owner.forward();
       const start=owner.pos.clone().addScaledVector(new THREE.Vector3(fwd.z,0,-fwd.x),1.5);
       const distance=Math.hypot(start.x,start.z);
       if(distance>11.8)start.multiplyScalar(11.8/distance);
       const owned=[],root=new THREE.Group();
-      // Shared 3D armor meshes: no GLB, skinned mesh, mixer, or per-spawn heavy geometry.
-      const rig=buildIce3d(THREE,root);
+      // Exact 3D model is already prepared. No synchronous clone at keypress.
+      const rig=buildIce3d(THREE,root,owner);
+      if(!rig)return;
       if(runtime.texture){
         const auraMat=new THREE.SpriteMaterial({map:runtime.texture,color:0x8ce3ff,
           transparent:true,opacity:.54,blending:THREE.AdditiveBlending,depthWrite:false,fog:false});
@@ -1248,7 +1190,7 @@
       hpBar.add(bg,fill);root.add(hpBar);
       owned.push(bgGeo,bgMat,hpGeo,hpMat);
       root.position.copy(start);b.scene.add(root);
-      const maxHp=Math.max(1,Math.round(owner.maxHp*HP_RATIO));
+      const maxHp=1;
       const echo={
         key:'valgard-ice-echo',name:'氷分身・ヴァルガルド',owner,root,owned,
         team:owner.team,pos:start,def:owner.def,scale:.92,radius:.45,
@@ -1260,12 +1202,11 @@
         forward(){return new THREE.Vector3(Math.sin(this.facing),0,Math.cos(this.facing));},
         receive(damage,stun,kx,kz){
           if(this.dead||this.__retired)return 0;
-          const taken=Math.max(0,Math.round(Math.max(0,Number(damage)||0)*this.defMul));
-          if(!taken)return 0;
-          this.hp=Math.max(0,this.hp-taken);
+          const taken=Math.max(1,Math.round(Math.max(0,Number(damage)||0)));
+          this.hp=0;
           this.stun=Math.max(this.stun,Math.max(0,Number(stun)||0));
           this.vel.set(Number(kx)||0,0,Number(kz)||0);
-          if(this.hp===0)this.dead=true;
+          this.dead=true;
           return taken;
         },
         applyStatus(key){
@@ -1276,7 +1217,7 @@
       };
       owner.__iceEcho=echo;group.add(echo);
       showIceFX(b,start,.68);
-      b.ui.popup?.(start,`氷分身 HP ${maxHp}`,'#a2eeff');
+      b.ui.popup?.(start,'氷分身（1回被弾で消滅）','#a2eeff');
       b.ui.sfx?.('skill',{elem:1,color:ICE});
     }
     function tickEcho(b,echo,dt){
@@ -1321,18 +1262,26 @@
       if(distance>12.2)echo.pos.multiplyScalar(12.2/distance);
       echo.root.position.copy(echo.pos);
       echo.root.rotation.y=echo.facing;
-      // Animated 3D armor, entirely CPU-light: no animation mixer or bones.
+      // Exact original model. Reuse the original pose at low cadence.
       echo.animTime+=dt;
       echo.attackPulse=Math.max(0,(echo.attackPulse||0)-dt);
       const rig=echo.rig;
-      if(rig){
+      if(rig?.native){
         const moving=!!target&&echo.stun<=0&&echo.pos.distanceTo(target.pos)>ECHO_RANGE*.78;
-        rig.core.position.y=(moving?.035:.018)*Math.sin(echo.animTime*10);
-        rig.left.rotation.x=moving?Math.sin(echo.animTime*9)*.19:-.05;
-        if(rig.legs)for(let i=0;i<rig.legs.length;i++)rig.legs[i].rotation.x=moving?Math.sin(echo.animTime*9+(i?Math.PI:0))*.23:0;
-        rig.right.rotation.x=echo.attackPulse>0
-          ?-1.65*Math.sin((1-echo.attackPulse/.30)*Math.PI)
-          :moving?-Math.sin(echo.animTime*9)*.24:0;
+        rig.model.position.y=rig.baseY+(moving?.025:.009)*Math.sin(echo.animTime*8);
+        rig.model.rotation.z=rig.baseRotZ+(echo.attackPulse>0
+          ? .035*Math.sin((1-echo.attackPulse/.30)*Math.PI) : 0);
+        if(rig.sourceBones?.length){
+          rig.poseIn-=dt;
+          if(rig.poseIn<=0){
+            rig.poseIn=.1; // 10fps bone pose mirroring; no second mixer.
+            for(const [srcBone,dstBone] of rig.sourceBones){
+              dstBone.position.copy(srcBone.position);
+              dstBone.quaternion.copy(srcBone.quaternion);
+              dstBone.scale.copy(srcBone.scale);
+            }
+          }
+        }
       }
       const ratio=Math.max(0,Math.min(1,echo.hp/Math.max(1,echo.maxHp)));
       echo.fill.scale.x=Math.max(.001,ratio);
@@ -1366,12 +1315,25 @@
     }
 
 
+    // Prepare the real model once during the battle's intro/idle time.
+    const battleAddBeforeEcho=Battle.prototype.add;
+    Battle.prototype.add=function(key,options){
+      const fighter=battleAddBeforeEcho.call(this,key,options);
+      if(key==='valgard' && !fighter.remoteAuth && !this.net)
+        scheduleEchoModel(fighter);
+      return fighter;
+    };
     // Normal slash summons/re-aims; no Fighter is constructed for the echo.
     const startLightOriginal=Fighter.prototype.startLight;
     Fighter.prototype.startLight=function(...args){
       if(this.key!=='valgard'||this.__isValgardIceEcho||this.remoteAuth||this.battle?.net||!runtime?.THREE)
         return startLightOriginal.apply(this,args);
       const b=this.battle;
+      if(this.__iceEchoModelFailed){
+        b?.ui?.popup?.(this.pos,'氷分身モデルの準備に失敗しました','#b9eeff');
+        return startLightOriginal.apply(this,args);
+      }
+      if(!this.__iceEchoBlueCopy) scheduleEchoModel(this);
       if(this.dead||this.stun>0||b?.ended)return;
       const now=performance.now()/1000;
       this.faceNearest?.(9);
@@ -1569,7 +1531,11 @@
       }
       const result=updateOriginal.call(this,rawDt,playerInput);
       for(const owner of this.fighters){
-        if(owner.key==='valgard'&&owner.__iceEchoQueued){
+        if(owner.key!=='valgard'||owner.remoteAuth||this.net)continue;
+        if(!owner.__iceEchoBlueCopy&&!owner.__iceEchoModelFailed)
+          scheduleEchoModel(owner);
+        if(owner.__iceEchoModelFailed)owner.__iceEchoQueued=false;
+        if(owner.__iceEchoQueued && owner.__iceEchoBlueCopy){
           owner.__iceEchoQueued=false;
           createEcho(owner);
         }
@@ -1616,6 +1582,19 @@
         f.__iceEchoQueued=false;
       }
       for(const echo of [...(this.__valgardEchoes||[])])disposeEcho(this,echo,false);
+      for(const f of this.fighters||[]){
+        const cache=f.__iceEchoBlueCopy;
+        if(cache){
+          cache.model.removeFromParent();
+          for(const material of cache.materials)material.dispose();
+          if(cache.bones.length){
+            cache.model.traverse(node=>{
+              if(node.isSkinnedMesh)node.skeleton?.dispose?.();
+            });
+          }
+          f.__iceEchoBlueCopy=null;
+        }
+      }
       return disposeOriginal.apply(this,args);
     };
 
