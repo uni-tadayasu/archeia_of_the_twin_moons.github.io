@@ -56,23 +56,56 @@
     schedule();
   }
 
-  // Back/return controls are NORMAL CONTENT, not sticky or viewport-fixed.
-  // They scroll away with their own menu; no click behaviour is modified.
+  // Menus scroll, while the existing back/navigation buttons remain visible.
+  // This affects presentation only; existing onclick handlers are unchanged.
   const scrollStyle = document.createElement('style');
-  scrollStyle.id = 'illustrated-patch-scrolling-back';
+  scrollStyle.id = 'illustrated-patch-sticky-navigation';
   scrollStyle.textContent = `
-    #ui .screen .topbar, #ui .screen .topbar:has(> .back),
+    #ui .screen .topbar, #ui .screen .inner > .topbar,
     #ui #scr-lobby .topbar, #ui #scr-result .topbar, #ui #scr-story .topbar {
-      position:relative !important; top:auto !important; bottom:auto !important;
-      left:auto !important; right:auto !important; backdrop-filter:none !important;
-      -webkit-backdrop-filter:none !important; z-index:2 !important;
+      position: sticky !important;
+      top: 0 !important;
+      bottom: auto !important;
+      left: auto !important;
+      right: auto !important;
+      z-index: 90 !important;
+      background: linear-gradient(180deg, rgba(13,25,41,.99),rgba(15,31,49,.96)) !important;
+      border-bottom: 1px solid rgba(216,194,147,.65) !important;
+      box-shadow: 0 10px 28px rgba(1,8,18,.42);
+      padding: 8px 10px 10px !important;
+      backdrop-filter: blur(14px) !important;
+      -webkit-backdrop-filter: blur(14px) !important;
+      isolation: isolate;
     }
-    #ui .screen .back, #ui .screen .topbar .back, #ui #select-back {
-      position:static !important; inset:auto !important; transform:none;
+    #ui .screen .topbar .back,
+    #ui .screen .back,
+    #ui #select-back {
+      position: static !important;
+      inset: auto !important;
+      flex-shrink: 0;
     }
-    #scr-title .portal-header { position:relative !important; top:auto !important; }
-    #ui .screen.on { touch-action:pan-y; overscroll-behavior-y:contain; }
-    @media(max-width:680px){#ui .screen .topbar{flex-shrink:0}}
+    #ui #scr-title .portal-header,
+    #ui .screen .portal-header {
+      position: sticky !important;
+      top: 0 !important;
+      z-index: 90 !important;
+      background-color: rgba(12,23,39,.96) !important;
+      backdrop-filter: blur(14px) !important;
+      -webkit-backdrop-filter: blur(14px) !important;
+    }
+    #ui .screen.on {
+      touch-action: pan-y;
+      overscroll-behavior-y: contain;
+      scroll-padding-top: 65px;
+    }
+    #ui .screen .inner { overflow: visible !important; }
+    @media (max-width:680px) {
+      #ui .screen .topbar { gap: 6px; padding: 7px 9px 9px !important; }
+      #ui .screen .topbar .back { min-height: 42px; }
+    }
+    @media (prefers-reduced-transparency: reduce) {
+      #ui .screen .topbar { background:#101f31 !important; }
+    }
   `;
   document.head.appendChild(scrollStyle);
 

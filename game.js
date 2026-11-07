@@ -294,10 +294,60 @@ const FOLLOW_SKILL_CATALOG = {
 const FOLLOW_CACHE = new WeakMap();
 const FOLLOW_HOLD = 0.45, FOLLOW_MAX = 1.5;
 const FOLLOW_OWNERS = new WeakMap(Object.entries(FIGHTERS).map(([key,def])=>[def,key]));
+
+// Include ALL combatants, including procedurally generated g*, m* and boss*
+// entries. The first 21 named characters retain their manually authored arts.
+// Each remaining fighter/skill gets a stable, independently named follow-up
+// with its own color, status, animation variation and combat family.
+function uniqueFollowHash(text){
+  let value=2166136261;
+  for(const char of String(text)){
+    value=Math.imul(value^char.codePointAt(0),16777619)>>>0;
+  }
+  return value>>>0;
+}
+const FOLLOW_FAMILY_BY_KIND = Object.freeze({
+  projectile:['star_chain','thunder_lattice','lunar_cross','ember_orbit','venom_field'],
+  dash:['rift_sweep','shadow_execution','lunar_cross','resonance'],
+  shockwave:['seal_lattice','gravity_cage','ice_prison','gear_trap','resonance'],
+  rain:['holy_rain','meteor_spiral','thunder_lattice','ember_orbit','ice_prison'],
+  judgment:['meteor_spiral','holy_rain','thunder_lattice','gravity_cage'],
+  implode:['gravity_cage','venom_field','seal_lattice','gear_trap'],
+  heal:['renewal','phoenix_rebirth'],
+  summon:['phoenix_rebirth','resonance'],
+  default:['star_chain','resonance','seal_lattice','rift_sweep','holy_rain']
+});
+const FOLLOW_TITLE_A = ['星痕','双月','蒼穹','幽焔','銀河','黎明','天輪','幻影','極光','蒼雷','深翠','終焔','雪霞','紅蓮','皇星','虚影'];
+const FOLLOW_TITLE_B = ['秘陣','斬舞','天墜','輪唱','鎖縛','神域','追想','双閃','旋葬','鳴動','封界','光撃','千刃','帰還','魔刻','輪廻'];
+const FOLLOW_ENGLISH = ['ノヴァ','ルクス','レゾナンス','ゼフィロス','アストラ','カタルシス','エクリプス','ヴェール','イグニス','アーク','グリモア','セレナーデ'];
+const FOLLOW_STATUS_BY_ELEM = {0:'burn',1:'freeze',2:'stun',3:'slow',4:'stun',5:'slow',6:'curse',7:'slow',8:'para',9:'curse'};
+function generateIndividualFollow(key,def,base,index){
+  const seed=uniqueFollowHash(`${key}|${def?.name||''}|${base?.name||''}|${index}`);
+  const families=FOLLOW_FAMILY_BY_KIND[base?.kind]||FOLLOW_FAMILY_BY_KIND.default;
+  const style=(seed>>>7)%10;
+  const mode=families[(seed>>>3)%families.length];
+  const element=Number.isFinite(+base?.elem)?(+base.elem+10)%10:(seed>>>15)%10;
+  const tier=/^g\d+$/.test(key)?'戦士':/^m\d+$/.test(key)?'魔影':/^boss\d+$/.test(key)?'魔将':'異界';
+  const serial=Number.parseInt(key.match(/\d+$/)?.[0]||'0',10)+1;
+  const subject=String(def?.name||FOLLOW_ENGLISH[(seed>>>18)%FOLLOW_ENGLISH.length]).slice(0,12);
+  const name=`${FOLLOW_TITLE_A[seed%FOLLOW_TITLE_A.length]}${FOLLOW_TITLE_B[(seed>>>11)%FOLLOW_TITLE_B.length]}《${subject}・${tier}${serial}ノ${index+1}》`;
+  const status=(base?.kind==='heal'||mode==='renewal'||mode==='phoenix_rebirth')?'':FOLLOW_STATUS_BY_ELEM[element];
+  return [name,mode,status,style];
+}
+const GENERATED_FOLLOW_SKILL_CATALOG = Object.create(null);
+for(const [key,def] of Object.entries(FIGHTERS)){
+  if(!Array.isArray(def?.skills)||!def.skills.length)continue;
+  if(FOLLOW_SKILL_CATALOG[key]?.length>=def.skills.length)continue;
+  GENERATED_FOLLOW_SKILL_CATALOG[key]=def.skills.map((base,index)=>
+    FOLLOW_SKILL_CATALOG[key]?.[index]||generateIndividualFollow(key,def,base,index));
+}
+export const FOLLOW_TARGET_COUNT = Object.values(FIGHTERS).filter(f=>Array.isArray(f?.skills)&&f.skills.length).length;
+export const FOLLOW_SLOT_COUNT = Object.values(FIGHTERS).reduce((total,f)=>total+(f?.skills?.length||0),0);
+
 export function followSpec(def,i){
   const base=def?.skills?.[i]; if(!base)return null;
   const owner=FOLLOW_OWNERS.get(def)||'';
-  const row=FOLLOW_SKILL_CATALOG[owner]?.[i];
+  const row=FOLLOW_SKILL_CATALOG[owner]?.[i]||GENERATED_FOLLOW_SKILL_CATALOG[owner]?.[i];
   let cache=FOLLOW_CACHE.get(def); if(!cache)FOLLOW_CACHE.set(def,(cache={}));
   const signature=`${owner}|${i}|${base.name}|${base.kind}|${base.dmg||0}|${base.heal||0}|${base.finalDmg||0}`;
   if(cache[i]?.__sourceSignature===signature)return cache[i];
