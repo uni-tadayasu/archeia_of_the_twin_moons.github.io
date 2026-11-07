@@ -1,10 +1,14 @@
 // 運営長の配信と受信箱。配信・既読・受け取りの確定は、常に認証済みサーバーの応答を待つ。
-import { apiEnabled, api } from './api.js?v=20261106-complete-review1';
-import { WEAPONS, ARMORS } from './data.js';
+import { apiEnabled, api } from './api.js';
+import { WEAPONS, ARMORS } from './data.js?v=valgard-exact-20261107';
 
 const ITEM_LIST = [...WEAPONS, ...ARMORS];
 const ITEM_NAMES = new Map(ITEM_LIST.map(x => [x.id, x.name]));
 const PID = /^[a-z0-9]{8,24}$/;
+const MAX_GROUP = 40;
+const parseRecipients = value => [...new Set(String(value || '').split(/[\s,，;；]+/).map(x => x.trim()).filter(Boolean))];
+const recipientText = m => m.recipient === 'all' ? '全プレイヤー' : m.recipient === 'group' ? `指定 ${m.recipients?.length || 0} 人` : m.recipient;
+
 const DRAFT_ID = /^[A-Za-z0-9_-]{12,64}$/;
 const stamp = value => new Date(value).toLocaleString('ja-JP', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
 const number = value => Number(value || 0).toLocaleString('ja-JP');
@@ -37,7 +41,7 @@ export function mailErrorMessage(error, chief = false) {
   const messages = {
     nosync: '受信箱を使うには、旅支度の「端末間の同期」で一度記録を預けてください。',
     denied: 'この操作は許可されませんでした。運営長の鍵を入力し直してからお試しください。',
-    recipient_notfound: 'そのプレイヤーIDは見つかりません。相手に同期を設定してもらい、IDを確認してください。',
+    recipient_notfound: '一部のプレイヤーIDが見つかりません。対象者に同期を設定してもらい、IDを確認してください。',
     mail_recipient: 'このメールはあなた宛てではありません。',
     notfound: 'このメールは見つかりませんでした。受信箱を更新してください。',
     expired: '配信・受取期限を過ぎています。',
@@ -330,7 +334,7 @@ export function initMailbox(opts) {
   }
   function messageCard(m, action, history = false) {
     const b = button('', action, 'mb-message');
-    b.append(el('b', '', m.title), el('small', '', `運営長から · ${stamp(m.createdAt)}${history ? ` · ${m.recipient === 'all' ? '全プレイヤー' : m.recipient}` : ''}`), el('span', 'mb-tag', labelFor(m, history)));
+    b.append(el('b', '', m.title), el('small', '', `運営長から · ${stamp(m.createdAt)}${history ? ` · ${recipientText(m)}` : ''}`), el('span', 'mb-tag', labelFor(m, history)));
     return b;
   }
   async function select(id) {
@@ -367,7 +371,7 @@ export function initMailbox(opts) {
     box.append(button(history ? '送信履歴へ戻る' : '受信一覧へ戻る', () => { S.selected = null; note(''); history ? renderHistory() : renderInbox(); }));
     const title = el('h3', '', m.title); title.style.marginTop = '16px';
     box.append(title, el('div', 'mb-muted', `差出人：運営長　配信日時：${stamp(m.createdAt)}`), el('div', 'mb-muted', `配信・受取期限：${stamp(m.expiresAt)}`));
-    if (history) box.append(el('div', 'mb-muted', '宛先：' + (m.recipient === 'all' ? '全プレイヤー' : m.recipient)));
+    if (history) box.append(el('div', 'mb-muted', '宛先：' + recipientText(m)));
     box.append(el('div', 'mb-body', m.body));
     if (m.kind === 'gift') renderGift(m.gift || {}, box);
     if (history) box.append(el('p', 'mb-note', labelFor(m, true)));
@@ -433,10 +437,15 @@ export function initMailbox(opts) {
     const form = el('form', 'mb-form');
     form.append(el('h3', '', S.tab === 'gift' ? '運営長からプレゼントを贈る' : '運営長からシステムメールを送る'));
     const scope = el('select');
-    for (const [value, text] of [['player', 'プレイヤーを指定'], ['all', '全プレイヤー']]) { const o = el('option', '', text); o.value = value; scope.append(o); }
-    scope.value = prefill?.recipient === 'all' ? 'all' : 'player';
+    for (const [value, text] of [['all', '全プレイヤーへ一斉配信'], ['player', 'プレイヤー1人を指定'], ['group', '複数プレイヤーを指定（最大40人）']]) { const o = el('option', '', text); o.value = value; scope.append(o); }
+    scope.value = prefill?.recipient === 'all' ? 'all' : prefill?.recipient === 'group' ? 'group' : 'player';
     const pid = input('text', PID.test(prefill?.recipient || '') ? prefill.recipient : S.recipient); pid.maxLength = 24; pid.autocomplete = 'off'; pid.spellcheck = false; pid.placeholder = '相手のプレイヤーID（8〜24文字）';
     const recipientField = field('プレイヤーID', pid);
+    const groupIds = el('textarea');
+    groupIds.rows = 4; groupIds.maxLength = 1200;
+    groupIds.placeholder = '例：abcdefgh12345678, xyza98765432\n（カンマ・空白・改行で区切る）';
+    groupIds.value = (prefill?.recipients || []).join('\n');
+    const groupField = field('配信先のプレイヤーID（最大40人）', groupIds);
     const info = el('p', 'mb-note', '相手の受信箱に表示されるプレイヤーIDを指定してください。同期コードは入力しません。');
     const recipients = opts.save.friends || [];
     if (recipients.length) {
@@ -445,11 +454,16 @@ export function initMailbox(opts) {
       form.append(list); pid.setAttribute('list', list.id);
     }
     scope.addEventListener('change', () => {
-      recipientField.hidden = scope.value === 'all';
-      info.textContent = scope.value === 'all' ? '全プレイヤーに配信します。現在オフラインの人と、期限までに新しく同期を設定した人も対象です。' : '相手の受信箱に表示されるプレイヤーIDを指定してください。同期コードは入力しません。';
+      recipientField.hidden = scope.value !== 'player';
+      groupField.hidden = scope.value !== 'group';
+      info.textContent = scope.value === 'all'
+        ? '現在オフラインの人も対象です。配信期限内なら、新しく同期を設定したプレイヤーも受信できます。'
+        : scope.value === 'group'
+          ? 'プレイヤーIDをカンマ・空白・改行で区切って入力します。最大40人まで。一斉公開はされず、このIDのプレイヤーだけ受信できます。'
+          : '受信箱に表示されるプレイヤーIDを指定してください。同期コードやパスワードは入力しません。';
     });
     scope.dispatchEvent(new Event('change'));
-    form.append(field('宛先', scope), recipientField, info);
+    form.append(field('宛先', scope), recipientField, groupField, info);
     const title = input('text'); title.maxLength = 80; title.required = true; title.placeholder = S.tab === 'gift' ? '例：ご参加ありがとうございます' : '例：メンテナンスのお知らせ';
     const body = el('textarea'); body.maxLength = 2000; body.required = true; body.rows = 5; body.placeholder = '本文を入力してください（2,000文字まで）';
     if (prefill) { title.value = prefill.title || ''; body.value = prefill.body || ''; }
@@ -494,14 +508,19 @@ export function initMailbox(opts) {
     form.addEventListener('submit', e => {
       e.preventDefault();
       if (!chief() || S.mutation) return;
-      const recipient = scope.value === 'all' ? 'all' : pid.value.trim();
-      if (recipient !== 'all' && !PID.test(recipient)) { note('相手のプレイヤーIDを8〜24文字の半角英数字で入力してください。', true); pid.focus(); return; }
+      const recipient = scope.value === 'all' ? 'all' : scope.value === 'group' ? 'group' : pid.value.trim();
+      const recipients = recipient === 'group' ? parseRecipients(groupIds.value) : [];
+      if (recipient === 'group' && (!recipients.length || recipients.length > MAX_GROUP || recipients.some(id => !PID.test(id)))) {
+        note('複数配信は、プレイヤーIDを8〜24文字の英小文字と数字で1〜40人分入力してください。', true);
+        groupIds.focus(); return;
+      }
+      if (recipient !== 'all' && recipient !== 'group' && !PID.test(recipient)) { note('相手のプレイヤーIDを8〜24文字の英小文字と数字で入力してください。', true); pid.focus(); return; }
       const amount = shards ? Number(shards.value) : 0;
       if (shards && (!Number.isSafeInteger(amount) || amount < 0 || amount > 999999 || (!amount && !selectedItems.size))) { note('プレゼントには灯晶1個以上、または装備品を選んでください。', true); return; }
       const cleanTitle = title.value.trim(), cleanBody = body.value.trim();
       if (!cleanTitle || !cleanBody || [...cleanTitle].length > 80 || [...cleanBody].length > 2000) { note(mailErrorMessage(err('bad')), true); return; }
       const requestId = 'mail_' + [...crypto.getRandomValues(new Uint8Array(18))].map(v => v.toString(16).padStart(2, '0')).join('');
-      S.review = { requestId, recipient, title: cleanTitle, body: cleanBody, expiresAt: Math.floor(now() + Number(days.value) * 86400000 - 2000),
+      S.review = { requestId, recipient, ...(recipient === 'group' ? { recipients } : {}), title: cleanTitle, body: cleanBody, expiresAt: Math.floor(now() + Number(days.value) * 86400000 - 2000),
         ...(shards ? { gift: { shards: amount, items: [...selectedItems] } } : {}) };
       S.form = form;
       S.formTab = S.tab;
@@ -520,10 +539,11 @@ export function initMailbox(opts) {
     const box = el('section', 'mb-review mb-form');
     box.append(el('h3', '', persisted ? '送信結果の確認' : '送信内容の確認'));
     const dl = el('dl');
-    for (const [key, value] of [['差出人', '運営長'], ['宛先', d.recipient === 'all' ? '全プレイヤー' : d.recipient], ['種類', d.gift ? 'プレゼント付きメール' : 'システムメール'], ['期限', stamp(d.expiresAt)]]) dl.append(el('dt', '', key), el('dd', '', value));
+    for (const [key, value] of [['差出人', '運営長'], ['宛先', recipientText(d)], ['種類', d.gift ? 'プレゼント付きメール' : 'システムメール'], ['期限', stamp(d.expiresAt)]]) dl.append(el('dt', '', key), el('dd', '', value));
     box.append(dl, el('h3', '', d.title), el('div', 'mb-body', d.body));
     if (d.gift) renderGift(d.gift, box);
     if (d.recipient === 'all') box.append(el('p', 'mb-note', '全プレイヤーに届きます。現在オフラインの人、新しく同期を設定する人も期限内は受け取れます。'));
+    if (d.recipient === 'group') box.append(el('p', 'mb-note', `配信先 ${d.recipients.length} 人：${d.recipients.join('、')}。送信先のIDを最終確認してください。`));
     if (persisted) box.append(el('p', 'mb-note', '同じ送信IDで結果を照会・再試行します。確認できるまで新しい配信は作成しません。'));
     const row = el('div', 'mb-row');
     const back = button(persisted ? '送信履歴を見る' : '修正に戻る', () => {

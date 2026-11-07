@@ -4,6 +4,7 @@ import { Battle, ARENA_R } from './game.js?v=valgard-exact-20261107';
 import { FIGHTERS, STORY, ROSTER, UPGRADES, MAX_LV, STAGES, BGM, APEX_BGM, ENEMY_ROSTER, UPG_CAP, LB_MAX, lbMaxLv, lbMul, lbCost, WEAPONS, ARMORS, SUMMONS, STAT_LABEL, SPECIAL_KEYS, BOSS_ROSTER, currentEvent, sanitizeEvent, EV_FOE_KINDS } from './data.js?v=valgard-exact-20261107';
 import { sayBattle, setVoiceMuted, stopVoices } from './voice.js';
 import { initSocial, uiConfirm } from './social.js?v=valgard-exact-20261107';
+import { initMailbox } from './mailbox.js?v=mail-20261107';
 import { OPERATOR_KEY_SHA256, CHIEF_KEY_SHA256, MAX_KEY_ATTEMPTS, LOCKOUT_MS, SHOP_ITEMS } from './config.js';
 import { connect, issueInvite, redeemInvite, syncPush, syncPullV } from './net.js?v=valgard-exact-20261107';
 import { apiEnabled, api, verifyToken } from './api.js';
@@ -1389,6 +1390,7 @@ async function refreshRole() {
   roleState.tok = d ? tok : '';
   if (!d) localStorage.removeItem('arkeia-role');
   refreshOptions();
+  mailbox?.refreshAccess();
 }
 function chiefUnlocked() {
   if (apiEnabled()) return roleState.r === 'chief';
@@ -3275,6 +3277,7 @@ function refreshOptions() {
     ? '運営長として認められています — ルミナリアとセラフェルが選べます'
     : operatorUnlocked() ? '運営として認められています — セラフェルが選べます' : '運営の鍵・運営長の鍵・招待された運営キー（OP-…）を入力';
   $('#chief-panel').hidden = !chiefUnlocked();
+  mailbox?.refreshAccess();
 }
 // 推測されにくいランダムコード（紛らわしい文字を除外）
 function randomCode(groups) {
@@ -3564,6 +3567,86 @@ var social = initSocial({
       save.guild ? `所属ギルド「${save.guild.name}」` : 'ギルドを結成して仲間と語り合おう（チャット › ギルド）'
     ];
   }
+});
+// ---- 世界の運営長便り・プレゼント配送 ----
+// Server-side mail receipt is authoritative; do not grant an item or currency
+// from client JS. SyncLock atomically records the claim, wallet and inventory.
+let mailbox;
+const MAIL_CLAIM_KEY = 'arkeia-mail-claim-pending-v1';
+const pendingClaims = () => {
+  try {
+    const ids = JSON.parse(localStorage.getItem(MAIL_CLAIM_KEY) || '[]');
+    return Array.isArray(ids) ? ids.filter(x => typeof x === 'string') : [];
+  } catch { return []; }
+};
+function rememberClaim(id, pending) {
+  const ids = new Set(pendingClaims());
+  if (pending) ids.add(id); else ids.delete(id);
+  try { localStorage.setItem(MAIL_CLAIM_KEY, JSON.stringify([...ids].slice(-50))); } catch { /* storage disabled */ }
+}
+async function claimMailboxGift(id) {
+  if (!apiEnabled() || !/^[0-9a-z]{10}_[0-9a-f]{32}$/.test(id)) throw Object.assign(new Error('bad'), { code: 'bad' });
+  if (state.battle) throw Object.assign(new Error('busy'), { code: 'busy' });
+  const code = syncCodeNow();
+  const pid = save.pid;
+  if (code.length !== 12) throw Object.assign(new Error('nosync'), { code: 'nosync' });
+  // The same lock is used for guild donations, cross-device merges and prizes.
+  // This prevents an older autosave from overwriting a newly claimed reward.
+  let turns = 0;
+  while (autoBusy || syncSpendBusy || syncImportBusy) {
+    if (++turns > 250) throw Object.assign(new Error('busy'), { code: 'busy' });
+    await new Promise(resolve => setTimeout(resolve, 100));
+  }
+  syncSpendBusy = true;
+  rememberClaim(id, true);
+  try {
+    if (localStorage.getItem('arkeia-sync-dirty') || getPends().length) {
+      await autoPush({ forSpend: true, reload: false });
+      if (localStorage.getItem('arkeia-sync-dirty') || getPends().length) {
+        throw Object.assign(new Error('sync'), { code: 'sync' });
+      }
+    }
+    if (state.battle || syncCodeNow() !== code || save.pid !== pid) {
+      throw Object.assign(new Error('identity'), { code: 'identity' });
+    }
+    const r = await api('/mail/claim', { code, id });
+    if (!r.ok) throw Object.assign(new Error(r.error || 'net'), { code: r.error || 'net', status: r.status });
+    if (r.pid !== pid || !r.receipt || r.receipt.id !== id || typeof r.data !== 'string' || !Number.isSafeInteger(r.ver) || r.ver < syncVer()) {
+      throw Object.assign(new Error('invalid_response'), { code: 'invalid_response' });
+    }
+    const authoritative = JSON.parse(r.data);
+    if (!authoritative || authoritative.pid !== pid || !Array.isArray(authoritative.owned) || !Number.isSafeInteger(authoritative.shards)) {
+      throw Object.assign(new Error('invalid_response'), { code: 'invalid_response' });
+    }
+    // Purchased-character entitlements are not managed by the save server.
+    // Preserve those client-only flags while trusting the server's items/wallet.
+    const finalSave = { ...authoritative,
+      chars: [...new Set([...(Array.isArray(authoritative.chars) ? authoritative.chars : []), ...(Array.isArray(save.chars) ? save.chars : [])])],
+      buyId: save.buyId
+    };
+    localStorage.setItem(SAVE_KEY, JSON.stringify(finalSave));
+    Object.assign(save, finalSave);
+    setPend(null);
+    markSynced(r.ver, Date.now(), authoritative.shards);
+    refreshTitle();
+    social?.refresh();
+    rememberClaim(id, false);
+    return r;
+  } finally {
+    syncSpendBusy = false;
+    if (localStorage.getItem('arkeia-sync-dirty')) scheduleAutoSync();
+  }
+}
+mailbox = initMailbox({
+  save,
+  syncCode: () => syncCodeNow(),
+  isChief: () => apiEnabled() && chiefUnlocked() && !!roleState.tok,
+  roleToken: () => roleState.tok,
+  claim: claimMailboxGift,
+  pendingClaims,
+  inBattle: () => !!state.battle,
+  sfx,
+  openSync: () => { refreshOptions(); show('scr-options'); }
 });
 function renderShop() {
   const list = $('#shop-list');

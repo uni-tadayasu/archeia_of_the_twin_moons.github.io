@@ -58,6 +58,7 @@
     </script>
     <link rel="stylesheet" href="./rosebud-game-defaults.css" />
     <link rel="stylesheet" href="./arkeia-ui.css?v=20261106a" />
+    <link rel="stylesheet" href="./mailbox.css?v=mail-20261107" />
     <script defer src="./arkeia-ui.js?v=20261106a"></script>
     <script src="./rosebud-game-defaults.js" defer></script>
     <script type="importmap">
@@ -414,6 +415,8 @@
             <div class="portal-services">
               <button id="btn-forge" type="button"><span class="service-icon">⚒</span><b>鍛錬の工房</b><small>強化と限界突破</small></button>
               <button id="btn-shop" type="button"><span class="service-icon">✧</span><b>灯晶商店</b><small>装備・戦士の入手</small></button>
+              <button id="btn-mailbox" type="button"><span class="service-icon">✉</span><b>受信箱 <span class="mail-badge" data-mail-badge></span></b><small>プレゼント・運営からのお知らせ</small></button>
+              <button id="btn-chief-mail" type="button" hidden><span class="service-icon">✦</span><b>運営長の配信管理</b><small>一斉配信・指定配信・送信履歴</small></button>
               <button id="btn-options" type="button"><span class="service-icon">⚙</span><b>旅支度・設定</b><small>音量・同期・操作</small></button>
               <button id="btn-evmaker" type="button" hidden><span class="service-icon">✦</span><b>イベント作成</b><small>運営長専用</small></button>
               <button id="btn-invade" type="button" hidden><span class="service-icon">✥</span><b>乱入の窓</b><small>運営専用</small></button>
@@ -444,6 +447,7 @@
               <span>運営長の間 — 1回だけ使える運営キーを発行して、信頼できる人に渡します</span>
               <button type="button" class="btn" id="chief-issue">運営キーを発行する</button>
               <input id="chief-code" readonly aria-label="発行された運営キー" placeholder="ここに表示されます">
+              <button id="chief-mail-center" type="button" class="btn" hidden>プレゼント・システムメールの配信管理</button>
             </div>
             <div class="field" style="width:100%">
               <span>端末間の同期 — 同じ同期コードで、別の端末に進み具合を引き継げます（一度設定すると以後は自動で常時同期されます）</span>
@@ -581,6 +585,6 @@
         </div>
       </div>
     </main>
-    <script type="module" src="main.js?v=valgard-exact-20261107"></script>
+    <script type="module" src="main.js?v=mail-system-20261107"></script>
 </body>
 </html>

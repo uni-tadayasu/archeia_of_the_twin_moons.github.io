@@ -327,6 +327,21 @@ FIGHTERS.sovereign2 = {
   ],
   over: { name: '深淵開闢・緋紫の終焉', kind: 'judgment', visual: 'pillar', finalVisual: 'bigsword', count: 24, spread: 8, radius: 2.8, dmg: 120, delay: 0.7, interval: 0.05, finalDmg: 650, finalRadius: 11, elem: 9, color: 0xff2050, vivid: true }
 };
+// 新氷属性運営長キャラ（ゲーム本体のデータと一致）
+FIGHTERS.valgard = {
+  name: 'ヴァルガルド', title: '氷鋼の覇王（運営長専用）',
+  model: 'assets/models/iron-warlord.glb', face: 'assets/face-valgard.webp',
+  color: 0x8cdcff, height: 2.06, hp: 1850, speed: 5.8, overGain: 1.65,
+  locked: true, special: 'chief',
+  light: { dmg: 66, range: 2.6, color: 0xb8efff },
+  skills: [
+    { name: '凍牙・氷鋼砕', cost: 21, kind: 'shockwave', dmg: 160, radius: 6.3, elem: 1, color: 0x89e7ff, vivid: true },
+    { name: '白銀氷鎧突', cost: 19, kind: 'dash', dmg: 145, speed: 19, dur: 0.34, elem: 1, color: 0xb4efff, vivid: true },
+    { name: '零度氷槍陣', cost: 22, kind: 'projectile', visual: 'ice', count: 6, spreadAng: 0.2, dmg: 72, speed: 21, radius: 0.65, elem: 1, color: 0x64d5ff, vivid: true },
+    { name: '氷葬流星群', cost: 27, kind: 'rain', visual: 'crystal', count: 10, spread: 3.4, radius: 1.7, dmg: 74, delay: 0.38, interval: 0.065, elem: 1, color: 0xc6f4ff, vivid: true }
+  ],
+  over: { name: '極氷皇界《エターナル・ゼロ》', kind: 'judgment', visual: 'crystal', finalVisual: 'pillar', count: 14, spread: 7, radius: 2.3, dmg: 92, delay: 0.65, interval: 0.08, finalDmg: 450, finalRadius: 8.8, elem: 1, color: 0x70ddff, vivid: true }
+};
 // 運営長だけが灯晶で購入できる特別キャラ：血魔ザルグレイヴ（血属性）
 export const BLOODFIEND_PRICE = 50000;
 FIGHTERS.bloodfiend = {
@@ -1229,7 +1244,7 @@ const EARN_SLACK = 5000;
 
 // キャラ使用の可否：運営/運営長専用・購入キャラはサーバーで確認
 const OP_ONLY = new Set(['seraphel']);
-const CHIEF_ONLY = new Set(['chief', 'sovereign', 'sovereign2', 'bloodfiend']);
+const CHIEF_ONLY = new Set(['chief', 'sovereign', 'sovereign2', 'bloodfiend', 'valgard']);
 
 // ---------- ルート ----------
 export default {
@@ -1598,6 +1613,14 @@ const MAIL_ID_RE = /^[0-9a-z]{10}_[0-9a-f]{32}$/;
 const MAIL_REQUEST_RE = /^[A-Za-z0-9_-]{12,64}$/;
 const MAIL_PAGE = 50;
 const MAIL_MAX_SHARDS = 999999; // クライアントのセーブ上限と同じ。超過分を切り捨てない。
+const MAIL_GROUP_MAX = 40;
+// group recipient list is validated by a chief role token before storing; each player
+// can only access messages explicitly indexed to their bound player ID.
+function mailAllowed(message, pid) {
+  return !!message && (message.recipient === 'all' || message.recipient === pid ||
+    (message.recipient === 'group' && Array.isArray(message.recipients) && message.recipients.includes(pid)));
+}
+
 const MAIL_ITEM_IDS = new Set([...WEAPONS, ...ARMORS].map((x) => x.id));
 const mailStub = (env) => env.MAIL_STORE.get(env.MAIL_STORE.idFromName('chief-mail-v1'));
 const mailCursor = (value) => value == null || value === '' ? '' : typeof value === 'string' && MAIL_ID_RE.test(value) ? value : null;
@@ -1628,17 +1651,27 @@ async function chiefMail(req, env, H, body, op) {
   const requestId = body.requestId, recipient = body.recipient;
   const title = mailText(body.title, 80), text = mailText(body.body, 2000), gift = mailGift(body.gift);
   const expiresAt = body.expiresAt;
+  const recipients = recipient === 'group' && Array.isArray(body.recipients) ? [...new Set(body.recipients)].sort() : [];
   if (typeof requestId !== 'string' || !MAIL_REQUEST_RE.test(requestId) ||
-      typeof recipient !== 'string' || (recipient !== 'all' && !PID_RE.test(recipient)) ||
+      typeof recipient !== 'string' || !(
+        recipient === 'all' || recipient === 'group' || PID_RE.test(recipient)
+      ) || (recipient === 'group' && (
+        !Array.isArray(body.recipients) || !recipients.length || recipients.length > MAIL_GROUP_MAX ||
+        body.recipients.length > MAIL_GROUP_MAX || recipients.some(id => typeof id !== 'string' || !PID_RE.test(id))
+      )) || (recipient !== 'group' && body.recipients != null) ||
       !title || /\n/.test(title) || !text || !gift || !Number.isSafeInteger(expiresAt) || expiresAt <= 0) {
     return json(H, { error: 'bad' }, 400);
   }
-  if (recipient !== 'all') {
-    const found = await doCall(env.PID_BIND.get(env.PID_BIND.idFromName(recipient)), { op: 'lookup' });
-    if (found.status !== 200) return json(H, { error: 'server' }, 500);
-    if (!found.data?.registered) return json(H, { error: 'recipient_notfound' }, 404);
+  const targets = recipient === 'all' ? [] : recipient === 'group' ? recipients : [recipient];
+  if (targets.length) {
+    const found = await Promise.all(targets.map(pid =>
+      doCall(env.PID_BIND.get(env.PID_BIND.idFromName(pid)), { op: 'lookup' }).then(r => ({ pid, ...r }))
+    ));
+    if (found.some(r => r.status !== 200)) return json(H, { error: 'server' }, 500);
+    const missing = found.find(r => !r.data?.registered);
+    if (missing) return json(H, { error: 'recipient_notfound', recipient: missing.pid }, 404);
   }
-  const message = { recipient, title, body: text, gift, expiresAt, kind: gift.shards || gift.items.length ? 'gift' : 'system', senderName: '運営長' };
+  const message = { recipient, ...(recipient === 'group' ? { recipients } : {}), title, body: text, gift, expiresAt, kind: gift.shards || gift.items.length ? 'gift' : 'system', senderName: '運営長' };
   const digest = await sha256(JSON.stringify(message));
   const r = await doCall(mailStub(env), { op, requestId, digest, message });
   return json(H, r.data, r.status);
@@ -1695,7 +1728,11 @@ export class MailStore {
       const storage = this.state.storage;
       const out = (v, status = 200) => new Response(JSON.stringify(v), { status });
       const now = Date.now();
-      const view = (m) => ({ ...m, expired: m.expiresAt <= now });
+      const view = (m, forPlayer = false) => {
+        const safe = { ...m, expired: m.expiresAt <= now };
+        if (forPlayer) delete safe.recipients; // group members' IDs are not exposed to other players
+        return safe;
+      };
       if (b.op === 'send') {
         const prior = await storage.get('request:' + b.requestId);
         if (prior) {
@@ -1707,16 +1744,17 @@ export class MailStore {
         if (!(b.message.expiresAt > now + 60000 && b.message.expiresAt <= now + 90 * DAY)) return out({ error: 'bad' }, 400);
         const id = now.toString(36).padStart(10, '0') + '_' + crypto.randomUUID().replace(/-/g, '');
         const message = { ...b.message, id, createdAt: now };
-        const prefix = message.recipient === 'all' ? 'a:' : 'p:' + message.recipient + ':';
+        const indexKeys = message.recipient === 'all' ? ['a:' + id]
+          : (message.recipient === 'group' ? message.recipients : [message.recipient]).map(pid => 'p:' + pid + ':' + id);
         await writeTogether(storage, [
-          ['m:' + id, message], [prefix + id, id], ['request:' + b.requestId, { id, digest: b.digest }]
+          ['m:' + id, message], ...indexKeys.map(key => [key, id]), ['request:' + b.requestId, { id, digest: b.digest }]
         ]);
         return out({ ok: true, duplicate: false, id, message: view(message) });
       }
       if (b.op === 'get') {
         const message = await storage.get('m:' + b.id);
         if (!message) return out({ error: 'notfound' }, 404);
-        if (message.recipient !== 'all' && message.recipient !== b.pid) return out({ error: 'mail_recipient' }, 403);
+        if (!mailAllowed(message, b.pid)) return out({ error: 'mail_recipient' }, 403);
         return out({ ok: true, message: view(message) });
       }
       if (b.op === 'list' || b.op === 'history') {
@@ -1729,11 +1767,11 @@ export class MailStore {
           const personal = await storage.list(options('p:' + b.pid + ':'));
           const ids = [...new Set([...global.values(), ...personal.values()])];
           const rows = ids.length ? await storage.get(ids.map((id) => 'm:' + id)) : new Map();
-          candidates = [...rows.values()].filter((m) => m.recipient === 'all' || m.recipient === b.pid);
+          candidates = [...rows.values()].filter((m) => mailAllowed(m, b.pid));
         }
         candidates.sort((a, b) => a.id < b.id ? 1 : a.id > b.id ? -1 : 0);
         const page = candidates.slice(0, MAIL_PAGE);
-        return out({ ok: true, messages: page.map(view), nextCursor: candidates.length > MAIL_PAGE ? page.at(-1).id : null, serverTime: now });
+        return out({ ok: true, messages: page.map(m => view(m, b.op === 'list')), nextCursor: candidates.length > MAIL_PAGE ? page.at(-1).id : null, serverTime: now });
       }
       return out({ error: 'bad' }, 400);
     });
@@ -1975,7 +2013,7 @@ export class SyncLock {
             claimedAt: saved.get('mail:claim:' + id)?.claimedAt || 0
           }])) });
         }
-        if (!mail || !MAIL_ID_RE.test(String(mail.id || '')) || (mail.recipient !== 'all' && mail.recipient !== pid)) return res({ error: 'mail_recipient' }, 403);
+        if (!mail || !MAIL_ID_RE.test(String(mail.id || '')) || !mailAllowed(mail, pid)) return res({ error: 'mail_recipient' }, 403);
         const readKey = 'mail:read:' + mail.id;
         const readAt = (await store.get(readKey)) || Date.now();
         if (op === 'mail-read') {
