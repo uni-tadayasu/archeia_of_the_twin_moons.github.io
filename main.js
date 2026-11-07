@@ -1,11 +1,11 @@
 import * as THREE from 'three';
-import { loadModel } from './model-runtime.js?v=valgard-ice-20261107';
-import { Battle, ARENA_R } from './game.js?v=valgard-ice-20261107';
-import { FIGHTERS, STORY, ROSTER, UPGRADES, MAX_LV, STAGES, BGM, APEX_BGM, ENEMY_ROSTER, UPG_CAP, LB_MAX, lbMaxLv, lbMul, lbCost, WEAPONS, ARMORS, SUMMONS, STAT_LABEL, SPECIAL_KEYS, BOSS_ROSTER, currentEvent, sanitizeEvent, EV_FOE_KINDS } from './data.js?v=valgard-ice-20261107';
+import { loadModel } from './model-runtime.js?v=valgard-exact-20261107';
+import { Battle, ARENA_R } from './game.js?v=valgard-exact-20261107';
+import { FIGHTERS, STORY, ROSTER, UPGRADES, MAX_LV, STAGES, BGM, APEX_BGM, ENEMY_ROSTER, UPG_CAP, LB_MAX, lbMaxLv, lbMul, lbCost, WEAPONS, ARMORS, SUMMONS, STAT_LABEL, SPECIAL_KEYS, BOSS_ROSTER, currentEvent, sanitizeEvent, EV_FOE_KINDS } from './data.js?v=valgard-exact-20261107';
 import { sayBattle, setVoiceMuted, stopVoices } from './voice.js';
-import { initSocial, uiConfirm } from './social.js?v=valgard-ice-20261107';
+import { initSocial, uiConfirm } from './social.js?v=valgard-exact-20261107';
 import { OPERATOR_KEY_SHA256, CHIEF_KEY_SHA256, MAX_KEY_ATTEMPTS, LOCKOUT_MS, SHOP_ITEMS } from './config.js';
-import { connect, issueInvite, redeemInvite, syncPush, syncPullV } from './net.js?v=valgard-ice-20261107';
+import { connect, issueInvite, redeemInvite, syncPush, syncPullV } from './net.js?v=valgard-exact-20261107';
 import { apiEnabled, api, verifyToken } from './api.js';
 
 const $ = (s) => document.querySelector(s);
@@ -2384,7 +2384,7 @@ function resetFieldLight() {
 async function enterField() {
   // フィールドは物語でしか使わないので必要になった時だけ読み込む（初回表示を軽く）
   if (!(await ensureAllModelsReady())) return;
-  const { Field } = await import('./field.js?v=valgard-ice-20261107');
+  const { Field } = await import('./field.js?v=valgard-exact-20261107');
   leaveField();
   const ch = STORY[state.chapter];
   const st = stageById(ch.stage);

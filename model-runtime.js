@@ -14,7 +14,7 @@ let active = 0;
 let decoderPromise = null;
 let meshoptPromise = null;
 const BASE = new URL('./', (typeof document !== 'undefined' && document.baseURI) || import.meta.url);
-export const MODEL_VERSION = 'gaien-true-uv-20261107';
+export const MODEL_VERSION = 'valgard-exact-20261107';
 
 export class ModelLoadError extends Error {
   constructor(url, detail, cause) {
@@ -128,9 +128,9 @@ function samplerSetting(THREE, sampler, texture) {
 }
 async function restoreInMemoryTextures(gltf, detached, sourceUrl = '') {
   if (!detached?.images.length || !detached.materials.length) return;
-  // Gaien's face/body patterns came from flipping its 2048px texture atlas.
-  // Only correct Gaien here; do not alter the presentation of other fighters.
-  const preserveOrientation = /(?:^|\/)flame-shell-(?:king|titan)\.glb(?:[?#]|$)/i.test(sourceUrl);
+  // The ice warlord model must keep the unmodified texture atlas orientation.
+  // Preserve this GLB without changing how the other fighters are decoded.
+  const preserveOrientation = /(?:^|\/)iron-warlord\.glb(?:[?#]|$)/i.test(sourceUrl);
   const decoded = await Promise.all(detached.images.map((image, i) =>
     decodeInMemoryImage(image, i, preserveOrientation)
   ));
@@ -252,7 +252,7 @@ export function instantiateModel(gltf, height, tint = null) {
   const wrapper = new THREE.Group();
   const materials = new Set();
   const tintColor = tint == null ? null : new THREE.Color(tint);
-  const preserveGaienMaterial = /(?:^|\/)flame-shell-(?:king|titan)\.glb(?:[?#]|$)/i.test(gltf.userData?.arkeiaSource || '');
+  const preserveSourceMaterial = /(?:^|\/)iron-warlord\.glb(?:[?#]|$)/i.test(gltf.userData?.arkeiaSource || '');
   model.traverse((o) => {
     if (!o.isMesh) return;
     o.castShadow = true;
@@ -262,16 +262,16 @@ export function instantiateModel(gltf, height, tint = null) {
       const material = source.clone();
       // The source avatars embed painted color textures, not polished metal skins.
       // Avoid the exported material's metallicFactor=1 turning faces into shiny polygons.
-      if (!preserveGaienMaterial && (material.isMeshStandardMaterial || material.isMeshPhysicalMaterial)) {
+      if (!preserveSourceMaterial && (material.isMeshStandardMaterial || material.isMeshPhysicalMaterial)) {
         material.metalness = Math.min(0.18, material.metalness ?? 0);
         material.roughness = Math.max(0.7, material.roughness ?? 0.8);
       }
-      if (!preserveGaienMaterial && tintColor && material.color) material.color.lerp(tintColor, 0.22);
+      if (!preserveSourceMaterial && tintColor && material.color) material.color.lerp(tintColor, 0.22);
       // Use the GLB's original base-color, metal/rough and normal textures.
       // Anisotropic filtering changes sampling quality, not the painted pattern.
-      if (material.map) material.map.anisotropy = Math.max(preserveGaienMaterial ? 8 : 2, material.map.anisotropy || 1);
-      if (preserveGaienMaterial && material.metalnessMap) material.metalnessMap.anisotropy = Math.max(8, material.metalnessMap.anisotropy || 1);
-      if (preserveGaienMaterial && material.roughnessMap) material.roughnessMap.anisotropy = Math.max(8, material.roughnessMap.anisotropy || 1);
+      if (material.map) material.map.anisotropy = Math.max(preserveSourceMaterial ? 8 : 2, material.map.anisotropy || 1);
+      if (preserveSourceMaterial && material.metalnessMap) material.metalnessMap.anisotropy = Math.max(8, material.metalnessMap.anisotropy || 1);
+      if (preserveSourceMaterial && material.roughnessMap) material.roughnessMap.anisotropy = Math.max(8, material.roughnessMap.anisotropy || 1);
       materials.add(material); return material;
     };
     o.material = Array.isArray(o.material) ? o.material.map(cloneMaterial) : cloneMaterial(o.material);

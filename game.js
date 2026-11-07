@@ -1,9 +1,9 @@
 import * as THREE from 'three';
-import { attachValgardMotion } from './valgard-motion.js?v=valgard-ice-20261107';
+import { attachValgardMotion } from './valgard-motion.js?v=valgard-exact-20261107';
 import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js';
-import { FIGHTERS, ELEMS } from './data.js?v=valgard-ice-20261107';
+import { FIGHTERS, ELEMS } from './data.js?v=valgard-exact-20261107';
 import { makeGear, animGear } from './gear.js';
-import { instantiateModel, disposeModel, loadModel } from './model-runtime.js?v=valgard-ice-20261107';
+import { instantiateModel, disposeModel, loadModel } from './model-runtime.js?v=valgard-exact-20261107';
 
 // 召喚獣の見た目と性能（HPは使い手の最大HPに比例）
 const SUMMON_DEFS = {
