@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { attachValgardMotion } from './valgard-motion.js?v=valgard-exact-20261107';
 import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js';
-import { FIGHTERS, ELEMS, spellCastTime } from './data.js?v=portrait-new-20261107b';
+import { FIGHTERS, ELEMS, spellCastTime } from './data.js?v=role-voices-portraits-20261107c';
 import { makeGear, animGear } from './gear.js';
 import { instantiateModel, disposeModel, loadModel } from './model-runtime.js?v=valgard-exact-20261107';
 

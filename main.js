@@ -1,10 +1,10 @@
 import * as THREE from 'three';
 import { loadModel } from './model-runtime.js?v=valgard-exact-20261107';
-import { Battle, ARENA_R } from './game.js?v=portrait-new-20261107b';
-import { FIGHTERS, spellCastTime, STORY, ROSTER, UPGRADES, MAX_LV, STAGES, BGM, APEX_BGM, ENEMY_ROSTER, UPG_CAP, LB_MAX, lbMaxLv, lbMul, lbCost, WEAPONS, ARMORS, SUMMONS, STAT_LABEL, SPECIAL_KEYS, BOSS_ROSTER, currentEvent, sanitizeEvent, EV_FOE_KINDS } from './data.js?v=portrait-new-20261107b';
-import { sayBattle, setVoiceMuted, stopVoices } from './voice.js';
+import { Battle, ARENA_R } from './game.js?v=role-voices-portraits-20261107c';
+import { FIGHTERS, spellCastTime, STORY, ROSTER, UPGRADES, MAX_LV, STAGES, BGM, APEX_BGM, ENEMY_ROSTER, UPG_CAP, LB_MAX, lbMaxLv, lbMul, lbCost, WEAPONS, ARMORS, SUMMONS, STAT_LABEL, SPECIAL_KEYS, BOSS_ROSTER, currentEvent, sanitizeEvent, EV_FOE_KINDS } from './data.js?v=role-voices-portraits-20261107c';
+import { sayBattle, setVoiceMuted, stopVoices } from './voice.js?v=role-voices-portraits-20261107c';
 import { initSocial, uiConfirm } from './social.js?v=valgard-exact-20261107';
-import { initMailbox } from './mailbox.js?v=portrait-new-20261107b';
+import { initMailbox } from './mailbox.js?v=role-voices-portraits-20261107c';
 import { OPERATOR_KEY_SHA256, CHIEF_KEY_SHA256, MAX_KEY_ATTEMPTS, LOCKOUT_MS, SHOP_ITEMS } from './config.js';
 import { connect, issueInvite, redeemInvite, syncPush, syncPullV } from './net.js?v=valgard-exact-20261107';
 import { apiEnabled, api, verifyToken } from './api.js';
@@ -1513,7 +1513,11 @@ const foeHp = (m) => (m || 1) * DIFFS[save.diff].h;
 // その戦士を使えるか（運営専用・ショップ解放）
 function canUse(k) {
   const d = FIGHTERS[k];
-  if (d.special === 'chief') return chiefUnlocked() && (!d.shardPrice || save.gemChars.includes(k));
+  if (!d) return false;
+  // Only Valgard remains exclusively for the chief. All other previously
+  // chief-only fighters can be selected by authenticated operators as well.
+  if (k === 'valgard') return chiefUnlocked();
+  if (d.special === 'chief') return operatorUnlocked();
   if (d.shop) return save.chars.includes(k) || operatorUnlocked();
   if (d.locked) return operatorUnlocked();
   return true;
@@ -1658,49 +1662,156 @@ function openSelect(label, crumb, cb, { allowLocked = false, onBack = goTitle } 
 function openPartySelect(done) {
   if ($('#select-search')) $('#select-search').value = '';
   const pool = SELECT_KEYS().filter((k) => canUse(k) && (!SPECIAL_KEYS.includes(k) || operatorUnlocked() || FIGHTERS[k].shop));
-  let party = save.party.filter((k) => pool.includes(k));
-  if (!party.length) party = ['rowen'];
-  let main = party.includes(save.main) ? save.main : party[0];
+  let party = [...new Set(save.party.filter((k) => pool.includes(k)))].slice(0, 4);
+  if (!party.length) party = [pool.includes('rowen') ? 'rowen' : pool[0]].filter(Boolean);
+  let main = party.includes(save.main) ? save.main : party[0] || null;
   $('#select-label').textContent = '旅の仲間を選ぶ';
   $('#select-crumb').textContent = '灯脈の旅路 › 編成';
-  $('#select-back').onclick = () => {
-    sfx('ui');
-    goTitle();
-  };
+  $('#select-back').onclick = () => { sfx('ui'); goTitle(); };
   $('#party-bar').hidden = false;
   const grid = $('#select-grid');
   const cards = {};
-  // 運営長・運営だけ：主人公（自分で操作するキャラ）を外し、全員を自動で戦わせられる
   const op = operatorUnlocked();
   let noHero = op && !!save.noHero;
   const nh = $('#party-nohero');
-  nh.hidden = !op;
-  nh.onclick = () => {
-    sfx('ui');
-    noHero = !noHero;
-    render();
+  const picker = $('#party-quick-picker');
+  const pickerResults = $('#party-picker-results');
+  const pickerSearch = $('#party-picker-search');
+  const pickerTitle = $('#party-picker-title');
+  const pickerNote = $('#party-picker-note');
+  let replacingSlot = -1;
+
+  const closePicker = () => {
+    replacingSlot = -1;
+    if (picker) picker.hidden = true;
+    if (pickerSearch) pickerSearch.value = '';
   };
+
+  // Selected slot can be replaced directly from a small searchable picker.
+  // No need to scroll to its current character in the large list to remove it.
+  const showPickerResults = () => {
+    if (!pickerResults || replacingSlot < 0) return;
+    pickerResults.replaceChildren();
+    const term = (pickerSearch?.value || '').trim().toLocaleLowerCase();
+    const available = pool.filter((k) =>
+      !party.includes(k) && (!term || `${FIGHTERS[k].name} ${FIGHTERS[k].title} ${k}`.toLocaleLowerCase().includes(term))
+    );
+    const matches = available.slice(0, 24);
+    const fragment = document.createDocumentFragment();
+    for (const k of matches) {
+      const d = FIGHTERS[k];
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'party-picker-choice';
+      btn.setAttribute('aria-label', `${d.name}に変更`);
+      if (d.face) {
+        const img = document.createElement('img');
+        img.src = d.face;
+        img.alt = '';
+        img.loading = 'lazy';
+        btn.append(img);
+      }
+      const text = document.createElement('span');
+      const name = document.createElement('strong'); name.textContent = d.name;
+      const title = document.createElement('small'); title.textContent = d.title;
+      text.append(name, title);
+      btn.append(text);
+      btn.addEventListener('click', () => {
+        const index = replacingSlot;
+        if (index < 0 || index > party.length || party.includes(k)) return;
+        const replacedMain = party[index] === main;
+        if (index < party.length) party[index] = k;
+        else party.push(k);
+        if (replacedMain || !main) main = k;
+        sfx('ui');
+        closePicker();
+        render();
+      });
+      fragment.append(btn);
+    }
+    pickerResults.append(fragment);
+    if (pickerNote) pickerNote.textContent = available.length
+      ? `${available.length}人が候補${available.length > matches.length ? '（最初の24人を表示。名前で絞り込めます）' : ''}`
+      : '該当するキャラクターはありません。';
+  };
+  const openPicker = (index) => {
+    if (!picker || index < 0 || index > 3) return;
+    replacingSlot = Math.min(index, party.length);
+    picker.hidden = false;
+    pickerTitle.textContent = `第${index + 1}枠 ${index < party.length ? '変更' : '追加'}する仲間を選択`;
+    pickerSearch.value = '';
+    showPickerResults();
+    pickerSearch.focus({ preventScroll: true });
+  };
+  if (pickerSearch) pickerSearch.oninput = showPickerResults;
+  const pickerClose = $('#party-picker-close');
+  if (pickerClose) pickerClose.onclick = () => { sfx('ui'); closePicker(); };
+  if (pickerSearch) pickerSearch.onkeydown = (e) => {
+    if (e.key === 'Escape') { e.preventDefault(); closePicker(); }
+  };
+  closePicker();
+
+  nh.hidden = !op;
+  nh.onclick = () => { sfx('ui'); noHero = !noHero; render(); };
+
   const render = () => {
     nh.textContent = noHero ? '主人公：外す（全員が自動で戦う）' : '主人公：あり（★を自分で操作）';
     const slots = $('#party-slots');
     slots.replaceChildren();
     for (let i = 0; i < 4; i++) {
       const k = party[i];
-      const b = document.createElement('button');
-      const isMain = k === main && !noHero;
-      b.textContent = k ? (isMain ? '★ ' : '') + FIGHTERS[k].name : '（空き）';
-      b.className = isMain ? 'main' : '';
-      b.disabled = !k;
-      b.addEventListener('click', () => {
-        sfx('ui');
-        main = k;
-        render();
-      });
-      slots.append(b);
+      const isMain = !!k && k === main && !noHero;
+      const slot = document.createElement('div');
+      slot.className = 'party-slot' + (isMain ? ' main' : '') + (!k ? ' empty' : '');
+      const head = document.createElement('div'); head.className = 'party-slot-head';
+      if (k && FIGHTERS[k].face) {
+        const img = document.createElement('img');
+        img.src = FIGHTERS[k].face; img.alt = ''; img.loading = 'lazy';
+        head.append(img);
+      }
+      const label = document.createElement('span');
+      const slotNum = document.createElement('small'); slotNum.textContent = `第${i + 1}枠${isMain ? ' ★操作中' : ''}`;
+      const name = document.createElement('strong'); name.textContent = k ? FIGHTERS[k].name : '空き枠';
+      label.append(slotNum, name); head.append(label); slot.append(head);
+      const actions = document.createElement('div'); actions.className = 'party-slot-actions';
+      if (k) {
+        const mainBtn = document.createElement('button');
+        mainBtn.type = 'button';
+        mainBtn.className = 'party-slot-action party-slot-main';
+        mainBtn.textContent = isMain ? '★操作中' : '操作';
+        mainBtn.disabled = noHero || isMain;
+        mainBtn.title = 'このキャラを自分で操作する';
+        mainBtn.addEventListener('click', () => { sfx('ui'); main = k; render(); });
+        actions.append(mainBtn);
+      }
+      const changeBtn = document.createElement('button');
+      changeBtn.type = 'button'; changeBtn.className = 'party-slot-action party-slot-change';
+      changeBtn.textContent = k ? '変更' : '追加';
+      changeBtn.setAttribute('aria-label', `第${i + 1}枠を${k ? '変更' : '追加'}`);
+      changeBtn.addEventListener('click', () => { sfx('ui'); openPicker(i); });
+      changeBtn.disabled = !pool.some((key) => !party.includes(key));
+      actions.append(changeBtn);
+      if (k) {
+        const removeBtn = document.createElement('button');
+        removeBtn.type = 'button'; removeBtn.className = 'party-slot-action party-slot-remove';
+        removeBtn.textContent = '外す';
+        removeBtn.setAttribute('aria-label', `${FIGHTERS[k].name}をパーティーから外す`);
+        removeBtn.addEventListener('click', () => {
+          sfx('ui');
+          party.splice(i, 1);
+          if (main === k) main = party[0] || null;
+          closePicker();
+          render();
+        });
+        actions.append(removeBtn);
+      }
+      slot.append(actions);
+      slots.append(slot);
     }
     for (const k in cards) cards[k].classList.toggle('picked', party.includes(k));
     $('#party-go').disabled = !party.length;
   };
+
   grid.replaceChildren();
   for (const k of pool) {
     const d = FIGHTERS[k];
@@ -1709,30 +1820,23 @@ function openPartySelect(done) {
     card.style.setProperty('--c', '#' + d.color.toString(16).padStart(6, '0'));
     if (d.face) {
       const img = document.createElement('img');
-      img.className = 'face';
-      img.src = d.face;
+      img.className = 'face'; img.src = d.face;
       img.alt = `${d.name}のキャラクターイラスト`;
-      img.decoding = 'async';
-      img.loading = 'lazy';
+      img.decoding = 'async'; img.loading = 'lazy';
       img.onerror = () => {
         if (d.originalSelectFace && !img.dataset.oldArtFallback) {
-          img.dataset.oldArtFallback = '1';
-          img.src = d.originalSelectFace;
-          return;
+          img.dataset.oldArtFallback = '1'; img.src = d.originalSelectFace; return;
         }
         img.style.display = 'none';
         card.title = 'キャラクター画像が読み込めませんでした';
       };
-      // Use the portrait painted for this character's actual GLB model.
       card.append(img);
     }
-    const t = document.createElement('em');
-    t.textContent = d.title;
-    const n = document.createElement('b');
-    n.textContent = d.name;
+    const t = document.createElement('em'); t.textContent = d.title;
+    const n = document.createElement('b'); n.textContent = d.name;
     card.append(t, n);
     card.addEventListener('click', () => {
-      sfx('ui');
+      sfx('ui'); closePicker();
       if (party.includes(k)) {
         party = party.filter((x) => x !== k);
         if (main === k) main = party[0] || null;
@@ -1752,6 +1856,7 @@ function openPartySelect(done) {
     save.main = main;
     save.noHero = op && noHero;
     persist();
+    closePicker();
     $('#party-bar').hidden = true;
     done();
   };
@@ -2432,7 +2537,7 @@ function resetFieldLight() {
 async function enterField() {
   // フィールドは物語でしか使わないので必要になった時だけ読み込む（初回表示を軽く）
   if (!(await ensureAllModelsReady())) return;
-  const { Field } = await import('./field.js?v=portrait-new-20261107b');
+  const { Field } = await import('./field.js?v=role-voices-portraits-20261107c');
   leaveField();
   const ch = STORY[state.chapter];
   const st = stageById(ch.stage);
@@ -2951,8 +3056,9 @@ async function onInvaded(e) {
   state.paused = false;
   $('#pause').hidden = true;
   const p = state.worldPeers?.[e.from];
-  const apexOk = !apiEnabled() || tr === 'chief';
-  const ik = apexOk && ['chief', 'sovereign', 'sovereign2', 'bloodfiend', 'valgard'].includes(p?.fk) && (!apiEnabled() || peerVerified(e.from, p.fk)) ? p.fk : 'seraphel';
+  const apexOk = !apiEnabled() || tr === 'chief' || tr === 'op';
+  const chiefOnlyAttempt = p?.fk === 'valgard' && tr !== 'chief' && apiEnabled();
+  const ik = apexOk && !chiefOnlyAttempt && ['chief', 'sovereign', 'sovereign2', 'bloodfiend', 'valgard'].includes(p?.fk) && (!apiEnabled() || peerVerified(e.from, p.fk)) ? p.fk : 'seraphel';
   b.add(ik, { team: 1, remote: true, netId: e.from, pos: p ? [p.x, p.z] : [0, -9], facing: Math.PI, name: `乱入者・${e.name}`, ...peerOpts(e.from, ik) });
   b.net = w;
   b.strictNet = apiEnabled();
@@ -2961,8 +3067,8 @@ async function onInvaded(e) {
   sfx('burst');
   const apex = ik === 'sovereign' || ik === 'sovereign2' ? 2 : ik === 'chief' || ik === 'bloodfiend' || ik === 'valgard' ? 1 : 0;
   playTrack(ik === 'valgard' ? 'valgard' : ik === 'bloodfiend' ? 'zarugureibu' : apex ? 'apex:' + apex : 'boss');
-  if (apex) ui.cutin(b.fighters[b.fighters.length - 1], FIGHTERS[ik].name, '運営長、降臨');
-  ui.banner({ name: '— 空が裂けた —' }, apex ? '運営長が降りてきた！' : '裁定者が降りてきた！');
+  if (apex) ui.cutin(b.fighters[b.fighters.length - 1], FIGHTERS[ik].name, tr === 'chief' ? '運営長、降臨' : '運営、降臨');
+  ui.banner({ name: '— 空が裂けた —' }, apex ? (tr === 'chief' ? '運営長が降りてきた！' : '運営が降りてきた！') : '裁定者が降りてきた！');
 }
 
 function renderInvadeList() {
@@ -2987,7 +3093,7 @@ function renderInvadeList() {
 
 $('#invade-who').addEventListener('click', () => {
   sfx('ui');
-  const order = chiefUnlocked() ? ['seraphel', 'chief', 'sovereign', 'bloodfiend', 'valgard'] : ['seraphel'];
+  const order = operatorUnlocked() ? ['seraphel', 'chief', 'sovereign', 'bloodfiend', ...(chiefUnlocked() ? ['valgard'] : [])] : ['seraphel'];
   state.invadeKey = order[(order.indexOf(state.invadeKey) + 1) % order.length];
   $('#invade-who').textContent = `乱入する姿：${FIGHTERS[state.invadeKey].name}`;
 });
@@ -3022,7 +3128,7 @@ async function startInvade(p) {
   w.invade({ to: p.id, from: w.myId, name: '運営', tk });
   setStage(stageById(STORY[p.ch]?.stage));
   const b = makeBattle(w);
-  const ik = ['chief', 'sovereign', 'bloodfiend', 'valgard'].includes(state.invadeKey) && chiefUnlocked() ? state.invadeKey : 'seraphel';
+  const ik = ['chief', 'sovereign', 'bloodfiend'].includes(state.invadeKey) && operatorUnlocked() || state.invadeKey === 'valgard' && chiefUnlocked() ? state.invadeKey : 'seraphel';
   b.add(ik, { team: 0, player: true, awk: save.awk, netId: w.myId, pos: [0, -9], name: FIGHTERS[ik].name + '（運営）', upg: upgFor(ik), gear: gearFor(ik) });
   b.add(peerKeyOf(p.id, p.fk), { team: 1, remote: true, netId: p.id, pos: [p.x, p.z], name: p.name, gear: { w: p.gw, a: p.ga }, ...peerOpts(p.id, peerKeyOf(p.id, p.fk)) });
   b.strictNet = apiEnabled();
@@ -3320,8 +3426,8 @@ function refreshOptions() {
   $('#opt-mute').textContent = audio.muted ? '音：黙らせる' : '音：鳴らす';
   $('#opt-diff').textContent = `CPUの強さ：${DIFFS[save.diff].n}`;
   $('#op-state').textContent = chiefUnlocked()
-    ? '運営長として認められています — ルミナリアとセラフェルが選べます'
-    : operatorUnlocked() ? '運営として認められています — セラフェルが選べます' : '運営の鍵・運営長の鍵・招待された運営キー（OP-…）を入力';
+    ? '運営長として認められています — 全運営キャラ・ヴァルガルドを選べます'
+    : operatorUnlocked() ? '運営として認められています — ルミナリア・ヴェスペラ・ザルグレイヴなどを選べます（ヴァルガルドを除く）' : '運営の鍵・運営長の鍵・招待された運営キー（OP-…）を入力';
   $('#chief-panel').hidden = !chiefUnlocked();
   mailbox?.refreshAccess();
 }

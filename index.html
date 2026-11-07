@@ -27,9 +27,9 @@
     <script type="application/ld+json">
       {"@context":"https://schema.org","@type":"VideoGame","name":"双月のアルケイア","alternateName":"Arkeia of Twin Moons","description":"100人の戦士と全100章の物語を楽しめる、ブラウザ3Dアリーナファンタジーアクション。","image":"assets/app-icon.webp","genre":["Action","Fighting","Fantasy","RPG"],"gamePlatform":["Web browser","PC","Mobile"],"playMode":["SinglePlayer","MultiPlayer","CoOp"],"applicationCategory":"Game","operatingSystem":"Any","inLanguage":"ja","isAccessibleForFree":true,"offers":{"@type":"Offer","price":"0","priceCurrency":"JPY"},"publisher":{"@type":"Organization","name":"KASAI SOLUTIONS INC."},"author":{"@type":"Organization","name":"KASAI SOLUTIONS INC."},"copyrightHolder":{"@type":"Organization","name":"KASAI SOLUTIONS INC."},"copyrightNotice":"© KASAI SOLUTIONS INC. All rights reserved.","musicBy":{"@type":"Organization","name":"KASAI SOLUTIONS INC."},"keywords":"3Dアクション,覚醒,秘奥義,追加技,オンライン対戦,ブラウザゲーム"}
     </script>
-    <link rel="modulepreload" href="./main.js?v=portrait-new-20261107b" />
-    <link rel="modulepreload" href="./game.js?v=portrait-new-20261107b" />
-    <link rel="modulepreload" href="./data.js?v=portrait-new-20261107b" />
+    <link rel="modulepreload" href="./main.js?v=role-voices-portraits-20261107c" />
+    <link rel="modulepreload" href="./game.js?v=role-voices-portraits-20261107c" />
+    <link rel="modulepreload" href="./data.js?v=role-voices-portraits-20261107c" />
     <link rel="preconnect" href="https://esm.sh" crossorigin>
     <meta name="author" content="KASAI SOLUTIONS INC." />
     <meta name="copyright" content="© KASAI SOLUTIONS INC. All rights reserved." />
@@ -117,6 +117,44 @@
       #party-slots { display:grid; grid-template-columns:repeat(4,1fr); gap:6px; width:min(640px,100%); }
       #party-slots button { background:rgba(27,29,58,.85); color:var(--paper); border:1px solid #4a4570; padding:6px; min-height:40px; font-size:clamp(11px,1.8vmin,14px); }
       #party-slots button.main { border-color:var(--ember); background:rgba(80,60,40,.9); }
+
+      /* Party slot actions: direct removal/replacement, no scrolling through portraits */
+      #party-slots { width:min(930px,100%); grid-template-columns:repeat(4,minmax(0,1fr)); gap:9px; }
+      #party-slots .party-slot { min-width:0; padding:8px; display:flex; flex-direction:column; gap:8px; border:1px solid rgba(201,166,90,.4); background:linear-gradient(160deg,rgba(32,36,66,.95),rgba(15,19,38,.96)); border-radius:8px; }
+      #party-slots .party-slot.main { border-color:#ffcf76; box-shadow:0 0 0 1px rgba(255,207,118,.23) inset; }
+      #party-slots .party-slot.empty { border-style:dashed; }
+      #party-slots .party-slot-head { display:flex; align-items:center; min-width:0; gap:8px; text-align:left; min-height:48px; }
+      #party-slots .party-slot-head img { width:40px; height:46px; object-fit:cover; flex-shrink:0; border-radius:3px; }
+      #party-slots .party-slot-head span { min-width:0; }
+      #party-slots .party-slot-head small { display:block; color:#c9b581; font-size:10px; }
+      #party-slots .party-slot-head strong { display:block; font-size:clamp(12px,1.4vw,15px); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+      #party-slots .party-slot-actions { display:flex; flex-wrap:wrap; gap:4px; }
+      #party-slots .party-slot-action { min-height:34px; flex:1 1 27%; padding:5px; border:1px solid rgba(209,179,117,.55); border-radius:4px; background:rgba(17,24,50,.92); color:#fff0d0; font-size:12px; }
+      #party-slots .party-slot-action:hover:not(:disabled) { background:#4a3a29; }
+      #party-slots .party-slot-action:focus-visible { outline:2px solid #ffcf76; outline-offset:1px; }
+      #party-slots .party-slot-change { border-color:#a9c8ef; color:#e9f3ff; }
+      #party-slots .party-slot-remove { border-color:#b97674; color:#ffe8df; }
+      #party-slots .party-slot-action:disabled { opacity:.52; cursor:default; }
+      #party-quick-picker[hidden] { display:none !important; }
+      #party-quick-picker { display:flex; flex-direction:column; gap:8px; width:min(930px,100%); padding:14px; background:rgba(10,15,32,.97); border:1px solid #c9a65a; border-radius:8px; box-shadow:0 14px 28px rgba(0,0,0,.28); }
+      .party-picker-top { display:flex; justify-content:space-between; align-items:center; gap:10px; }
+      .party-picker-top strong { color:#ffe2a7; }
+      .party-picker-top button { border:1px solid #b39b70; color:#fff1d0; background:#28253a; padding:7px 12px; border-radius:4px; }
+      .party-picker-label { text-align:left; display:block; font-size:12px; color:#d6c6a2; }
+      #party-picker-search { display:block; width:100%; margin-top:6px; padding:10px; background:#f4ead2; color:#181b30; border:1px solid #bca879; border-radius:4px; font:inherit; font-size:16px; user-select:text; -webkit-user-select:text; }
+      .party-picker-results { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:6px; max-height:220px; overflow-y:auto; }
+      .party-picker-choice { display:flex; align-items:center; gap:8px; min-width:0; padding:6px; text-align:left; border:1px solid rgba(201,166,90,.28); border-radius:4px; background:#202944; color:#f4ead2; }
+      .party-picker-choice:hover { background:#394663; }
+      .party-picker-choice img { width:38px; height:43px; flex-shrink:0; object-fit:cover; border-radius:3px; }
+      .party-picker-choice span { min-width:0; }
+      .party-picker-choice strong, .party-picker-choice small { display:block; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; }
+      .party-picker-choice small { color:#cdbfa0; font-size:10px; }
+      #party-picker-note { color:#cdbfa0; }
+      @media (max-width:720px) {
+        #party-slots { grid-template-columns:repeat(2,minmax(0,1fr)); }
+        .party-picker-results { grid-template-columns:repeat(2,minmax(0,1fr)); }
+      }
+      @media (max-width:390px) { #party-slots .party-slot-action { flex-basis:32%; font-size:11px; padding:4px 2px; } }
       .card.picked { outline:3px solid var(--ember); }
       .card.locked { filter:grayscale(1) brightness(.55); cursor:not-allowed; }
       .card:not(.locked):hover, .card:focus-visible { transform:translateY(-3px); outline:2px solid var(--ember); }
@@ -497,7 +535,15 @@
           <div class="label" id="select-label"></div>
           <div id="party-bar" hidden>
             <div id="party-slots"></div>
-            <p class="foot">最大4人。選んだ戦士をもう一度押すと外れます。上の枠を押すと、その戦士を自分で操作します（★）。残りの仲間は自動で戦います。</p>
+            <div id="party-quick-picker" class="party-quick-picker" hidden>
+              <div class="party-picker-top"><strong id="party-picker-title">変更する仲間を選択</strong><button type="button" id="party-picker-close" aria-label="変更を閉じる">閉じる ×</button></div>
+              <label class="party-picker-label" for="party-picker-search">名前・特徴で探す
+                <input type="search" id="party-picker-search" autocomplete="off" placeholder="例：ロウエン、氷、剣士" />
+              </label>
+              <div id="party-picker-results" class="party-picker-results"></div>
+              <small id="party-picker-note" aria-live="polite"></small>
+            </div>
+            <p class="foot">最大4人。各枠の「外す」で即解除、「変更」で別の仲間と入れ替え。「操作」で主人公（★）を指定できます。</p>
             <button class="btn ghost" id="party-nohero" type="button" hidden>主人公：あり（★を自分で操作）</button>
             <button class="btn" id="party-go">この顔ぶれで旅立つ</button>
           </div>
@@ -585,6 +631,6 @@
         </div>
       </div>
     </main>
-    <script type="module" src="main.js?v=portrait-new-20261107b"></script>
+    <script type="module" src="main.js?v=role-voices-portraits-20261107c"></script>
 </body>
 </html>

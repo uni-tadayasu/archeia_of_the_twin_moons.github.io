@@ -1113,3 +1113,21 @@ export function spellCastTime(spec, slot = 's') {
   if (slot?.startsWith('f')) return +bound(base + 0.23, 0.5, 2.2).toFixed(1);
   return +bound(base, 0.35, 1.85).toFixed(1);
 }
+
+
+// Individually mastered select cards. Each card uses artwork drawn for the
+// same original GLB archetype, but has unique framing, name, element emblems.
+// The actual 3D models and the original 44 drawings are never modified.
+for (const [key, fighter] of Object.entries(FIGHTERS)) {
+  const modelName = fighter.model?.split('/').pop();
+  if (!NEW_MODEL_PORTRAITS[modelName]?.length) continue;
+  fighter.originalSelectFace ||= fighter.face;
+  fighter.face = `assets/portraits/unique/${key}.webp`;
+  fighter.faceHue = 0;
+}
+
+// Operator-accessible special fighters now share access labels; Valgard remains chief-only.
+for (const key of ['chief', 'sovereign', 'sovereign2', 'bloodfiend']) {
+  const d = FIGHTERS[key];
+  if (d?.title) d.title = d.title.replace('（運営長', '（運営・運営長');
+}

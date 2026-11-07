@@ -1243,8 +1243,10 @@ const EARN_PER_HOUR = 30000;
 const EARN_SLACK = 5000;
 
 // キャラ使用の可否：運営/運営長専用・購入キャラはサーバーで確認
-const OP_ONLY = new Set(['seraphel']);
-const CHIEF_ONLY = new Set(['chief', 'sovereign', 'sovereign2', 'bloodfiend', 'valgard']);
+// Operator and chief share these playable fighter privileges, but the
+// chief's mailbox, world-BGM signatures and Valgard remain chief-only.
+const OP_ONLY = new Set(['seraphel', 'chief', 'sovereign', 'sovereign2', 'bloodfiend']);
+const CHIEF_ONLY = new Set(['valgard']);
 
 // ---------- ルート ----------
 export default {

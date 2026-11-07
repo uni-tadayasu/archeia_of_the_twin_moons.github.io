@@ -1,37 +1,40 @@
-Riftfall Arena / Arkeia - In-game Gifts and System Mail
-2026-11-07 | updated files only
+双月のアルケイア — 編成UI / 戦闘ボイス / 選択画像 / 運営キャラ権限 修正版
 
-1) Deploy the Web game files at the same paths:
-   index.html            (updated menu and cache version)
-   main.js               (mailbox integration and server-confirmed reward import)
-   mailbox.js            (new; player inbox and chief-only send/history UI)
-   mailbox.css           (new; dialog styling)
+【更新ファイルだけを収録】
+index.html、main.js、data.js、game.js、field.js、mailbox.js、voice.js
+server/worker.js
+assets/portraits/unique/*.webp（222枚）
+assets/voices/**/*.ogg（100クリップ）
 
-2) Deploy server/worker.js to the EXISTING Cloudflare Worker.
-   Do not deploy it as a second Worker. Do not delete Durable Objects.
-   It keeps the eight existing exported Durable Object classes, including MailStore.
-   Keep your existing server/wrangler.toml, Secrets and bindings.
-   The existing config must have the binding:
-     name = "MAIL_STORE"
-     class_name = "MailStore"
-   and the existing migration: v4-mail / MailStore.
-   Use Wrangler from the server directory if code-editor deployment cannot
-   resolve Durable Object bindings, e.g. npx wrangler deploy (with the proper account).
+【反映手順】
+1. ZIP内のディレクトリ構成を変えず、現在のゲームサイトのルートへ上書き・追加します。
+2. 以前の assets/portraits/*.webp、assets/models/*.glb、既存BGM、mailbox.cssは削除しないでください。
+3. GitHub Pages公開後、Ctrl + Shift + Rで強制更新してください。
+4. server/worker.jsを使っている場合はCloudflare Workersに同コードをデプロイしてください。
+   元のDurable Objectsクラス8件、Secrets、wrangler.toml、バインディングは維持してください。
+   GitHub Pagesだけの更新ではオンラインでの運営キャラ使用権は変更されません。
 
-3) In-game controls:
-   Main menu -> 受信箱: View your player ID; receive, read and claim gifts.
-   After entering the verified chief key: Main menu -> 運営長の配信管理.
-   Tabs: プレゼント配信 / システムメール / 送信履歴.
-   Recipient: All / One player ID / Group of up to 40 player IDs.
-   Group IDs: comma, spaces or newlines. Every selected target must have
-   registered an account via the in-game sync feature.
+【編成】
+4枠に「操作」「変更／追加」「外す」を設けています。
+「変更」は検索付き候補一覧を開き、同じキャラを探して押し直さずに交換できます。
 
-4) The server owns mail records, gift receipts and player currency/inventory.
-   Claiming again with the same message ID does not award twice.
-   Recipients do not need to be online; they receive mail on their next inbox check.
-   Global mail is available to sync-registered players for the chosen period.
-   The mail box does NOT send external emails to an email address.
+【キャラクター画像】
+従来のモデル用44枚を基に、通常・派生222体の画像を個別に書き出しました。
+画像の構図、飾り、キャラ名を個別化し、同じ画像ファイルは使い回していません。
+同じGLBを使うキャラは元の同系統イラストを共有しています。
+専用キャラ8体の既存専用イラストはそのまま残しています。
 
-5) Back up the current files and Worker settings before deployment.
-   No GLB models, sound assets, data.js, or existing player saves are changed.
-   Validation performed locally; real Cloudflare deployment still needs verification.
+【戦闘ボイス】
+長いセリフをWeb Speechで棒読みする代わりに、合成した短い掛け声、呻き声、息遣いなど100種類を用途別に再生します。
+声優が収録した人声ではありません。音声が聞こえない場合はブラウザー内で一度クリックして音を有効にしてください。
+既存BGMは変更していません。
+
+【役職】
+運営も、セラフェル・ルミナリア・ヴェスペラ(2形態)・ザルグレイヴを使えます。
+氷鋼覇王ヴァルガルドだけ運営長限定のままです。
+プレゼント配信・システムメールの送信権限も引き続き運営長専用です。
+サーバー上でキャラ使用権を検証します。権限のないプレイヤーがローカル画面を改変してもオンラインで使用可能にはなりません。
+
+【検証】
+構文検査、230体画像URLの重複チェック、音声100ファイルの出力・デコード、ZIP整合性の検査を実施。
+実公開環境での対戦・受信メールとの総合テストは未実施です。
