@@ -918,7 +918,7 @@
    * Normal sword attack becomes one autonomous, targetable ice duplicate.
    * Independent lightweight ice fighter proxy: no new Fighter, GLB, mixer,
    * or Battle.fighters mutations, preventing repeated heavy clone creation.
-   * The ice circle starts on one press, persists for 30s, and cancels on hit.
+   * A tap maintains the circle for a full 30s even under enemy attacks; no cooldown.
    */
   import('./game.js?v=audio-cast-20261107d').then(combat => {
     installValgardIceEcho(combat.Battle, combat.Fighter);
@@ -1026,66 +1026,166 @@
     // caused the old combat/fighter loop to treat the effect as a full actor.
     const ECHO_RANGE=2.35, ECHO_SPEED=7.3;
     const ECHO_RESPAWN=1.25;
-    // One compact geometry/material palette is shared by every ice echo.
-    // Model is fully 3D, but neither GLB loading, GPU skinning, skeleton cloning
-    // nor an AnimationMixer can occur during battle. <500 triangles per echo.
+    // Valgard's ice echo: icy black-steel armor, horned crown, white fur,
+    // crystalline chest/eyes, broad spiked pauldrons, cloak and frozen halberd.
+    // Parts are BAKED ONCE into one/two geometries per animated body segment;
+    // only <= 12 draw calls per echo. No GLB, bones, mixers or GPU skinning.
     let ice3dPalette=null;
-    function buildIce3d(THREE, root) {
-      if (!ice3dPalette) {
-        const makeMat=(color,emissive)=>new THREE.MeshLambertMaterial({color,emissive,emissiveIntensity:.24});
-        ice3dPalette={
-          geos:{ box:new THREE.BoxGeometry(1,1,1), spike:new THREE.ConeGeometry(1,1,5),
-            disk:new THREE.CylinderGeometry(1,1,1,6), crystal:new THREE.TetrahedronGeometry(1)},
-          mats:{shadow:makeMat(0x16344f,0x081c2a), metal:makeMat(0x398aaa,0x0c4660),
-            ice:makeMat(0xa7ebff,0x236b97), shine:makeMat(0xe3ffff,0x4aa2c0)}
+    function buildIce3d(THREE,root) {
+      if(!ice3dPalette){
+        const C={
+          shadow:0x101b2d, armor:0x28354b, iron:0x43536b,
+          rim:0xb6c9d9, silver:0xe8f1fc, blue:0x21558e,
+          cloak:0x122b5d, fur:0xe8f4ff, furDark:0x99b2cd,
+          glacial:0x53cdfb, glint:0xc8fbff, deep:0x0b1730
         };
+        const geos={
+          box:new THREE.BoxGeometry(1,1,1),
+          spike:new THREE.ConeGeometry(1,.999,5),
+          disk:new THREE.CylinderGeometry(1,1,1,7),
+          crystal:new THREE.TetrahedronGeometry(1),
+        };
+        const B={core:[],head:[],left:[],right:[],legL:[],legR:[]};
+        const A=(group,geo,col,x,y,z,w,h,d,rx=0,ry=0,rz=0,light=false)=>{
+          B[group].push({geo,col:C[col]??col,x,y,z,w,h,d,rx,ry,rz,light});
+        };
+        // Entire body / breastplate: broad blackened steel with silver seams.
+        A('core','box','deep',0,1.25,-.015,.84,.88,.50);
+        A('core','box','armor',0,1.49,.015,1.01,.82,.61);
+        A('core','box','iron',0,1.70,.08,1.14,.33,.62);
+        A('core','box','rim',0,1.91,.12,1.17,.07,.65);
+        A('core','box','rim',-.48,1.53,.34,.09,.65,.07,0,0,-.16);
+        A('core','box','rim', .48,1.53,.34,.09,.65,.07,0,0, .16);
+        A('core','box','shadow',0,1.11,.02,.73,.24,.53);
+        A('core','box','silver',0,1.16,.30,.29,.14,.13);
+        A('core','crystal','glacial',0,1.59,.385,.33,.50,.14,0,0,0,true);
+        A('core','crystal','glint',0,1.69,.50,.13,.23,.09,0,0,0,true);
+        A('core','box','blue',0,1.04,.27,.49,.14,.10);
+        A('core','crystal','glacial',0,1.04,.37,.15,.19,.08,0,0,0,true);
+        // Winglike pointed faulds and the iconic white arctic fur collar.
+        for(const side of [-1,1]){
+          A('core','box','armor',side*.34,.77,.03,.38,.59,.43,0,0,side*.13);
+          A('core','box','rim',side*.54,.80,.33,.09,.57,.11,0,0,side*.22);
+          A('core','spike','iron',side*.55,.61,-.25,.30,.82,.25,Math.PI,0,side*.27);
+          A('core','box','cloak',side*.60,1.10,-.41,.33,1.70,.12,.03,0,-side*.22);
+          A('core','spike','cloak',side*.83,.55,-.46,.31,1.09,.19,Math.PI,0,side*.18);
+          A('core','box','rim',side*.35,1.85,-.26,.44,.10,.30,0,0,side*-.15);
+        }
+        for(let i=0;i<10;i++){
+          const a=(i/10)*Math.PI*2;
+          A('core','spike',i%4?'fur':'furDark',Math.sin(a)*.63,1.94,Math.cos(a)*.39,
+             .20,.36,.19,Math.sin(a)*.16,0,Math.cos(a)*-.20);
+        }
+        A('core','box','cloak',0,.88,-.47,.70,1.47,.105,.08,0,0);
+        A('core','spike','blue',0,.20,-.51,.38,.45,.20,Math.PI);
+        // Viking-style closed helm with an elaborate 6-part horned crown.
+        A('head','box','shadow',0,-.02,0,.59,.55,.51);
+        A('head','box','armor',0,.21,-.055,.69,.25,.60);
+        A('head','box','rim',0,.30,.23,.68,.09,.10);
+        A('head','box','silver',0,-.065,.277,.10,.38,.09);
+        A('head','box','iron',0,-.22,.23,.55,.14,.12);
+        for(const side of [-1,1]){
+          A('head','box','glacial',side*.17,.03,.307,.21,.060,.06,0,0,side*.07,true);
+          A('head','spike','armor',side*.39,.36,-.09,.23,.51,.23,0,0,side*-.62);
+          A('head','spike','rim',side*.63,.58,-.08,.18,.43,.19,0,0,side*-.83);
+          A('head','spike','iron',side*.88,.71,-.11,.23,.54,.21,0,0,side*.65);
+          A('head','spike','silver',side*.30,.42,.17,.14,.30,.13,0,0,side*.21);
+        }
+        for(let i=-1;i<=1;i++)A('head','spike',i?'rim':'glacial',i*.19,.54,.18,.12,.48,.15,0,0,i*-.21,i===0);
+        // Heavy gauntlets with exaggerated 3-layer shoulder armour.
+        for(const side of [-1,1]){
+          const k=side===-1?'left':'right';
+          A(k,'box','deep',0,-.33,0,.34,.69,.39,0,0,side*-.06);
+          A(k,'box','iron',0,.02,0,.67,.33,.67,0,0,side*-.14);
+          A(k,'box','armor',side*.09,.12,.04,.72,.32,.68,0,0,side*-.16);
+          A(k,'box','rim',side*.13,.28,.09,.78,.10,.66,0,0,side*-.17);
+          A(k,'spike','armor',side*.37,.33,-.08,.34,.83,.33,0,0,side*-.65);
+          A(k,'spike','silver',side*.51,.44,-.06,.19,.52,.24,0,0,side*-.78);
+          A(k,'box','armor',0,-.56,.04,.39,.35,.45);
+          A(k,'box','rim',0,-.63,.30,.44,.06,.12);
+          A(k,'box','iron',0,-.84,.04,.43,.24,.47);
+          for(let j=-1;j<=1;j++)A(k,'spike','rim',j*.105,-.93,.26,.08,.23,.12,Math.PI/2);
+        }
+        // Left-hand ice halberd / huge axe to echo Valgard's original pose.
+        A('left','disk','shadow',-.12,-.47,.33,.075,2.75,.075,0,0,-.10);
+        A('left','box','rim',-.10,-.36,.33,.20,.14,.16);
+        A('left','box','iron',-.14,.47,.33,.53,.14,.20);
+        A('left','spike','armor',-.52,.62,.33,.50,.75,.23,0,0, .86);
+        A('left','spike','glacial',-.82,.84,.32,.43,.74,.20,0,0,1.15,true);
+        A('left','spike','silver', .26,.62,.33,.40,.71,.22,0,0,-.85);
+        A('left','spike','glacial', .51,.82,.33,.25,.55,.18,0,0,-1.1,true);
+        A('left','crystal','glint',-.12,1.04,.33,.14,.37,.15,0,0,0,true);
+        // Right-hand clawed ice gauntlet, stronger than a plain sword.
+        for(let j=-1;j<=1;j++)A('right','spike','glacial',j*.15,-1.02,.24,.12,.48,.17,Math.PI*.61,0,j*.18,true);
+        A('right','crystal','glint',0,-.42,.34,.13,.20,.10,0,0,0,true);
+        // Boots and pointed greaves are separate pivots for light gait motion.
+        for(const side of [-1,1]){
+          const k=side===-1?'legL':'legR';
+          A(k,'box','deep',0,-.28,0,.33,.62,.40);
+          A(k,'box','armor',0,-.38,.14,.36,.41,.48);
+          A(k,'box','rim',0,-.24,.37,.29,.07,.07);
+          A(k,'box','iron',0,-.67,.08,.39,.34,.50);
+          A(k,'box','rim',0,-.80,.28,.40,.07,.49);
+          A(k,'spike','armor',0,-.46,.38,.25,.38,.23,Math.PI*.49);
+          A(k,'crystal','glacial',0,-.26,.41,.13,.18,.08,0,0,0,true);
+        }
+        function bake(list,light){
+          const xyz=[],normal=[],rgb=[];
+          for(const part of list){
+            if(part.light!==light)continue;
+            const base=geos[part.geo];
+            const copy=base.clone();
+            copy.scale(part.w,part.h,part.d);
+            if(part.rx)copy.rotateX(part.rx);
+            if(part.ry)copy.rotateY(part.ry);
+            if(part.rz)copy.rotateZ(part.rz);
+            copy.translate(part.x,part.y,part.z);
+            const flat=copy.index?copy.toNonIndexed():copy;
+            const p=flat.getAttribute('position'),n=flat.getAttribute('normal');
+            const col=new THREE.Color(part.col);
+            for(let v=0;v<p.count;v++){
+              xyz.push(p.getX(v),p.getY(v),p.getZ(v));
+              if(n)normal.push(n.getX(v),n.getY(v),n.getZ(v));
+              rgb.push(col.r,col.g,col.b);
+            }
+            if(flat!==copy)flat.dispose();
+            copy.dispose();
+          }
+          if(!xyz.length)return null;
+          const merged=new THREE.BufferGeometry();
+          merged.setAttribute('position',new THREE.Float32BufferAttribute(xyz,3));
+          merged.setAttribute('normal',new THREE.Float32BufferAttribute(normal,3));
+          merged.setAttribute('color',new THREE.Float32BufferAttribute(rgb,3));
+          merged.computeBoundingSphere();
+          return merged;
+        }
+        const baked={};
+        for(const [name,list] of Object.entries(B)){
+          baked[name]=[bake(list,false),bake(list,true)];
+        }
+        for(const g of Object.values(geos))g.dispose();
+        ice3dPalette={baked,mats:[
+          new THREE.MeshLambertMaterial({vertexColors:true,side:THREE.DoubleSide,emissive:0x071b2d,emissiveIntensity:.27}),
+          new THREE.MeshBasicMaterial({vertexColors:true,side:THREE.DoubleSide,
+            transparent:true,opacity:.92,depthWrite:false,blending:THREE.AdditiveBlending})
+        ]};
       }
-      const {geos,mats}=ice3dPalette;
       const model=new THREE.Group();root.add(model);
-      const part=(parent,geo,mat,x,y,z,sx,sy,sz,rx=0,ry=0,rz=0)=>{
-        const m=new THREE.Mesh(geos[geo],mats[mat]);
-        m.position.set(x,y,z);m.scale.set(sx,sy,sz);
-        m.rotation.set(rx,ry,rz);
-        m.frustumCulled=true; // No shadow map passes for disposable minion.
-        parent.add(m);return m;
-      };
       const core=new THREE.Group();model.add(core);
-      part(core,'box','shadow',0,1.25,0,.76,.78,.46); // dark under-armor
-      part(core,'box','metal',0,1.58,0,.89,.73,.51); // high cuirass
-      part(core,'box','ice',0,1.67,.27,.54,.51,.09); // breastplate
-      part(core,'crystal','shine',0,1.64,.365,.17,.26,.11); // frost crest
-      part(core,'box','shadow',0,1.04,0,.64,.26,.44); // belt
-      part(core,'box','ice',0,1.06,.28,.43,.14,.1); // buckle
-      const head=new THREE.Group();head.position.y=2.10;core.add(head);
-      part(head,'box','shadow',0,0,0,.53,.51,.48);
-      part(head,'box','metal',0,.24,-.02,.61,.18,.51); // helmet brow
-      part(head,'box','ice',0,.06,.257,.49,.12,.045); // eye visor
-      part(head,'spike','shine',0,.52,0,.22,.51,.24); // center plume
-      for(const side of [-1,1]){
-        part(head,'spike','ice',side*.35,.29,-.08,.18,.6,.2,0,0,side*-.38); // horn
-        part(core,'box','metal',side*.64,1.79,0,.48,.32,.52,0,0,side*.18); // pauldron
-        part(core,'spike','shine',side*.87,1.9,0,.23,.54,.25,0,0,side*-.48); // pauldron shard
-        const leg=new THREE.Group();leg.position.set(side*.23,.86,0);model.add(leg);
-        part(leg,'box','shadow',0,-.31,0,.27,.66,.31);
-        part(leg,'box','metal',0,-.66,.05,.34,.39,.38); // armored boot
-        part(leg,'spike','ice',0,-.75,.23,.21,.2,.3,Math.PI/2);
-      }
+      const head=new THREE.Group();head.position.y=2.08;core.add(head);
       const left=new THREE.Group(),right=new THREE.Group();
-      left.position.set(-.64,1.78,0);right.position.set(.64,1.78,0);
+      left.position.set(-.71,1.79,0);right.position.set(.71,1.79,0);
       core.add(left,right);
-      for(const [pivot,side] of [[left,-1],[right,1]]){
-        part(pivot,'box','shadow',0,-.29,0,.31,.55,.33,0,0,side*.1);
-        part(pivot,'box','metal',0,-.51,.09,.33,.3,.37);
-        part(pivot,'spike','ice',side*.08,-.54,.26,.23,.39,.24,Math.PI*.48,0,side*.12);
+      const legL=new THREE.Group(),legR=new THREE.Group();
+      legL.position.set(-.27,.89,0);legR.position.set(.27,.89,0);
+      model.add(legL,legR);
+      for(const [name,pivot] of Object.entries({core,head,left,right,legL,legR})){
+        const [solid,glowing]=ice3dPalette.baked[name];
+        if(solid)pivot.add(new THREE.Mesh(solid,ice3dPalette.mats[0]));
+        if(glowing){const m=new THREE.Mesh(glowing,ice3dPalette.mats[1]);m.renderOrder=2;pivot.add(m);}
       }
-      // Right arm carries a small crystalline blade; 3D attack swing rotates this pivot.
-      part(right,'spike','shine',.02,-.78,.35,.14,.8,.22,Math.PI*.45);
-      // Transparent-looking silhouette without expensive transparency sorting.
-      for(const side of [-1,1]){
-        part(core,'spike','metal',side*.41,.88,-.24,.23,.95,.33,Math.PI,0,side*.16);
-      }
-      model.scale.setScalar(.92);
-      return {model,core,left,right};
+      model.scale.setScalar(.88);
+      return {model,core,head,left,right,legs:[legL,legR]};
     }
     function echoes(b){return (b.__valgardEchoes ||= new Set());}
     function disposeEcho(b,echo,shatter=false){
@@ -1228,7 +1328,8 @@
       if(rig){
         const moving=!!target&&echo.stun<=0&&echo.pos.distanceTo(target.pos)>ECHO_RANGE*.78;
         rig.core.position.y=(moving?.035:.018)*Math.sin(echo.animTime*10);
-        rig.left.rotation.x=moving?Math.sin(echo.animTime*9)*.24:0;
+        rig.left.rotation.x=moving?Math.sin(echo.animTime*9)*.19:-.05;
+        if(rig.legs)for(let i=0;i<rig.legs.length;i++)rig.legs[i].rotation.x=moving?Math.sin(echo.animTime*9+(i?Math.PI:0))*.23:0;
         rig.right.rotation.x=echo.attackPulse>0
           ?-1.65*Math.sin((1-echo.attackPulse/.30)*Math.PI)
           :moving?-Math.sin(echo.animTime*9)*.24:0;
@@ -1302,11 +1403,10 @@
     };
 
     // -------------------- VALGARD FROST SEAL --------------------
-    // Single-press ability: 30 seconds of autonomous freezing. Releasing the
-    // key does not cancel it. Additional key-downs cannot bypass cooldown.
+    // One press starts 30 seconds of freezing, immune to incoming damage.
+    // No cooldown; pressing again refreshes the timer without adding a mesh.
     const GLYPH_RADIUS=4.1;
     const SEAL_DURATION=30.0;
-    const SEAL_COOLDOWN=3.0;
     const FREEZE_IMMUNITY=2.5;
     function thawTarget(t,owner=null){
       if(!t?.__iceSealOwner||(owner&&t.__iceSealOwner!==owner))return;
@@ -1317,22 +1417,24 @@
       t.__iceSealImmuneUntil=performance.now()/1000+FREEZE_IMMUNITY;
       t.battle?.fxPop?.(t.pos.clone().setY(1.2),1,8,1.8,.28,{grow:1.55,op:.55});
     }
-    function stopSeal(f,interrupted=false){
+    function stopSeal(f){
       const seal=f?.__iceSeal;
       if(!seal)return;
       seal.root.removeFromParent();
       seal.mat.dispose();seal.geo.dispose();
       f.__iceSeal=null;
-      // A broken seal thaws its prisoners immediately.
-      if(interrupted){
-        f.__iceSealCooldownUntil=Math.max(f.__iceSealCooldownUntil||0,performance.now()/1000+SEAL_COOLDOWN);
-        for(const target of f.battle?.fighters||[])thawTarget(target,f);
-        f.battle?.ui.popup?.(f.pos,'氷結封印陣・解除','#a8eaff');
-        f.battle?.fxPop?.(f.pos.clone().setY(1),1,8,2.3,.28,{grow:1.5,op:.45});
-      }
+      // Seal ends on its scheduled expiry; previously frozen enemies may thaw
+      // when their remaining status expires or when they are hit.
     }
     function startSeal(f,now){
       const THREE=runtime?.THREE;if(!THREE||!runtime?.sealTexture)return false;
+      // Zero cooldown: re-tapping an active seal only renews its full lifetime.
+      if(f.__iceSeal){
+        f.__iceSeal.started=now;
+        f.__iceSeal.expires=now+SEAL_DURATION;
+        f.battle?.ui.popup?.(f.pos,'氷結封印陣・30秒に延長','#b9f7ff');
+        return true;
+      }
       const geo=new THREE.PlaneGeometry(GLYPH_RADIUS*2,GLYPH_RADIUS*2);
       const mat=new THREE.MeshBasicMaterial({map:runtime.sealTexture,color:0xc7f5ff,
         transparent:true,opacity:.86,side:THREE.DoubleSide,blending:THREE.AdditiveBlending,
@@ -1341,7 +1443,6 @@
       root.rotation.x=-Math.PI/2;root.position.y=.065;root.renderOrder=4;
       f.root.add(root);
       f.__iceSeal={root,mat,geo,started:now,expires:now+SEAL_DURATION,fx:0};
-      f.__iceSealCooldownUntil=now+SEAL_DURATION+SEAL_COOLDOWN;
       f.battle?.ui.popup?.(f.pos,`氷結封印陣：${SEAL_DURATION}秒持続`,'#bcf5ff');
       f.battle?.fxPop?.(f.pos.clone().setY(.1),1,5,4.8,.56,{flat:true,grow:1.2,spin:2.5,op:.8});
       f.battle?.flashLight?.(f.pos.clone().setY(.8),ICE,.95,.22);
@@ -1357,13 +1458,12 @@
       this.__iceSealGuardWasDown=pressed;
       // Never enter the engine's ordinary damage-reduction guard stance.
       if(pressed)input={...input,guard:false};
-      const beforeHp=this.hp;
       const outcome=updateFighterOriginal.call(this,dt,input);
       this.guard=false;
       if(this.guardMesh)this.guardMesh.visible=false;
-      if(this.__iceSeal&&(this.dead||this.hp<beforeHp))stopSeal(this,true);
-      if(this.__iceSeal&&now>=this.__iceSeal.expires)stopSeal(this,false);
-      if(edge&&!this.dead&&this.stun<=0&&this.y<=.15&&now>=(this.__iceSealCooldownUntil||0)){
+      // Damage never cancels the 30-second seal. Only natural expiry/death ends it.
+      if(this.__iceSeal&&(this.dead||now>=this.__iceSeal.expires))stopSeal(this);
+      if(edge&&!this.dead&&this.stun<=0&&this.y<=.15){
         startSeal(this,now);
       }
       const seal=this.__iceSeal;
@@ -1393,13 +1493,11 @@
       }
       return outcome;
     };
-    // Ice effects break when a frozen enemy is struck. The caster loses the
-    // circle when damaged, so guarding no longer grants damage reduction.
+    // Hits thaw a frozen enemy, but NEVER interrupt the caster's ice circle.
     const receiveWithEcho=Fighter.prototype.receive;
     Fighter.prototype.receive=function(...args){
       const received=receiveWithEcho.apply(this,args);
       if(received>0 && this.__iceSealOwner)thawTarget(this);
-      if(received>0 && this.__iceSeal)stopSeal(this,true);
       return received;
     };
 
@@ -1436,10 +1534,9 @@
           const now=performance.now()/1000;
           const active=actor?.__iceSeal;
           const remaining=active?Math.max(0,Math.ceil(active.expires-now)):0;
-          const cooldown=mine&&!active?Math.max(0,Math.ceil((actor.__iceSealCooldownUntil||0)-now)):0;
-          const text=!mine?'構':active?`結界${remaining}秒`:cooldown?`待機${cooldown}秒`:'氷結陣';
+          const text=!mine?'構':active?`結界${remaining}秒`:'氷結陣';
           if(guard.textContent!==text){guard.textContent=text;guard.style.fontSize=mine?'clamp(9px,2.2vmin,12px)':'';}
-          guard.setAttribute('aria-label',!mine?'ガード':active?`氷結封印陣：残り${remaining}秒`:cooldown?`氷結封印陣：あと${cooldown}秒で再発動可能`:'氷結封印陣：1回押すと30秒自動展開');
+          guard.setAttribute('aria-label',!mine?'ガード':active?`氷結封印陣：残り${remaining}秒、再押下で30秒へ延長`:'氷結封印陣：クールダウンなし、1回押すと30秒間展開');
           guard.setAttribute('aria-pressed',mine&&!!active?'true':'false');
         }
       }
