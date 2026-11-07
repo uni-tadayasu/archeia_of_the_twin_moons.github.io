@@ -913,4 +913,325 @@
     });
   }
 
+
+  /* VALGARD / ICE ECHO 2026-11-07
+   * Normal sword attack becomes one autonomous, targetable ice duplicate.
+   * Uses the genuine Valgard GLB and the existing illustrated ice VFX.
+   * Battle mechanics and saved progression are left intact. PvP is not altered.
+   */
+  Promise.all([
+    import('./game.js?v=audio-cast-20261107d'),
+    import('./model-runtime.js?v=valgard-exact-20261107')
+  ]).then(([combat, modelRuntime]) => {
+    installValgardIceEcho(combat.Battle, combat.Fighter, modelRuntime.disposeModel);
+  }).catch(error => console.warn('[Arkeia] Valgard ice echo unavailable:', error));
+
+  function installValgardIceEcho(Battle, Fighter, disposeModel) {
+    if (!Battle || !Fighter || Battle.prototype.__valgardIceEchoV1) return;
+    Battle.prototype.__valgardIceEchoV1 = true;
+    const ICE = 0x9ceaff;
+    const HP_RATIO = 0.60;
+    const MAX_ACTIVE = 4;
+    const THREE_MODULE = import('three');
+    let assetPromise = null;
+
+    function iceAssets() {
+      if (assetPromise) return assetPromise;
+      assetPromise = THREE_MODULE.then(THREE => {
+        const canvas = document.createElement('canvas');
+        canvas.width = canvas.height = 256;
+        const g = canvas.getContext('2d');
+        if (!g) return { THREE, texture: null };
+        const c = 128, TAU = Math.PI * 2;
+        const aura = g.createRadialGradient(c,c,6,c,c,124);
+        aura.addColorStop(0,'rgba(233,254,255,.83)');
+        aura.addColorStop(.18,'rgba(95,209,255,.38)');
+        aura.addColorStop(.47,'rgba(86,132,244,.18)');
+        aura.addColorStop(.8,'rgba(84,174,255,.08)');
+        aura.addColorStop(1,'rgba(0,90,220,0)');
+        g.fillStyle = aura; g.fillRect(0,0,256,256);
+        g.translate(c,c);
+        g.strokeStyle='#d9fbff';g.lineCap='round';
+        for(let j=0;j<3;j++){
+          g.beginPath();g.arc(0,0,36+j*29,j*.65,TAU-.3-j*.52);
+          g.globalAlpha=.64-j*.13;g.lineWidth=3.3-j*.55;g.shadowBlur=15;g.shadowColor='#6df2ff';g.stroke();
+        }
+        g.shadowBlur=7;g.globalAlpha=.9;g.lineWidth=2;
+        for(let i=0;i<12;i++){
+          const a=TAU*i/12,rad=i%2?68:84;
+          g.beginPath();g.moveTo(Math.cos(a)*53,Math.sin(a)*53);
+          g.lineTo(Math.cos(a)*rad,Math.sin(a)*rad);
+          g.stroke();
+          const x=Math.cos(a)*rad,y=Math.sin(a)*rad;
+          g.beginPath();g.moveTo(x-6,y-3);g.lineTo(x,y-12);g.lineTo(x+5,y-3);g.stroke();
+        }
+        g.globalAlpha=1;g.shadowBlur=0;
+        const texture = new THREE.CanvasTexture(canvas);
+        texture.colorSpace = THREE.SRGBColorSpace;
+        texture.minFilter = THREE.LinearMipmapLinearFilter;
+        return { THREE, texture };
+      });
+      return assetPromise;
+    }
+    // This is invoked after the same 'three' import has settled, so model creation
+    // remains synchronous at the moment the attack key is pressed.
+    let runtime = null;
+    iceAssets().then(value => { runtime = value; }).catch(() => {});
+
+    function showIceFX(b, pos, power = 1, breaking = false) {
+      if (!b || !pos) return;
+      const THREE = runtime?.THREE;
+      if (!THREE) return;
+      const at = pos.clone();
+      const q = at.clone().setY(.10);
+      b.fxPop?.(q,1,5,4.2*power,.82,{flat:true,grow:breaking?2.8:1.5,spin:breaking?-6:6,op:.86});
+      b.fxPop?.(q.clone().setY(.16),1,4,2.4*power,.54,{flat:true,grow:2.2,spin:breaking?8:-8,op:.7});
+      b.fxPop?.(at.clone().setY(1.15),1,2,3.0*power,.65,{grow:breaking?2.4:1.75,spin:5,op:.83});
+      for(let i=0;i<8;i++){
+        const a=i*Math.PI/4+Math.random()*.24;
+        b.fxPop?.(new THREE.Vector3(at.x+Math.cos(a)*.95, .4+Math.random()*1.4, at.z+Math.sin(a)*.95),1,i%3===0?8:7, (1+Math.random()*.6)*power,.45+i*.04,{grow:2,rise:breaking?2.2:1.2,spin:(i%2?1:-1)*4,op:.7});
+      }
+      b.flashLight?.(at.clone().setY(1.2),ICE,breaking?1.4:1.8,.45);
+      if (breaking) b.shake=Math.max(b.shake||0,.22);
+    }
+
+    function addVisuals(clone) {
+      if (!runtime?.THREE) return;
+      const THREE = runtime.THREE;
+      const ice = new THREE.Color(ICE);
+      // instantiateModel() already gave this fighter private material clones.
+      // Never recolor the cached source or another character's material.
+      for(const mat of clone.modelInstance?.materials || []){
+        mat.color?.lerp(ice,.64);
+        if(mat.emissive){mat.emissive.copy(ice).multiplyScalar(.55);mat.emissiveIntensity=.48;}
+        mat.transparent=true;mat.opacity=Math.min(1,mat.opacity??1)*.82;
+        mat.depthWrite=false;
+        if('metalness' in mat)mat.metalness=Math.min(.1,mat.metalness??0);
+        if('roughness' in mat)mat.roughness=Math.max(.56,mat.roughness??.6);
+        mat.needsUpdate=true;
+      }
+      if(clone.ringMesh?.material?.color)clone.ringMesh.material.color.setHex(ICE);
+      const owned=[];
+      const texture=runtime.texture;
+      if(texture){
+        const glowMat=new THREE.SpriteMaterial({map:texture,color:0x92e7ff,transparent:true,opacity:.5,
+          blending:THREE.AdditiveBlending,depthWrite:false,depthTest:true,fog:false});
+        const aura=new THREE.Sprite(glowMat);
+        aura.scale.set(3.2,3.8,1);aura.position.y=1.05;
+        clone.root.add(aura);owned.push({mesh:aura,material:glowMat});
+        const floorMat=new THREE.MeshBasicMaterial({map:texture,color:0x8be6ff,transparent:true,opacity:.65,
+          side:THREE.DoubleSide,depthWrite:false,blending:THREE.AdditiveBlending});
+        const floorGeo=new THREE.PlaneGeometry(2.7,2.7);
+        const floor=new THREE.Mesh(floorGeo,floorMat);
+        floor.rotation.x=-Math.PI/2;floor.position.y=.035;
+        clone.root.add(floor);owned.push({mesh:floor,material:floorMat,geometry:floorGeo});
+        clone.__iceAura=aura; clone.__iceFloor=floor;
+      }
+      const health = new THREE.Group();
+      health.position.y=(clone.def?.height || 2.06)*clone.scale+.48;
+      const bgGeo=new THREE.PlaneGeometry(1.75,.2);
+      const bgMat=new THREE.MeshBasicMaterial({color:0x061d34,transparent:true,opacity:.88,depthTest:false,depthWrite:false});
+      const bg=new THREE.Mesh(bgGeo,bgMat);
+      const barGeo=new THREE.PlaneGeometry(1.68,.13);
+      const barMat=new THREE.MeshBasicMaterial({color:0x9defff,transparent:true,opacity:.98,depthTest:false,depthWrite:false});
+      const fill=new THREE.Mesh(barGeo,barMat);fill.position.z=.01;
+      bg.renderOrder=fill.renderOrder=100;
+      health.add(bg,fill);clone.root.add(health);
+      owned.push({mesh:bg,material:bgMat,geometry:bgGeo},{mesh:fill,material:barMat,geometry:barGeo});
+      clone.__iceHealth={group:health,fill};
+      clone.__iceVisuals=owned;
+    }
+
+    function releaseVisuals(clone){
+      if (clone.__iceVisualsReleased) return;
+      clone.__iceVisualsReleased = true;
+      for (const entry of clone.__iceVisuals || []){
+        entry.mesh.removeFromParent();
+        entry.material?.dispose();
+        entry.geometry?.dispose();
+      }
+      clone.__iceVisuals=[];
+    }
+
+    function retire(b,clone){
+      releaseVisuals(clone);
+      if (clone.__iceOwner?.__iceEcho===clone) clone.__iceOwner.__iceEcho=null;
+      const idx=b.fighters.indexOf(clone);
+      if(idx>=0)b.fighters.splice(idx,1);
+      clone.valgardMotion?.stop?.();
+      if(clone.redMats)clone.endAwaken();
+      disposeModel?.(clone.modelInstance,clone.mixer);
+      clone.modelInstance=null;
+      clone.root.removeFromParent();
+      clone.ringMesh?.material?.dispose?.();
+      clone.guardMesh?.material?.dispose?.();
+      clone.__iceRetired=true;
+    }
+
+    const startLightOriginal=Fighter.prototype.startLight;
+    Fighter.prototype.startLight=function(...args){
+      // Keep the normal slash for the autonomous duplicate itself. Never let it recursively summon.
+      if(this.key!=='valgard'||this.__isValgardIceEcho||this.remoteAuth||this.battle?.net || !runtime?.THREE)
+        return startLightOriginal.apply(this,args);
+      if(this.dead||this.stun>0||this.battle?.ended)return;
+      this.faceNearest?.(9);
+      this.action={type:'cast',t:0,dur:.43};
+      this.vel.set(0,0,0);
+      const b=this.battle;
+      showIceFX(b,this.pos,.72);
+      const active=this.__iceEcho;
+      if(active&&!active.dead&&!active.__iceRetired){
+        active.__iceFocus=b.nearestEnemy(this);
+        showIceFX(b,active.pos,.58);
+        b.ui.popup?.(this.pos,'氷分身・追尾指令','#a2eeff');
+        return;
+      }
+      this.__iceEcho=null;
+      if(b.fighters.filter(f=>f.__isValgardIceEcho&&!f.dead).length>=MAX_ACTIVE){
+        b.ui.popup?.(this.pos,'氷分身はこれ以上召喚できない','#a2eeff');
+        return;
+      }
+      const left=runtime.THREE;
+      const right=new left.Vector3(this.forward().z,0,-this.forward().x);
+      const start=this.pos.clone().addScaledVector(right,1.55);
+      const radius=Math.hypot(start.x,start.z);
+      if(radius>11.7)start.multiplyScalar(11.7/radius);
+      const clone=b.add('valgard',{
+        team:this.team,cpu:.95,pos:[start.x,start.z],facing:this.facing,
+        name:'氷分身・ヴァルガルド',upg:this.upg,scale:.92,tint:ICE,
+        hpMul:this.hpMul,atkMul:.45,defMul:1.0,
+        gear:{w:'',a:''},
+      });
+      clone.__isValgardIceEcho=true;
+      clone.__iceOwner=this;
+      clone.__iceFocus=b.nearestEnemy(this);
+      clone.__iceAttackWait=0;
+      clone.__iceTime=0;
+      clone.__iceDestroyed=false;
+      clone.__iceRetired=false;
+      clone.__iceVisualsReleased=false;
+      clone.maxHp=Math.max(1,Math.round(this.maxHp*HP_RATIO));
+      clone.hp=clone.maxHp;
+      clone.atkMul=this.atkMul*.46;
+      clone.defMul=this.defMul;
+      clone.over=0; clone.awk=0;
+      clone.flux=0;
+      this.__iceEcho=clone;
+      addVisuals(clone);
+      showIceFX(b,start,1.4);
+      b.ui.popup?.(clone.pos,`氷分身！ HP ${clone.maxHp}`,'#a2eeff');
+      b.ui.sfx?.('skill',{elem:1,color:ICE});
+    };
+
+    const aiOriginal=Battle.prototype.aiInput;
+    Battle.prototype.aiInput=function(f,dt){
+      if(!f?.__isValgardIceEcho)return aiOriginal.call(this,f,dt);
+      const target=f.__iceFocus&&!f.__iceFocus.dead&&f.__iceFocus.team!==f.team
+        ? f.__iceFocus : this.nearestEnemy(f);
+      f.__iceFocus=target;
+      if(!target)return {mx:0,mz:0};
+      const dx=target.pos.x-f.pos.x,dz=target.pos.z-f.pos.z;
+      const d=Math.hypot(dx,dz)||.001;
+      const speed=d>2.05?1:0;
+      f.__iceAttackWait=Math.max(0,(f.__iceAttackWait||0)-dt);
+      const inp={mx:dx/d*speed,mz:dz/d*speed};
+      if(d < 2.75 && f.__iceAttackWait<=0 && !f.action){
+        inp.attack=true;
+        f.__iceAttackWait=.74;
+      }
+      return inp;
+    };
+
+    const swingOriginal=Battle.prototype.swingFx;
+    Battle.prototype.swingFx=function(f){
+      const result=swingOriginal.call(this,f);
+      if(f?.__isValgardIceEcho){
+        const pos=f.pos.clone().setY(1.3+f.y);
+        this.fxPop?.(pos,1,6,3.7,.28,{grow:1.65,spin:2.6});
+        this.fxPop?.(pos,1,1,1.7,.20,{grow:1.4,op:.87});
+        this.flashLight?.(pos,ICE,.45,.13);
+      }
+      return result;
+    };
+
+    const receiveOriginal=Fighter.prototype.receive;
+    Fighter.prototype.receive=function(...args){
+      const result=receiveOriginal.apply(this,args);
+      if(this.__isValgardIceEcho){
+        this.awk=0; // Ice copies do not turn into red awakened characters.
+        if(this.awakened>0)this.endAwaken?.();
+        if(result>0)this.battle?.fxPop?.(this.pos.clone().setY(1.1),1,7,1.35,.22,{grow:1.55,op:.58});
+      }
+      return result;
+    };
+
+    const updateOriginal=Battle.prototype.update;
+    Battle.prototype.update=function(rawDt,playerInput){
+      // Keep the touch attack label accurate when switching characters.
+      const touchAttack=document.querySelector('#tbtns button[data-act="attack"]');
+      if(touchAttack){
+        const actor=this.fighters.find(f=>f.isPlayer && !f.__isValgardIceEcho);
+        const iceMode=actor?.key==='valgard' && !this.net;
+        const label=iceMode?'氷分身':'斬';
+        if(touchAttack.textContent!==label){
+          touchAttack.textContent=label;
+          touchAttack.style.fontSize=iceMode?'clamp(9px,2.2vmin,12px)':'';
+          touchAttack.setAttribute('aria-label',iceMode?'氷分身を召喚・追尾指示':'通常攻撃');
+        }
+      }
+      for(const clone of this.fighters){
+        if(!clone.__isValgardIceEcho || clone.__iceRetired)continue;
+        const owner=clone.__iceOwner;
+        if(!clone.dead && (!owner || owner.dead || !this.fighters.includes(owner))){
+          clone.dead=true;clone.hp=0;
+        }
+      }
+      const result=updateOriginal.call(this,rawDt,playerInput);
+      for(const clone of [...this.fighters]){
+        if(!clone.__isValgardIceEcho||clone.__iceRetired)continue;
+        if(clone.dead){
+          if(!clone.__iceDestroyed){
+            clone.__iceDestroyed=true;
+            clone.__iceOwner && (clone.__iceOwner.__iceEcho=null);
+            showIceFX(this,clone.pos,1.2,true);
+            this.ui.popup?.(clone.pos,'氷分身が砕け散った','#b9f5ff');
+            clone.root.visible=false;
+          }
+          clone.__iceTime+=rawDt;
+          if(clone.__iceTime>=.9)retire(this,clone);
+          continue;
+        }
+        if(clone.__iceHealth){
+          const ratio=Math.max(0,Math.min(1,clone.hp/Math.max(1,clone.maxHp)));
+          const fill=clone.__iceHealth.fill;
+          fill.scale.x=Math.max(.001,ratio);
+          fill.position.x=-(1-ratio)*.84;
+          clone.__iceHealth.group.quaternion.copy(this.camera.quaternion);
+        }
+        if(clone.__iceAura){
+          clone.__iceAura.material.opacity=.39+.14*Math.sin((this.fxClock||0)*6);
+          clone.__iceAura.material.rotation=(this.fxClock||0)*.16;
+        }
+        if(clone.__iceFloor)clone.__iceFloor.rotation.z=(this.fxClock||0)*.85;
+        clone.__iceMote=(clone.__iceMote||0)-rawDt;
+        if(clone.__iceMote<=0){
+          clone.__iceMote=.17+Math.random()*.1;
+          const p=clone.pos.clone().setY(.5+Math.random()*1.7);
+          p.x+=(Math.random()-.5)*1.0; p.z+=(Math.random()-.5)*1.0;
+          this.fxPop?.(p,1,7,.9,.48,{rise:.7,grow:1.55,op:.5});
+        }
+      }
+      return result;
+    };
+
+    const disposeOriginal=Battle.prototype.dispose;
+    Battle.prototype.dispose=function(...args){
+      for(const clone of this.fighters || [])if(clone.__isValgardIceEcho){
+        releaseVisuals(clone);
+        if(clone.__iceOwner?.__iceEcho===clone)clone.__iceOwner.__iceEcho=null;
+      }
+      return disposeOriginal.apply(this,args);
+    };
+  }
+
 })();
