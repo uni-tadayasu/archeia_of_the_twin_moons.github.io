@@ -2,6 +2,41 @@
 // long-form speech synthesis; audio stays separate from BGM / combat SFX.
 // No voice is synthesized from private player text.
 const VOICE_ROOT = './assets/voices/';
+// Dedicated, pre-rendered low male synthetic lines for Valgard's spell calls.
+// No device-dependent browser speech synthesis; respect the existing voice mixer.
+const VALGARD_CLIPS = Object.freeze({
+  astral: './assets/audio/valgard-judgment-voice.mp3',
+  other: './assets/audio/valgard-other-voice.mp3',
+  spear: './assets/audio/valgard-shining-spear-voice.mp3'
+});
+let lastValgardLineAt = -Infinity;
+function playValgardLine(line = 'other', actor = null) {
+  if (!enabled || muted || channelVolume <= 0 || typeof Audio === 'undefined') return false;
+  const now = timeNow();
+  if (now - lastValgardLineAt < (line === 'spear' ? 260 : 820)) return false;
+  const url = VALGARD_CLIPS[line === 'astral' ? 'astral' : line === 'spear' ? 'spear' : 'other'];
+  const sound = new Audio(url);
+  sound.preload = 'auto';
+  sound.volume = Math.min(1, (actor?.isPlayer === false ? 0.62 : 0.94) * channelVolume);
+  sound.playbackRate = 1;
+  sound.preservesPitch = true;
+  sound.onended = () => active.delete(sound);
+  sound.onerror = () => active.delete(sound);
+  // Prevent overlapping Valgard lines while keeping other fighters' voices.
+  for (const prev of [...active]) if (prev.__arkeiaValgardLine) stopElement(prev);
+  sound.__arkeiaValgardLine = true;
+  active.add(sound);
+  lastValgardLineAt = now;
+  lastGlobal = now;
+  Promise.resolve(sound.play()).catch(() => active.delete(sound));
+  return true;
+}
+// The ice seal and ice echo are actions added by arkeia-ui.js, not skill slots.
+// Expose a narrow, voice-settings-aware call for those two special actions.
+if (typeof window !== 'undefined') {
+  window.__arkeiaPlayValgardOther = (fighter) => playValgardLine('other', fighter);
+}
+
 const CLIPS = {
   attack: 3, skill: 3, over: 2, hurt: 2, pinch: 2,
   ko: 2, summon: 2, awaken: 2, hi: 2
@@ -47,6 +82,13 @@ export function sayBattle(f, kind = 'skill', _attackName = '', important = false
   if (!enabled || muted || channelVolume <= 0 || typeof Audio === 'undefined' || !f) return;
   const cue = Object.prototype.hasOwnProperty.call(CLIPS, kind) ? kind : 'skill';
   const owner = String(f.key || f.def?.name || f.name || 'player');
+  if (owner === 'valgard' && (cue === 'skill' || cue === 'over' || cue === 'hi')) {
+    const name = String(_attackName || '');
+    const isAstral = /アストラル[・･\s]*ジャッジメント|蒼天雷裁|astral[\s-]*judgment/i.test(name);
+    const isSpear = /シャイニング[・･\s]*スピア|凍牙・光槍封陣|shining[\s-]*spear/i.test(name);
+    playValgardLine(isAstral ? 'astral' : isSpear ? 'spear' : 'other', f);
+    return;
+  }
   const now = timeNow();
   const player = !!f.isPlayer;
   const minGap = (important ? 110 : 230) + (cue === 'attack' ? 50 : 0);

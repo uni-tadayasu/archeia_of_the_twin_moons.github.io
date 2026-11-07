@@ -437,6 +437,7 @@
     import('./data.js?v=audio-cast-20261107d')
   ]).then(([THREE,combat,data]) => {
     installAstralJudgment(THREE,combat.Battle,data.FIGHTERS);
+    installFrostShiningSpear(THREE,combat.Battle,data.FIGHTERS);
   }).catch(error=>console.warn('[Arkeia] Original celestial judgment unavailable.',error));
 
   function installAstralJudgment(THREE,Battle,FIGHTERS){
@@ -1053,41 +1054,273 @@
       this.__astralFxCleanups?.clear();
       return previousDispose?.apply(this,args);
     };
-    // Dedicated synthesized Valgard calls. Playback follows the user's
-    // audio settings; Chrome/Edge uses the installed Japanese TTS voice.
-    // Only skill usage, not a recurring per-frame effect.
-    let nextLineAt=0;
-    function sayValgardLine(line){
-      try{
-        if(typeof window==='undefined' || !window.speechSynthesis ||
-           typeof SpeechSynthesisUtterance==='undefined')return;
-        if(window.localStorage?.getItem('arkeia-muted')==='1')return;
-        const volume=clamp((+(window.localStorage?.getItem('arkeia-voice-volume')??75))/100,0,1);
-        if(volume===0)return;
-        const now=performance.now();
-        if(now<nextLineAt)return;
-        nextLineAt=now+1050;
-        const utterance=new SpeechSynthesisUtterance(line);
-        utterance.lang='ja-JP';utterance.rate=.87;utterance.pitch=.68;
-        utterance.volume=volume*.87;
-        const options=window.speechSynthesis.getVoices?.()||[];
-        const japanese=options.filter(v=>/^ja(?:-|_)/i.test(v.lang||''));
-        if(japanese.length)utterance.voice=japanese.find(v=>v.localService)||japanese[0];
-        window.speechSynthesis.speak(utterance);
-      }catch(error){console.warn('[Arkeia] Japanese cast voice unavailable.',error);}
-    }
+    // Dedicated voice clips are selected in voice.js so voice volume and mute
+    // remain authoritative. Do not run a second browser speech synthesizer.
     const previous=Battle.prototype.executeCast;
     Battle.prototype.executeCast=function(f,slot,net){
       // Exact original skill slot only; long-press followups and other spellcasters unchanged.
       const selected=!!f && f.key==='valgard' && slot==='s2'
         && f.def?.skills?.[2]?.kind==='astral_judgment_painted';
       const outcome=previous.call(this,f,slot,net);
-      if(f?.key==='valgard' && !f.remoteAuth && !this.net &&
-        (slot==='over'||slot==='hi'||/^[sf]\d+$/.test(slot))){
-        sayValgardLine(selected?'力の違いを見せてやる':'これでどうだ');
-      }
       if(selected)perform(this,f,net);
       return outcome;
+    };
+  }
+
+
+  /* VALGARD — FROST SHINING SPEARS / ORIGINAL PAINTED CG
+   * A luminous impalement spell with a target lock, a ring of spectral lances,
+   * and a concentric finish, authored from scratch for this game. No source
+   * art/video/animation from another title is embedded or copied.
+   * Two-dimensional sprite textures only — not 3D polygonal spears.
+   */
+  function installFrostShiningSpear(THREE,Battle,FIGHTERS){
+    if(!Battle || !FIGHTERS?.valgard || Battle.prototype.__frostShiningSpear20261108)return;
+    Battle.prototype.__frostShiningSpear20261108=true;
+    const spec=FIGHTERS.valgard.skills?.[0];
+    if(!spec)return;
+    Object.assign(spec,{
+      name:'凍牙・光槍封陣《シャイニングスピア》',
+      kind:'frost_shining_spear_painted',elem:5,color:0xb9f5ff,
+      cost:26,castTime:1.45,dmg:645,radius:3.1,hitCount:10,
+      visual:'illustrated_multi_spear',vivid:true,
+      description:'光の魔法陣で標的を捕捉し、全方向から光槍を十連撃で突き立てる氷光の晶術'
+    });
+    const TAU=Math.PI*2;
+    const touch=typeof matchMedia==='function'&&matchMedia('(pointer:coarse)').matches;
+    const R=touch?.76:1;
+    const textures=new Map();
+    const maxActive=touch?1:2;
+    let active=0;
+    const clamp=(v,a=0,b=1)=>Math.max(a,Math.min(b,v));
+    function rnd(seed){let v=seed>>>0;return()=>{v=(Math.imul(v,1664525)+1013904223)>>>0;return v/4294967296;};}
+    const SIZES={spear:[360,900],rune:[640,640],cage:[576,576],flare:[640,640],streak:[512,512],halo:[576,576]};
+    function illustration(kind){
+      if(textures.has(kind))return textures.get(kind);
+      const [W,H]=SIZES[kind];
+      const can=document.createElement('canvas');
+      can.width=Math.round(W*R);can.height=Math.round(H*R);
+      const g=can.getContext('2d');
+      if(!g)return null;
+      g.scale(can.width/W,can.height/H);
+      g.lineJoin='round';g.lineCap='round';
+      const r=rnd(kind.length*29501+kind.charCodeAt(0)*601);
+      const glow=(x,y,rad,stops)=>{
+        const q=g.createRadialGradient(x,y,0,x,y,rad);
+        for(const [at,col] of stops)q.addColorStop(at,col);
+        return q;
+      };
+      const arc=(x,y,rad,w,col,start=0,end=TAU,blur=14)=>{
+        g.save();g.strokeStyle=col;g.lineWidth=w;g.shadowColor=col;g.shadowBlur=blur;
+        g.beginPath();g.arc(x,y,rad,start,end);g.stroke();g.restore();
+      };
+      const star=(x,y,sz,a=1)=>{
+        g.save();g.translate(x,y);g.globalAlpha=a;
+        g.strokeStyle='#fff';g.lineWidth=1.4;g.shadowColor='#8ef4ff';g.shadowBlur=10;
+        g.beginPath();g.moveTo(-sz,0);g.lineTo(sz,0);g.moveTo(0,-sz*1.8);g.lineTo(0,sz*1.8);g.stroke();g.restore();
+      };
+      if(kind==='spear'){
+        // Long hand-painted shaft of translucent ice-white light.
+        g.fillStyle=glow(180,380,310,[[0,'rgba(241,253,255,.35)'],[.36,'rgba(126,240,255,.19)'],[1,'rgba(80,148,245,0)']]);
+        g.fillRect(0,0,W,H);
+        g.save();g.shadowColor='#d9ffff';g.shadowBlur=32;
+        const spear=g.createLinearGradient(120,70,250,850);
+        spear.addColorStop(0,'rgba(251,255,255,.96)');spear.addColorStop(.22,'rgba(143,230,255,.97)');
+        spear.addColorStop(.52,'rgba(255,255,255,.97)');spear.addColorStop(1,'rgba(98,150,255,.10)');
+        g.fillStyle=spear;
+        g.beginPath();g.moveTo(180,32);g.bezierCurveTo(238,160,224,270,198,350);
+        g.lineTo(194,750);g.lineTo(181,865);g.lineTo(168,748);g.lineTo(162,351);
+        g.bezierCurveTo(139,260,126,155,180,32);g.closePath();g.fill();g.restore();
+        g.save();g.strokeStyle='rgba(243,254,255,.99)';g.lineWidth=5;g.shadowColor='#d5f9ff';g.shadowBlur=23;
+        g.beginPath();g.moveTo(180,39);g.lineTo(181,838);g.stroke();g.restore();
+        for(const side of [-1,1]){
+          g.save();g.translate(180,330);g.scale(side,1);
+          g.fillStyle='rgba(224,253,255,.82)';g.shadowColor='#8dd6ff';g.shadowBlur=16;
+          g.beginPath();g.moveTo(0,-55);g.quadraticCurveTo(66,-28,116,-5);g.quadraticCurveTo(62,6,12,48);g.closePath();g.fill();g.restore();
+        }
+        for(let i=0;i<24;i++){
+          g.save();g.globalAlpha=.16+r()*.5;g.strokeStyle=i%3?'#bff8ff':'#ffffff';g.lineWidth=.7+r()*2;
+          const x=180+(r()-.5)*100,y=100+r()*720;
+          g.beginPath();g.moveTo(x,y);g.lineTo(x+(r()-.5)*25,y+(r()-.5)*125);g.stroke();g.restore();
+        }
+        for(let i=0;i<14;i++)star(175+(r()-.5)*106,120+r()*660,1.5+r()*4,.25+r()*.7);
+      }else if(kind==='rune'){
+        g.fillStyle=glow(320,320,311,[[0,'rgba(222,251,255,.25)'],[.44,'rgba(95,177,244,.13)'],[1,'rgba(30,80,140,0)']]);g.fillRect(0,0,W,H);
+        for(let k=0;k<5;k++)arc(320,320,115+k*31,k%2?1.8:3.2,k%2?'rgba(240,255,255,.75)':'rgba(140,231,255,.79)',0,TAU,15);
+        for(let i=0;i<24;i++){
+          const a=i*TAU/24,x=320+Math.cos(a)*248,y=320+Math.sin(a)*248;
+          g.save();g.translate(x,y);g.rotate(a+Math.PI/2);g.strokeStyle='rgba(218,254,255,.9)';
+          g.shadowColor='#68d5ff';g.shadowBlur=9;g.lineWidth=2;
+          g.beginPath();g.moveTo(0,-14);g.lineTo(9,0);g.lineTo(0,14);g.lineTo(-9,0);g.closePath();g.stroke();g.restore();
+        }
+        for(let i=0;i<8;i++){
+          const a=i*TAU/8;
+          g.save();g.translate(320,320);g.rotate(a);g.strokeStyle='rgba(254,255,255,.6)';g.lineWidth=2;g.shadowColor='#93e2ff';g.shadowBlur=12;
+          g.beginPath();g.moveTo(-30,-30);g.lineTo(0,-192);g.lineTo(30,-30);g.stroke();g.restore();
+        }
+        arc(320,320,55,4,'rgba(237,252,255,.89)',0,TAU,20);
+        star(320,320,28,.9);
+      }else if(kind==='cage'){
+        g.fillStyle=glow(288,288,282,[[0,'rgba(244,255,255,.2)'],[.5,'rgba(114,211,255,.12)'],[1,'rgba(120,184,255,0)']]);g.fillRect(0,0,W,H);
+        for(let i=0;i<12;i++){
+          const a=TAU*i/12,rr=214;
+          const x=288+Math.cos(a)*rr,y=288+Math.sin(a)*rr;
+          g.save();g.strokeStyle='rgba(231,251,255,.68)';g.lineWidth=3;
+          g.shadowColor='#94dcff';g.shadowBlur=19;
+          g.beginPath();g.moveTo(x,y-62);g.bezierCurveTo(x-20,y-15,x+15,y+35,x,y+84);g.stroke();g.restore();
+        }
+        for(let i=0;i<6;i++)arc(288,288,150+i*13,1.5,'rgba(202,239,255,.55)',i*.25,TAU-i*.2,13);
+        star(288,288,40,.72);
+      }else if(kind==='flare' || kind==='halo'){
+        const x=W/2,y=H/2;
+        g.fillStyle=glow(x,y,W*.46,[[0,'rgba(255,255,255,.98)'],[.10,'rgba(231,254,255,.90)'],[.32,'rgba(124,227,255,.49)'],[.68,'rgba(111,136,255,.20)'],[1,'rgba(100,160,250,0)']]);g.fillRect(0,0,W,H);
+        if(kind==='flare'){
+          for(let i=0;i<38;i++){
+            const a=TAU*i/38+(r()-.5)*.09, len=100+r()*220;
+            g.save();g.translate(x,y);g.rotate(a);
+            const ray=g.createLinearGradient(0,0,len,0);
+            ray.addColorStop(0,'rgba(248,255,255,.90)');ray.addColorStop(1,'rgba(145,220,255,0)');
+            g.fillStyle=ray;g.beginPath();g.moveTo(0,-(3+r()*7));g.lineTo(len,0);g.lineTo(0,3+r()*7);g.fill();g.restore();
+          }
+          star(x,y,58,1);
+        }else{
+          for(let k=0;k<4;k++)arc(x,y,80+k*45,6-k*.6,'rgba(221,247,255,.70)',0,TAU,14);
+          for(let i=0;i<44;i++)star(x+(r()-.5)*440,y+(r()-.5)*440,1+r()*3,.3+r()*.5);
+        }
+      }else if(kind==='streak'){
+        const x=256,y=256;
+        g.fillStyle=glow(x,y,245,[[0,'rgba(242,254,255,.68)'],[.16,'rgba(176,242,255,.46)'],[.60,'rgba(115,199,255,.2)'],[1,'rgba(90,130,240,0)']]);g.fillRect(0,0,W,H);
+        for(let i=0;i<28;i++){
+          const a=(i/28)*TAU,rr=20+r()*170;
+          g.save();g.translate(x,y);g.rotate(a);
+          g.strokeStyle=i%3?'rgba(219,250,255,.72)':'rgba(255,255,255,.97)';g.lineWidth=1+r()*3;
+          g.shadowColor='#a7eaff';g.shadowBlur=15;
+          g.beginPath();g.moveTo(rr,0);g.quadraticCurveTo(rr+45,-(r()-.5)*100,rr+100,10*(r()-.5));g.stroke();g.restore();
+        }
+      }
+      const tex=new THREE.CanvasTexture(can);
+      tex.colorSpace=THREE.SRGBColorSpace;
+      tex.minFilter=THREE.LinearMipmapLinearFilter;tex.magFilter=THREE.LinearFilter;
+      tex.generateMipmaps=true;
+      textures.set(kind,tex);
+      return tex;
+    }
+    let prewarmed=false;
+    function warm(){if(prewarmed)return;prewarmed=true;for(const name of Object.keys(SIZES))illustration(name);}
+    if(typeof window!=='undefined'){
+      const idle=()=>{try{warm();}catch(error){console.warn('[Arkeia] Spear painting',error);}};
+      if(typeof requestIdleCallback==='function')requestIdleCallback(idle,{timeout:4500});
+      else setTimeout(idle,2200);
+    }
+    function perform(b,f,net){
+      if(active>=maxActive || b.ended || !b.fx || f.dead)return;
+      warm();
+      const chosen=b.nearestEnemy?.(f);
+      const fw=f.forward();
+      const point=chosen?.pos?.clone?.()||f.pos.clone().addScaledVector(fw,4);
+      point.y=0;
+      const x=point.x,z=point.z;
+      const root=new THREE.Group();root.position.set(x,0,z);b.fx.add(root);
+      const ownMats=[],ownGeos=[];
+      function sprite(kind,px,py,pz,w,h,opacity=.85,rotation=0){
+        const material=new THREE.SpriteMaterial({map:illustration(kind),transparent:true,opacity,depthWrite:false,
+          depthTest:true,blending:THREE.AdditiveBlending,fog:false,rotation});
+        const s=new THREE.Sprite(material);s.position.set(px,py,pz);s.scale.set(w,h,1);
+        ownMats.push(material);root.add(s);return s;
+      }
+      function ground(kind,px,pz,size,opacity=.8){
+        const geo=new THREE.PlaneGeometry(1,1);
+        const mat=new THREE.MeshBasicMaterial({map:illustration(kind),transparent:true,opacity,depthWrite:false,
+          depthTest:true,blending:THREE.AdditiveBlending,side:THREE.DoubleSide,fog:false});
+        const obj=new THREE.Mesh(geo,mat);obj.rotation.x=-Math.PI/2;obj.position.set(px,.10,pz);obj.scale.set(size,size,1);
+        ownMats.push(mat);ownGeos.push(geo);root.add(obj);return obj;
+      }
+      const earth=ground('rune',0,0,7.8,.01);
+      const halo=ground('halo',0,0,4.6,.01);
+      const sky=sprite('rune',0,5.9,0,7.3,7.3,.01);
+      const cage=sprite('cage',0,1.3,0,5.8,5.7,.01);
+      const streak=sprite('streak',0,1.4,0,6.5,6.5,.01);
+      const finale=sprite('flare',0,1.15,0,3.4,3.4,0);
+      const spearParts=[];
+      const hits=[];
+      for(let i=0;i<10;i++){
+        const a=(i*TAU/10)+.21;
+        const r=5.25+(i%3)*.28;
+        const from=new THREE.Vector3(Math.cos(a)*r,2.1+(i%4)*.6,Math.sin(a)*r);
+        const to=new THREE.Vector3((i%2?-.17:.17),1.24+(i%3)*.11,(i%2?.09:-.09));
+        const s=sprite('spear',from.x,from.y,from.z,1.6,5.3,0,a+Math.PI*.4);
+        spearParts.push({s,from,to,at:.60+i*.165,hit:false});
+        hits.push({at:.60+i*.165+.28,dmg:i===0?65:i===9?140:55,radius:i===9?3.4:2.3});
+      }
+      active++;
+      let closed=false,elapsed=0,nextHit=0;
+      const cleanup=()=>{
+        if(closed)return;closed=true;active=Math.max(0,active-1);
+        b.__prismaticSpearCleanups?.delete(cleanup);
+        root.removeFromParent();for(const m of ownMats)m.dispose();for(const g of ownGeos)g.dispose();
+      };
+      (b.__prismaticSpearCleanups ||= new Set()).add(cleanup);
+      b.ui.sfx?.('skill',{elem:5,color:0xd1f5ff});
+      b.flashLight?.(new THREE.Vector3(x,1.2,z),0xd2f6ff,.9,.36);
+      if(chosen&&!chosen.remoteAuth && !chosen.dead){
+        chosen.action=null;chosen.vel?.set?.(0,0,0);
+        chosen.stun=Math.max(chosen.stun||0,2.55);
+      }
+      b.addEffect(dt=>{
+        if(closed)return false;
+        if(!root.parent){cleanup();return false;}
+        dt=clamp(Number(dt)||0,0,.066);elapsed+=dt;
+        const t=elapsed;
+        const enter=clamp(t/.45),pulse=.8+.2*Math.sin(10*t);
+        const fade=1-clamp((t-2.55)/.54);
+        earth.material.opacity=.83*enter*fade;earth.rotation.z+=dt*.85;
+        sky.material.opacity=.69*enter*fade;sky.material.rotation-=dt*.36;
+        cage.material.opacity=.66*clamp((t-.25)/.25)*fade*pulse;
+        cage.material.rotation+=dt*.68;
+        streak.material.opacity=.28*clamp((t-.32)/.2)*fade;
+        streak.material.rotation-=dt*1.7;
+        halo.material.opacity=.54*enter*fade;
+        halo.scale.setScalar(4.6*(1+.12*Math.sin(t*9)));
+        for(const part of spearParts){
+          const q=t-part.at;
+          if(q<-.15){part.s.material.opacity=0;continue;}
+          const u=clamp(q/.28);
+          part.s.position.lerpVectors(part.from,part.to,1-Math.pow(1-u,3));
+          part.s.scale.set(1.6*(1-.2*u),5.3*(1-.1*u),1);
+          part.s.material.opacity=clamp((q+.15)/.16)*(.97)*(1-clamp((q-.27)/.27));
+          part.s.material.rotation+=dt*1.3;
+        }
+        while(nextHit<hits.length && t>=hits[nextHit].at){
+          const h=hits[nextHit++];
+          if(!f.remoteAuth){
+            b.strikeAt(f,x,z,h.radius,h.dmg,Math.max(.25,nextHit===1?1.1:.36),nextHit===10?8:2.1,
+              {kind:'frost_shining_spear_painted',elem:5,color:0xb9f5ff});
+          }
+          b.fxPop?.(new THREE.Vector3(x,1.25,z),5,nextHit===10?8:1,
+            nextHit===10?6.2:1.8,nextHit===10?.45:.20,{grow:1.5,spin:2.2,op:.71});
+          if(nextHit%3===0){b.ui.sfx?.('zap');b.flashLight?.(new THREE.Vector3(x,1.5,z),0xc8f5ff,.95,.18);}
+          if(nextHit===10){b.ui.flash?.();b.ui.sfx?.('burst');b.shake=Math.max(b.shake||0,.73);}
+        }
+        const finish=clamp((t-2.35)/.55);
+        finale.material.opacity=.93*Math.sin(Math.PI*clamp(finish));
+        finale.scale.setScalar(3.4+15*finish);
+        if(t>=3.12){cleanup();return false;}
+        return true;
+      });
+    }
+    const previous=Battle.prototype.executeCast;
+    Battle.prototype.executeCast=function(f,slot,net){
+      const selected=!!f && f.key==='valgard' && slot==='s0' &&
+        f.def?.skills?.[0]?.kind==='frost_shining_spear_painted';
+      const result=previous.call(this,f,slot,net);
+      if(selected)perform(this,f,net);
+      return result;
+    };
+    const disposeOriginal=Battle.prototype.dispose;
+    Battle.prototype.dispose=function(...args){
+      for(const cleanup of [...(this.__prismaticSpearCleanups||[])])cleanup();
+      this.__prismaticSpearCleanups?.clear();
+      return disposeOriginal?.apply(this,args);
     };
   }
 
@@ -2006,6 +2239,7 @@
       this.__iceEcho=null;
       if(this.__iceEchoQueued||now<(this.__iceEchoReadyAt||0))return;
       this.__iceEchoQueued=true;
+      window.__arkeiaPlayValgardOther?.(this);
     };
     // Include the proxy in enemy targeting/hits, but NEVER in Battle.fighters.
     // The original 3D fighter update / resurrection / camera loops stay untouched.
@@ -2089,6 +2323,7 @@
       root.rotation.x=-Math.PI/2;root.position.y=.065;root.renderOrder=4;
       f.root.add(root);
       f.__iceSeal={root,mat,geo,started:now,expires:now+SEAL_DURATION,fx:0};
+      window.__arkeiaPlayValgardOther?.(f);
       f.battle?.ui.popup?.(f.pos,`氷結封印陣：${SEAL_DURATION}秒持続`,'#bcf5ff');
       f.battle?.fxPop?.(f.pos.clone().setY(.1),1,5,4.8,.56,{flat:true,grow:1.2,spin:2.5,op:.8});
       f.battle?.flashLight?.(f.pos.clone().setY(.8),ICE,.95,.22);
