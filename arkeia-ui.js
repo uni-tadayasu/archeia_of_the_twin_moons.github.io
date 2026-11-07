@@ -344,66 +344,6 @@
       multi(this,p,e,Math.max(.65,Math.min(1.75,reach/3)),'slash');
       if(L.spin)spawn(this,new THREE.Vector3(f.pos.x,.1,f.pos.z),e,4,reach*1.6,.42,{flat:true,grow:1.9,spin:7});
     };
-    // Valgard's effects use illustrations with alpha depth and soft volume;
-    // do not draw faceted rings, polygon crystals, or 3D mesh weapons.
-    // Only visible artwork changes here; the gameplay/attack timing remains authoritative.
-    const oldCastVisual=Battle.prototype.castFx;
-    if(typeof oldCastVisual==='function')Battle.prototype.castFx=function(f,color,spec){
-      if(f?.key!=='valgard')return oldCastVisual.call(this,f,color,spec);
-      const p=new THREE.Vector3(f.pos.x,.09,f.pos.z), e=element(spec,1);
-      spawn(this,p,e,5,5.6,.92,{flat:true,grow:1.22,hold:true,spin:1.5,op:.86});
-      spawn(this,p.clone().setY(.16),e,4,4.2,.66,{flat:true,grow:1.8,spin:-2.6,op:.54});
-      spawn(this,p.clone().setY(1.7),e,2,5.0,.66,{grow:1.7,rise:1.1,spin:.6,op:.58});
-      spawn(this,p.clone().setY(1.2),e,7,3.6,.48,{grow:1.6,rise:.4,op:.7});
-      if(spec?.follow){
-        spawn(this,p.clone().setY(1.0),e,9,4.2,.42,{grow:1.8,spin:2.2,op:.66});
-      }
-      this.flashLight?.(p.clone().setY(1.2),color||0x8bdcff,.8,.27);
-    };
-    const oldStrikeVisual=Battle.prototype.strike;
-    if(typeof oldStrikeVisual==='function')Battle.prototype.strike=function(f,spec,x,z,delay,radius,dmg,hitSpec){
-      if(f?.key!=='valgard')return oldStrikeVisual.apply(this,arguments);
-      const e=element(spec,1),clr=spec?.color??0x86ddff;
-      const at=new THREE.Vector3(x,0.11,z), size=Math.max(1,Number(radius)||1);
-      const wait=Math.max(0,Number(delay)||0);
-      this.fxPop(at,e,5,size*2.3,Math.max(.32,wait+.28),
-        {flat:true,grow:1.08,spin:1.3,hold:true,op:.68});
-      let t=-wait,done=false;
-      this.addEffect(dt=>{
-        t+=Math.max(0,Number(dt)||0);
-        if(!done&&t>=0){
-          done=true;
-          this.strikeAt(f,x,z,size,Math.max(0,Number(dmg)||0),spec?.final?1:.4,spec?.final?11:4,hitSpec||spec);
-          this.fxPop(at.clone().setY(1.4),e,8,size*2.4,.42,{grow:1.8,op:.82});
-          this.fxPop(at.clone().setY(.13),e,4,size*2.1,.55,{flat:true,grow:2.25,spin:2,op:.79});
-          this.flashLight?.(at.clone().setY(1.25),clr,spec?.final?1.9:.9,.32);
-          if(spec?.final){
-            this.fxPop(at.clone().setY(2.4),e,2,size*2.8,.7,{grow:2.1,op:.7});
-            this.shake=Math.max(this.shake||0,.65);
-          }
-        }
-        return t<.71;
-      });
-    };
-    const oldShockwaveVisual=Battle.prototype.shockwave;
-    if(typeof oldShockwaveVisual==='function')Battle.prototype.shockwave=function(f,spec,delay,cx,cz){
-      if(f?.key!=='valgard')return oldShockwaveVisual.apply(this,arguments);
-      const x=cx??f.pos.x,z=cz??f.pos.z,p=new THREE.Vector3(x,.1,z);
-      const e=element(spec,1),size=Math.max(.4,spec?.radius||3.4);
-      let t=-(Math.max(0,Number(delay)||0)),done=false;
-      this.fxPop(p,e,5,size*1.95,Math.max(.38,-t+.48),{flat:true,grow:1.15,spin:2.0,hold:true,op:.83});
-      this.addEffect(dt=>{
-        t+=Math.max(0,Number(dt)||0);
-        if(!done&&t>=0){
-          done=true;
-          this.strikeAt(f,x,z,size,Math.max(0,spec?.dmg||0),.48,5,spec);
-          this.fxPop(p,e,4,size*1.3,.57,{flat:true,grow:2.3,spin:-2.0,op:.9});
-          this.fxPop(p.clone().setY(1.1),e,8,size*1.5,.4,{grow:1.75,op:.72});
-          this.flashLight?.(p.clone().setY(1.0),spec?.color||0x8fdfff,.75,.2);
-        }
-        return t<.65;
-      });
-    };
     // Flying projectile collision/hit logic remains the original implementation.
     // Only the 3D solid in the newly created projectile root is replaced by paint.
     const originalProjectile=Battle.prototype.projectile;
@@ -1351,6 +1291,38 @@
       });
     }
 
+    function showCastingCircle(b,f,slot){
+      if(!b?.fx || !f || f.dead) return;
+      const root=new THREE.Group(); b.fx.add(root);
+      const mats=[], geos=[];
+      const add=(id,pos,w,h,flat=false,op=1,color=0xffffff,additive=true)=>{
+        const map=tex(id); if(!map) return null;
+        const opts={map,transparent:true,opacity:op,color,depthWrite:false,depthTest:flat,blending:additive?THREE.AdditiveBlending:THREE.NormalBlending,side:THREE.DoubleSide,fog:false};
+        const material=flat?new THREE.MeshBasicMaterial(opts):new THREE.SpriteMaterial(opts);
+        const obj=flat?new THREE.Mesh(new THREE.PlaneGeometry(1,1),material):new THREE.Sprite(material);
+        obj.position.copy(pos); obj.scale.set(w,h,1); obj.renderOrder=flat?5:8; if(flat)obj.rotation.x=-Math.PI/2;
+        root.add(obj); mats.push(material); if(flat)geos.push(obj.geometry); return obj;
+      };
+      const baseX=f.pos.x, baseZ=f.pos.z;
+      const spec=(slot==='over')?f.def?.over:(slot==='hi')?f.def?.hi:/^[sf](\d+)$/.test(slot)?f.def?.skills?.[+slot.slice(1)]:null;
+      const dur=clamp((Number(spec?.castTime)||1.2)+0.35, .8, 3.2);
+      const ring=add('heaven',new THREE.Vector3(baseX,.08,baseZ),4.7,4.7,true,0,0xdff7ff);
+      const gate=add('celestialGate',new THREE.Vector3(baseX,2.8,baseZ),7.1,7.1,false,0,0xffffff,false);
+      const mist=add('mist',new THREE.Vector3(baseX,1.8,baseZ),5.3,4.1,false,0,0xffffff,true);
+      let elapsed=0, cleaned=false;
+      const clean=()=>{ if(cleaned)return; cleaned=true; root.removeFromParent(); for(const m of mats)m.dispose(); for(const g of geos)g.dispose(); };
+      b.addEffect(dt=>{
+        if(cleaned)return false;
+        elapsed+=clamp(Number(dt)||0,0,.065);
+        root.position.set(f.pos.x-baseX,0,f.pos.z-baseZ);
+        const fadeIn=clamp(elapsed/.18,0,1), fadeOut=1-clamp((elapsed-(dur-.35))/.35,0,1);
+        if(ring){ ring.material.opacity=.64*fadeIn*fadeOut; ring.rotation.z+=dt*.9; ring.scale.setScalar(4.7*(.84+.18*fadeIn)); }
+        if(gate){ gate.material.opacity=.42*fadeIn*fadeOut; gate.material.rotation+=dt*.13; gate.position.y=2.8+.15*Math.sin(elapsed*3); }
+        if(mist){ mist.material.opacity=.18*fadeIn*fadeOut; mist.position.y=1.8+.10*Math.sin(elapsed*5); }
+        if(elapsed>=dur||f.dead){ clean(); return false; }
+        return true;
+      });
+    }
     function performValgardCinematic(b,f,slot,net){
       if(!b?.fx || !f || f.dead || b.ended) return;
       const mode=(slot==='s1'||slot==='f1')?'warp':(slot==='s3'||slot==='f3')?'ice':(slot==='s4'||slot==='f4')?'heal':null;
@@ -1412,6 +1384,73 @@
       });
     }
 
+
+    function performEvolvedFollowVisual(b,f,slot,net){
+      if(!b?.fx || !f || f.dead || !/^f\d+$/.test(slot)) return;
+      const idx=+slot.slice(1);
+      const spec=f.def?.skills?.[idx]||{};
+      const elem=Number(spec.elem)||0;
+      const name=`${spec.name||''}`;
+      const kind=`${spec.kind||''}`;
+      const target=findTarget(b,f,net);
+      const support=/heal|cure|regen|earth|再生|回復/i.test(name+kind);
+      const point=support?f.pos:(target?.pos || new THREE.Vector3(f.pos.x+(Math.sin(f.facing||0)*3.6),0,f.pos.z+(Math.cos(f.facing||0)*3.6)));
+      const root=new THREE.Group(); b.fx.add(root);
+      const mats=[], geos=[];
+      const palette={
+        0:[0xe8f6ff,0x8ad6ff,0x4da3ff],
+        1:[0xfff0a6,0xffc76c,0xff8c48],
+        2:[0xf3e0ff,0xc49bff,0x8f67ff],
+        3:[0xbef7ff,0x74dcff,0x35a6ff],
+        4:[0xffb8d2,0xff7bac,0xf5518f],
+        5:[0xe8f9ff,0xc7efff,0x8fd6ff]
+      };
+      const [c0,c1,c2]=palette[elem]||palette[0];
+      const make=(id,pos,w,h,flat=false,op=1,color=0xffffff,additive=true)=>{
+        const map=tex(id); if(!map) return null;
+        const opts={map,transparent:true,opacity:op,color,depthWrite:false,depthTest:flat,blending:additive?THREE.AdditiveBlending:THREE.NormalBlending,side:THREE.DoubleSide,fog:false};
+        const mat=flat?new THREE.MeshBasicMaterial(opts):new THREE.SpriteMaterial(opts);
+        const obj=flat?new THREE.Mesh(new THREE.PlaneGeometry(1,1),mat):new THREE.Sprite(mat);
+        obj.position.copy(pos); obj.scale.set(w,h,1); obj.renderOrder=flat?5:8; if(flat)obj.rotation.x=-Math.PI/2;
+        root.add(obj); mats.push(mat); if(flat)geos.push(obj.geometry); return obj;
+      };
+      const floor=make('heaven',new THREE.Vector3(point.x,.08,point.z),5.4,5.4,true,0,c1);
+      const floor2=make('earth',new THREE.Vector3(point.x,.09,point.z),4.2,4.2,true,0,c0);
+      const halo=make('shockHalo',new THREE.Vector3(point.x,.12,point.z),3.4,3.4,true,0,c0);
+      const mist=make('mist',new THREE.Vector3(point.x,1.4,point.z),6.2,4.8,false,0,c0,true);
+      const veil=make('sparkVeil',new THREE.Vector3(point.x,2.2,point.z),6.2,6.2,false,0,c1,true);
+      const storm=make('sacredFlares',new THREE.Vector3(point.x,2.5,point.z),7.2,7.2,false,0,c1,true);
+      const pillar=make('pillar',new THREE.Vector3(point.x,3.5,point.z),4.8,13.5,false,0,c2,true);
+      const bladeA=make('bladeWake',new THREE.Vector3(point.x,1.55,point.z),5.0,8.2,false,0,c0,true);
+      const bladeB=make('royalSlash',new THREE.Vector3(point.x,1.25,point.z),7.0,3.4,false,0,c1,true);
+      const boltA=make('boltA',new THREE.Vector3(point.x,4.8,point.z),2.8,9.5,false,0,c0,true);
+      const boltB=make('boltB',new THREE.Vector3(point.x,4.6,point.z),2.8,9.2,false,0,c1,true);
+      const bloom=support?make('healBloom',new THREE.Vector3(point.x,2.6,point.z),8.6,8.6,false,0,c0,true):null;
+      let elapsed=0, cleaned=false;
+      const clean=()=>{ if(cleaned) return; cleaned=true; root.removeFromParent(); for(const m of mats)m.dispose(); for(const g of geos)g.dispose(); };
+      b.addEffect(dt=>{
+        if(cleaned)return false;
+        dt=clamp(Number(dt)||0,0,.065); elapsed+=dt;
+        const t=elapsed, fadeIn=clamp(t/.18,0,1), fadeOut=1-clamp((t-1.08)/.54,0,1);
+        const livePoint=support?f.pos:(target?.pos || point);
+        const px=livePoint.x, pz=livePoint.z;
+        if(floor){ floor.position.set(px,.08,pz); floor.material.opacity=.82*fadeIn*fadeOut; floor.rotation.z+=dt*.8; floor.scale.setScalar(5.4*(.78+.22*fadeIn)); }
+        if(floor2){ floor2.position.set(px,.09,pz); floor2.material.opacity=.65*fadeIn*fadeOut; floor2.rotation.z-=dt*1.05; floor2.scale.setScalar(4.2*(.8+.28*fadeIn)); }
+        if(halo){ halo.position.set(px,.12,pz); halo.material.opacity=.84*clamp((t-.1)/.12,0,1)*(1-clamp((t-1.0)/.38,0,1)); halo.scale.setScalar(3.4+6.8*clamp((t-.15)/.9,0,1)); }
+        if(mist){ mist.position.set(px,1.35,pz); mist.material.opacity=.26*fadeIn*fadeOut; mist.position.y=1.35+.18*Math.sin(t*5.2); }
+        if(veil){ veil.position.set(px,2.2,pz); veil.material.opacity=.42*fadeIn*fadeOut; veil.material.rotation-=dt*.35; }
+        if(storm){ storm.position.set(px,2.5,pz); storm.material.opacity=.58*clamp((t-.12)/.16,0,1)*(1-clamp((t-1.12)/.42,0,1)); storm.material.rotation+=dt*.22; }
+        if(pillar){ pillar.position.set(px,3.4,pz); pillar.material.opacity=.38*clamp((t-.06)/.14,0,1)*fadeOut; pillar.scale.set(4.8,13.5+.5*Math.sin(t*6),1); }
+        if(bladeA){ bladeA.position.set(px,1.55,pz); bladeA.material.opacity=.72*clamp((t-.14)/.12,0,1)*(1-clamp((t-.78)/.28,0,1)); bladeA.material.rotation+=dt*.8; }
+        if(bladeB){ bladeB.position.set(px,1.25,pz); bladeB.material.opacity=.94*clamp((t-.18)/.14,0,1)*(1-clamp((t-.84)/.26,0,1)); }
+        if(boltA){ boltA.position.set(px+Math.sin(t*7)*.4,4.8,pz); boltA.material.opacity=(support?0:.92)*clamp((t-.08)/.1,0,1)*(1-clamp((t-.64)/.22,0,1)); }
+        if(boltB){ boltB.position.set(px-Math.sin(t*6.5)*.38,4.6,pz); boltB.material.opacity=(support?0:.86)*clamp((t-.16)/.1,0,1)*(1-clamp((t-.72)/.24,0,1)); }
+        if(bloom){ bloom.position.set(px,2.6,pz); bloom.material.opacity=.88*fadeIn*fadeOut; bloom.material.rotation+=dt*.14; }
+        if(t>=1.62 || f.dead){ clean(); return false; }
+        return true;
+      });
+    }
+
     function performBlueEarth(b,f){
       if(!b?.fx || b.ended || !f || f.dead)return;
       const healed=Math.max(0,Math.round(f.maxHp-f.hp));
@@ -1466,7 +1505,26 @@
     // Dedicated synthesized Valgard calls. Playback follows the user's
     // audio settings; Chrome/Edge uses the installed Japanese TTS voice.
     // Only skill usage, not a recurring per-frame effect.
-    // Valgard combat speech is provided by voice.js with fixed male audio clips.
+    let nextLineAt=0;
+    function sayValgardLine(line){
+      try{
+        if(typeof window==='undefined' || !window.speechSynthesis ||
+           typeof SpeechSynthesisUtterance==='undefined')return;
+        if(window.localStorage?.getItem('arkeia-muted')==='1')return;
+        const volume=clamp((+(window.localStorage?.getItem('arkeia-voice-volume')??75))/100,0,1);
+        if(volume===0)return;
+        const now=performance.now();
+        if(now<nextLineAt)return;
+        nextLineAt=now+1050;
+        const utterance=new SpeechSynthesisUtterance(line);
+        utterance.lang='ja-JP';utterance.rate=.82;utterance.pitch=.58;
+        utterance.volume=volume*.92;
+        const options=window.speechSynthesis.getVoices?.()||[];
+        const japanese=options.filter(v=>/^ja(?:-|_)/i.test(v.lang||''));
+        if(japanese.length)utterance.voice=japanese.find(v=>v.localService)||japanese[0];
+        window.speechSynthesis.speak(utterance);
+      }catch(error){console.warn('[Arkeia] Japanese cast voice unavailable.',error);}
+    }
     const previous=Battle.prototype.executeCast;
     Battle.prototype.executeCast=function(f,slot,net){
       const selectedAstral=!!f && f.key==='valgard' && (slot==='s2'||slot==='f2') && f.def?.skills?.[2]?.kind==='astral_judgment_painted';
@@ -1474,13 +1532,16 @@
       const selectedLast=!!f && f.key==='valgard' && slot==='over' && f.def?.over?.kind==='last_vanisher_painted';
       const selectedBlue=!!f && f.key==='valgard' && slot==='hi' && f.def?.hi?.kind==='blue_earth_painted';
       const outcome=previous.call(this,f,slot,net);
+      if(f && !f.remoteAuth && !this.net && (slot==='over'||slot==='hi'||/^[sf]\d+$/.test(slot))){
+        showCastingCircle(this,f,slot);
+        if(/^f\d+$/.test(slot)) performEvolvedFollowVisual(this,f,slot,net);
+      }
       if(f?.key==='valgard' && !f.remoteAuth && !this.net && (slot==='over'||slot==='hi'||/^[sf]\d+$/.test(slot))){
-        // Male pre-rendered voice comes from voice.js through main.js ui.skillName;
-        // avoid overlapping the device-dependent browser speech synthesis.
+        sayValgardLine(selectedAstral?'力の違いを見せてやる':selectedSpear?'これはよけられまい':'これでどうだ');
         performValgardCinematic(this,f,slot,net);
       }
-      if(selectedSpear)performShiningSpear(this,f,net,slot==='f0'?1.16:1);
-      if(selectedAstral)perform(this,f,net,slot==='f2'?1.16:1);
+      if(selectedSpear)performShiningSpear(this,f,net,slot==='f0'?.65:1);
+      if(selectedAstral)perform(this,f,net,slot==='f2'?.65:1);
       if(selectedLast)performLastVanisher(this,f,net);
       if(selectedBlue)performBlueEarth(this,f);
       return outcome;
