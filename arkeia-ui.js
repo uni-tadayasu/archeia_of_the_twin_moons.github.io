@@ -76,6 +76,112 @@
   `;
   document.head.appendChild(scrollStyle);
 
+  // Stage selection -> real loading UI while main.js loads GLB models.
+  // No fictitious percentage, no long blocking delay, and safe dismissal on model errors.
+  function installStageLoadingScreen(){
+    if(document.getElementById('arkeia-stage-loading'))return;
+    const style=document.createElement('style');
+    style.id='arkeia-stage-loading-css';
+    style.textContent=`
+      #arkeia-stage-loading[hidden]{display:none!important}
+      #arkeia-stage-loading{position:fixed;inset:0;z-index:9998;display:grid;place-items:center;
+        padding:clamp(16px,4vw,40px);overflow:auto;color:#f6f0e3;
+        background:#07101d;isolation:isolate;font-family:serif;}
+      #arkeia-stage-loading .sl-stage-art{position:absolute;inset:0;background-position:center;
+        background-size:cover;opacity:.44;filter:saturate(.75) contrast(1.1) brightness(.8);z-index:-2}
+      #arkeia-stage-loading .sl-vignette{position:absolute;inset:0;z-index:-1;
+        background:radial-gradient(ellipse at 50% 40%,#162c42a0 0%,#081322ec 73%,#04090ffb 100%)}
+      #arkeia-stage-loading .sl-center{position:relative;display:flex;flex-direction:column;
+        align-items:center;justify-content:center;gap:15px;width:min(560px,100%);
+        text-align:center;padding:24px 18px 30px}
+      #arkeia-stage-loading .sl-mark{position:relative;width:112px;height:112px;margin:6px auto 16px}
+      #arkeia-stage-loading .sl-mark::before,#arkeia-stage-loading .sl-mark::after{
+        content:'';position:absolute;inset:9px;border:2px solid #b6e8ff99;
+        border-radius:50%;box-shadow:0 0 18px #69caff5c,inset 0 0 14px #6aaaff22;
+        animation:arkeia-loading-orbit 3.5s linear infinite}
+      #arkeia-stage-loading .sl-mark::after{inset:0;border-color:#d7c38e84;
+        border-style:dashed;animation-duration:5.5s;animation-direction:reverse}
+      #arkeia-stage-loading .sl-moon{position:absolute;inset:24px;border-radius:50%;
+        background:radial-gradient(circle at 33% 27%,#f8ffff,#9dceef 38%,#315176 72%,#0a192f 100%);
+        box-shadow:0 0 23px #91d6ff80,0 0 65px #4ba6eb40}
+      #arkeia-stage-loading .sl-kicker{font:600 10px/1.5 system-ui,sans-serif;letter-spacing:.36em;color:#c6c1ac}
+      #arkeia-stage-loading .sl-title{font-size:clamp(26px,5vw,40px);font-weight:500;letter-spacing:.17em;
+        line-height:1.4;text-shadow:0 2px 22px #000d}
+      #arkeia-stage-loading .sl-stage{font-size:clamp(14px,2.2vw,19px);letter-spacing:.15em;color:#e5d3a8}
+      #arkeia-stage-loading .sl-label{font:13px/1.8 system-ui,sans-serif;letter-spacing:.08em;color:#c7dce9}
+      #arkeia-stage-loading .sl-track{position:relative;overflow:hidden;height:3px;width:min(340px,85%);
+        border-radius:8px;background:#b5c9da30;margin:5px 0}
+      #arkeia-stage-loading .sl-track::after{content:'';display:block;width:38%;height:100%;
+        background:linear-gradient(90deg,transparent,#b8efff,#ddbd7f,transparent);
+        animation:arkeia-loading-sweep 1.8s ease-in-out infinite}
+      #arkeia-stage-loading .sl-dismiss{margin-top:10px;padding:9px 18px;border:1px solid #9ba6ac90;
+        color:#f2e7d0;background:#102438bb;cursor:pointer;font-size:12px;letter-spacing:.1em;
+        min-height:38px;border-radius:4px}
+      #arkeia-stage-loading .sl-dismiss:hover{background:#1b3c57}
+      @keyframes arkeia-loading-orbit{to{transform:rotate(360deg)}}
+      @keyframes arkeia-loading-sweep{0%{transform:translateX(-130%)}100%{transform:translateX(380%)}}
+      @media(prefers-reduced-motion:reduce){#arkeia-stage-loading *{animation:none!important}}
+    `;
+    document.head.appendChild(style);
+    const overlay=document.createElement('div'); overlay.id='arkeia-stage-loading'; overlay.hidden=true;
+    overlay.setAttribute('role','status'); overlay.setAttribute('aria-live','polite');
+    overlay.innerHTML=`
+      <div class="sl-stage-art" aria-hidden="true"></div><div class="sl-vignette" aria-hidden="true"></div>
+      <div class="sl-center"><div class="sl-mark" aria-hidden="true"><div class="sl-moon"></div></div>
+        <div class="sl-kicker">RIFTFALL ARENA · WORLD LOADING</div>
+        <div class="sl-title">戦いの舞台へ</div><div class="sl-stage"></div>
+        <div class="sl-track" aria-hidden="true"></div>
+        <div class="sl-label">キャラクターとステージを読み込んでいます</div>
+        <button type="button" class="sl-dismiss">ロード画面を閉じる</button></div>`;
+    document.body.appendChild(overlay);
+    const art=overlay.querySelector('.sl-stage-art'),title=overlay.querySelector('.sl-stage');
+    const label=overlay.querySelector('.sl-label');
+    const select=document.getElementById('scr-select');
+    let openAt=0,hideTimer=0,noticeTimer=0,watcher=null,observer=null;
+    const hide=()=>{
+      clearTimeout(hideTimer);clearTimeout(noticeTimer);
+      if(watcher)watcher.disconnect();watcher=null;
+      overlay.hidden=true;overlay.removeAttribute('aria-busy');
+    };
+    const finish=()=>{
+      if(overlay.hidden)return;
+      clearTimeout(hideTimer);
+      hideTimer=setTimeout(hide,Math.max(0,420-(performance.now()-openAt)));
+    };
+    const start=(tile)=>{
+      if(!select?.classList.contains('on'))return;
+      const heading=document.getElementById('select-label')?.textContent||'';
+      if(!heading.includes('舞台'))return;
+      clearTimeout(hideTimer);clearTimeout(noticeTimer);
+      openAt=performance.now();
+      title.textContent=tile.querySelector('b')?.textContent?.trim()||'新たな舞台';
+      const pic=tile.querySelector('.sthumb');
+      art.style.backgroundImage=pic?.style?.backgroundImage || '';
+      label.textContent='キャラクターモデルとステージを読み込んでいます';
+      overlay.hidden=false;overlay.setAttribute('aria-busy','true');
+      if(watcher)watcher.disconnect();
+      watcher=new MutationObserver(()=>{
+        if(document.getElementById('arkeia-model-error')){hide();return;}
+        if(!select.classList.contains('on'))finish();
+      });
+      watcher.observe(document.body,{childList:true});
+      watcher.observe(select,{attributes:true,attributeFilter:['class']});
+      noticeTimer=setTimeout(()=>{
+        if(!overlay.hidden){label.textContent='読み込みが続いています。時間がかかる場合は接続状況をご確認ください。';}
+      },12000);
+    };
+    overlay.querySelector('.sl-dismiss').addEventListener('click',hide);
+    document.addEventListener('click',event=>{
+      const tile=event.target.closest?.('#select-grid button.stage-tile');
+      if(tile&&!tile.disabled)start(tile);
+    },true);
+    // When main.js transitions to gameplay, the selection section loses .on.
+    // Cancel/return to menu or model load failure must not trap the player.
+    window.addEventListener('pagehide',hide);
+  }
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',installStageLoadingScreen,{once:true});
+  else installStageLoadingScreen();
+
   // Patch the SAME ESM module instances that main.js uses. This is visual only.
   const VISUAL_VERSION = 'painted-cg-20261107a';
   Promise.all([
@@ -1502,42 +1608,23 @@
       this.__astralFxCleanups?.clear();
       return previousDispose?.apply(this,args);
     };
-    // Dedicated synthesized Valgard calls. Playback follows the user's
-    // audio settings; Chrome/Edge uses the installed Japanese TTS voice.
-    // Only skill usage, not a recurring per-frame effect.
-    let nextLineAt=0;
-    function sayValgardLine(line){
-      try{
-        if(typeof window==='undefined' || !window.speechSynthesis ||
-           typeof SpeechSynthesisUtterance==='undefined')return;
-        if(window.localStorage?.getItem('arkeia-muted')==='1')return;
-        const volume=clamp((+(window.localStorage?.getItem('arkeia-voice-volume')??75))/100,0,1);
-        if(volume===0)return;
-        const now=performance.now();
-        if(now<nextLineAt)return;
-        nextLineAt=now+1050;
-        const utterance=new SpeechSynthesisUtterance(line);
-        utterance.lang='ja-JP';utterance.rate=.82;utterance.pitch=.58;
-        utterance.volume=volume*.92;
-        const options=window.speechSynthesis.getVoices?.()||[];
-        const japanese=options.filter(v=>/^ja(?:-|_)/i.test(v.lang||''));
-        if(japanese.length)utterance.voice=japanese.find(v=>v.localService)||japanese[0];
-        window.speechSynthesis.speak(utterance);
-      }catch(error){console.warn('[Arkeia] Japanese cast voice unavailable.',error);}
-    }
+    // Valgard voice uses the pre-rendered deep male clips in voice.js ONLY.
+    // Do not run speechSynthesis here; the OS may select a female voice and
+    // overlap the actual MP3 voice at the start of each attack.
     const previous=Battle.prototype.executeCast;
     Battle.prototype.executeCast=function(f,slot,net){
-      const selectedAstral=!!f && f.key==='valgard' && (slot==='s2'||slot==='f2') && f.def?.skills?.[2]?.kind==='astral_judgment_painted';
-      const selectedSpear=!!f && f.key==='valgard' && (slot==='s0'||slot==='f0') && f.def?.skills?.[0]?.kind==='shining_spear_painted';
+      const selectedAstral=!!f && f.key==='valgard' && slot==='s2' && f.def?.skills?.[2]?.kind==='astral_judgment_painted';
+      const selectedSpear=!!f && f.key==='valgard' && slot==='s0' && f.def?.skills?.[0]?.kind==='shining_spear_painted';
       const selectedLast=!!f && f.key==='valgard' && slot==='over' && f.def?.over?.kind==='last_vanisher_painted';
       const selectedBlue=!!f && f.key==='valgard' && slot==='hi' && f.def?.hi?.kind==='blue_earth_painted';
       const outcome=previous.call(this,f,slot,net);
-      if(f && !f.remoteAuth && !this.net && (slot==='over'||slot==='hi'||/^[sf]\d+$/.test(slot))){
-        showCastingCircle(this,f,slot);
-        if(/^f\d+$/.test(slot)) performEvolvedFollowVisual(this,f,slot,net);
+      if(f && !f.remoteAuth && !this.net && /^f\d+$/.test(slot)){
+        // The real chant circle already begins in game.js at chant START.
+        // Give only the new independent follow-up its distinctive impact artwork.
+        performEvolvedFollowVisual(this,f,slot,net);
       }
-      if(f?.key==='valgard' && !f.remoteAuth && !this.net && (slot==='over'||slot==='hi'||/^[sf]\d+$/.test(slot))){
-        sayValgardLine(selectedAstral?'力の違いを見せてやる':selectedSpear?'これはよけられまい':'これでどうだ');
+      if(f?.key==='valgard' && !f.remoteAuth && !this.net &&
+         (slot==='s1'||slot==='s3'||slot==='s4')){
         performValgardCinematic(this,f,slot,net);
       }
       if(selectedSpear)performShiningSpear(this,f,net,slot==='f0'?.65:1);

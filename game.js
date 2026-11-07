@@ -266,51 +266,66 @@ function beginChantCircle(b,f,spec,duration,stamp) {
 }
 
 
-// ---- 全キャラクター追加技：元技の動作を保つ軽い進化・アレンジ版 ----
-// Special/normal/enemy characters all use this generic factory. Results are cached per fighter definition.
-const EVOLVED_FORMS = {
-  projectile: ['星穿', '連光', '流星', '双奏', '追閃'],
-  dash: ['瞬迅', '閃迅', '残影', '裂光', '天穿'],
-  shockwave: ['広奏', '連環', '光輪', '鳴動', '渦舞'],
-  rain: ['星雨', '連奏', '散華', '天雨', '流光'],
-  judgment: ['天響', '二重奏', '星裁', '蒼響', '極光'],
-  implode: ['深淵', '連環', '双渦', '重閃', '凝光'],
-  heal: ['恵光', '清奏', '光環', '再輝', '連祈']
-};
+// ---- 全キャラクター84技、それぞれ個別設計の追加技 ---
+// 名前、演出、属性状態、攻撃順序はキャラクター×通常技スロットごとに固有。
+// 通常技を再利用するのではなく、完全に独立した追撃定義で描画・判定。
+const FOLLOW_SKILL_CATALOG = {
+  rowen: [['紅蓮輪舞《灼光陣》','ember_orbit','burn',4], ['双焔飛燕《紅刃交差》','lunar_cross','burn',7], ['焔鎖追月《流火の群》','star_chain','burn',1], ['灰燼天華《火雨葬》','holy_rain','burn',6]],
+  minase: [['雪精追奏《銀花の旋律》','star_chain','freeze',2], ['霜天封棺《白晶牢》','ice_prison','freeze',6], ['氷華千輪《霜界の花》','seal_lattice','slow',4], ['零度星蝕《凍星墜》','meteor_spiral','freeze',8]],
+  garou: [['砕岩震塊《大地王の足音》','seal_lattice','slow',0], ['暴風断斧《鬼神往還》','rift_sweep','stun',5], ['岩刃追討《破山斧陣》','star_chain','stun',7], ['狂砂縛輪《砂王封域》','gravity_cage','slow',9]],
+  tsubaki: [['乱華影縫《黒千鳥》','star_chain','blind',8], ['朧十字《黒影秘閃》','shadow_execution','blind',2], ['霞返し《空蝉の檻》','lunar_cross','blind',7], ['月輪木葉《紅葉忍雨》','venom_field','blind',3]],
+  harlan: [['聖壁連鐘《騎士結界》','seal_lattice','slow',1], ['雷槍重奏《古兵の一矢》','lunar_cross','stun',6], ['白銀守護《再生聖域》','renewal','',4], ['王都護衛《六重天槍》','holy_rain','stun',8]],
+  pip: [['爆晶散花《三色煙火》','ember_orbit','burn',7], ['錬金時限陣《連爆方程式》','gear_trap','burn',4], ['生命蒸留《若芽の雫》','renewal','',9], ['煙界錯乱《毒夢の輪》','venom_field','blind',2]],
+  velka: [['森妖巡箭《追星樹雨》','star_chain','slow',5], ['葉風瞬駆《翠空転身》','rift_sweep','slow',1], ['穿星精矢《一閃の森》','lunar_cross','stun',8], ['天弓星群《銀河射礼》','holy_rain','slow',3]],
+  osric: [['虚無刻印《紫冥の結界》','seal_lattice','curse',9], ['滅影転刃《闇月二閃》','shadow_execution','blind',6], ['黒炎螺旋《獄火追刃》','ember_orbit','burn',2], ['裁断星棺《黒天刑雨》','holy_rain','curse',5]],
+  noa: [['銀鈴共鳴《安息の鐘》','phoenix_rebirth','',3], ['聖響追光《星鈴の歌》','star_chain','slow',8], ['光天花冠《祝福環》','renewal','',0], ['白陽燈陣《聖なる雨》','holy_rain','stun',4]],
+  kurouga: [['獣王咆鳴《牙狼の月》','seal_lattice','stun',7], ['月影裂牙《狼霊踏破》','shadow_execution','blind',5], ['追猟風牙《双月狩》','star_chain','stun',3], ['銀狼天翔《狩月の爪》','lunar_cross','stun',9]],
+  rinfa: [['鳳火飛拳《焔蝶追撃》','ember_orbit','burn',4], ['風虎縮歩《三界踏破》','rift_sweep','stun',8], ['旋竜脚陣《翠風結界》','seal_lattice','slow',1], ['紅天百拳《流星蓮撃》','meteor_spiral','burn',6]],
+  igna: [['竜爪星墜《天翔槍雨》','meteor_spiral','stun',9], ['雷竜一閃《天空刺撃》','shadow_execution','stun',3], ['竜鎧猛烈《鱗の大旋風》','seal_lattice','slow',5], ['青炎追槍《飛竜の息吹》','star_chain','burn',2]],
+  petra: [['輪歯連奏《発条星群》','gear_trap','stun',1], ['糸命操影《人形影跳》','shadow_execution','blind',7], ['機巧千華《歯車舞台》','meteor_spiral','stun',4], ['時限輪舞《刻機爆裂》','gear_trap','slow',9]],
+  seraphel: [['天翼聖槍《白天の裁列》','holy_rain','stun',0], ['審判霊閃《光天交差》','lunar_cross','stun',5], ['聖印巡光《神域追星》','star_chain','slow',8], ['白翼鳴動《絶光聖環》','phoenix_rebirth','',3]],
+  uninomiya: [['天皇星辰《金華の槍》','holy_rain','stun',7], ['神代雷輪《御雷天弧》','thunder_lattice','stun',4], ['三華鳳雷《双月御剣》','star_chain','stun',0], ['公達閃影《紫苑の道》','rift_sweep','blind',6]],
+  chief: [['鳳凰散華《朱翼の天輪》','phoenix_rebirth','burn',3], ['白耀結界《永光の守》','seal_lattice','slow',9], ['天裁連雷《風神の審問》','thunder_lattice','stun',5], ['宵闇圧界《深淵の抱擁》','gravity_cage','curse',1]],
+  crimson: [['紅魔追星《獄炎魔刃》','ember_orbit','burn',8], ['獅子瞬閃《双獣の牙》','shadow_execution','stun',4], ['烈天咆震《魔王の刻印》','seal_lattice','stun',2], ['緋雷天落《紅月流星》','thunder_lattice','stun',7]],
+  sovereign: [['冥夜追鎖《紫星の嘆》','star_chain','curse',5], ['紫月幻身《宵闇回帰》','shadow_execution','blind',2], ['冥霊雷蝕《十界の鎖》','thunder_lattice','curse',8], ['虚無重界《時滅の牢》','gravity_cage','curse',0]],
+  sovereign2: [['緋天輪廻《赤星冠環》','ember_orbit','burn',6], ['冥后聖域《黒星崩壊》','gravity_cage','curse',1], ['血月終夜《緋華天雨》','venom_field','curse',4], ['深紅の寵愛《奈落転生》','phoenix_rebirth','',9]],
+  valgard: [['氷皇封界《蒼晶鎖》','ice_prison','freeze',1], ['時空逆刃《凍零の転身》','shadow_execution','stun',8], ['神雷十天《絶剣の閃》','thunder_lattice','stun',4], ['凍星監獄《零界大結晶》','ice_prison','freeze',7]],
+  bloodfiend: [['紅爪血月《命啜る影》','venom_field','curse',2], ['深紅転翼《血鏡双牙》','shadow_execution','blind',9], ['緋血霊雨《千槍紅蓮》','holy_rain','curse',6], ['吸命血界《紅獄心臓》','gravity_cage','curse',3]],};
 const FOLLOW_CACHE = new WeakMap();
 const FOLLOW_HOLD = 0.45, FOLLOW_MAX = 1.5;
-export function followSpec(def, i) {
-  const base = def?.skills?.[i];
-  if (!base) return null;
-  let m = FOLLOW_CACHE.get(def);
-  if (!m) FOLLOW_CACHE.set(def, (m = {}));
-  // Modifications to the base skill invalidate only that cached variant.
-  if (m[i]?.__evolvedSourceName === base.name && m[i]?.__evolvedSourcePower === base.dmg) return m[i];
-  let h = (i + 23) * 997;
-  for (const ch of base.name) h = (Math.imul(h, 31) + ch.codePointAt(0)) >>> 0;
-  const forms = EVOLVED_FORMS[base.kind] || ['追奏', '深化', '極彩', '双奏', '残光'];
-  const extra = forms[h % forms.length];
-  const s = { ...base, name: `${base.name}・${extra}`,
-    follow: true, evolvedFollow: true,
-    cost: Math.max(0, Math.ceil((base.cost || 0) * 0.56)),
-    __evolvedSourceName: base.name, __evolvedSourcePower: base.dmg
+const FOLLOW_OWNERS = new WeakMap(Object.entries(FIGHTERS).map(([key,def])=>[def,key]));
+export function followSpec(def,i){
+  const base=def?.skills?.[i]; if(!base)return null;
+  const owner=FOLLOW_OWNERS.get(def)||'';
+  const row=FOLLOW_SKILL_CATALOG[owner]?.[i];
+  let cache=FOLLOW_CACHE.get(def); if(!cache)FOLLOW_CACHE.set(def,(cache={}));
+  const signature=`${owner}|${i}|${base.name}|${base.kind}|${base.dmg||0}|${base.heal||0}|${base.finalDmg||0}`;
+  if(cache[i]?.__sourceSignature===signature)return cache[i];
+  // An uncatalogued future fighter still receives a deterministic standalone technique.
+  let hash=(i+29)*1009;
+  for(const ch of `${def.name||''}:${base.name||''}`) hash=(Math.imul(hash,31)+ch.codePointAt(0))>>>0;
+  const families=['star_chain','rift_sweep','seal_lattice','meteor_spiral','gravity_cage','renewal','resonance','ember_orbit','ice_prison','lunar_cross','venom_field','thunder_lattice','gear_trap','phoenix_rebirth','shadow_execution','holy_rain'];
+  const name=row?.[0]||`${base.name}・異界奥式《${['壱','弐','参','肆'][i%4]}》`;
+  const mode=row?.[1]||families[hash%families.length];
+  const status=row?.[2]||'';
+  const visualStyle=row?.[3]??(hash%10);
+  const power=Math.max(28,Number(base.dmg)||Number(base.finalDmg)||60);
+  // Keep separate independent damage from existing base moves; avoid runaway PvP.
+  const strength=Math.min(410,Math.max(36,Math.round(power*.44)));
+  const heal=Math.max(55,Math.round((Number(base.heal)||130)*.58));
+  const result={
+    name, kind:'follow_signature', followArchetype:mode, followStyle:visualStyle,
+    followStatus:status,followOwner:owner,followIndex:i,follow:true,evolvedFollow:true,
+    __sourceSignature:signature,__sourceKind:base.kind||'',
+    elem:base.elem??(hash%10),color:base.color??def.color??0xb8dfff,
+    cost:Math.max(4,Math.ceil((Number(base.cost)||18)*.58)),
+    castTime:Math.max(.36,Math.min(1.14,(Number(base.castTime)||.92)*.78)),
+    dmg:strength,heal,radius:Math.max(2.6,Math.min(7.4,(Number(base.radius)||3.4)*.96)),
+    speed:Math.max(12,Number(base.speed)||17),
+    visual:'follow_unique',vivid:true,
+    description:`${def.name}専用の独立派生技：${name}。${mode}の個別演出と判定を行う`
   };
-  // Each follow-up is a recognizably stronger variation, not a separate overpowering ultimate.
-  if (Number.isFinite(s.dmg) && s.dmg > 0) s.dmg = Math.round(s.dmg * (1.15 + (h % 3) * .02));
-  if (Number.isFinite(s.finalDmg) && s.finalDmg > 0) s.finalDmg = Math.round(s.finalDmg * 1.13);
-  if (Number.isFinite(s.count) && s.count > 0) s.count = Math.min(24, Math.ceil(s.count + 1));
-  if (Number.isFinite(s.radius) && s.radius > 0) s.radius = +(s.radius * 1.12).toFixed(2);
-  if (Number.isFinite(s.speed) && s.speed > 0) s.speed = +(s.speed * 1.09).toFixed(2);
-  if (Number.isFinite(s.heal) && s.heal > 0) s.heal = Math.round(s.heal * 1.18);
-  if (Number.isFinite(s.stun) && s.stun >= 0) s.stun = +(s.stun + .07).toFixed(2);
-  if (Number.isFinite(s.interval) && s.interval > 0) s.interval = +(s.interval * .94).toFixed(3);
-  if (Number.isFinite(s.spreadAng) && s.spreadAng > 0) s.spreadAng = +(s.spreadAng * 1.1).toFixed(3);
-  if (Number.isFinite(s.spread) && s.spread > 0) s.spread = +(s.spread * 1.1).toFixed(2);
-  // Avoid doubling all shockwave hits: the evolved halo is VISUAL, not a duplicate damage event.
-  if (s.kind === 'shockwave') s.double = !!base.double;
-  if (s.kind === 'heal') s.cost = Math.max(0, Math.ceil((base.cost || 0) * .60));
-  m[i] = s;
-  return s;
+  cache[i]=result;return result;
 }
 // ---- 秘奥義：覚醒中に放つ奥義 ----
 const HI_CACHE = new WeakMap();
@@ -1719,6 +1734,8 @@ export class Battle {
       }
     } else if (spec.kind === 'rain' || spec.kind === 'judgment') {
       this.rain(f, spec, tx, tz);
+    } else if (spec.kind === 'follow_signature') {
+      this.executeSignatureFollow(f,spec,tx,tz);
     } else if (spec.kind === 'heal') {
       const ring = new THREE.Mesh(GEO.disc, glow(spec.color, 0.35));
       ring.position.set(f.pos.x, 0.05, f.pos.z);
@@ -1743,6 +1760,142 @@ export class Battle {
         }
       }
     }
+  }
+
+  // 固有派生技：キャラクターごとに異なるエフェクト・判定・追撃・状態異常。
+  executeSignatureFollow(f,spec,tx,tz){
+    if(!f || f.dead || this.ended || f.remoteAuth)return;
+    const mode=spec.followArchetype||'resonance';
+    const color=spec.color||0xcce8ff;
+    const elem=((Number(spec.elem??5)%10)+10)%10;
+    const radius=Math.max(2,Math.min(7.5,Number(spec.radius)||3.4));
+    const damage=Math.max(12,Number(spec.dmg)||68);
+    const variant=Number(spec.followStyle)||0;
+    const seed=variant+spec.followIndex*7;
+    const center=new THREE.Vector3(Number.isFinite(tx)?tx:f.pos.x,0,Number.isFinite(tz)?tz:f.pos.z);
+    const currentTarget=()=>this.nearestEnemy(f);
+    const foePos=()=>currentTarget()?.pos?.clone?.().setY(0)||center.clone();
+    const point=(r,angle,p=foePos())=>p.clone().add(new THREE.Vector3(Math.cos(angle)*r,0,Math.sin(angle)*r));
+    const magic=(p,sz=2.6,slot=4,flat=true)=>{
+      const at=p.clone();at.y=flat?.09:1.2;
+      this.fxPop(at,elem,slot,sz,.44,{grow:1.3+variant*.055,spin:(variant%2?-2.6:2.6),op:.79,flat});
+    };
+    const blast=(p,sz=2.5,slot=8)=>{
+      this.fxPop(p.clone().setY(1.1),elem,slot,sz,.3,{grow:1.65+variant*.03,op:.83,spin:variant%2?2:-2});
+      if(sz>2.8)this.flashLight?.(p.clone().setY(.75),color,.72,.18);
+    };
+    const hit=(p,r,pow=damage,stun=.3,kb=2)=>{this.strikeAt(f,p.x,p.z,r,pow,stun,kb,spec);};
+    const alter=(e,key,time)=>{if(!key||!e||e.dead||e.remoteAuth)return;try{e.applyStatus?.(key)}catch{}};
+    const heal=(p,ratio=1)=>{
+      for(const ally of this.fighters){
+        if(ally.dead||ally.remoteAuth||ally.team!==f.team || ally.pos.distanceTo(p)>radius+2.2)continue;
+        const amount=Math.max(1,Math.round((Number(spec.heal)||100)*ratio));
+        const restored=Math.max(0,Math.min(ally.maxHp-ally.hp,amount));
+        if(restored){ally.hp+=restored;this.ui.popup?.(ally.pos,'+'+restored,'#b3ffe8');}
+      }
+    };
+    const statusNear=(p,r)=>{
+      const status=spec.followStatus;if(!status)return;
+      for(const foe of this.enemiesOf(f)){
+        if(foe.dead||foe.remoteAuth||foe.pos.distanceTo(p)>r)continue;
+        if(status==='stun')foe.stun=Math.max(foe.stun,.42);
+        else alter(foe,status);
+      }
+    };
+    const timers={
+      star_chain:[.16,.37,.60,.87],rift_sweep:[.20,.49],seal_lattice:[.20,.57,.94],
+      meteor_spiral:[.22,.42,.63,.84,1.05],gravity_cage:[.45,.88],renewal:[.24,.62,1.01],
+      resonance:[.20,.55,.87],ember_orbit:[.19,.40,.61,.82,1.03],ice_prison:[.28,.63,1.02],
+      lunar_cross:[.23,.52,.85],venom_field:[.23,.43,.63,.83,1.03],thunder_lattice:[.20,.37,.55,.77,.96],
+      gear_trap:[.24,.52,.96],phoenix_rebirth:[.20,.57,.98],shadow_execution:[.25,.63,1.00],
+      holy_rain:[.20,.37,.54,.71,.88,1.05]
+    };
+    const pulses=timers[mode]||timers.resonance;
+    const opening=mode==='renewal'||mode==='phoenix_rebirth'?f.pos.clone():foePos();
+    magic(opening,3.5+(seed%3)*.38,5,true);
+    blast(opening,2.1+(seed%4)*.17,1);
+    if(mode==='rift_sweep'||mode==='shadow_execution'){
+      const foe=currentTarget();
+      if(foe&&!foe.dead){
+        const dir=foe.forward?.() || new THREE.Vector3(Math.sin(foe.facing||0),0,Math.cos(foe.facing||0));
+        const dst=foe.pos.clone().addScaledVector(dir,-Math.max(1.1,(foe.radius||.5)+(f.radius||.5)+.26));
+        if(Math.hypot(dst.x,dst.z)<12){
+          magic(f.pos,2.5,4,true);
+          f.pos.copy?.(dst);f.vel?.set?.(0,0,0);
+          f.facing=Math.atan2(foe.pos.x-f.pos.x,foe.pos.z-f.pos.z);
+          blast(f.pos,3.6,6);
+        }
+      }
+    }
+    let t=0,next=0;
+    this.addEffect(dt=>{
+      if(this.ended||f.dead)return false;
+      t+=Math.min(.08,Math.max(0,Number(dt)||0));
+      if((mode==='gravity_cage'||mode==='gear_trap'||mode==='ice_prison')&&t<.96){
+        const p=foePos();
+        for(const foe of this.enemiesOf(f)){
+          if(foe.dead||foe.remoteAuth)continue;
+          const dx=p.x-foe.pos.x,dz=p.z-foe.pos.z,d=Math.hypot(dx,dz);
+          if(d>.6&&d<radius+2){
+            const strength=mode==='gravity_cage'?3.4:mode==='gear_trap'?1.65:1.2;
+            const step=Math.min(d-.6,dt*strength);
+            foe.pos.x+=dx/d*step;foe.pos.z+=dz/d*step;
+            foe.vel?.multiplyScalar?.(.65);
+          }
+        }
+      }
+      while(next<pulses.length&&t>=pulses[next]){
+        const i=next++, centerAt=(mode==='renewal'||mode==='phoenix_rebirth')?f.pos.clone():foePos();
+        const theta=(i*2.12+seed*.74), wide=radius*(.16+.11*(i%4));
+        const a=point(wide,theta,centerAt),b=point(wide,theta+Math.PI,centerAt);
+        if(mode==='star_chain'){
+          blast(a,1.8+i*.2,1);hit(a,2.4,damage*(i===3?1.2:.7),.29,2);statusNear(a,2.5);
+        }else if(mode==='rift_sweep'){
+          magic(centerAt,3.6,4,true);blast(b,3.1,6);
+          hit(centerAt,radius*.74,damage*(i===1?1.35:.9),i===1?.65:.35,i===1?7:2);statusNear(centerAt,radius*.75);
+        }else if(mode==='seal_lattice'){
+          magic(centerAt,radius*1.3+i*.4,5,true);blast(centerAt,2+i*.4,8);
+          hit(centerAt,radius,damage*(i===2?1.4:.65),.48,0);statusNear(centerAt,radius);
+        }else if(mode==='meteor_spiral'){
+          blast(a,2.8+i*.19,i%2?8:7);hit(a,radius*.84,damage*(i===4?1.45:.66),.33,3);statusNear(a,radius*.7);
+        }else if(mode==='gravity_cage'){
+          magic(centerAt,i===0?4.0:7.7,5,true);blast(centerAt,i===0?3.3:6.2);
+          hit(centerAt,radius,damage*(i===0?.45:2.0),i===0?.55:.85,i===0?0:8);statusNear(centerAt,radius);
+        }else if(mode==='renewal'){
+          magic(centerAt,3.5+i*.8,5,true);blast(centerAt,3+i*.4,3);heal(centerAt,i===2?1:.6);
+          if(i===2)for(const ally of this.fighters)if(ally.team===f.team && ally.pos.distanceTo(centerAt)<radius+2){delete ally.status?.slow;delete ally.status?.para;}
+        }else if(mode==='ember_orbit'){
+          blast(a,2.6+i*.1,i%2?3:8);hit(a,2.8,damage*(i===4?1.4:.61),.28,2);statusNear(a,3);
+        }else if(mode==='ice_prison'){
+          magic(centerAt,4.6+i*.5,5,true);blast(i===2?centerAt:a,2.7+i*.6,8);
+          hit(centerAt,radius*.9,damage*(i===2?1.7:.62),.48,i===2?6:0);
+          statusNear(centerAt,radius);
+          for(const e of this.enemiesOf(f))if(e.pos.distanceTo(centerAt)<radius) e.stun=Math.max(e.stun,.35);
+        }else if(mode==='lunar_cross'){
+          blast(i===0?a:i===1?b:centerAt,4.2,6);
+          hit(centerAt,radius*.7,damage*(i===2?1.5:.85),.3,i===2?7:3);statusNear(centerAt,radius*.8);
+        }else if(mode==='venom_field'){
+          magic(centerAt,3.8,4,true);blast(a,1.7+i*.1,7);hit(centerAt,radius,damage*(i===4?1.4:.36),.2,0);statusNear(centerAt,radius);
+        }else if(mode==='thunder_lattice'){
+          blast(i%2?a:b,3.3,2);hit(centerAt,radius,damage*(i===4?1.35:.57),.38,1);statusNear(centerAt,radius);
+        }else if(mode==='gear_trap'){
+          magic(centerAt,i===2?6.4:4.3,5,true);blast(centerAt,2.2+i*.6,1);
+          hit(centerAt,radius,damage*(i===2?1.7:.51),i===2?.65:.48,0);statusNear(centerAt,radius);
+        }else if(mode==='phoenix_rebirth'){
+          magic(centerAt,4.2,5,true);blast(centerAt,3.3+i*.7,8);
+          heal(centerAt,i===2?.98:.53);
+          if(spec.followStatus){hit(centerAt,radius*.7,damage*(i===2?1.0:.48),.2,1);statusNear(centerAt,radius);}
+        }else if(mode==='shadow_execution'){
+          blast(i%2?a:b,3+i*.45,6);hit(centerAt,radius*.65,damage*(i===2?1.78:.83),i===2?.64:.25,i===2?7:2);statusNear(centerAt,radius*.75);
+        }else if(mode==='holy_rain'){
+          const where=point(radius*(i%3)*.19,theta,centerAt);
+          blast(where,2.2+(i%3)*.32,i%2?2:8);hit(where,radius*.7,damage*(i===5?1.7:.48),i===5?.72:.27,i===5?6:1);statusNear(where,radius*.65);
+        }else{
+          blast(centerAt,3.2+i*.35,8);hit(centerAt,radius*.9,damage*(i===2?1.4:.7),.4,2);statusNear(centerAt,radius);
+        }
+      }
+      return t<pulses[pulses.length-1]+.25;
+    });
   }
 
   addEffect(fn) {

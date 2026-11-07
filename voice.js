@@ -13,12 +13,12 @@ let lastValgardLineAt = -Infinity;
 function playValgardLine(line = 'other', actor = null) {
   if (!enabled || muted || channelVolume <= 0 || typeof Audio === 'undefined') return false;
   const now = timeNow();
-  if (now - lastValgardLineAt < (line === 'spear' ? 260 : 820)) return false;
+  if (now - lastValgardLineAt < 320) return false;
   const url = VALGARD_CLIPS[line === 'astral' ? 'astral' : line === 'spear' ? 'spear' : 'other'];
   const sound = new Audio(url);
   sound.preload = 'auto';
-  sound.volume = Math.min(1, (actor?.isPlayer === false ? 0.62 : 0.94) * channelVolume);
-  sound.playbackRate = 1;
+  sound.volume = Math.min(1, (actor?.isPlayer === false ? 0.7 : 1.0) * channelVolume);
+  sound.playbackRate = 1; // Permanently processed low-pitch masculine MP3; never OS TTS.
   sound.preservesPitch = true;
   sound.onended = () => active.delete(sound);
   sound.onerror = () => active.delete(sound);
@@ -82,7 +82,7 @@ export function sayBattle(f, kind = 'skill', _attackName = '', important = false
   if (!enabled || muted || channelVolume <= 0 || typeof Audio === 'undefined' || !f) return;
   const cue = Object.prototype.hasOwnProperty.call(CLIPS, kind) ? kind : 'skill';
   const owner = String(f.key || f.def?.name || f.name || 'player');
-  if (owner === 'valgard' && (cue === 'skill' || cue === 'over' || cue === 'hi')) {
+  if (owner === 'valgard' && (cue === 'skill' || cue === 'over' || cue === 'hi' || cue === 'summon')) {
     const name = String(_attackName || '');
     const isAstral = /アストラル[・･\s]*ジャッジメント|蒼天雷裁|astral[\s-]*judgment/i.test(name);
     const isSpear = /光牢剣陣|ルミナス[・･\s]*レギオン|シャイニング[・･\s]*スピア|凍牙・光槍封陣|shining[\s-]*spear/i.test(name);
