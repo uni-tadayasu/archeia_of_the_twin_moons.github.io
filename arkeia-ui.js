@@ -526,4 +526,334 @@
       return result;
     };
   }
+
+  /* ARKEIA CHARACTER PROGRESSION 2026-11-07
+   * Integrated in arkeia-ui.js: all FIGHTERS, unlimited BigInt levels,
+   * battle EXP, persistent local records and interactive player UI.
+   * It never changes the game's existing save format or battle network packets.
+   */
+  Promise.all([
+    import('./game.js?v=audio-cast-20261107d'),
+    import('./data.js?v=audio-cast-20261107d')
+  ]).then(([combat, data]) => {
+    installCharacterProgression(combat.Battle, data.FIGHTERS);
+  }).catch((error) => {
+    console.warn('[Arkeia] Character EXP system could not initialize.', error);
+  });
+
+  function installCharacterProgression(Battle, FIGHTERS) {
+    if (!Battle || !FIGHTERS || Battle.prototype.__characterExpV1) return;
+    Battle.prototype.__characterExpV1 = true;
+    const STORAGE_KEY = 'arkeia-character-exp-v1';
+    const VALID_KEYS = Object.keys(FIGHTERS);
+    const NAME_TO_KEY = new Map(VALID_KEYS.map((key) => [FIGHTERS[key].name, key]));
+    const experience = Object.create(null);
+    const MAX_DECIMAL_DIGITS = 2500; // Reject malformed/untrusted enormous strings; no gameplay level cap.
+    const decimal = (value) => typeof value === 'string' && /^\d+$/.test(value) && value.length <= MAX_DECIMAL_DIGITS;
+    const asExp = (value) => decimal(String(value)) ? BigInt(value) : 0n;
+    let savedRecords;
+    try { savedRecords = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}'); } catch { savedRecords = {}; }
+    for (const key of VALID_KEYS) {
+      const raw = savedRecords?.[key];
+      experience[key] = asExp(typeof raw === 'object' && raw ? raw.exp : raw ?? '0');
+    }
+    const toText = (num) => BigInt(num).toLocaleString('ja-JP');
+    const costOf = (level) => 100n + 42n * level + 5n * level * level;
+    // Exact cumulative EXP for Lv.1 -> Lv.N. Binary search makes huge levels practical.
+    function totalAt(level) {
+      const n = level - 1n;
+      return 100n * n + 21n * n * (n + 1n) +
+        (5n * n * (n + 1n) * (2n * n + 1n)) / 6n;
+    }
+    function levelOf(exp) {
+      if (exp < costOf(1n)) return 1n;
+      let low = 1n, high = 2n;
+      while (totalAt(high) <= exp) { low = high; high *= 2n; }
+      while (high - low > 1n) {
+        const middle = (high + low) / 2n;
+        if (totalAt(middle) <= exp) low = middle;
+        else high = middle;
+      }
+      return low;
+    }
+    function snapshot(key) {
+      const exp = experience[key] ?? 0n;
+      const level = levelOf(exp), start = totalAt(level), next = costOf(level);
+      const within = exp - start;
+      const percent = Number((1000n * within) / next) / 10;
+      return { exp, level, within, next, percent };
+    }
+    // Gentle, never explicitly capped local growth. PvP uses original combat values.
+    function levelBonus(level) {
+      const number = Number(level);
+      const str = Number.isFinite(number) ? '' : String(level);
+      const logarithm = Number.isFinite(number) ? Math.log(number) :
+        Math.log(Number(str.slice(0, 12))) + (str.length - 12) * Math.LN10;
+      const hp = 1 + Math.max(0, logarithm) * 0.065;
+      const atk = 1 + Math.max(0, logarithm) * 0.044;
+      const def = 1 / (1 + Math.max(0, logarithm) * 0.033);
+      return { hp, atk, def };
+    }
+    function persistExperience() {
+      try {
+        const data = {};
+        for (const key of VALID_KEYS) if (experience[key] > 0n) data[key] = String(experience[key]);
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+        return true;
+      } catch (err) {
+        console.warn('[Arkeia] EXP could not be saved to this browser.', err);
+        return false;
+      }
+    }
+    function giveExp(key, amount) {
+      if (!(key in FIGHTERS)) return null;
+      const before = snapshot(key);
+      experience[key] += BigInt(Math.max(0, Math.floor(amount)));
+      const after = snapshot(key);
+      return { key, before, after, gained: amount, raised: after.level > before.level };
+    }
+
+    const addOld = Battle.prototype.add;
+    Battle.prototype.add = function (key, options) {
+      const fighter = addOld.call(this, key, options);
+      fighter.__arkeiaTrainingKey = key;
+      // Only locally owned allies get level bonuses. Remote PvP remains fair.
+      if (fighter.team === 0 && !fighter.remoteAuth && !this.net && FIGHTERS[key]) {
+        const lv = snapshot(key).level, bonus = levelBonus(lv);
+        fighter.__arkeiaLevel = lv;
+        fighter.atkMul *= bonus.atk;
+        fighter.defMul *= bonus.def;
+        fighter.maxHp = Math.max(1, Math.round(fighter.maxHp * bonus.hp));
+        fighter.hp = fighter.maxHp;
+      }
+      return fighter;
+    };
+    const updateOld = Battle.prototype.update;
+    Battle.prototype.update = function (...args) {
+      const value = updateOld.apply(this, args);
+      if (!this.ended || this.__arkeiaExpGiven) return value;
+      this.__arkeiaExpGiven = true;
+      const owned = [...new Set(this.fighters.filter((f) => f.team === 0 && !f.remoteAuth &&
+        f.__arkeiaTrainingKey && FIGHTERS[f.__arkeiaTrainingKey]).map((f) => f.__arkeiaTrainingKey))];
+      if (owned.length === 0) return value;
+      const victory = this.fighters.some((f) => f.team === 0 && !f.dead);
+      const foes = this.fighters.filter((f) => f.team !== 0);
+      let chapter = 0;
+      try { chapter = Math.max(0, Math.floor(JSON.parse(localStorage.getItem('arkeia-save-v1') || '{}').chapter || 0)); } catch {}
+      const count = Math.max(1, foes.length);
+      const hpWeight = Math.min(600, Math.round(foes.reduce((sum, f) => sum + (Number(f.maxHp) || 0), 0) / 80));
+      const reward = victory
+        ? 95 + count * 40 + hpWeight + Math.min(chapter * 5, 650)
+        : 22 + count * 9 + Math.round(hpWeight * .1);
+      const records = owned.map((key) => giveExp(key, reward)).filter(Boolean);
+      if (records.length) {
+        const saved = persistExperience();
+        updateAllLevelLabels();
+        notifyReward(records, reward, victory, saved);
+      }
+      return value;
+    };
+
+    const css = document.createElement('style');
+    css.id = 'arkeia-level-styles';
+    css.textContent = `
+      .arkeia-lv-chip { display:inline-flex;align-items:center;gap:5px;flex-wrap:wrap;color:#ffe8b0;
+        font:700 12px/1.6 system-ui,sans-serif;letter-spacing:.01em; }
+      .arkeia-lv-progress {display:block;width:100%;height:5px;border:0;border-radius:6px;
+        overflow:hidden;accent-color:#e1bc78;}
+      .arkeia-lv-panel{display:flex;flex-direction:column;gap:5px;width:100%;margin-top:7px;padding:8px 10px;
+        border:1px solid #b59a6333;border-radius:5px;background:#0b1427b8;}
+      .arkeia-lv-panel small{font:11px/1.4 system-ui,sans-serif;color:#ccc5b5;}
+      .arkeia-lv-action{border:1px solid #bba273!important;border-radius:4px;background:#27344b!important;
+        color:#ffebc4!important;padding:7px 12px!important;font:600 12px/1.45 system-ui,sans-serif;cursor:pointer;}
+      #arkeia-lv-modal{position:fixed;inset:0;z-index:99999;display:flex;justify-content:center;align-items:center;
+        background:#030913e8;pointer-events:auto;padding:clamp(8px,3vw,28px);}
+      #arkeia-lv-modal[hidden]{display:none!important;}
+      .arkeia-lv-window{width:min(840px,100%);max-height:min(92dvh,920px);overflow-y:auto;
+        background:linear-gradient(160deg,#192840,#0b1524);color:#f9efda;border:1px solid #ae915c;
+        box-shadow:0 22px 65px #000a;padding:clamp(12px,3vw,24px);touch-action:pan-y;overscroll-behavior:contain;}
+      .arkeia-lv-window h2{margin:0 0 8px;font-size:clamp(20px,4vw,28px);font-family:serif;}
+      .arkeia-lv-help{color:#c2c8d3;font:12px/1.9 system-ui,sans-serif;margin:8px 0 14px;}
+      .arkeia-lv-toolbar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:12px 0;}
+      .arkeia-lv-toolbar input{width:min(300px,100%);flex:1;min-width:140px;color:#fff6e2;background:#08121f;
+        border:1px solid #91764c;padding:9px;border-radius:4px;touch-action:auto;font-size:16px;}
+      .arkeia-lv-rows{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(295px,100%),1fr));gap:8px;}
+      .arkeia-lv-record{padding:12px;border:1px solid #8575546b;border-radius:6px;background:#17263b;min-width:0;}
+      .arkeia-lv-record strong{display:block;font-size:15px;line-height:1.5;}
+      .arkeia-lv-record p{font:11px/1.6 system-ui,sans-serif;color:#c1c7d3;margin:5px 0;overflow-wrap:anywhere;}
+      #arkeia-exp-toast{position:fixed;bottom:calc(12px + env(safe-area-inset-bottom));left:50%;z-index:9989;
+        transform:translateX(-50%);max-width:min(520px,94vw);pointer-events:none;text-align:center;
+        border:1px solid #cba96b;background:#0b1622f4;color:#ffeac0;padding:10px 15px;
+        font:600 13px/1.8 system-ui,sans-serif;box-shadow:0 5px 35px #0009;}
+      .arkeia-exp-summary{border:1px solid #c0a47488;padding:12px 14px;border-radius:5px;
+        background:#24334a;margin:8px auto 12px;color:#ffebbd;font:600 13px/1.7 system-ui,sans-serif;}
+      @media(max-width:560px){ .arkeia-lv-action{font-size:11px!important} }
+    `;
+    document.head.appendChild(css);
+
+    function makePanel(key) {
+      const s = snapshot(key), panel = document.createElement('div');
+      panel.className = 'arkeia-lv-panel';
+      const label = document.createElement('span');
+      label.className = 'arkeia-lv-chip'; label.textContent = `Lv. ${toText(s.level)}`;
+      const stat = document.createElement('small');
+      stat.textContent = `EXP ${toText(s.within)} / ${toText(s.next)}（次まで ${toText(s.next-s.within)}）`;
+      const bar = document.createElement('progress');
+      bar.className = 'arkeia-lv-progress'; bar.max = 100; bar.value = s.percent;
+      bar.setAttribute('aria-label', `${FIGHTERS[key].name} レベル経験値進捗 ${s.percent}%`);
+      panel.append(label, stat, bar);
+      return panel;
+    }
+    function makeLevelButton() {
+      const button = document.createElement('button');
+      button.type='button';button.className='arkeia-lv-action';
+      button.textContent='✦ キャラクターレベル・EXP';
+      button.addEventListener('click', () => showModal());
+      return button;
+    }
+    const titleAccount = document.querySelector('#scr-title .portal-account');
+    const forgeBar = document.querySelector('#scr-forge .topbar');
+    if (titleAccount) titleAccount.append(makeLevelButton());
+    if (forgeBar) forgeBar.append(makeLevelButton());
+
+    const modal = document.createElement('section');
+    modal.id='arkeia-lv-modal';modal.hidden=true;
+    modal.setAttribute('role','dialog');modal.setAttribute('aria-modal','true');
+    modal.setAttribute('aria-labelledby','arkeia-lv-heading');
+    const windowEl=document.createElement('div'); windowEl.className='arkeia-lv-window';
+    const heading=document.createElement('h2');heading.id='arkeia-lv-heading';heading.textContent='キャラクター成長記録';
+    const help=document.createElement('p');help.className='arkeia-lv-help';
+    help.textContent='全キャラクター Lv.1から開始。戦闘に参加すると勝利・敗北に応じて経験値を獲得。レベル上限なし。レベルによる能力上昇はオフライン戦のみ適用されます。';
+    const toolbar=document.createElement('div');toolbar.className='arkeia-lv-toolbar';
+    const search=document.createElement('input');search.type='search';search.placeholder='名前・称号で検索';search.setAttribute('aria-label','キャラクター検索');
+    const close=document.createElement('button');close.type='button';close.className='arkeia-lv-action';close.textContent='戻る・閉じる';
+    close.addEventListener('click',()=>{modal.hidden=true;search.value='';});
+    toolbar.append(search,close);
+    const rows=document.createElement('div');rows.className='arkeia-lv-rows';
+    windowEl.append(heading,help,toolbar,rows);modal.append(windowEl);
+    modal.addEventListener('click',e=>{if(e.target===modal)modal.hidden=true;});
+    document.addEventListener('keydown',e=>{
+      if(e.key==='Escape'&&!modal.hidden){modal.hidden=true;e.stopImmediatePropagation();}
+    },true);
+    document.querySelector('#ui')?.append(modal);
+    function renderModal() {
+      const q=search.value.normalize('NFKC').trim().toLocaleLowerCase('ja');
+      const keys=VALID_KEYS.filter(k=>!q||`${FIGHTERS[k].name} ${FIGHTERS[k].title} ${k}`.normalize('NFKC').toLocaleLowerCase('ja').includes(q));
+      keys.sort((a,b)=>{
+        const x=snapshot(a).level,y=snapshot(b).level;
+        return x===y?FIGHTERS[a].name.localeCompare(FIGHTERS[b].name,'ja') : x>y?-1:1;
+      });
+      const fragment=document.createDocumentFragment();
+      for(const key of keys){
+        const d=FIGHTERS[key],record=document.createElement('article');
+        record.className='arkeia-lv-record';
+        const h=document.createElement('strong');h.textContent=d.name;
+        const sub=document.createElement('p');sub.textContent=d.title||key;
+        const panel=makePanel(key);
+        const b=levelBonus(snapshot(key).level);
+        const perks=document.createElement('p');
+        perks.textContent=`オフライン能力：最大HP ×${b.hp.toFixed(2)} ／ 攻撃 ×${b.atk.toFixed(2)} ／ 被ダメージ ×${b.def.toFixed(2)}`;
+        record.append(h,sub,panel,perks);fragment.append(record);
+      }
+      rows.replaceChildren(fragment);
+    }
+    search.addEventListener('input',renderModal);
+    function showModal(){renderModal();modal.hidden=false;search.focus({preventScroll:true});}
+
+    // Selection cards, party slot headers and forge labels are often rebuilt by main.js.
+    // Observe only their container's immediate child list: level labels won't loop.
+    function tagCards() {
+      const grid = document.getElementById('select-grid');
+      if(!grid)return;
+      for(const card of grid.children){
+        if(!card.matches('button.card') || card.querySelector('.arkeia-lv-panel'))continue;
+        const name=card.querySelector('b')?.textContent?.trim();
+        const key=NAME_TO_KEY.get(name);
+        if(key)card.append(makePanel(key));
+      }
+    }
+    function tagParty() {
+      const slots=document.getElementById('party-slots');
+      if(!slots)return;
+      for(const slot of slots.children){
+        if(slot.querySelector('.arkeia-lv-chip'))continue;
+        const name=slot.querySelector('.party-slot-head strong')?.textContent?.trim();
+        const key=NAME_TO_KEY.get(name);
+        if(key){
+          const text=document.createElement('span'); text.className='arkeia-lv-chip';
+          text.textContent=`Lv. ${toText(snapshot(key).level)}`;
+          slot.querySelector('.party-slot-head')?.append(text);
+        }
+      }
+    }
+    function tagForge() {
+      const list = document.getElementById('forge-list');
+      if(list){for(const chip of list.children){
+        if(!chip.matches('button')||chip.querySelector('.arkeia-lv-chip'))continue;
+        const key=VALID_KEYS.find(k=>chip.textContent.startsWith(FIGHTERS[k].name));
+        if(!key)continue;
+        const tag=document.createElement('span');tag.className='arkeia-lv-chip';
+        tag.textContent=`　Lv.${toText(snapshot(key).level)}`;
+        chip.append(tag);
+      }}
+      const rows = document.getElementById('forge-rows');
+      const heading = document.getElementById('forge-name');
+      if(rows && heading){
+        const name=heading.textContent.split('　')[0].trim();const key=NAME_TO_KEY.get(name);
+        let info=document.getElementById('arkeia-forge-level');
+        if(key){
+          if(!info){info=document.createElement('div');info.id='arkeia-forge-level';rows.parentNode?.insertBefore(info,rows);}
+          if(info.dataset.key!==key){info.dataset.key=key;info.replaceChildren(makePanel(key));}
+        }
+      }
+    }
+    const scheduleTag=()=>{if(pending)return;pending=true;queueMicrotask(()=>{
+      pending=false;tagCards();tagParty();tagForge();
+    });};
+    let pending=false;
+    for(const id of ['select-grid','party-slots','forge-list']){
+      const node=document.getElementById(id);
+      if(node)new MutationObserver(scheduleTag).observe(node,{childList:true});
+    }
+    const forgeName=document.getElementById('forge-name');
+    if(forgeName)new MutationObserver(scheduleTag).observe(forgeName,{childList:true,characterData:true,subtree:true});
+    scheduleTag();
+
+    function updateAllLevelLabels() {
+      for(const item of document.querySelectorAll('#select-grid .arkeia-lv-panel'))item.remove();
+      for(const item of document.querySelectorAll('#party-slots .arkeia-lv-chip'))item.remove();
+      for(const item of document.querySelectorAll('#forge-list .arkeia-lv-chip'))item.remove();
+      document.getElementById('arkeia-forge-level')?.remove();
+      scheduleTag();
+      if(!modal.hidden)renderModal();
+    }
+    let toastTimeout;
+    function notifyReward(records, reward, won, saved) {
+      const leveled=records.filter(x=>x.raised);
+      const summary=`${won?'勝利':'敗北'}：参加者 ${records.length}人に EXP +${toText(BigInt(reward))}`;
+      const rise=leveled.length?` ／ ${leveled.slice(0,3).map(x=>`${FIGHTERS[x.key].name} Lv.${toText(x.after.level)}`).join('・')}${leveled.length>3?' ほか':''}`:'';
+      let toast=document.getElementById('arkeia-exp-toast');
+      if(!toast){toast=document.createElement('div');toast.id='arkeia-exp-toast';toast.setAttribute('role','status');document.querySelector('#ui')?.append(toast);}
+      toast.textContent=summary+rise+(saved?'':'（保存できませんでした）');
+      toast.hidden=false;clearTimeout(toastTimeout);
+      toastTimeout=setTimeout(()=>{toast.hidden=true;},5000);
+      const result=document.getElementById('scr-result');
+      const holder=document.getElementById('res-reward');
+      if(result && holder){
+        let panel=document.getElementById('arkeia-exp-summary');
+        if(!panel){panel=document.createElement('div');panel.id='arkeia-exp-summary';panel.className='arkeia-exp-summary';holder.insertAdjacentElement('afterend',panel);}
+        panel.textContent=summary+rise;
+        // Story encounter may return directly to field; only show when result opens.
+      }
+    }
+    window.addEventListener('storage',e=>{
+      if(e.key!==STORAGE_KEY)return;
+      try {
+        const data=JSON.parse(e.newValue||'{}');
+        for(const key of VALID_KEYS)experience[key]=asExp(data?.[key]??'0');
+        updateAllLevelLabels();
+      }catch{}
+    });
+  }
+
 })();
