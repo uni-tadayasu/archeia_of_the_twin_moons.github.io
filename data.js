@@ -1005,3 +1005,76 @@ if (FIGHTERS.valgard?.skills?.[HEAL_SLOT]) Object.assign(FIGHTERS.valgard.skills
     f.pool = [0, 1, 2, 3, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14];
   }
 }
+
+
+// ARK-20261107-BALANCE-CAST
+// Model-matched portraits: re-use the original illustrated portrait for each GLB.
+// Derived characters sharing that exact mesh keep its portrait, rather than
+// an arbitrary hue-rotation that changes clothing/skin colors independently.
+const portraitForModel = new Map();
+for (const [key, f] of Object.entries(FIGHTERS)) {
+  if (f?.model && f?.face && !f.enemy && !/^g\d+$/.test(key)) portraitForModel.set(f.model, f.face);
+}
+for (const f of Object.values(FIGHTERS)) {
+  if (portraitForModel.has(f.model)) f.face = portraitForModel.get(f.model);
+  // hue rotation doesn't correspond to the actual glb's painted textures.
+  if (f.faceHue != null) f.faceHue = 0;
+}
+
+const bound = (x, lo, hi) => Math.max(lo, Math.min(hi, Number(x) || 0));
+// Centralized damage budget. Standard / elite / bosses / chief characters
+// retain unique attributes but are prevented from extreme outliers.
+for (const [key, f] of Object.entries(FIGHTERS)) {
+  if (!f?.skills?.length || !f.light) continue;
+  const chief = f.special === 'chief';
+  const elite = key === 'seraphel' || key === 'uninomiya';
+  const boss = !!f.enemy;
+  const group = chief ? 'chief' : elite ? 'elite' : boss ? 'enemy' : 'normal';
+  f.balanceClass = group;
+  const limits = chief
+    ? { hp: [1300, 3900], speed: [4.5, 8.4], light: [24, 75], power: [0.8, 2.25], armor: [0.5, 1.25], skill: 178, ultimate: 228, final: 560, radius: 9.8, flux: 2.25 }
+    : elite
+      ? { hp: [1050, 2400], speed: [5.2, 7.9], light: [28, 60], power: [0.9, 1.5], armor: [0.7, 1.15], skill: 144, ultimate: 194, final: 400, radius: 8.6, flux: 1.55 }
+      : boss
+        ? { hp: [680, 1740], speed: [4.7, 7.5], light: [26, 62], power: [0.8, 1.35], armor: [0.74, 1.2], skill: 132, ultimate: 180, final: 360, radius: 8, flux: 1.42 }
+        : { hp: [730, 1450], speed: [4.9, 7.35], light: [25, 55], power: [0.8, 1.22], armor: [0.78, 1.18], skill: 117, ultimate: 158, final: 290, radius: 7, flux: 1.4 };
+  f.hp = Math.round(bound(f.hp, ...limits.hp));
+  f.speed = +bound(f.speed, ...limits.speed).toFixed(2);
+  f.power = +bound(f.power == null ? 1 : f.power, ...limits.power).toFixed(3);
+  f.armor = +bound(f.armor == null ? 1 : f.armor, ...limits.armor).toFixed(3);
+  f.fluxMul = +bound(f.fluxMul == null ? 1 : f.fluxMul, 0.75, limits.flux).toFixed(2);
+  f.overGain = +bound(f.overGain ?? 1, 0.7, chief ? 2.6 : elite ? 1.7 : 1.45).toFixed(2);
+  const shots = Math.max(1, f.light.shots || 1);
+  f.light.dmg = Math.round(bound(f.light.dmg, limits.light[0] / Math.sqrt(shots), Math.min(limits.light[1], limits.light[1] * 2 / Math.sqrt(shots))));
+  const tune = (skill, ultimate = false) => {
+    if (!skill) return;
+    const count = Math.max(1, Number(skill.count) || 1);
+    const multi = (skill.kind === 'rain' || skill.kind === 'projectile') && count > 1;
+    const maxDmg = (ultimate ? limits.ultimate : limits.skill) / (multi ? (1 + Math.max(0, count - 2) * 0.085) : 1);
+    if (Number.isFinite(+skill.dmg)) skill.dmg = Math.round(bound(skill.dmg, 16, maxDmg));
+    if (Number.isFinite(+skill.finalDmg)) skill.finalDmg = Math.round(bound(skill.finalDmg, 24, limits.final));
+    if (Number.isFinite(+skill.radius)) skill.radius = +bound(skill.radius, 0.3, limits.radius).toFixed(2);
+    if (Number.isFinite(+skill.finalRadius)) skill.finalRadius = +bound(skill.finalRadius, 1, limits.radius + 1.8).toFixed(2);
+    if (Number.isFinite(+skill.heal)) skill.heal = Math.round(bound(skill.heal, 20, f.hp * (chief ? 0.34 : 0.28)));
+  };
+  f.skills.forEach(x => tune(x, false));
+  tune(f.over, true);
+}
+
+// Measured in battle seconds: small spells are quick, complex spells and
+// special/secret arts require longer chanting. Used by every fighter/CPU.
+export function spellCastTime(spec, slot = 's') {
+  if (!spec) return 0.5;
+  const cost = bound(spec.cost || 18, 0, 40);
+  const power = Math.max(0, +spec.dmg || 0, (+spec.finalDmg || 0) * 0.62, (+spec.heal || 0) * 0.42);
+  const count = bound(spec.count || 1, 1, 30);
+  const kindBonus = spec.kind === 'judgment' ? 0.38
+    : spec.kind === 'rain' || spec.kind === 'implode' ? 0.19
+      : spec.kind === 'shockwave' ? 0.09 : 0;
+  const computed = 0.2 + cost * 0.012 + power * 0.0022 + (count - 1) * 0.012 + kindBonus;
+  const base = Number.isFinite(+spec.castTime) && +spec.castTime > 0 ? +spec.castTime : computed;
+  if (slot === 'hi') return +bound(Math.max(2.55, base + 1.1), 2.55, 3.6).toFixed(1);
+  if (slot === 'over') return +bound(Math.max(1.65, base + 0.85), 1.65, 2.8).toFixed(1);
+  if (slot?.startsWith('f')) return +bound(base + 0.23, 0.5, 2.2).toFixed(1);
+  return +bound(base, 0.35, 1.85).toFixed(1);
+}

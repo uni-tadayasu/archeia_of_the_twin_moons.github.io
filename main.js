@@ -1,10 +1,10 @@
 import * as THREE from 'three';
 import { loadModel } from './model-runtime.js?v=valgard-exact-20261107';
-import { Battle, ARENA_R } from './game.js?v=valgard-exact-20261107';
-import { FIGHTERS, STORY, ROSTER, UPGRADES, MAX_LV, STAGES, BGM, APEX_BGM, ENEMY_ROSTER, UPG_CAP, LB_MAX, lbMaxLv, lbMul, lbCost, WEAPONS, ARMORS, SUMMONS, STAT_LABEL, SPECIAL_KEYS, BOSS_ROSTER, currentEvent, sanitizeEvent, EV_FOE_KINDS } from './data.js?v=valgard-exact-20261107';
+import { Battle, ARENA_R } from './game.js?v=balance-cast-20261107';
+import { FIGHTERS, spellCastTime, STORY, ROSTER, UPGRADES, MAX_LV, STAGES, BGM, APEX_BGM, ENEMY_ROSTER, UPG_CAP, LB_MAX, lbMaxLv, lbMul, lbCost, WEAPONS, ARMORS, SUMMONS, STAT_LABEL, SPECIAL_KEYS, BOSS_ROSTER, currentEvent, sanitizeEvent, EV_FOE_KINDS } from './data.js?v=balance-cast-20261107';
 import { sayBattle, setVoiceMuted, stopVoices } from './voice.js';
 import { initSocial, uiConfirm } from './social.js?v=valgard-exact-20261107';
-import { initMailbox } from './mailbox.js?v=mail-20261107';
+import { initMailbox } from './mailbox.js?v=balance-cast-20261107';
 import { OPERATOR_KEY_SHA256, CHIEF_KEY_SHA256, MAX_KEY_ATTEMPTS, LOCKOUT_MS, SHOP_ITEMS } from './config.js';
 import { connect, issueInvite, redeemInvite, syncPush, syncPullV } from './net.js?v=valgard-exact-20261107';
 import { apiEnabled, api, verifyToken } from './api.js';
@@ -1622,14 +1622,16 @@ function openSelect(label, crumb, cb, { allowLocked = false, onBack = goTitle } 
     const s = document.createElement('small');
     s.textContent = locked
       ? (d.shop ? '灯晶商店で迎えられる' : '運営の鍵でのみ目覚める')
-      : `${d.skills.map((x) => x.name).join('／')}\n奥義：${d.over.name}`;
+      : `${d.skills.slice(0, 4).map((x) => `${x.name}（詠唱${spellCastTime(x).toFixed(1)}秒）`).join('／')}\n奥義：${d.over.name}（詠唱${spellCastTime(d.over, 'over').toFixed(1)}秒）`;
     if (d.face) {
       const img = document.createElement('img');
       img.className = 'face';
       img.src = d.face;
-      img.alt = '';
+      img.alt = `${d.name}のキャラクターイラスト`;
+      img.decoding = 'async';
       img.loading = 'lazy';
-      if (d.faceHue) img.style.filter = `hue-rotate(${d.faceHue}deg)`;
+      img.onerror = () => { img.style.display = 'none'; card.title = '対応画像を読み込めませんでした'; };
+      // Use the portrait painted for this character's actual GLB model.
       if (locked) img.style.filter = 'brightness(0)';
       card.append(img);
     }
@@ -1701,9 +1703,11 @@ function openPartySelect(done) {
       const img = document.createElement('img');
       img.className = 'face';
       img.src = d.face;
-      img.alt = '';
+      img.alt = `${d.name}のキャラクターイラスト`;
+      img.decoding = 'async';
       img.loading = 'lazy';
-      if (d.faceHue) img.style.filter = `hue-rotate(${d.faceHue}deg)`;
+      img.onerror = () => { img.style.display = 'none'; card.title = '対応画像を読み込めませんでした'; };
+      // Use the portrait painted for this character's actual GLB model.
       card.append(img);
     }
     const t = document.createElement('em');
@@ -1849,6 +1853,32 @@ const ui = {
   callout(f, name) {
     ui.popup(f.pos, name, '#f4ead2');
   },
+  // 現在の詠唱時間と発動までの残りを、プレイヤー自身のHUDに表示。
+  chant(f, spec, remain, duration) {
+    if (!f?.isPlayer) return;
+    const hud = $('#hud');
+    if (!hud) return;
+    let bar = $('#spell-chant-progress');
+    if (!bar) {
+      bar = document.createElement('div');
+      bar.id = 'spell-chant-progress';
+      bar.style.cssText = 'position:absolute;left:50%;bottom:19%;transform:translateX(-50%);width:min(420px,86vw);padding:10px 14px;color:#fff0d4;background:rgba(11,15,36,.92);border:1px solid #c9a65a;border-left:4px solid #8fd8ff;box-shadow:0 7px 20px #0007;z-index:60;pointer-events:none;text-align:center;font-size:clamp(11px,1.9vw,15px);';
+      const text = document.createElement('span');
+      text.className = 'chant-label';
+      const track = document.createElement('div');
+      track.style.cssText = 'height:6px;background:#20233e;margin-top:7px;overflow:hidden;';
+      const fill = document.createElement('div');
+      fill.className = 'chant-fill';
+      fill.style.cssText = 'height:100%;width:0;background:linear-gradient(90deg,#8fd8ff,#f4ead2);transition:width .08s linear;';
+      track.append(fill);
+      bar.append(text, track);
+      hud.append(bar);
+    }
+    bar.hidden = !spec || duration <= 0;
+    if (bar.hidden) return;
+    bar.querySelector('.chant-label').textContent = `${spec.name} — 詠唱中 ${Math.max(0,remain).toFixed(1)} 秒`;
+    bar.querySelector('.chant-fill').style.width = `${Math.max(0, Math.min(100, 100 * (1 - remain / duration)))}%`;
+  },
   // 画面上部の技名表示：次の技で切り替わり、出なければ自然に消える
   skillName(f, spec, isOver) {
     const el = $('#skillname');
@@ -1879,7 +1909,7 @@ const ui = {
     img.hidden = !d.face;
     if (d.face) {
       img.src = d.face;
-      img.style.filter = d.faceHue ? `hue-rotate(${d.faceHue}deg)` : '';
+      img.style.filter = '';
     }
     el.querySelector('.ci-who').textContent = f.name || d.name || '';
     el.querySelector('.ci-title').textContent = title;
@@ -2386,7 +2416,7 @@ function resetFieldLight() {
 async function enterField() {
   // フィールドは物語でしか使わないので必要になった時だけ読み込む（初回表示を軽く）
   if (!(await ensureAllModelsReady())) return;
-  const { Field } = await import('./field.js?v=valgard-exact-20261107');
+  const { Field } = await import('./field.js?v=balance-cast-20261107');
   leaveField();
   const ch = STORY[state.chapter];
   const st = stageById(ch.stage);

@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { attachValgardMotion } from './valgard-motion.js?v=valgard-exact-20261107';
 import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js';
-import { FIGHTERS, ELEMS } from './data.js?v=valgard-exact-20261107';
+import { FIGHTERS, ELEMS, spellCastTime } from './data.js?v=balance-cast-20261107';
 import { makeGear, animGear } from './gear.js';
 import { instantiateModel, disposeModel, loadModel } from './model-runtime.js?v=valgard-exact-20261107';
 
@@ -606,7 +606,7 @@ export class Fighter {
     let moving = false;
     // 追加技：技を出した後、同じボタンを長押しし続けると発動（全モード共通）
     const fa = this.followArm;
-    if (fa && inp && !this.dead) {
+    if (fa && inp && !this.dead && this.action?.type !== 'chant') {
       fa.t += dt;
       const held = fa.cpu != null ? fa.cpu : !!inp[fa.hold];
       if (!held || fa.t > FOLLOW_MAX + 1) {
@@ -867,6 +867,9 @@ export class Fighter {
       }
     } else if (a.type === 'cast') {
       this.visual.position.y = Math.sin(k * Math.PI) * 0.3;
+    } else if (a.type === 'chant') {
+      // Chant pose; spell effects are triggered only after completion.
+      this.visual.position.y = 0.08 + Math.sin(a.t * 10) * 0.045;
     }
     if (a.t >= a.dur) {
       this.visual.rotation.y = 0;
@@ -1342,6 +1345,58 @@ export class Battle {
   }
 
   cast(f, slot, net) {
+    // Remote cast notifications arrive when the attack actually fires.
+    // Do not charge them twice or broadcast again.
+    if (net || f.remoteAuth) return this.executeCast(f, slot, net);
+    const idx = Math.max(0, Math.min((f.def.skills?.length || 1) - 1, +slot.slice(1) || 0));
+    const spec = slot === 'over' ? f.def.over
+      : slot === 'hi' ? hiSpec(f.def)
+        : slot[0] === 'f' ? followSpec(f.def, idx) || f.def.skills[0]
+          : f.def.skills[idx] || f.def.skills[0];
+    if (!spec || f.dead || f.chantToken || this.ended) return;
+    const duration = spellCastTime(spec, slot);
+    const stamp = {};
+    f.chantToken = stamp;
+    f.action = { type: 'chant', t: 0, dur: duration + 0.12 };
+    f.vel.set(0, 0, 0);
+    f.faceNearest(14);
+    if (slot !== 'over' && slot !== 'hi') {
+      (this.skillLock ||= {})[f.team] = { f, until: performance.now() / 1000 + duration + 0.8 };
+    }
+    this.ui.callout?.(f, `詠唱 ${duration.toFixed(1)}秒：${spec.name}`);
+    this.ui.chant?.(f, spec, duration, duration);
+    let remain = duration;
+    let flare = 0;
+    this.addEffect((dt) => {
+      if (f.chantToken !== stamp || this.ended) return false;
+      if (f.dead || f.stun > 0 || f.status?.silence || f.action?.type !== 'chant') {
+        f.chantToken = null;
+        if (f.action?.type === 'chant') f.action = null;
+        if (slot === 'over' || slot === 'hi') f.over = Math.min(100, f.over + 35);
+        else f.flux = Math.min(100, f.flux + (spec.cost || 0) * 0.5);
+        this.ui.chant?.(f, null, 0, 0);
+        this.ui.popup?.(f.pos, '詠唱中断', '#9dcfff');
+        return false;
+      }
+      remain -= dt;
+      flare -= dt;
+      this.ui.chant?.(f, spec, Math.max(0, remain), duration);
+      if (remain > 0) {
+        if (flare <= 0) {
+          flare = 0.23;
+          this.spark?.(f.pos.clone().setY(f.y + 1.05), spec.color || 0xc9a65a, 0.33);
+        }
+        return true;
+      }
+      f.chantToken = null;
+      this.ui.chant?.(f, null, 0, 0);
+      this.executeCast(f, slot, null);
+      return false;
+    });
+  }
+
+  executeCast(f, slot, net) {
+
     const idx = Math.max(0, Math.min((f.def.skills?.length || 1) - 1, +slot.slice(1) || 0));
     const spec = slot === 'over' ? f.def.over
       : slot === 'hi' ? hiSpec(f.def)
