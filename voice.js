@@ -9,6 +9,7 @@ const CLIPS = {
 const active = new Set();
 const lastByCharacter = new Map();
 let muted = false;
+let channelVolume = 0.75;
 let enabled = true;
 let lastGlobal = 0;
 const MAX_ACTIVE = 4;
@@ -31,6 +32,10 @@ function stopElement(el) {
   try { el.pause(); el.currentTime = 0; } catch {}
   active.delete(el);
 }
+export function setVoiceVolume(value) {
+  channelVolume = Math.min(1, Math.max(0, Number(value) || 0));
+  if (channelVolume <= 0) stopVoices();
+}
 export function setVoiceMuted(value) {
   muted = !!value;
   if (muted) stopVoices();
@@ -39,7 +44,7 @@ export function stopVoices() {
   for (const el of [...active]) stopElement(el);
 }
 export function sayBattle(f, kind = 'skill', _attackName = '', important = false) {
-  if (!enabled || muted || typeof Audio === 'undefined' || !f) return;
+  if (!enabled || muted || channelVolume <= 0 || typeof Audio === 'undefined' || !f) return;
   const cue = Object.prototype.hasOwnProperty.call(CLIPS, kind) ? kind : 'skill';
   const owner = String(f.key || f.def?.name || f.name || 'player');
   const now = timeNow();
@@ -58,7 +63,7 @@ export function sayBattle(f, kind = 'skill', _attackName = '', important = false
   const clip = `${VOICE_ROOT}${family}/${cue}-${variant}.ogg`;
   const element = new Audio(clip);
   element.preload = 'auto';
-  element.volume = Math.max(0.06, Math.min(1, (player ? 0.54 : important ? 0.32 : 0.22) * (cue === 'ko' ? 1.04 : 1)));
+  element.volume = Math.min(1, (player ? 0.54 : important ? 0.32 : 0.22) * (cue === 'ko' ? 1.04 : 1) * channelVolume);
   element.playbackRate = 0.91 + (hash(owner) % 19) / 100 + (cue === 'over' || cue === 'hi' ? -0.04 : 0);
   element.preservesPitch = false;
   element.onended = () => active.delete(element);

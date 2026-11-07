@@ -27,9 +27,9 @@
     <script type="application/ld+json">
       {"@context":"https://schema.org","@type":"VideoGame","name":"双月のアルケイア","alternateName":"Arkeia of Twin Moons","description":"100人の戦士と全100章の物語を楽しめる、ブラウザ3Dアリーナファンタジーアクション。","image":"assets/app-icon.webp","genre":["Action","Fighting","Fantasy","RPG"],"gamePlatform":["Web browser","PC","Mobile"],"playMode":["SinglePlayer","MultiPlayer","CoOp"],"applicationCategory":"Game","operatingSystem":"Any","inLanguage":"ja","isAccessibleForFree":true,"offers":{"@type":"Offer","price":"0","priceCurrency":"JPY"},"publisher":{"@type":"Organization","name":"KASAI SOLUTIONS INC."},"author":{"@type":"Organization","name":"KASAI SOLUTIONS INC."},"copyrightHolder":{"@type":"Organization","name":"KASAI SOLUTIONS INC."},"copyrightNotice":"© KASAI SOLUTIONS INC. All rights reserved.","musicBy":{"@type":"Organization","name":"KASAI SOLUTIONS INC."},"keywords":"3Dアクション,覚醒,秘奥義,追加技,オンライン対戦,ブラウザゲーム"}
     </script>
-    <link rel="modulepreload" href="./main.js?v=role-voices-portraits-20261107c" />
-    <link rel="modulepreload" href="./game.js?v=role-voices-portraits-20261107c" />
-    <link rel="modulepreload" href="./data.js?v=role-voices-portraits-20261107c" />
+    <link rel="modulepreload" href="./main.js?v=audio-cast-20261107d" />
+    <link rel="modulepreload" href="./game.js?v=audio-cast-20261107d" />
+    <link rel="modulepreload" href="./data.js?v=audio-cast-20261107d" />
     <link rel="preconnect" href="https://esm.sh" crossorigin>
     <meta name="author" content="KASAI SOLUTIONS INC." />
     <meta name="copyright" content="© KASAI SOLUTIONS INC. All rights reserved." />
@@ -471,7 +471,10 @@
           <div class="label">旅支度</div>
           <div class="menu">
             <button class="btn" id="opt-mute">音：鳴らす</button>
-            <label class="audio-volume-control" for="opt-bgm-volume"><span>BGM音量 <output id="opt-bgm-value">65%</output></span><input id="opt-bgm-volume" type="range" min="0" max="100" step="5" value="65" aria-label="BGM音量を変更" /><small>変更は自動的に保存されます。</small></label>
+            <label class="audio-volume-control" for="opt-bgm-volume"><span>BGM音量 <output id="opt-bgm-value">70%</output></span><input id="opt-bgm-volume" type="range" min="0" max="100" step="5" value="70" aria-label="BGM音量" /></label>
+            <label class="audio-volume-control" for="opt-sfx-volume"><span>戦闘効果音 <output id="opt-sfx-value">80%</output></span><input id="opt-sfx-volume" type="range" min="0" max="100" step="5" value="80" aria-label="戦闘効果音の音量" /></label>
+            <label class="audio-volume-control" for="opt-voice-volume"><span>戦闘ボイス <output id="opt-voice-value">75%</output></span><input id="opt-voice-volume" type="range" min="0" max="100" step="5" value="75" aria-label="戦闘ボイスの音量" /></label>
+            <label class="audio-volume-control" for="opt-ui-volume"><span>ボタン操作音 <output id="opt-ui-value">65%</output></span><input id="opt-ui-volume" type="range" min="0" max="100" step="5" value="65" aria-label="ボタン操作音の音量" /><small>音量は端末に保存されます。初回再生はクリック・キー操作後に始まります。</small></label>
             <button class="btn" id="opt-diff">CPUの強さ：ノーマル</button>
             <p class="foot" id="pad-status" style="text-align:left">ゲームパッド：まだ見つかっていません（ボタンを押すと気づきます）</p>
             <p class="foot" style="text-align:left">パッド　スティック/十字：移動　A(×)：斬る　X(□)：技A　RB(R1)：技B　Y(△)：奥義　B(○)：跳ぶ　LB/LT/RT：構え　START：休む<br>メニュー　十字で選ぶ／A(×)で決める／B(○)で戻る</p>
@@ -631,6 +634,6 @@
         </div>
       </div>
     </main>
-    <script type="module" src="main.js?v=role-voices-portraits-20261107c"></script>
+    <script type="module" src="main.js?v=audio-cast-20261107d"></script>
 </body>
 </html>

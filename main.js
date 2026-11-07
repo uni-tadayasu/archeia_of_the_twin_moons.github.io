@@ -1,10 +1,10 @@
 import * as THREE from 'three';
 import { loadModel } from './model-runtime.js?v=valgard-exact-20261107';
-import { Battle, ARENA_R } from './game.js?v=role-voices-portraits-20261107c';
-import { FIGHTERS, spellCastTime, STORY, ROSTER, UPGRADES, MAX_LV, STAGES, BGM, APEX_BGM, ENEMY_ROSTER, UPG_CAP, LB_MAX, lbMaxLv, lbMul, lbCost, WEAPONS, ARMORS, SUMMONS, STAT_LABEL, SPECIAL_KEYS, BOSS_ROSTER, currentEvent, sanitizeEvent, EV_FOE_KINDS } from './data.js?v=role-voices-portraits-20261107c';
-import { sayBattle, setVoiceMuted, stopVoices } from './voice.js?v=role-voices-portraits-20261107c';
+import { Battle, ARENA_R } from './game.js?v=audio-cast-20261107d';
+import { FIGHTERS, spellCastTime, STORY, ROSTER, UPGRADES, MAX_LV, STAGES, BGM, APEX_BGM, ENEMY_ROSTER, UPG_CAP, LB_MAX, lbMaxLv, lbMul, lbCost, WEAPONS, ARMORS, SUMMONS, STAT_LABEL, SPECIAL_KEYS, BOSS_ROSTER, currentEvent, sanitizeEvent, EV_FOE_KINDS } from './data.js?v=audio-cast-20261107d';
+import { sayBattle, setVoiceMuted, setVoiceVolume, stopVoices } from './voice.js?v=audio-cast-20261107d';
 import { initSocial, uiConfirm } from './social.js?v=valgard-exact-20261107';
-import { initMailbox } from './mailbox.js?v=role-voices-portraits-20261107c';
+import { initMailbox } from './mailbox.js?v=audio-cast-20261107d';
 import { OPERATOR_KEY_SHA256, CHIEF_KEY_SHA256, MAX_KEY_ATTEMPTS, LOCKOUT_MS, SHOP_ITEMS } from './config.js';
 import { connect, issueInvite, redeemInvite, syncPush, syncPullV } from './net.js?v=valgard-exact-20261107';
 import { apiEnabled, api, verifyToken } from './api.js';
@@ -321,7 +321,7 @@ const maxLvOf = (k) => lbMaxLv(lbOf(k));
 const allMaxed = (k) => UPGRADES.every((u) => lvOf(k, u.id) >= maxLvOf(k));
 // 100種の強化を戦闘用の5能力（段換算）にまとめる（限界突破で効果と上限が上がる）
 function upgFor(k) {
-  const out = { hp: 0, atk: 0, def: 0, flux: 0, over: 0 };
+  const out = { hp: 0, atk: 0, def: 0, flux: 0, over: 0, cast: 0 };
   const lb = lbOf(k), mul = lbMul(lb);
   for (const u of UPGRADES) out[u.stat] += lvOf(k, u.id) * u.w * mul;
   for (const s in out) out[s] = Math.min(UPG_CAP[s] * (1 + 0.6 * lb), out[s]);
@@ -739,16 +739,19 @@ const audio = {
   tracks: {}, current: null, currentKey: null, wanted: 'title', pools: {}, ctx: null,
   unlocked: false,
   volume: Math.max(0, Math.min(100, +(localStorage.getItem('arkeia-bgm-volume') ?? 70))) / 100,
+  sfxVolume: Math.max(0, Math.min(100, +(localStorage.getItem('arkeia-sfx-volume') ?? 80))) / 100,
+  voiceVolume: Math.max(0, Math.min(100, +(localStorage.getItem('arkeia-voice-volume') ?? 75))) / 100,
+  uiVolume: Math.max(0, Math.min(100, +(localStorage.getItem('arkeia-ui-volume') ?? 65))) / 100,
   fadeId: 0
 };
 // データで指定した音楽を実際に再生する。旧式の自動生成曲は使わない。
 const MUSIC_FILES = {
   title: 'title-theme.mp3',
-  story: 'story-theme.mp3',
+  story: 'title-theme.mp3',  // メニュー／物語導入は実在するタイトル音源を使用
   field: 'field-theme.mp3',
   battle: 'battle-theme.mp3',
   event: 'event-theme.mp3',
-  boss: 'boss-theme.mp3',
+  boss: 'event-theme.mp3',  // ボス戦は実在するイベント音源を使用
   zarugureibu: 'zarugureibu-theme.mp3',
   valgard: 'valgard-theme.mp3'
 };
@@ -767,8 +770,7 @@ for (const [name, file] of Object.entries(MUSIC_FILES)) {
 function pool(name, url, n) {
   audio.pools[name] = { list: Array.from({ length: n }, () => new Audio(url)), i: 0 };
 }
-pool('hit', 'assets/audio/hit-impact.mp3', 4);
-pool('burst', 'assets/audio/arte-burst.mp3', 2);
+// hit / burst are rendered by Web Audio. Do not request absent MP3 files.
 function musicKey(name) {
   if (/^field:\d+$/.test(name)) return 'field';
   if (/^bgm:\d+$/.test(name)) return 'battle';
@@ -783,6 +785,28 @@ function applyMusicVolume() {
   const track = audio.tracks[audio.currentKey];
   if (track) track.volume = audio.muted ? 0 : audio.volume * .6;
 }
+
+function applyChannelVolume() {
+  const controls = [
+    ['sfx', audio.sfxVolume], ['voice', audio.voiceVolume], ['ui', audio.uiVolume]
+  ];
+  for (const [kind, value] of controls) {
+    const slider = document.getElementById('opt-' + kind + '-volume');
+    const output = document.getElementById('opt-' + kind + '-value');
+    if (slider) slider.value = String(Math.round(value * 100));
+    if (output) output.textContent = `${Math.round(value * 100)}%`;
+  }
+  if (sfxChain?.master) sfxChain.master.gain.value = audio.muted ? 0 : 1.1 * audio.sfxVolume;
+  setVoiceVolume(audio.voiceVolume);
+  setVoiceMuted(audio.muted || audio.voiceVolume <= 0);
+}
+function setChannelVolume(kind, value) {
+  if (!['sfx', 'voice', 'ui'].includes(kind)) return;
+  const val = Math.min(1, Math.max(0, Number(value) / 100 || 0));
+  audio[kind + 'Volume'] = val;
+  localStorage.setItem(`arkeia-${kind}-volume`, String(Math.round(val * 100)));
+  applyChannelVolume();
+}
 function setBgmVolume(value) {
   const n = +value;
   audio.volume = Number.isFinite(n) ? Math.max(0, Math.min(1, n / 100)) : .7;
@@ -792,6 +816,8 @@ function setBgmVolume(value) {
 // 音楽はシーンの希望曲と、全世界のヴァルガルド優先曲を分けて管理する。
 // 音楽が未解禁の状態で先に曲名を登録しても、最初のユーザー操作で必ず再生する。
 function shouldForceValgard() {
+  // タイトル／メニュー／設定画面では必ずメニュー曲を優先する。
+  if (audio.wanted === 'title' || isScreen('scr-title') || isScreen('scr-press')) return false;
   const localFight = state?.battle?.fighters?.some((f) => !f.dead && (f.key === 'valgard'));
   const field = state?.field;
   const localField = !!field && [state.myKey, ...(field.o?.partyKeys || [])].some((k) => k === 'valgard');
@@ -858,7 +884,7 @@ function blip(freq) {
   o.type = 'triangle';
   o.frequency.setValueAtTime(freq, audio.ctx.currentTime);
   o.frequency.exponentialRampToValueAtTime(freq * 2, audio.ctx.currentTime + 0.15);
-  g.gain.setValueAtTime(0.12, audio.ctx.currentTime);
+  g.gain.setValueAtTime(0.12 * audio.uiVolume, audio.ctx.currentTime);
   g.gain.exponentialRampToValueAtTime(0.001, audio.ctx.currentTime + 0.25);
   o.connect(g).connect(audio.ctx.destination);
   o.start();
@@ -886,7 +912,7 @@ function sfxBus(ctx) {
   comp.attack.value = 0.002;
   comp.release.value = 0.15;
   const master = ctx.createGain();
-  master.gain.value = 1.1;
+  master.gain.value = audio.muted ? 0 : 1.1 * audio.sfxVolume;
   comp.connect(master).connect(ctx.destination);
   const dry = ctx.createGain();
   dry.connect(comp);
@@ -901,7 +927,7 @@ function sfxBus(ctx) {
   const wet = ctx.createGain();
   wet.gain.value = 0.35;
   wet.connect(verb).connect(comp);
-  sfxChain = { dry, wet };
+  sfxChain = { dry, wet, master };
   return sfxChain;
 }
 const ELEM_BASE = [160, 1200, 900, 520, 70, 880, 110, 300, 240, 200];
@@ -1109,9 +1135,10 @@ function elemSfx(e, dest) {
   }
 }
 function sfx(name, spec) {
-  if (audio.muted) {
+  if (audio.muted || (name === 'ui' ? audio.uiVolume <= 0 : audio.sfxVolume <= 0)) {
     return;
   }
+  if (name === 'burst') { skillSfx(86, 0); return; }
   if (name === 'skill' && spec && (spec.snd != null || spec.elem != null)) {
     skillSfx(spec.snd ?? spec.elem * 7, spec.elem ?? 0);
     return;
@@ -1155,7 +1182,7 @@ function sfx(name, spec) {
   }
   const a = p.list[p.i++ % p.list.length];
   a.currentTime = 0;
-  a.volume = name === 'hit' ? 0.5 : 0.7;
+  a.volume = (name === 'hit' ? 0.5 : 0.7) * audio.sfxVolume;
   a.play().catch(() => {});
 }
 function unlockAudio() {
@@ -1177,7 +1204,7 @@ document.addEventListener('visibilitychange', () => {
 });
 function setMuted(m) {
   audio.muted = !!m;
-  setVoiceMuted(audio.muted);
+  setVoiceMuted(audio.muted || audio.voiceVolume <= 0);
   localStorage.setItem('arkeia-muted', audio.muted ? '1' : '0');
   ++audio.fadeId;
   for (const t of Object.values(audio.tracks)) {
@@ -1188,10 +1215,15 @@ function setMuted(m) {
   const button = $('#opt-mute');
   if (button) button.textContent = audio.muted ? '音をオンにする' : '音をミュートする';
   applyMusicVolume();
+  applyChannelVolume();
 }
 setMuted(audio.muted);
 $('#opt-bgm-volume')?.addEventListener('input', (e) => setBgmVolume(e.currentTarget.value));
+for (const kind of ['sfx', 'voice', 'ui']) {
+  $('#opt-' + kind + '-volume')?.addEventListener('input', (e) => setChannelVolume(kind, e.currentTarget.value));
+}
 applyMusicVolume();
+applyChannelVolume();
 
 // ---------- Input ----------
 const keys = new Set();
@@ -1360,6 +1392,10 @@ function show(id) {
   }
   $('#hud').hidden = id !== null;
   $('#touch').classList.toggle('active', id === null);
+  if (id === 'scr-title' || id === 'scr-press') {
+    audio.wanted = 'title';
+    syncMusicTrack();
+  }
   if (id) {
     const first = $('#' + id).querySelector('.menu button, .card:not(.locked), .chip');
     if (first && !isTouch) {
@@ -2537,7 +2573,7 @@ function resetFieldLight() {
 async function enterField() {
   // フィールドは物語でしか使わないので必要になった時だけ読み込む（初回表示を軽く）
   if (!(await ensureAllModelsReady())) return;
-  const { Field } = await import('./field.js?v=role-voices-portraits-20261107c');
+  const { Field } = await import('./field.js?v=audio-cast-20261107d');
   leaveField();
   const ch = STORY[state.chapter];
   const st = stageById(ch.stage);
@@ -2818,7 +2854,9 @@ function renderForge() {
     const pips = document.createElement('i');
     pips.textContent = MAX_LV <= 5 ? '◆'.repeat(lv) + '◇'.repeat(MAX_LV - lv) : `${lv}/${MAX_LV}段`;
     const desc = document.createElement('small');
-    desc.textContent = `${u.what} ${u.sign}${+(u.pct * mulNow).toFixed(2)}%／段${lb ? `（突破×${mulNow.toFixed(1)}）` : ''}`;
+    desc.textContent = u.stat === 'cast'
+      ? `詠唱短縮 ${Math.round(Math.min(0.45, upgFor(forgeSel).cast * 0.03) * 100)}%（1段につき3%、最大45%）` 
+      : `${u.what} ${u.sign}${+(u.pct * mulNow).toFixed(2)}%／段${lb ? `（突破×${mulNow.toFixed(1)}）` : ''}`;
     row.append(lab, btn, pips, desc);
     rows.append(row);
   }

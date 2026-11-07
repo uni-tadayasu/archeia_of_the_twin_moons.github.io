@@ -337,10 +337,10 @@ FIGHTERS.valgard = {
   skills: [
     { name: '凍牙・氷鋼砕', cost: 21, kind: 'shockwave', dmg: 160, radius: 6.3, elem: 1, color: 0x89e7ff, vivid: true },
     { name: '白銀氷鎧突', cost: 19, kind: 'dash', dmg: 145, speed: 19, dur: 0.34, elem: 1, color: 0xb4efff, vivid: true },
-    { name: '零度氷槍陣', cost: 22, kind: 'projectile', visual: 'ice', count: 6, spreadAng: 0.2, dmg: 72, speed: 21, radius: 0.65, elem: 1, color: 0x64d5ff, vivid: true },
-    { name: '氷葬流星群', cost: 27, kind: 'rain', visual: 'crystal', count: 10, spread: 3.4, radius: 1.7, dmg: 74, delay: 0.38, interval: 0.065, elem: 1, color: 0xc6f4ff, vivid: true }
+    { name: '第九位氷晶術《グレイシャル・ランス》', cost: 29, castTime: 1.65, kind: 'projectile', visual: 'ice', count: 8, spreadAng: 0.20, dmg: 82, speed: 23, radius: 0.75, elem: 1, color: 0x64d5ff, vivid: true },
+    { name: '禁呪《絶対氷葬界》', cost: 36, castTime: 1.85, kind: 'judgment', visual: 'crystal', finalVisual: 'pillar', count: 10, spread: 4.8, radius: 2.1, dmg: 105, delay: 0.55, interval: 0.10, finalDmg: 370, finalRadius: 7.8, elem: 1, color: 0xc6f4ff, vivid: true }
   ],
-  over: { name: '極氷皇界《エターナル・ゼロ》', kind: 'judgment', visual: 'crystal', finalVisual: 'pillar', count: 14, spread: 7, radius: 2.3, dmg: 92, delay: 0.65, interval: 0.08, finalDmg: 450, finalRadius: 8.8, elem: 1, color: 0x70ddff, vivid: true }
+  over: { name: '終極氷皇術《エターナル・ゼロ》', castTime: 2.45, kind: 'judgment', visual: 'crystal', finalVisual: 'pillar', count: 16, spread: 7.2, radius: 2.5, dmg: 108, delay: 0.7, interval: 0.08, finalDmg: 520, finalRadius: 9.1, elem: 1, color: 0x70ddff, vivid: true }
 };
 // 運営長だけが灯晶で購入できる特別キャラ：血魔ザルグレイヴ（血属性）
 export const BLOODFIEND_PRICE = 50000;
@@ -595,6 +595,9 @@ UPG_PRE.forEach((pre, pi) => UPG_STATS.forEach((s) => {
   const pct = +(s.per * w).toFixed(2);
   UPGRADES.push({ id: pi === 0 ? s.id : s.id + pi, stat: s.id, w, pct, what: s.what, sign: s.sign, label: pi === 0 ? FIRST_LABEL[s.id] : pre + s.noun, desc: `${s.what} ${s.sign}${pct}%／段` });
 }));
+// 詠唱短縮：既存100種に加える独立強化。1段につき3％、最大45％短縮。
+// 旧セーブに cast がなくても0段として扱うため、既存の進行を壊さない。
+UPGRADES.push({ id: 'cast', stat: 'cast', w: 1, pct: 3, what: '技・奥義・秘奥義の詠唱時間', sign: '−', label: '詠唱の研鑽', name: '詠唱の研鑽', desc: '1段につき詠唱を3％短縮（最大45％）' });
 // ---------- 限界突破：全強化を極めると解放。上限段+5、各強化の効果+20%（1回ごと） ----------
 export const LB_MAX = 10;
 export const LB_STEP = 5;
@@ -634,7 +637,7 @@ export const SUMMONS = [
 export const STAT_LABEL = { hp: '体力', atk: '攻撃', def: '守り', flux: '灯力', over: '奥義' };
 
 // 強化の合計上限（段換算）
-export const UPG_CAP = { hp: 25, atk: 25, def: 14, flux: 25, over: 20 };
+export const UPG_CAP = { hp: 25, atk: 25, def: 14, flux: 25, over: 20, cast: 15 };
 
 const STORY_BASE = [
   {
@@ -1197,7 +1200,7 @@ async function limited(env, req, bucket, max, windowMs) {
 
 // ---------- セーブ検証（戦闘用ステータスの算出：クライアントの upgFor と同じ規則） ----------
 function statsFor(save, key) {
-  const out = { hp: 0, atk: 0, def: 0, flux: 0, over: 0 };
+  const out = { hp: 0, atk: 0, def: 0, flux: 0, over: 0, cast: 0 };
   const lb = Math.max(0, Math.min(LB_MAX, Math.floor(+save?.lb?.[key] || 0)));
   const up = save?.upg?.[key];
   if (up && typeof up === 'object') {

@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { attachValgardMotion } from './valgard-motion.js?v=valgard-exact-20261107';
 import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js';
-import { FIGHTERS, ELEMS, spellCastTime } from './data.js?v=role-voices-portraits-20261107c';
+import { FIGHTERS, ELEMS, spellCastTime } from './data.js?v=audio-cast-20261107d';
 import { makeGear, animGear } from './gear.js';
 import { instantiateModel, disposeModel, loadModel } from './model-runtime.js?v=valgard-exact-20261107';
 
@@ -1354,7 +1354,13 @@ export class Battle {
         : slot[0] === 'f' ? followSpec(f.def, idx) || f.def.skills[0]
           : f.def.skills[idx] || f.def.skills[0];
     if (!spec || f.dead || f.chantToken || this.ended) return;
-    const duration = spellCastTime(spec, slot);
+    // 詠唱の研鑽：強化段数と限界突破倍率を upgFor が検証・集約する。
+    // 効果は3%/実効段、合計45%上限。上位魔法・奥義は最低詠唱時間を保証する。
+    const baseDuration = spellCastTime(spec, slot);
+    const castRank = Math.max(0, Math.min(15, Number(f.upg?.cast) || 0));
+    const castReduction = Math.min(0.45, castRank * 0.03);
+    const minimum = slot === 'hi' ? 1.4 : slot === 'over' ? 0.9 : slot?.startsWith('f') ? 0.3 : 0.24;
+    const duration = +Math.max(minimum, baseDuration * (1 - castReduction)).toFixed(2);
     const stamp = {};
     f.chantToken = stamp;
     f.action = { type: 'chant', t: 0, dur: duration + 0.12 };
