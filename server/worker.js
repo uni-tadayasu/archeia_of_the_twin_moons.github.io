@@ -1,3 +1,4 @@
+// RF_GRAND_FOUR_20261108 server/worker.js
 // Riftfall Arena Cloudflare Worker — runtime/preview guard update (2026-11-06).
 // Single-file ES module for the existing Worker.
 // Preserves 8 Durable Object classes including MailStore and existing POST APIs.
@@ -357,7 +358,7 @@ FIGHTERS.bloodfiend = {
   over: { name: '紅月葬送・血華の宴', kind: 'judgment', visual: 'pillar', finalVisual: 'bigsword', count: 18, spread: 7, radius: 2.6, dmg: 100, delay: 0.7, interval: 0.06, finalDmg: 480, finalRadius: 9.5, elem: 9, color: 0xe0103c, vivid: true }
 };
 // 通常プレイヤーがパーティーに入れられない特別枠
-export const SPECIAL_KEYS = ['seraphel', 'chief', 'crimson', 'sovereign', 'bloodfiend'];
+export const SPECIAL_KEYS = ['seraphel', 'chief', 'crimson', 'sovereign', 'bloodfiend', 'operator_gigantes'];
 
 // ---------- 決定的な乱数（毎回同じ内容を生成する） ----------
 function rng(seed) {
@@ -1276,7 +1277,68 @@ FIGHTERS.gaizorg = {
     spread:6,radius:2.9,dmg:260,delay:.55,interval:.08,finalDmg:1500,finalRadius:10.0,vivid:true}
 };
 
-const CHIEF_ONLY = new Set(['valgard', 'gaizorg']);
+// RF_OPERATOR_GIGANTES_20261108: Separate from the chief-only Valgard.
+FIGHTERS.operator_gigantes = {
+  name: '機神ギガンテス', title: '終焉機神（運営専用・運営長不可）',
+  model: 'assets/models/operator-gigantes.glb',
+  face: 'assets/portraits/operator-gigantes.webp',
+  color: 0xb584ff, tint: null, height: 4.85, hp: 4400,
+  speed: 5.2, overGain: 1.38, locked: true, special: 'operator',
+  light: { dmg: 182, range: 3.7, color: 0xf09bff },
+  skills: [
+    { name: '破壊光線《デストラクション・レイ》', kind: 'projectile', visual: 'orb', count: 1,
+      dmg: 460, speed: 35, radius: 1.8, cost: 24, castTime: 0.66, elem: 8, color: 0xd86aff, vivid: true },
+    { name: '機神光剣《ビームサーベル》', kind: 'dash', dmg: 490,
+      speed: 20.5, dur: 0.48, cost: 22, elem: 8, color: 0xfe8cff, vivid: true },
+    { name: '追尾砲陣《ファンネル》', kind: 'rain', visual: 'bolt',
+      count: 12, spread: 4.8, radius: 1.4, dmg: 125, delay: 0.35, interval: 0.08,
+      cost: 26, elem: 8, color: 0xcd8aff, vivid: true },
+    { name: '星葬砲雨《フルバースト》', kind: 'judgment', visual: 'pillar', finalVisual: 'nova',
+      count: 10, spread: 4.6, radius: 2.0, dmg: 225, delay: 0.4,
+      interval: 0.07, finalDmg: 760, finalRadius: 7.6,
+      cost: 42, castTime: 1.7, elem: 8, color: 0xf4a1ff, vivid: true },
+    { name: '機神装甲・自己修復', kind: 'heal', heal: 850, radius: 5,
+      cost: 30, elem: 8, color: 0xbafff0, vivid: true }
+  ],
+  over: { name: '最終殲滅《オメガ・バスター》', kind: 'judgment', visual: 'pillar',
+    finalVisual: 'nova', count: 17, spread: 6.4, radius: 2.7,
+    dmg: 245, delay: 0.55, interval: 0.06, finalDmg: 1700, finalRadius: 10.4,
+    castTime: 2.3, elem: 8, color: 0xf4c5ff, vivid: true }
+};
+
+const OP_EXCLUSIVE = new Set(['operator_gigantes']);
+// RF_VALDARION_CHIEF_20261108: Genuine model path; source GLB is not modified.
+FIGHTERS.valdarion = {
+  name: '虚無機神ヴァルダリオン', title: '無の尊座・至高位機神（運営長専用）',
+  model: 'assets/models/valdarion.glb', face: 'assets/portraits/valdarion.webp',
+  attribute: '無', nullElement: true,
+  color: 0xc6b5ff, tint: null, height: 3.95, hp: 7800, speed: 5.7,
+  overGain: 1.48, locked: true, special: 'chief', power: 1.4, armor: .72,
+  light: {dmg: 230, range: 3.4, color: 0xe6d5ff},
+  guardArt: {name: '絶対護装《無傷の煌鎧》', duration: 30, damageMultiplier: .5,
+    staggerImmune: true, knockbackImmune: true, continueAttacking: true, cooldown: 75},
+  skills: [
+    {name:'虚無光砲《アビス・ゼロ》', kind:'projectile', visual:'orb', count:5, spreadAng:.10, chain:.06,
+      dmg:180, speed:30, radius:1.15, cost:27, castTime:.8, elem:6, nullElement:true, color:0xc5a7ff, vivid:true},
+    {name:'零界断刀《ゼロ・エクスカリオン》',kind:'dash',dmg:520,speed:25,dur:.42,
+      cost:25,castTime:.68,elem:6,nullElement:true,color:0xf8efff,vivid:true},
+    {name:'無限裂界《ノヴァ・ファンネル》',kind:'rain',visual:'crystal',count:15,spread:5.0,
+      radius:1.75,dmg:160,delay:.35,interval:.065,cost:32,elem:6,nullElement:true,color:0xbb98ff,vivid:true},
+    {name:'現実歪曲《リアリティ・リライト》',kind:'judgment',visual:'nova',finalVisual:'pillar',
+      count:13,spread:6,radius:2.3,dmg:230,delay:.5,interval:.065,finalDmg:870,finalRadius:8.8,
+      cost:42,castTime:2,elem:6,nullElement:true,color:0xf5e2ff,vivid:true},
+    {name:'虚空再編《無の復元》',kind:'heal',heal:1100,radius:5.7,cost:30,
+      elem:6,nullElement:true,color:0xc4eaff,vivid:true}
+  ],
+  hi: {name:'超越禁呪《原初の空白》',kind:'judgment',visual:'pillar',finalVisual:'nova',
+    count:17,spread:6.5,radius:2.5,dmg:250,delay:.55,interval:.05,finalDmg:1300,finalRadius:10,
+    castTime:3.15,elem:6,nullElement:true,color:0xebddff,vivid:true},
+  over: {name:'無限終焉《エターナル・ヌル》',kind:'judgment',visual:'nova',finalVisual:'pillar',
+    count:20,spread:7,radius:2.7,dmg:280,delay:.55,interval:.055,finalDmg:1700,finalRadius:11,
+    castTime:2.65,elem:6,nullElement:true,color:0xf5e4ff,vivid:true}
+};
+
+const CHIEF_ONLY = new Set(['valgard', 'gaizorg', 'valdarion']);
 
 // ---------- ルート ----------
 export default {
@@ -1486,6 +1548,7 @@ async function profile(req, env, H, { code, key, role, buyer }) {
   }
   if (!save) save = {}; // 未登録なら強化なしとして署名
   const r = (await verify(env, role, 'role'))?.r || null;
+  if (OP_EXCLUSIVE.has(key) && r !== 'op') return json(H, { error: 'denied' }, 403);
   if (CHIEF_ONLY.has(key) && r !== 'chief') return json(H, { error: 'denied' }, 403);
   if (OP_ONLY.has(key) && !r) return json(H, { error: 'denied' }, 403);
   if (FIGHTERS[key].shop && !(await ownedKeys(env, buyer)).includes(key)) return json(H, { error: 'not purchased' }, 403);
