@@ -1,115 +1,121 @@
-// RF_GRAND_FOUR_20261108 model-transport.js
-// Arkeia: model file transport with explicit URL and HTTP diagnostics.
-// Use the DOCUMENT location first, not import.meta.url, which can be rewritten
-// to a transient blob:/CDN module by browser game hosts.
+/* Riftfall Arena Mobile V7 — model transport. Direct lightweight GLB first.
+ * Public API preserved: modelURLCandidates, getModelBytes.
+ * Legacy .parts.json format remains an optional fallback when full GLB is absent.
+ */
 const DEFAULT_TIMEOUT_MS = 90000;
-
-function asURL(value, base) {
-  try { return new URL(value, base); } catch { return null; }
-}
-
+function asURL(value, base) { try { return new URL(value, base); } catch { return null; } }
 export function modelURLCandidates(path, moduleURL = null) {
   if (typeof path !== 'string' || !path.trim()) throw new Error('モデルのパスがありません');
-  const candidates = [];
-  const add = (candidate) => {
-    if (!candidate || !['https:', 'http:', 'file:'].includes(candidate.protocol)) return;
-    if (!candidates.some(c => c.href === candidate.href)) candidates.push(candidate);
+  const results = [];
+  const add = url => {
+    if (!url || !['https:', 'http:', 'file:'].includes(url.protocol)) return;
+    if (!results.some(u => u.href === url.href)) results.push(url);
   };
-  const docURL = (typeof document !== 'undefined' && document.baseURI)
+  const base = (typeof document !== 'undefined' && document.baseURI)
     || (typeof location !== 'undefined' && location.href) || null;
-  if (docURL) add(asURL(path, docURL));
+  if (base) add(asURL(path, base));
   if (moduleURL) add(asURL(path, moduleURL));
-  if (!candidates.length) throw new Error('モデルの公開先URLを組み立てられません');
-  return candidates;
+  if (!results.length) throw new Error('モデルの公開先URLを組み立てられません');
+  return results;
 }
-function errText(err) { return err?.message || String(err); }
-
-async function attemptFetch(url, timeoutMs) {
+function textOf(error) { return error?.message || String(error); }
+function isValidGLB(buffer) {
+  if (!buffer || buffer.byteLength < 28) return false;
+  const v = new DataView(buffer);
+  return v.getUint32(0, true) === 0x46546c67
+    && v.getUint32(4, true) === 2
+    && v.getUint32(8, true) === buffer.byteLength
+    && v.getUint32(16, true) === 0x4e4f534a;
+}
+async function attemptFetch(url, timeout = DEFAULT_TIMEOUT_MS) {
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  const timeoutId = setTimeout(() => controller.abort(), timeout);
   try {
     const response = await fetch(url.href, {
-      signal: controller.signal, credentials: 'same-origin', cache: 'no-store', redirect: 'follow'
+      signal: controller.signal,
+      credentials: 'same-origin', cache: 'default', redirect: 'follow'
     });
     if (!response.ok) {
-      const e = new Error(`HTTP ${response.status}`);
-      e.httpStatus = response.status;
-      throw e;
+      const error = new Error(`HTTP ${response.status}`);
+      error.httpStatus = response.status;
+      throw error;
     }
-    const buf = await response.arrayBuffer();
-    if (buf.byteLength < 32) throw new Error(`GLBファイルが短すぎます (${buf.byteLength} bytes)`);
-    return buf;
-  } finally { clearTimeout(timer); }
+    const bytes = await response.arrayBuffer();
+    if (bytes.byteLength < 32) throw new Error('モデルデータが短すぎます');
+    return bytes;
+  } finally { clearTimeout(timeoutId); }
 }
-
-// XHR can be useful on browser-hosted preview pages where window.fetch has
-// been wrapped/restricted. It cannot bypass CORS or permissions.
 function attemptXHR(url, timeoutMs) {
   if (typeof XMLHttpRequest === 'undefined') return Promise.reject(new Error('XHR未対応'));
   return new Promise((resolve, reject) => {
     const req = new XMLHttpRequest();
-    req.open('GET', url.href, true);
-    req.responseType = 'arraybuffer';
-    req.timeout = timeoutMs;
-    req.onload = () => {
-      if (req.status < 200 || req.status >= 300) {
-        const e = new Error(`HTTP ${req.status || 0}`);
-        e.httpStatus = req.status || 0;
-        reject(e);
-      } else if (!req.response || req.response.byteLength < 32) {
-        reject(new Error('GLBデータが空または不完全です'));
-      } else resolve(req.response);
-    };
-    req.onerror = () => reject(new Error('ネットワーク/CORSによる取得失敗'));
+    req.open('GET', url.href, true); req.responseType = 'arraybuffer'; req.timeout = timeoutMs;
+    req.onload = () => req.status >= 200 && req.status < 300 && req.response?.byteLength >= 32
+      ? resolve(req.response) : reject(new Error(`HTTP ${req.status || 0}`));
+    req.onerror = () => reject(new Error('ネットワークエラー'));
     req.ontimeout = () => reject(new Error('通信タイムアウト'));
-    req.onabort = () => reject(new Error('通信が中断されました'));
-    try { req.send(); } catch (e) { reject(e); }
+    req.onabort = () => reject(new Error('通信中断'));
+    try { req.send(); } catch (error) { reject(error); }
   });
 }
-
-export async function getModelBytes(path, moduleURL = null) {
-  // RIFTFALL-25MB-MODEL-CHUNKS: reconstruct exact glb from <25MB parts.
-  if (/\.glb(?:[?#]|$)/i.test(String(path))) {
-    const url = new URL(String(path).split(/[?#]/)[0] + '.parts.json', document.baseURI);
-    let manifest = null;
-    try { const resp = await fetch(url.href, {cache:'no-store'}); if (resp.ok) manifest = await resp.json(); } catch(e) {}
-    if (manifest) {
-      if (!Array.isArray(manifest.parts) || manifest.parts.length < 2 || manifest.parts.length > 30 || !Number.isSafeInteger(manifest.byteLength)) throw Error('モデルの分割マニフェストが不正です');
-      const merged = new Uint8Array(manifest.byteLength);let at=0;
-      for(const part of manifest.parts) {
-        if(typeof part !== 'string' || !/^[a-z0-9._-]+\.bin$/i.test(part)) throw Error('モデルの分割パスが不正です');
-        const resp=await fetch(new URL(part,url).href,{cache:'no-store'});if(!resp.ok) throw Error(part+': HTTP '+resp.status);
-        const chunk=new Uint8Array(await resp.arrayBuffer());
-        if(at+chunk.byteLength>merged.byteLength) throw Error('モデルの結合長が不正です');
-        merged.set(chunk,at);at+=chunk.length;
-      }
-      if(at!==merged.length || new DataView(merged.buffer).getUint32(0,true)!==0x46546c67) throw Error('GLB結合結果が不正です');
-      return merged.buffer;
-    }
+async function legacyParts(path, moduleURL = null) {
+  const candidate = modelURLCandidates(path, moduleURL)[0];
+  const url = new URL(candidate.href.split(/[?#]/)[0] + '.parts.json');
+  let response;
+  try { response = await fetch(url.href, { cache: 'default' }); } catch { return null; }
+  if (!response.ok) return null;
+  const manifest = await response.json();
+  if (!Number.isSafeInteger(manifest?.byteLength) || manifest.byteLength < 28 ||
+      !Array.isArray(manifest.parts) || manifest.parts.length < 2 || manifest.parts.length > 30) {
+    throw new Error('旧分割GLBのマニフェストが不正です');
   }
-
+  const combined = new Uint8Array(manifest.byteLength);
+  let offset = 0;
+  // One chunk at a time: do not keep multiple old 20MB ArrayBuffers in memory.
+  for (const name of manifest.parts) {
+    if (typeof name !== 'string' || !/^[a-z0-9._-]+\.bin$/i.test(name)) throw new Error('分割パスが不正です');
+    const partUrl = new URL(name, url);
+    const data = await attemptFetch(partUrl);
+    if (offset + data.byteLength > combined.length) throw new Error('GLBの結合サイズが不正です');
+    combined.set(new Uint8Array(data), offset);
+    offset += data.byteLength;
+  }
+  if (offset !== combined.byteLength || !isValidGLB(combined.buffer)) throw new Error('GLBの結合結果が不正です');
+  return combined.buffer;
+}
+export async function getModelBytes(path, moduleURL = null) {
   const candidates = modelURLCandidates(path, moduleURL);
+  const glb = /\.glb(?:[?#]|$)/i.test(String(path));
   const errors = [];
+  // IMPORTANT: this must run before reading *.parts.json. The latter refers
+  // to the old 55–60MB versions even when current 20–23MB files are available.
   for (const url of candidates) {
     if (url.protocol === 'file:') {
-      errors.push(`${url.href}：file://から直接開いたページでは3Dモデルを取得できません。GitHub PagesなどHTTPSで開いてください`);
+      errors.push('file:// ではモデルを取得できません。HTTPSで開いてください');
       continue;
     }
-    try { return await attemptFetch(url, DEFAULT_TIMEOUT_MS); }
-    catch (error) {
-      if (error?.httpStatus === 404 || error?.httpStatus === 403) {
-        errors.push(`${url.href}：HTTP ${error.httpStatus}（公開先にモデルがない、または閲覧禁止）`);
-        continue;
-      }
-      try { return await attemptXHR(url, 90000); }
-      catch (xhrError) {
-        errors.push(`${url.href}：fetch=${errText(error)} / XHR=${errText(xhrError)}`);
+    try {
+      const bytes = await attemptFetch(url);
+      if (glb && !isValidGLB(bytes)) throw new Error('GLBの形式または長さが不正です');
+      return bytes;
+    } catch (error) {
+      errors.push(`${url.pathname} : ${textOf(error)}`);
+      // Historical preview hosts may wrap window.fetch; XHR is a fallback.
+      if (error?.httpStatus !== 404 && error?.httpStatus !== 403) {
+        try {
+          const bytes = await attemptXHR(url, 30000);
+          if (glb && !isValidGLB(bytes)) throw new Error('GLBの形式が不正です');
+          return bytes;
+        } catch (xhrError) { errors.push(`XHR: ${textOf(xhrError)}`); }
       }
     }
   }
-  const message = `3Dモデルを取得できませんでした。${errors.join(' / ')}。公開したサイトから assets/models/ のGLB URLが開けるか確認してください。`;
-  const finalError = new Error(message);
-  finalError.assetURL = candidates[0]?.href || '';
-  finalError.details = errors;
-  throw finalError;
+  if (glb) {
+    const oldParts = await legacyParts(path, moduleURL);
+    if (oldParts) return oldParts;
+  }
+  const failure = new Error(`3Dモデルを取得できませんでした。${errors.join(' / ')}`);
+  failure.assetURL = candidates[0]?.href || '';
+  failure.details = errors;
+  throw failure;
 }

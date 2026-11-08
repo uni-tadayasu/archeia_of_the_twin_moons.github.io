@@ -5,7 +5,7 @@ import * as THREE from 'three';
 import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { separateEmbeddedTextures } from './model-image-fix.js?v=model-fetch-v20261107';
-import { getModelBytes, modelURLCandidates } from './model-transport.js?v=20261108-grand-four-v3';
+import { getModelBytes, modelURLCandidates } from './model-transport.js?v=rf-mobile-v7-20261109';
 
 const cache = new Map();
 const pending = new Map();
@@ -32,7 +32,7 @@ function schedule(task) {
   });
 }
 function pump() {
-  while (active < 2 && queue.length) {
+  while (active < ((typeof matchMedia==='function' && matchMedia('(pointer:coarse)').matches) ? 1 : 2) && queue.length) {
     const job = queue.shift(); active++;
     Promise.resolve().then(job.task).then(job.resolve, job.reject).finally(() => { active--; pump(); });
   }

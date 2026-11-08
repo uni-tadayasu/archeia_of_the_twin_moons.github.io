@@ -1,0 +1,27 @@
+Riftfall Arena / Mobile V7 (2026-11-09)
+ゲームシステム・スキル性能・3Dモデル本体・音声データは維持。
+古い分割GLBを削除（軽量版glbが存在するもののみ）。
+元GLBを直接優先。未配置の古いモデルのみ分割形式をフォールバック。
+スマホで3Dモデルを1件ずつロード、不要な同時3Dポートレートレンダリングを抑制。
+魔王の卵は1個／緑分身は1体・耐久3回のまま、分身生成を次フレームに分離。
+元のZIP容量: 245.01 MiB
+冗長分割データ: 207.90 MiB (16ファイル)
+追加画像圧縮: 0.20 -> 0.08 MiB
+変更したコード: arkeia-ui.js, boss-abilities.js, exact-model-portraits.js, field.js, gaizorg-adventure.js, game.js, glb-portrait.js, index.html, mailbox.js, main.js, maou-abilities.js, model-runtime.js, model-transport.js
+削除した旧モデル片（GitHubにアップロード済みの場合、そちらは手動削除が必要）:
+assets/models/gaizorg-boss.glb.part01.bin
+assets/models/gaizorg-boss.glb.part02.bin
+assets/models/gaizorg-boss.glb.part03.bin
+assets/models/gaizorg-boss.glb.parts.json
+assets/models/iron-warlord.glb.part01.bin
+assets/models/iron-warlord.glb.part02.bin
+assets/models/iron-warlord.glb.part03.bin
+assets/models/iron-warlord.glb.parts.json
+assets/models/operator-gigantes.glb.part01.bin
+assets/models/operator-gigantes.glb.part02.bin
+assets/models/operator-gigantes.glb.part03.bin
+assets/models/operator-gigantes.glb.parts.json
+assets/models/valdarion.glb.part01.bin
+assets/models/valdarion.glb.part02.bin
+assets/models/valdarion.glb.part03.bin
+assets/models/valdarion.glb.parts.json

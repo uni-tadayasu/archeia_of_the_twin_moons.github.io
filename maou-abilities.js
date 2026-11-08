@@ -3,14 +3,15 @@
  * All cloned material changes affect only clones, never the user's source GLB.
  */
 import * as THREE from 'three';
-import { FIGHTERS } from './data.js?v=20261108-maou-green-v6';
-import { disposeModel } from './model-runtime.js?v=20261108-maou-green-v6';
+import { FIGHTERS } from './data.js?v=rf-mobile-v7-20261109';
+import { disposeModel } from './model-runtime.js?v=rf-mobile-v7-20261109';
 const KEY = 'maou';
 const SHADE = 'maou_shade';
 const GOLD = 0xffe290;
 const CRIMSON = 0xff1238;
 const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, Number(v) || 0));
 const TAU = Math.PI * 2;
+const LOW_MEMORY = typeof matchMedia === 'function' && matchMedia('(pointer:coarse)').matches;
 
 function createAura(f, type) {
   const attr = type === 'rainbow' ? '__maouRainbowAura' : '__maouRegenAura';
@@ -21,7 +22,7 @@ function createAura(f, type) {
   group.name = 'maou-' + type + '-aura';
   const radius = Math.max(.95, Number(f.def?.height || 3.7) * .48);
   for (let i = 0; i < 3; i++) {
-    const geo = new THREE.TorusGeometry(radius * (1 + i * .22), .025 + i * .008, 5, 64);
+    const geo = new THREE.TorusGeometry(radius * (1 + i * .22), .025 + i * .008, 5, LOW_MEMORY ? 24 : 64);
     const mat = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: .6 - i * .1,
       depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide });
     const ring = new THREE.Mesh(geo, mat);
@@ -51,8 +52,8 @@ function updateAura(f, type, dt) {
   const {group, line, radius, t} = state;
   group.children.slice(0, 3).forEach((r,i) => {
     r.rotation.z += dt * (.5 + i * .22) * (i % 2 ? -1 : 1);
-    const a = type === 'rainbow' ? new THREE.Color().setHSL((t*.31+i/3)%1, 1, .67) : new THREE.Color(i%2?0x9ceeff:0xffe0a4);
-    r.material.color.copy(a);
+    if (type === 'rainbow') r.material.color.setHSL((t*.31+i/3)%1, 1, .67);
+    else r.material.color.setHex(i%2?0x9ceeff:0xffe0a4);
     r.material.opacity = .42 + .2 * Math.sin(t*6+i*1.8);
   });
   const arr=line.geometry.attributes.position;
@@ -196,24 +197,24 @@ function hatching(battle, f, spec, remote) {
   const end = spawn.clone().setY(.35), birth=.36;
   egg.position.copy(mouth);battle.fx.add(egg);
   let t=0;
-  const cleanEgg=()=>{egg.removeFromParent();egg.geometry.dispose();egg.material.dispose();f.__maouEggPending=false;};
+  const cleanEgg=(releaseLock=true)=>{egg.removeFromParent();egg.geometry.dispose();egg.material.dispose();if(releaseLock)f.__maouEggPending=false;};
   battle.addEffect(dt=>{
     if (battle.ended || f.dead) { cleanEgg(); return false; }
     t+=dt;const k=clamp(t/birth,0,1);
     egg.position.copy(mouth).lerp(end,k);egg.position.y+=Math.sin(k*Math.PI)*.65;
     egg.rotation.x+=dt*4;egg.rotation.z+=dt*3;
     if(k<1)return true;
-    cleanEgg();
-    battle.burst?.(end.clone(),0x56f56a,.85,{elem:3,color:0x5dff82});
-    if(!remote && !f.remoteAuth && battle.assets?.[SHADE] &&
-      !battle.fighters.some(a=>a.key===SHADE&&a.maouOwner===f&&!a.dead)){
+    cleanEgg(false);
+    const finishBirth=()=>{
       try {
+        if (battle.ended || f.dead || remote || f.remoteAuth || !battle.assets?.[SHADE] ||
+            battle.fighters.some(a=>a.key===SHADE&&a.maouOwner===f&&!a.dead)) return;
+        // The existing cached GLB is used; do not fetch or decode another copy.
         const shade=battle.add(SHADE,{team:f.team,cpu:.87,player:false,
           pos:[spawn.x,spawn.z],name:'緑影の分身',scale:.78,facing:f.facing});
         shade.maouOwner=f;shade.maouShadeHits=0;shade.maouShade=true;
         shade.root.scale.setScalar(.74);shade.guardMesh.visible=false;
-        // Summoned fighters are added after buildHud(); keep them off the HP UI.
-        // Empty stand-ins also prevent updateHud() from dereferencing undefined.
+        // No HP display, and updateHud() can safely inspect this hidden actor.
         shade.hudFill={style:{width:''}};
         shade.hudPlate={classList:{toggle(){}}};
         const green=new THREE.Color(0x3efa61), glow=new THREE.Color(0x1cae45);
@@ -225,8 +226,14 @@ function hatching(battle, f, spec, remote) {
             mat.needsUpdate=true;
           }
         });
-      } catch(error) { console.warn('[魔王の分身]',error); }
-    }
+      } catch(error) {
+        console.warn('[魔王の分身]',error);
+        battle.ui?.popup?.(f.pos,'分身の表示に失敗しました','#c5ffdc');
+      } finally { f.__maouEggPending=false; }
+    };
+    battle.burst?.(end.clone(),0x56f56a,.85,{elem:3,color:0x5dff82});
+    if(typeof requestAnimationFrame==='function') requestAnimationFrame(finishBirth);
+    else finishBirth();
     return false;
   });
   battle.ui?.popup?.(f.pos,'口卵術《翠影孵化》：卵1個・緑の分身1体（耐久3撃）','#b4ffd1');
@@ -264,7 +271,8 @@ export function installMaouCombat({Battle,Fighter}) {
   const BH=Battle.prototype.applyHit, BD=Battle.prototype.dispose;
   Fighter.prototype.update=function(dt,input){
     if(this.key===SHADE){
-      if(this.maouOwner?.dead||this.maouOwner?.transformed)retireShade(this);
+      if(this.__maouRetiring)return;
+      if(this.maouOwner?.dead||this.maouOwner?.transformed){retireShade(this);return;}
       return FU.call(this,dt,input);
     }
     if(this.key!==KEY)return FU.call(this,dt,input);

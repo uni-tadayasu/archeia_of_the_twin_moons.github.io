@@ -1,16 +1,16 @@
-import { installMaouCombat } from './maou-abilities.js?v=20261108-maou-green-v6';
-import { Fighter as MaouFighter } from './game.js?v=20261108-maou-green-v6';
-import './boss-abilities.js?v=20261108-maou-green-v6';
-import './exact-model-portraits.js?v=20261108-maou-green-v6';
+import { installMaouCombat } from './maou-abilities.js?v=rf-mobile-v7-20261109';
+import { Fighter as MaouFighter } from './game.js?v=rf-mobile-v7-20261109';
+import './boss-abilities.js?v=rf-mobile-v7-20261109';
+import './exact-model-portraits.js?v=rf-mobile-v7-20261109';
 // RF_GRAND_FOUR_20261108 main.js
 import * as THREE from 'three';
-import { setupGaizorgAdventure } from './gaizorg-adventure.js?v=20261108-maou-green-v6';
+import { setupGaizorgAdventure } from './gaizorg-adventure.js?v=rf-mobile-v7-20261109';
 import { installOperatorCombatFx } from './operator-combat-fx.js?v=20261108-grand-four-v3';
-import { renderExactPortrait } from './glb-portrait.js?v=20261108-maou-green-v6';
+import { renderExactPortrait } from './glb-portrait.js?v=rf-mobile-v7-20261109';
 // RF_OPERATOR_GIGANTES_MAIN_20261108
-import { loadModel } from './model-runtime.js?v=20261108-maou-green-v6';
-import { Battle, ARENA_R } from './game.js?v=20261108-maou-green-v6';
-import { FIGHTERS, spellCastTime, STORY, ROSTER, UPGRADES, MAX_LV, STAGES, BGM, APEX_BGM, ENEMY_ROSTER, UPG_CAP, LB_MAX, lbMaxLv, lbMul, lbCost, WEAPONS, ARMORS, SUMMONS, STAT_LABEL, SPECIAL_KEYS, BOSS_ROSTER, currentEvent, sanitizeEvent, EV_FOE_KINDS } from './data.js?v=20261108-maou-green-v6';
+import { loadModel } from './model-runtime.js?v=rf-mobile-v7-20261109';
+import { Battle, ARENA_R } from './game.js?v=rf-mobile-v7-20261109';
+import { FIGHTERS, spellCastTime, STORY, ROSTER, UPGRADES, MAX_LV, STAGES, BGM, APEX_BGM, ENEMY_ROSTER, UPG_CAP, LB_MAX, lbMaxLv, lbMul, lbCost, WEAPONS, ARMORS, SUMMONS, STAT_LABEL, SPECIAL_KEYS, BOSS_ROSTER, currentEvent, sanitizeEvent, EV_FOE_KINDS } from './data.js?v=rf-mobile-v7-20261109';
 import { sayBattle, setVoiceMuted, setVoiceVolume, stopVoices } from './voice.js?v=audio-cast-20261107d';
 import { initSocial, uiConfirm } from './social.js?v=valgard-exact-20261107';
 import { initMailbox } from './mailbox.js?v=audio-cast-20261107d';
@@ -1714,15 +1714,7 @@ function openSelect(label, crumb, cb, { allowLocked = false, onBack = goTitle } 
         img.style.display = 'none';
         card.title = 'キャラクター画像が読み込めませんでした';
       };
-      // For special GLBs, render the actual uploaded 3D model into a portrait.
-      // Fall back to the included selection artwork if WebGL is unavailable.
-      if ((['valgard', 'operator_gigantes', 'gaizorg', 'valdarion', 'chief', 'maou'].includes(k)) && !locked) {
-        loadModel(d.model).then((gltf) => renderExactPortrait(gltf, k)).then((uri) => {
-          if (!uri || !card.isConnected || !FIGHTERS[k]) return;
-          if (!d.originalSelectFace) d.originalSelectFace = d.face;
-          d.face = uri; img.src = uri; img.alt = d.name + '（実際の3Dモデルから描画）';
-        }).catch((e) => console.warn('[model portrait]', k, e?.message || e));
-      }
+      // 3D portrait preview is managed by exact-model-portraits.js (lazy).
       // Use the portrait painted for this character's actual GLB model.
       if (locked) img.style.filter = 'brightness(0)';
       card.append(img);

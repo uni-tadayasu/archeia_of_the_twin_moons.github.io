@@ -1,21 +1,28 @@
 /** Automatically creates character-select WebP thumbnails from the *real* GLB.
  * No AI repainting, mesh substitutions or tinting. The original models are
  * loaded through the game's own verified WebP/glTF pipeline. */
-import { FIGHTERS } from './data.js?v=20261108-maou-green-v6';
-import { loadModel } from './model-runtime.js?v=20261108-maou-green-v6';
-import { renderExactPortrait } from './glb-portrait.js?v=20261108-maou-green-v6';
+import { FIGHTERS } from './data.js?v=rf-mobile-v7-20261109';
+import { loadModel } from './model-runtime.js?v=rf-mobile-v7-20261109';
+import { renderExactPortrait } from './glb-portrait.js?v=rf-mobile-v7-20261109';
 
-const EXACT_KEYS=['gaizorg','valdarion','valgard','operator_gigantes','chief','maou'];
+const EXACT_KEYS=['gaizorg','valdarion','valgard','operator_gigantes','chief'];
 const result=new Map(),pending=new Map();
+// Cache one thumbnail job at a time: avoid decoding six 20MB GLBs together.
+let queue=Promise.resolve();
+// Low-memory mobile devices keep the existing static thumbnail; battle models
+// are unchanged and still use the exact GLB.
+const LOW_MEMORY = typeof navigator !== 'undefined' && (
+  (Number(navigator.deviceMemory)>0 && Number(navigator.deviceMemory)<=4) ||
+  /Android|iPhone|iPad|iPod/i.test(navigator.userAgent||''));
 const sourceMap=new Map(EXACT_KEYS.map(k=>[FIGHTERS[k]?.name,k]).filter(([n])=>n));
 function getExactWebp(key){
   if(result.has(key))return Promise.resolve(result.get(key));
   if(pending.has(key))return pending.get(key);
   const fighter=FIGHTERS[key];if(!fighter?.model)return Promise.reject(Error('モデルがありません'));
-  const promise=loadModel(fighter.model)
+  const promise=(queue=queue.catch(()=>{}).then(()=>loadModel(fighter.model))
     .then(gltf=>renderExactPortrait(gltf,key))
     .then(url=>{result.set(key,url);return url})
-    .finally(()=>pending.delete(key));
+    .finally(()=>pending.delete(key)));
   pending.set(key,promise);return promise;
 }
 // Render only on-screen selection tiles. Loading every 20–25MB GLB at once
@@ -52,6 +59,7 @@ function updateCards(){
   }
 }
 function init(){
+  if(LOW_MEMORY)return; // Avoid multiple GPU canvases and GLB decodes on phones.
   const grid=document.getElementById('select-grid');if(!grid)return;
   if(typeof IntersectionObserver==='function'){
     visibleObserver=new IntersectionObserver(entries=>{
