@@ -1,6 +1,6 @@
 /** Exact-GLB character select portrait, rendered on-demand, not AI recoloring. */
 import * as THREE from 'three';
-import { instantiateModel, disposeModel } from './model-runtime.js?v=20261108-boss-final-v5';
+import { instantiateModel, disposeModel } from './model-runtime.js?v=20261108-maou-green-v6';
 const cache=new Map();
 export async function renderExactPortrait(gltf,key){
   if(cache.has(key))return cache.get(key);

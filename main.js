@@ -1,14 +1,16 @@
-import './boss-abilities.js?v=20261108-boss-final-v5';
-import './exact-model-portraits.js?v=20261108-boss-final-v5';
+import { installMaouCombat } from './maou-abilities.js?v=20261108-maou-green-v6';
+import { Fighter as MaouFighter } from './game.js?v=20261108-maou-green-v6';
+import './boss-abilities.js?v=20261108-maou-green-v6';
+import './exact-model-portraits.js?v=20261108-maou-green-v6';
 // RF_GRAND_FOUR_20261108 main.js
 import * as THREE from 'three';
-import { setupGaizorgAdventure } from './gaizorg-adventure.js?v=20261108-boss-final-v5';
+import { setupGaizorgAdventure } from './gaizorg-adventure.js?v=20261108-maou-green-v6';
 import { installOperatorCombatFx } from './operator-combat-fx.js?v=20261108-grand-four-v3';
-import { renderExactPortrait } from './glb-portrait.js?v=20261108-boss-final-v5';
+import { renderExactPortrait } from './glb-portrait.js?v=20261108-maou-green-v6';
 // RF_OPERATOR_GIGANTES_MAIN_20261108
-import { loadModel } from './model-runtime.js?v=20261108-boss-final-v5';
-import { Battle, ARENA_R } from './game.js?v=20261108-boss-final-v5';
-import { FIGHTERS, spellCastTime, STORY, ROSTER, UPGRADES, MAX_LV, STAGES, BGM, APEX_BGM, ENEMY_ROSTER, UPG_CAP, LB_MAX, lbMaxLv, lbMul, lbCost, WEAPONS, ARMORS, SUMMONS, STAT_LABEL, SPECIAL_KEYS, BOSS_ROSTER, currentEvent, sanitizeEvent, EV_FOE_KINDS } from './data.js?v=20261108-boss-final-v5';
+import { loadModel } from './model-runtime.js?v=20261108-maou-green-v6';
+import { Battle, ARENA_R } from './game.js?v=20261108-maou-green-v6';
+import { FIGHTERS, spellCastTime, STORY, ROSTER, UPGRADES, MAX_LV, STAGES, BGM, APEX_BGM, ENEMY_ROSTER, UPG_CAP, LB_MAX, lbMaxLv, lbMul, lbCost, WEAPONS, ARMORS, SUMMONS, STAT_LABEL, SPECIAL_KEYS, BOSS_ROSTER, currentEvent, sanitizeEvent, EV_FOE_KINDS } from './data.js?v=20261108-maou-green-v6';
 import { sayBattle, setVoiceMuted, setVoiceVolume, stopVoices } from './voice.js?v=audio-cast-20261107d';
 import { initSocial, uiConfirm } from './social.js?v=valgard-exact-20261107';
 import { initMailbox } from './mailbox.js?v=audio-cast-20261107d';
@@ -17,6 +19,8 @@ import { connect, issueInvite, redeemInvite, syncPush, syncPullV } from './net.j
 import { apiEnabled, api, verifyToken } from './api.js';
 
 const $ = (s) => document.querySelector(s);
+// RF_MAOU_INSTALL_V6
+installMaouCombat({ Battle, Fighter: MaouFighter });
 installOperatorCombatFx(Battle);
 const isTouch = matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window;
 
@@ -237,12 +241,20 @@ async function ensureAllModelsReady(requiredKeys = null) {
     ? [...new Set(requiredExpanded.map((key) => FIGHTERS[key]?.model).filter(Boolean))]
     : modelUrls;
   if (!requested.length) return true;
-  await Promise.all(requested.map((url) => byUrl[url] ? true : retrieveModel(url)));
+  // RF_LOADING_MODEL_COUNTER_V6
+  const loadToken=window.RiftfallLoading?.begin('冒険と3Dモデルを準備しています',{total:requested.length,note:'必要なモデルを確認しています'});
+  let completedModels=0;
+  await Promise.all(requested.map(async url=>{
+    try{return byUrl[url] ? true : await retrieveModel(url);}
+    finally{completedModels++;window.RiftfallLoading?.progress(loadToken,completedModels,requested.length,url.split('/').pop());}
+  }));
   const failed = requested.filter((url) => !byUrl[url]);
   if (failed.length) {
+    window.RiftfallLoading?.error(loadToken,'モデルを読み込めませんでした: '+failed.map(x=>x.split('/').pop()).join(', '));
     modelErrorDialog(failed);
     return false;
   }
+  window.RiftfallLoading?.end(loadToken);
   return true;
 }
 // Preload the first character for a responsive title, then load others only
@@ -250,6 +262,8 @@ async function ensureAllModelsReady(requiredKeys = null) {
 // downloads and expensive animation parses on mobile browsers.
 const firstModel = FIGHTERS.rowen?.model || modelUrls[0];
 loadPromise = firstModel ? retrieveModel(firstModel) : Promise.resolve(true);
+loadPromise.then(ok=>{if(ok)window.RiftfallLoading?.end('boot');else window.RiftfallLoading?.error('boot','起動用3Dモデルの読み込みに失敗しました');}).catch(e=>window.RiftfallLoading?.error('boot',e?.message||String(e)));
+
 updateModelStatus();
 
 // ---------- Save ----------
@@ -1565,6 +1579,8 @@ const foeCpu = (base) => Math.max(0.15, Math.min(1, base * DIFFS[save.diff].c));
 const foeHp = (m) => (m || 1) * DIFFS[save.diff].h;
 // その戦士を使えるか（運営専用・ショップ解放）
 function canUse(k) {
+  if (k === 'maou') return chiefUnlocked();
+  if (k === 'maou_shade') return false;
   const d = FIGHTERS[k];
   if (!d) return false;
   // Only Valgard remains exclusively for the chief. All other previously
@@ -1576,7 +1592,7 @@ function canUse(k) {
   if (d.locked) return operatorUnlocked();
   return true;
 }
-const SELECT_KEYS = () => [...ROSTER, 'seraphel', 'chief', 'sovereign', 'bloodfiend', 'valgard', 'gaizorg', 'operator_gigantes', 'valdarion', 'crimson'];
+const SELECT_KEYS = () => [...ROSTER, 'seraphel', 'chief', 'sovereign', 'bloodfiend', 'valgard', 'gaizorg', 'operator_gigantes', 'valdarion', 'crimson', 'maou'];
 function refreshTitle() {
   $('#btn-invade').hidden = !operatorUnlocked();
   if ($('#btn-evmaker')) $('#btn-evmaker').hidden = !chiefUnlocked();
@@ -1700,7 +1716,7 @@ function openSelect(label, crumb, cb, { allowLocked = false, onBack = goTitle } 
       };
       // For special GLBs, render the actual uploaded 3D model into a portrait.
       // Fall back to the included selection artwork if WebGL is unavailable.
-      if ((['valgard', 'operator_gigantes', 'gaizorg', 'valdarion', 'chief'].includes(k)) && !locked) {
+      if ((['valgard', 'operator_gigantes', 'gaizorg', 'valdarion', 'chief', 'maou'].includes(k)) && !locked) {
         loadModel(d.model).then((gltf) => renderExactPortrait(gltf, k)).then((uri) => {
           if (!uri || !card.isConnected || !FIGHTERS[k]) return;
           if (!d.originalSelectFace) d.originalSelectFace = d.face;
@@ -3133,7 +3149,7 @@ async function onInvaded(e) {
   $('#pause').hidden = true;
   const p = state.worldPeers?.[e.from];
   const apexOk = !apiEnabled() || tr === 'chief' || tr === 'op';
-  const chiefOnlyAttempt = (['valgard', 'gaizorg', 'valdarion'].includes(p?.fk)) && tr !== 'chief' && apiEnabled();
+  const chiefOnlyAttempt = (['valgard', 'gaizorg', 'valdarion', 'maou'].includes(p?.fk)) && tr !== 'chief' && apiEnabled();
     const opOnlyAttempt = p?.fk === 'operator_gigantes' && tr !== 'op' && apiEnabled();
   const ik = apexOk && !chiefOnlyAttempt && !opOnlyAttempt && ['chief', 'sovereign', 'sovereign2', 'bloodfiend', 'valgard', 'gaizorg', 'operator_gigantes', 'valdarion'].includes(p?.fk) && (!apiEnabled() || peerVerified(e.from, p.fk)) ? p.fk : 'seraphel';
   b.add(ik, { team: 1, remote: true, netId: e.from, pos: p ? [p.x, p.z] : [0, -9], facing: Math.PI, name: `乱入者・${e.name}`, ...peerOpts(e.from, ik) });
@@ -3170,7 +3186,7 @@ function renderInvadeList() {
 
 $('#invade-who').addEventListener('click', () => {
   sfx('ui');
-  const order = operatorUnlocked() ? ['seraphel', 'chief', 'sovereign', 'bloodfiend', ...(chiefUnlocked() ? ['valgard', 'gaizorg', 'valdarion'] : []), ...(operatorOnlyUnlocked() ? ['operator_gigantes'] : [])] : ['seraphel'];
+  const order = operatorUnlocked() ? ['seraphel', 'chief', 'sovereign', 'bloodfiend', ...(chiefUnlocked() ? ['valgard', 'gaizorg', 'valdarion', 'maou'] : []), ...(operatorOnlyUnlocked() ? ['operator_gigantes'] : [])] : ['seraphel'];
   state.invadeKey = order[(order.indexOf(state.invadeKey) + 1) % order.length];
   $('#invade-who').textContent = `乱入する姿：${FIGHTERS[state.invadeKey].name}`;
 });
@@ -3205,7 +3221,7 @@ async function startInvade(p) {
   w.invade({ to: p.id, from: w.myId, name: '運営', tk });
   setStage(stageById(STORY[p.ch]?.stage));
   const b = makeBattle(w);
-  const ik = (['chief', 'sovereign', 'bloodfiend'].includes(state.invadeKey) && operatorUnlocked()) || ((['valgard', 'gaizorg', 'valdarion'].includes(state.invadeKey)) && chiefUnlocked()) || (state.invadeKey === 'operator_gigantes' && operatorOnlyUnlocked()) ? state.invadeKey : 'seraphel';
+  const ik = (['chief', 'sovereign', 'bloodfiend'].includes(state.invadeKey) && operatorUnlocked()) || ((['valgard', 'gaizorg', 'valdarion', 'maou'].includes(state.invadeKey)) && chiefUnlocked()) || (state.invadeKey === 'operator_gigantes' && operatorOnlyUnlocked()) ? state.invadeKey : 'seraphel';
   b.add(ik, { team: 0, player: true, awk: save.awk, netId: w.myId, pos: [0, -9], name: FIGHTERS[ik].name + '（運営）', upg: upgFor(ik), gear: gearFor(ik) });
   b.add(peerKeyOf(p.id, p.fk), { team: 1, remote: true, netId: p.id, pos: [p.x, p.z], name: p.name, gear: { w: p.gw, a: p.ga }, ...peerOpts(p.id, peerKeyOf(p.id, p.fk)) });
   b.strictNet = apiEnabled();

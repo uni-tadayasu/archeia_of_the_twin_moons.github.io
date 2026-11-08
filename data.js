@@ -306,7 +306,7 @@ FIGHTERS.operator_gigantes = {
 };
 
 // 通常プレイヤーがパーティーに入れられない特別枠
-export const SPECIAL_KEYS = ['seraphel', 'chief', 'crimson', 'sovereign', 'bloodfiend', 'valgard', 'operator_gigantes', 'valdarion'];
+export const SPECIAL_KEYS = ['seraphel', 'chief', 'crimson', 'sovereign', 'bloodfiend', 'valgard', 'operator_gigantes', 'valdarion', 'maou'];
 
 // ---------- 決定的な乱数（毎回同じ内容を生成する） ----------
 function rng(seed) {
@@ -1231,3 +1231,45 @@ if (FIGHTERS.valgard) {
   FIGHTERS.valgard2={...base,name:'ヴァルガルド・第二形態',title:'蘇生せし氷鋼覇王（運営長専用）',model:'assets/models/iron-warlord-f2.glb',face:base.face,hidden:true,locked:true,special:'chief',form2:null,transformOnlyAtZero:false,manualBase:'valgard',skills:base.skills,over:base.over,light:base.light};
   Object.defineProperty(FIGHTERS.valgard2,'hi',{configurable:true,enumerable:true,get(){return FIGHTERS.valgard.hi},set(value){FIGHTERS.valgard.hi=value}});
 }
+
+// RF_MAOU_V6
+// Riftfall V6: 新キャラ『魔王』。モデルはユーザー提供の軽量版GLBをそのまま参照。
+// バランス制限ループの後で実行するので、数値が他キャラの上限に再制限されない。
+FIGHTERS.maou = {
+  name:'魔王', title:'虹雷と無限光を統べる究極魔王（運営長専用）',
+  model:'assets/models/maou-lord.glb', face:'assets/portraits/maou-placeholder.svg',
+  color:0xffdff8, tint:null, height:4.18, hp:36000, speed:8.2,
+  power:2.9, armor:0.30, fluxMul:3.25, overGain:2.8,
+  locked:true, special:'chief', attribute:'光', supreme:true,
+  light:{dmg:0,range:4,color:0xffeeff, rainbowGuard:true},
+  regenGuard:{duration:30,cooldown:0,healFractionPerSecond:.033},
+  rainbowArmor:{duration:30,damageMultiplier:.5,staggerImmune:true,canCast:true},
+  revival:{chance:.5,maxActivations:1},
+  skills:[
+    {name:'神光星槍《アーク・レギオン》',kind:'projectile',visual:'spear',elem:5,color:0xfff1b2,cost:18,castTime:.48,count:10,spreadAng:.10,chain:.035,dmg:250,speed:33,radius:1.2,vivid:true},
+    {name:'超天照断《セレスティアル・エッジ》',kind:'dash',elem:5,color:0xffe3a5,cost:20,speed:32,dur:.45,dmg:1150,stun:.8,kb:10,vivid:true},
+    {name:'滅界眼光《スカーレット・アポカリプス》',kind:'maou_eye_laser',elem:5,color:0xff334d,cost:31,castTime:.75,dmg:1450,radius:20,vivid:true},
+    {name:'口卵術《翠影孵化》',kind:'maou_egg',elem:5,color:0xa4ffa2,cost:28,castTime:1.05,dmg:0,count:4,vivid:true,description:'口から産んだ卵が緑の分身4体に孵化。自動追尾攻撃・3回被弾で消滅・HPバーなし'},
+    {name:'無尽光輪《全生命復元》',kind:'maou_fullheal',elem:5,color:0xffffff,cost:30,castTime:1.2,dmg:0,heal:36000,vivid:true,description:'魔王自身のHPを最大まで完全回復'},
+    {name:'恒星破断《ヘヴン・カタストロフ》',kind:'judgment',visual:'pillar',finalVisual:'nova',elem:5,color:0xffed91,cost:38,castTime:2.15,count:20,spread:7,radius:2.6,dmg:420,delay:.4,interval:.065,finalDmg:2100,finalRadius:11,vivid:true},
+    {name:'万象虹皇《プリズム・テンペスト》',kind:'rain',visual:'bolt',elem:5,color:0xe2b3ff,cost:26,castTime:1.45,count:17,spread:5.5,radius:2.3,dmg:300,delay:.25,interval:.07,vivid:true},
+    {name:'輝天追星《スーパーノヴァ・ハント》',kind:'projectile',visual:'orb',elem:5,color:0xb2fcff,cost:24,castTime:.68,count:15,spreadAng:.1,chain:.045,dmg:280,speed:31,radius:1.5,vivid:true},
+    {name:'無窮雷獄《エターナル・ヴォルト》',kind:'shockwave',elem:5,color:0xe9e6ff,cost:27,castTime:.92,dmg:1500,radius:10.5,double:true,vivid:true},
+    {name:'無限天柱《アルティメット・カノン》',kind:'judgment',visual:'pillar',finalVisual:'nova',elem:5,color:0xffffff,cost:45,castTime:2.2,count:16,spread:6,radius:2.5,dmg:520,delay:.4,interval:.06,finalDmg:3200,finalRadius:12.2,vivid:true},
+    {name:'時空星彩《ゼニス・エクリプス》',kind:'implode',elem:5,color:0xfbc4ff,cost:32,castTime:1.4,dmg:1800,radius:11,vivid:true},
+    {name:'審判極星《デウス・レイジ》',kind:'rain',visual:'meteor',elem:5,color:0xffefaa,cost:40,castTime:2.15,count:22,spread:7.4,radius:2.6,dmg:470,delay:.34,interval:.055,vivid:true}
+  ],
+  // K/Uキーの技選択はローテーション。Hキーは固定の完全回復技。
+  pool:[0,1,2,3,5,6,7,8,9,10,11],
+  over:{name:'終極極光《アポカリプス・オメガ》',kind:'judgment',visual:'nova',finalVisual:'pillar',elem:5,color:0xffe5a2,cost:0,castTime:2.5,count:25,spread:8,radius:3,dmg:630,delay:.48,interval:.052,finalDmg:3900,finalRadius:12.4,vivid:true},
+  hi:{name:'創世絶光《エンドレス・セラフィム》',kind:'judgment',visual:'pillar',finalVisual:'nova',elem:5,color:0xffffff,cost:0,castTime:3.4,count:28,spread:8.6,radius:3.1,dmg:740,delay:.44,interval:.05,finalDmg:4900,finalRadius:13.5,vivid:true,hi:true}
+};
+FIGHTERS.maou_shade = {
+  name:'翠影の分身',title:'魔王の緑影（召喚専用）',model:'assets/models/maou-lord.glb',
+  face:'assets/portraits/maou-placeholder.svg',hidden:true,locked:true,special:'chief',
+  color:0x57f483, tint:null,height:2.55,hp:3,speed:7.6,power:0.65,armor:1,
+  overGain:0,light:{dmg:120,range:2.5,color:0x6aff86},
+  skills:[{name:'影光刺',kind:'dash',elem:5,color:0x7bff9f,dmg:110,cost:5,speed:16,dur:.25}],
+  over:{name:'影光閃',kind:'shockwave',elem:5,color:0x7bff9f,dmg:130,radius:3,cost:0}
+};
+

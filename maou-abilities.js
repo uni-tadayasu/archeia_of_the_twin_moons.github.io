@@ -1,0 +1,302 @@
+/** Riftfall Arena / 魔王 -- original light skills, no GLB mesh edits.
+ * Installs gameplay logic onto the existing Battle / Fighter prototypes.
+ * All cloned material changes affect only clones, never the user's source GLB.
+ */
+import * as THREE from 'three';
+const KEY = 'maou';
+const SHADE = 'maou_shade';
+const GOLD = 0xffe290;
+const CRIMSON = 0xff1238;
+const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, Number(v) || 0));
+const TAU = Math.PI * 2;
+
+function createAura(f, type) {
+  const attr = type === 'rainbow' ? '__maouRainbowAura' : '__maouRegenAura';
+  if (f[attr]) return f[attr];
+  const group = new THREE.Group();
+  const owned = [];
+  const color = type === 'rainbow' ? 0xffb8ee : 0xf8eab1;
+  group.name = 'maou-' + type + '-aura';
+  const radius = Math.max(.95, Number(f.def?.height || 3.7) * .48);
+  for (let i = 0; i < 3; i++) {
+    const geo = new THREE.TorusGeometry(radius * (1 + i * .22), .025 + i * .008, 5, 64);
+    const mat = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: .6 - i * .1,
+      depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide });
+    const ring = new THREE.Mesh(geo, mat);
+    ring.rotation.x = Math.PI / 2;
+    ring.position.y = .05 + i * .08;
+    group.add(ring); owned.push(geo, mat);
+  }
+  const lineGeo = new THREE.BufferGeometry();
+  const coords = new Float32Array(8 * 6 * 2 * 3);
+  lineGeo.setAttribute('position', new THREE.BufferAttribute(coords, 3));
+  const lineMat = new THREE.LineBasicMaterial({ color: type === 'rainbow' ? 0xc8edff : 0xfff2bb,
+    transparent: true, opacity: .85, depthWrite: false, blending: THREE.AdditiveBlending });
+  const line = new THREE.LineSegments(lineGeo, lineMat);line.frustumCulled = false;
+  group.add(line);owned.push(lineGeo, lineMat);
+  f.root.add(group);
+  return (f[attr] = {group, line, owned, t: 0, radius, type});
+}
+function stopAura(f, type) {
+  const attr = type === 'rainbow' ? '__maouRainbowAura' : '__maouRegenAura';
+  const aura = f[attr]; if (!aura) return;
+  aura.group.removeFromParent();
+  for (const o of aura.owned) o.dispose?.();
+  f[attr] = null;
+}
+function updateAura(f, type, dt) {
+  const state = createAura(f, type);state.t += dt;
+  const {group, line, radius, t} = state;
+  group.children.slice(0, 3).forEach((r,i) => {
+    r.rotation.z += dt * (.5 + i * .22) * (i % 2 ? -1 : 1);
+    const a = type === 'rainbow' ? new THREE.Color().setHSL((t*.31+i/3)%1, 1, .67) : new THREE.Color(i%2?0x9ceeff:0xffe0a4);
+    r.material.color.copy(a);
+    r.material.opacity = .42 + .2 * Math.sin(t*6+i*1.8);
+  });
+  const arr=line.geometry.attributes.position;
+  const H = Math.max(1.8, Number(f.def?.height || 3.7));
+  for(let k=0;k<8;k++) for(let j=0;j<6;j++) {
+    const a = k*TAU/8+t*.85+j*.09;
+    const y0 = H*(.12+j*.13), y1 = y0+H*.075;
+    const r0=radius*(.78+.13*Math.sin(t*13+j*2+k));
+    const s=(k*6+j)*2;
+    arr.setXYZ(s, Math.cos(a)*r0, y0, Math.sin(a)*r0);
+    arr.setXYZ(s+1, Math.cos(a+.18+.12*Math.sin(t*16+j))*r0, y1, Math.sin(a+.18)*r0);
+  }
+  arr.needsUpdate=true;
+  if(type==='rainbow') line.material.color.setHSL((t*.27)%1,.95,.6);
+  line.material.opacity=.55+.35*Math.abs(Math.sin(t*11));
+}
+function clangSound(f) {
+  const now=performance.now();
+  if (f.__maouClangAt && now-f.__maouClangAt<180) return;
+  f.__maouClangAt=now;
+  try {
+    const AC=window.AudioContext||window.webkitAudioContext;
+    if(!AC) { f.battle?.ui?.sfx?.('guard');return; }
+    const ctx=clangSound.ctx ||= new AC();
+    if(ctx.state==='suspended') void ctx.resume();
+    const t=ctx.currentTime, gain=ctx.createGain();
+    gain.gain.setValueAtTime(.0001,t);gain.gain.exponentialRampToValueAtTime(.12,t+.006);
+    gain.gain.exponentialRampToValueAtTime(.0001,t+.14);gain.connect(ctx.destination);
+    for(const [freq,mul] of [[870,1],[1477,.27],[2310,.12]]) {
+      const osc=ctx.createOscillator(),g=ctx.createGain();g.gain.value=mul;
+      osc.type='sine';osc.frequency.value=freq;osc.connect(g);g.connect(gain);osc.start(t);osc.stop(t+.16);
+    }
+  } catch (_) { f.battle?.ui?.sfx?.('guard'); }
+}
+function guardStarted(f, remote=false) {
+  f.maouGuardTime=30;
+  createAura(f,'regen');
+  if(!remote){
+    f.battle?.ui?.popup?.(f.pos,'雷光再生陣：30秒・再使用待機なし','#edffbd');
+    if(f.netId)f.battle?.net?.cast?.({id:f.netId,slot:'mg',tx:f.pos.x,tz:f.pos.z,ry:f.facing});
+  }
+}
+function rainbowStarted(f, remote=false) {
+  f.maouRainbowTime=30;
+  f.stun=0;
+  createAura(f,'rainbow');
+  if(!remote){
+    f.battle?.ui?.popup?.(f.pos,'虹光・金剛態：被ダメージ半減／完全耐性','#d1faff');
+    if(f.netId)f.battle?.net?.cast?.({id:f.netId,slot:'mr',tx:f.pos.x,tz:f.pos.z,ry:f.facing});
+  }
+}
+function actionVisual(battle,f,spec,slot) {
+  if(!battle?.fxPop || !f?.pos)return;
+  const p=f.pos.clone();p.y=.1;
+  const enemy=battle.nearestEnemy?.(f);const target=enemy?.pos?.clone?.()||p.clone();target.y=.1;
+  const big=slot==='over'||slot==='hi';
+  battle.fxPop(p,5,4,big?10:6,.9,{flat:true,spin:2.4,grow:1.45,op:.9});
+  battle.fxPop(target,5,8,big?12:7,1.1,{flat:true,spin:-2.2,grow:1.8,op:.75});
+  battle.flashLight?.(target.clone().setY(1.3),spec.color||GOLD,big?2:.9,.35);
+  if(big){battle.ui?.cutin?.(f,spec.name,slot==='hi'?'最上位秘奥義':'究極光魔法');battle.shake=Math.max(battle.shake||0,1.2);}
+}
+function eyeLaser(battle, f, spec, remote) {
+  const light=new THREE.Group(); light.name='maou-red-eye-laser';
+  const owned=[];const angle=f.facing||0;
+  const forward=new THREE.Vector3(Math.sin(angle),0,Math.cos(angle));
+  const right=new THREE.Vector3(Math.cos(angle),0,-Math.sin(angle));
+  const height=(Number(f.def?.height)||3.7)*.78;
+  const eyeWidth=(Number(f.def?.height)||3.7)*.062;
+  // Paired eyes each fire a wide fan: central and six peripheral beams.
+  for(const side of [-1,1])for(let k=-3;k<=3;k++){
+    const a=angle+k*.17;
+    const origin=f.pos.clone().addScaledVector(right,side*eyeWidth).add(new THREE.Vector3(0,height,0));
+    const far=origin.clone().add(new THREE.Vector3(Math.sin(a)*19,-height*.28,Math.cos(a)*19));
+    const dir=far.clone().sub(origin);const len=dir.length();
+    const geo=new THREE.CylinderGeometry(k===0?.1:.055,k===0?.16:.075,len,7,1,true);
+    const mat=new THREE.MeshBasicMaterial({color:k===0?0xfff4ed:CRIMSON,transparent:true,opacity:k===0?.9:.62,
+      blending:THREE.AdditiveBlending,depthWrite:false,side:THREE.DoubleSide});
+    const beam=new THREE.Mesh(geo,mat);
+    beam.position.copy(origin).add(far).multiplyScalar(.5);
+    beam.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0),dir.normalize());
+    light.add(beam);owned.push(geo,mat);
+  }
+  battle.fx.add(light);
+  battle.ui?.popup?.(f.pos,'滅界眼光《スカーレット・アポカリプス》','#ff3955');
+  battle.ui?.sfx?.('burst');
+  let elapsed=0,pulse=0,done=false;
+  battle.addEffect(dt=>{
+    elapsed+=dt;pulse-=dt;
+    if(!remote && !f.remoteAuth && !f.dead && pulse<=0 && elapsed<.91){
+      pulse=.22;
+      const half=.54,r=19,base=Number(spec.dmg)||1450;
+      for(const enemy of battle.enemiesOf(f)){
+        if(enemy.dead)continue;
+        const dx=enemy.pos.x-f.pos.x,dz=enemy.pos.z-f.pos.z;
+        const dist=Math.hypot(dx,dz);if(dist>r+enemy.radius||dist<.001)continue;
+        const a=Math.atan2(dx,dz),diff=Math.atan2(Math.sin(a-angle),Math.cos(a-angle));
+        if(Math.abs(diff)>half+(enemy.radius/dist))continue;
+        battle.applyHit(f,enemy,base*.28,.15,1.7,f.pos,spec);
+        battle.fxPop?.(enemy.pos.clone().setY(1.5),0,8,2.2,.3,{grow:1.6,op:.83});
+      }
+    }
+    for(const obj of light.children){obj.material.opacity*=Math.max(.1,1-dt*(elapsed>.6?3:.7));}
+    if(elapsed<1.08)return true;
+    light.removeFromParent();owned.forEach(x=>x.dispose?.());done=true;return false;
+  });
+}
+function hatching(battle, f, spec, remote) {
+  const existing=battle.fighters.filter(a=>a.key===SHADE&&a.maouOwner===f&&!a.dead).length;
+  const count=Math.max(0,4-existing);if(!count)return;
+  for(let i=0;i<count;i++){
+    const egg=new THREE.Mesh(new THREE.SphereGeometry(.33,12,8),new THREE.MeshStandardMaterial({color:0xc9e9a0,emissive:0x327d2e,emissiveIntensity:.4,roughness:.58}));
+    const mouth=f.pos.clone().add(new THREE.Vector3(Math.sin(f.facing)*.22,Number(f.def?.height||3.7)*.67,Math.cos(f.facing)*.22));
+    const a=f.facing+i*TAU/4;
+    const spawn=f.pos.clone().add(new THREE.Vector3(Math.sin(a)*2.1,0,Math.cos(a)*2.1));
+    const end=spawn.clone().setY(.35),birth=.36+i*.11;
+    egg.position.copy(mouth);battle.fx.add(egg);
+    let t=0,born=false;
+    battle.addEffect(dt=>{
+      t+=dt;const k=clamp(t/birth,0,1);
+      egg.position.copy(mouth).lerp(end,k);egg.position.y+=Math.sin(k*Math.PI)*.65;
+      egg.rotation.x+=dt*4;egg.rotation.z+=dt*3;
+      if(k<1)return true;
+      egg.removeFromParent();egg.geometry.dispose();egg.material.dispose();
+      battle.burst?.(end.clone(),0x56f56a,.85,{elem:3,color:0x5dff82});
+      if(!remote && !f.remoteAuth && !battle.ended && !f.dead && battle.assets?.[SHADE]){
+        try {
+          const shade=battle.add(SHADE,{team:f.team,cpu:.87,player:false,
+            pos:[spawn.x,spawn.z],name:'緑影の分身',scale:.78,facing:f.facing});
+          shade.maouOwner=f;shade.maouShadeHits=0;shade.maouShade=true;
+          shade.root.scale.setScalar(.74);shade.guardMesh.visible=false;
+          shade.modelInstance?.model?.traverse(node=>{
+            if(!node.isMesh)return;
+            for(const mat of (Array.isArray(node.material)?node.material:[node.material])){
+              if(mat.color)mat.color.lerp(new THREE.Color(0x3efa61),.72);
+              if(mat.emissive){mat.emissive.lerp(new THREE.Color(0x1cae45),.70);mat.emissiveIntensity=Math.max(.35,mat.emissiveIntensity||0);}
+              mat.needsUpdate=true;
+            }
+          });
+        }catch(error){console.warn('[魔王の分身]',error);}
+      }
+      return false;
+    });
+  }
+  battle.ui?.popup?.(f.pos,'口卵術《翠影孵化》：分身4体・耐久3撃','#b4ffd1');
+}
+function fullHeal(battle,f,remote){
+  actionVisual(battle,f,{color:0xd8ffff,name:'無尽光輪《全生命復元》'},'s4');
+  if(!remote&&!f.remoteAuth){
+    f.hp=f.maxHp;f.stun=0;f.status={};
+    battle.ui?.popup?.(f.pos,'HP完全回復','#baffdb');
+  }
+}
+function reviveIfEligible(f){
+  if(f.key!==KEY||f.maouReviveTried||f.hp>0)return false;
+  f.maouReviveTried=true;
+  if(Math.random()>=.5)return false;
+  f.hp=f.maxHp;f.dead=false;f.stun=0;f.status={};f.action=null;f.chantToken=null;
+  f.inv=2.5;f.maouGuardTime=30;f.maouRainbowTime=30;
+  f.visual.rotation.set(0,0,0);f.root.rotation.x=0;
+  f.battle?.ui?.popup?.(f.pos,'魔王再誕！ 50%復活成功','#ffe9a4');
+  f.battle?.ui?.flash?.();f.battle?.ui?.sfx?.('burst');
+  return true;
+}
+
+export function installMaouCombat({Battle,Fighter}) {
+  if(!Battle?.prototype||!Fighter?.prototype||Battle.prototype.__maouInstalled)return;
+  Battle.prototype.__maouInstalled=true;
+  const FU=Fighter.prototype.update, FL=Fighter.prototype.startLight, FR=Fighter.prototype.receive;
+  const FS=Fighter.prototype.applyStatus, FT=Fighter.prototype.tickStatus;
+  const BE=Battle.prototype.executeCast, BC=Battle.prototype.cast;
+  const BH=Battle.prototype.applyHit, BD=Battle.prototype.dispose;
+  Fighter.prototype.update=function(dt,input){
+    if(this.key===SHADE){
+      if(this.maouOwner?.dead||this.maouOwner?.transformed){this.dead=true;this.hp=0;this.root.visible=false;}
+      return FU.call(this,dt,input);
+    }
+    if(this.key!==KEY)return FU.call(this,dt,input);
+    const inp={...(input||{})};const holdingGuard=!!inp.guard,holdingAttack=!!inp.attack;
+    this.maouGuardTime=Math.max(0,(this.maouGuardTime||0)-dt);
+    this.maouRainbowTime=Math.max(0,(this.maouRainbowTime||0)-dt);
+    if(!this.dead && !this.remoteAuth){
+      if(holdingGuard && (!this.maouGuardHeld || this.maouGuardTime<=0))guardStarted(this);
+      if(holdingAttack && !this.maouAttackHeld)rainbowStarted(this);
+      if(this.maouGuardTime>0)this.hp=Math.min(this.maxHp,this.hp+this.maxHp*.033*dt);
+    }
+    this.maouGuardHeld=holdingGuard;this.maouAttackHeld=holdingAttack;
+    if(this.maouGuardTime>0 && !this.dead)updateAura(this,'regen',dt);else stopAura(this,'regen');
+    if(this.maouRainbowTime>0 && !this.dead)updateAura(this,'rainbow',dt);else stopAura(this,'rainbow');
+    if(this.maouRainbowTime>0){this.stun=0;delete this.status.freeze;delete this.status.petrify;}
+    // Attack/guard are stances; they must not steal K/U/L/H spell inputs.
+    inp.attack=false;inp.guard=false;
+    const result=FU.call(this,dt,inp);
+    reviveIfEligible(this);return result;
+  };
+  Fighter.prototype.startLight=function(){
+    if(this.key===KEY){rainbowStarted(this);return;}
+    return FL.call(this);
+  };
+  Fighter.prototype.receive=function(damage,stun,kx,kz){
+    if(this.key===SHADE){
+      if(this.dead||this.inv>0)return 0;
+      this.maouShadeHits=(this.maouShadeHits||0)+1;this.inv=.3;
+      this.battle?.spark?.(this.pos.clone().setY(.8),0x43ff75,.8);
+      if(this.maouShadeHits>=3){this.hp=0;this.dead=true;this.root.visible=false;
+        this.battle?.ui?.popup?.(this.pos,'分身消滅','#a8ffb4');}
+      else this.battle?.ui?.popup?.(this.pos,`分身被弾 ${this.maouShadeHits}/3`,'#a8ffb4');
+      return 1;
+    }
+    if(this.key!==KEY)return FR.call(this,damage,stun,kx,kz);
+    if(this.maouRainbowTime>0){damage*=.5;stun=0;kx=0;kz=0;this.stun=0;clangSound(this);}
+    const r=FR.call(this,damage,stun,kx,kz);
+    reviveIfEligible(this);return r;
+  };
+  Fighter.prototype.applyStatus=function(key){
+    if(this.key===SHADE)return;
+    if(this.key===KEY&&this.maouRainbowTime>0)return;
+    return FS.call(this,key);
+  };
+  Fighter.prototype.tickStatus=function(dt){const x=FT.call(this,dt);if(this.key===KEY)reviveIfEligible(this);return x;};
+  Battle.prototype.cast=function(f,slot,net){
+    if(f?.key===KEY&&slot==='mg'){guardStarted(f,true);return;}
+    if(f?.key===KEY&&slot==='mr'){rainbowStarted(f,true);return;}
+    return BC.call(this,f,slot,net);
+  };
+  Battle.prototype.executeCast=function(f,slot,net){
+    const key=f?.key;
+    if(key!==KEY)return BE.call(this,f,slot,net);
+    const idx=Math.max(0,Math.min((f.def.skills?.length||1)-1,+slot.slice(1)||0));
+    const spec=slot==='over'?f.def.over:slot==='hi'?f.def.hi:
+      slot[0]==='f'?null:f.def.skills[idx];
+    const previous=f.netCastAt;
+    const out=BE.call(this,f,slot,net);
+    if(net&&f.remoteAuth&&previous===f.netCastAt)return out;
+    if(!spec||slot[0]==='f')return out;
+    if(spec.kind==='maou_eye_laser')eyeLaser(this,f,spec,!!f.remoteAuth);
+    else if(spec.kind==='maou_egg')hatching(this,f,spec,!!f.remoteAuth);
+    else if(spec.kind==='maou_fullheal')fullHeal(this,f,!!f.remoteAuth);
+    else actionVisual(this,f,spec,slot);
+    return out;
+  };
+  Battle.prototype.applyHit=function(att,tgt,...rest){
+    if(att?.key===SHADE&&att.maouOwner&&!att.maouOwner.dead) return BH.call(this,att.maouOwner,tgt,...rest);
+    return BH.call(this,att,tgt,...rest);
+  };
+  Battle.prototype.dispose=function(){
+    for(const f of this.fighters||[]){stopAura(f,'rainbow');stopAura(f,'regen');}
+    return BD.call(this);
+  };
+}

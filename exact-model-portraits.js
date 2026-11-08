@@ -1,11 +1,11 @@
 /** Automatically creates character-select WebP thumbnails from the *real* GLB.
  * No AI repainting, mesh substitutions or tinting. The original models are
  * loaded through the game's own verified WebP/glTF pipeline. */
-import { FIGHTERS } from './data.js?v=20261108-boss-final-v5';
-import { loadModel } from './model-runtime.js?v=20261108-boss-final-v5';
-import { renderExactPortrait } from './glb-portrait.js?v=20261108-boss-final-v5';
+import { FIGHTERS } from './data.js?v=20261108-maou-green-v6';
+import { loadModel } from './model-runtime.js?v=20261108-maou-green-v6';
+import { renderExactPortrait } from './glb-portrait.js?v=20261108-maou-green-v6';
 
-const EXACT_KEYS=['gaizorg','valdarion','valgard','operator_gigantes','chief'];
+const EXACT_KEYS=['gaizorg','valdarion','valgard','operator_gigantes','chief','maou'];
 const result=new Map(),pending=new Map();
 const sourceMap=new Map(EXACT_KEYS.map(k=>[FIGHTERS[k]?.name,k]).filter(([n])=>n));
 function getExactWebp(key){

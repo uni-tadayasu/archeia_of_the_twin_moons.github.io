@@ -3,9 +3,9 @@ import { createNullGuardAura, tickNullGuardAura, disposeNullGuardAura } from './
 import * as THREE from 'three';
 import { attachValgardMotion } from './valgard-motion.js?v=20261108-grand-four-v3';
 import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js';
-import { FIGHTERS, ELEMS, spellCastTime } from './data.js?v=20261108-boss-final-v5';
+import { FIGHTERS, ELEMS, spellCastTime } from './data.js?v=20261108-maou-green-v6';
 import { makeGear, animGear } from './gear.js';
-import { instantiateModel, disposeModel, loadModel } from './model-runtime.js?v=20261108-boss-final-v5';
+import { instantiateModel, disposeModel, loadModel } from './model-runtime.js?v=20261108-maou-green-v6';
 
 // 召喚獣の見た目と性能（HPは使い手の最大HPに比例）
 const SUMMON_DEFS = {

@@ -4,7 +4,7 @@
  * Builds a small freely walkable rest camp, stage portal and a 10-battle chapter.
  * Runs inside the game's existing scene/battle system; no new renderer or audio loop.
  */
-import { instantiateModel, disposeModel } from './model-runtime.js?v=20261108-boss-final-v5';
+import { instantiateModel, disposeModel } from './model-runtime.js?v=20261108-maou-green-v6';
 import { attachValgardMotion } from './valgard-motion.js?v=20261108-grand-four-v3';
 // RF_OPERATOR_GIGANTES_ADVENTURE_20261108
 

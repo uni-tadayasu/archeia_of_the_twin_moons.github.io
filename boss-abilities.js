@@ -5,8 +5,8 @@
  */
 import * as THREE from 'three';
 import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js';
-import { FIGHTERS } from './data.js?v=20261108-boss-final-v5';
-import { Fighter, Battle } from './game.js?v=20261108-boss-final-v5';
+import { FIGHTERS } from './data.js?v=20261108-maou-green-v6';
+import { Fighter, Battle } from './game.js?v=20261108-maou-green-v6';
 
 const STAMP='boss-expansion-20261108-v5';
 const clamp=(v,min,max)=>Math.max(min,Math.min(max,Number(v)||0));

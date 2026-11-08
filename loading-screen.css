@@ -1,0 +1,33 @@
+/* Riftfall Arena / 双月のアルケイア — original green loading screen. */
+#rf-loading-screen{position:fixed;inset:0;z-index:10050;display:grid;place-items:center;box-sizing:border-box;padding:clamp(18px,4vw,50px);color:#edf8ed;background:radial-gradient(ellipse at 50% 35%,rgba(29,65,47,.64),transparent 58%),radial-gradient(ellipse at 50% 100%,rgba(7,30,19,.65),transparent 56%),#070e0c;font-family:'Shippori Mincho','Hiragino Mincho ProN','Yu Mincho',serif;user-select:none;transition:opacity .34s ease,visibility .34s ease;isolation:isolate}
+#rf-loading-screen[hidden]{display:none!important}
+#rf-loading-screen.rf-vanish{opacity:0;visibility:hidden;pointer-events:none}
+#rf-loading-screen::before{content:"";position:absolute;inset:16px;border:1px solid rgba(123,224,154,.15);pointer-events:none}
+#rf-loading-screen::after{content:"";position:absolute;inset:23px;border:1px solid rgba(208,236,196,.07);pointer-events:none}
+.rf-load-particles{position:absolute;inset:0;overflow:hidden;opacity:.33;pointer-events:none;background:radial-gradient(1px 1px at 22% 30%,#a7ffc3 99%,transparent),radial-gradient(2px 2px at 70% 80%,#8bf7a8 99%,transparent),radial-gradient(1px 1px at 85% 20%,#9deab8 99%,transparent),radial-gradient(1px 1px at 31% 78%,#e4ffdf 99%,transparent);background-size:170px 160px,290px 270px,220px 240px,180px 190px;animation:rf-stars 22s linear infinite}
+.rf-load-panel{position:relative;z-index:1;width:min(100%,550px);text-align:center;padding:clamp(24px,5.6vw,56px) clamp(22px,4vw,40px) clamp(23px,5vw,40px);border:1px solid rgba(157,224,166,.30);border-radius:2px;background:linear-gradient(165deg,rgba(16,31,25,.93),rgba(11,20,19,.9));box-shadow:0 28px 90px #0009,inset 0 1px rgba(241,255,222,.09)}
+.rf-load-kicker{font:600 10px/1.6 system-ui,sans-serif;color:#a6c7aa;letter-spacing:.27em;margin:0 0 9px}
+.rf-load-emblem{width:71px;height:71px;margin:0 auto 22px;position:relative;display:grid;place-items:center;border:1px solid #6fa5828a;border-radius:50%;box-shadow:0 0 28px #2bd98222,inset 0 0 22px #44bd7c1c}
+.rf-load-emblem::before,.rf-load-emblem::after{content:"";position:absolute;border-radius:50%;inset:8px;border:1px dashed #b6e8bc75;animation:rf-turn 19s linear infinite}
+.rf-load-emblem::after{inset:16px;border-color:#8eea9c60;animation-direction:reverse;animation-duration:11s}
+.rf-load-emblem span{font-size:28px;line-height:1;color:#baf8bc;text-shadow:0 0 24px #4de36daa;transform:translateY(-1px)}
+.rf-load-title{margin:0;color:#eef9e9;font-size:clamp(20px,4vw,29px);font-weight:700;letter-spacing:.12em;line-height:1.5}
+.rf-load-en{display:block;margin-top:5px;font:600 10px/1.5 system-ui,sans-serif;letter-spacing:.33em;color:#81b98a}
+.rf-load-description{min-height:24px;margin:28px 0 17px;color:#d0e8d1;font-size:14px;line-height:1.7}
+.rf-load-bar-shell{height:21px;position:relative;padding:4px;overflow:hidden;background:#0a1711;border:1px solid #547f63;box-shadow:0 0 0 2px rgba(61,134,81,.13),inset 0 2px 5px #0009}
+.rf-load-bar-fill{position:relative;height:100%;width:0;background:linear-gradient(90deg,#168d51,#35de76 58%,#a3ffb2);box-shadow:0 0 19px #31f37eaa;transition:width .28s cubic-bezier(.18,.82,.25,1);overflow:hidden}
+.rf-load-bar-fill::after{content:"";position:absolute;inset:0;background:linear-gradient(110deg,transparent 16%,rgba(255,255,255,.48) 40%,transparent 65%);transform:translateX(-110%);animation:rf-shimmer 1.65s ease-in-out infinite}
+.rf-load-bar-shell.rf-indeterminate .rf-load-bar-fill{width:36%!important;transition:none;animation:rf-indet 1.5s ease-in-out infinite}
+.rf-load-bar-shell.rf-indeterminate .rf-load-bar-fill::after{animation-duration:1s}
+.rf-load-meta{display:flex;justify-content:space-between;gap:10px;align-items:start;margin-top:12px;min-height:33px;color:#a2bea4;font:12px/1.4 system-ui,sans-serif}
+.rf-load-filename{max-width:74%;overflow-wrap:anywhere;text-align:left}
+.rf-load-percent{min-width:65px;text-align:right;color:#b7fbc8;font-weight:700;font-variant-numeric:tabular-nums;letter-spacing:.06em}
+.rf-load-dots{display:inline-block;font-size:15px;color:#55e78b;letter-spacing:.2em}
+.rf-load-error{color:#ffd6b7}
+.rf-load-dismiss{display:none;margin:14px auto 0;padding:9px 22px;color:#e5faea;background:#173e29;border:1px solid #64bd83;border-radius:3px;font:700 13px system-ui,sans-serif;cursor:pointer}
+.rf-load-dismiss:focus-visible{outline:2px solid #baffce;outline-offset:3px}
+.rf-load-error-state .rf-load-dismiss{display:block}
+.rf-load-footer{margin:24px 0 0;color:#61896b;font:10px/1.5 system-ui,sans-serif;letter-spacing:.24em}
+@keyframes rf-turn{to{transform:rotate(360deg)}}@keyframes rf-shimmer{to{transform:translateX(140%)}}@keyframes rf-indet{0%{transform:translateX(-110%)}50%{transform:translateX(100%)}100%{transform:translateX(285%)}}@keyframes rf-stars{to{background-position:340px 320px,580px 540px,-440px 480px,360px -380px}}
+@media(max-width:500px){#rf-loading-screen{padding:15px}.rf-load-panel{padding:31px 21px}.rf-load-title{letter-spacing:.07em}.rf-load-description{margin-top:24px}.rf-load-footer{letter-spacing:.14em}}
+@media(prefers-reduced-motion:reduce){#rf-loading-screen,#rf-loading-screen *{animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important}.rf-load-bar-shell.rf-indeterminate .rf-load-bar-fill{width:100%!important;opacity:.45;transform:none}}
