@@ -15,7 +15,11 @@ function readyBeast() {
   if (beastAsset) return Promise.resolve(beastAsset);
   if (!beastLoading) beastLoading = loadModel(BEAST_ASSET)
     .then(g => { beastAsset = g; return g; })
-    .catch(err => { console.warn('[Zelgrim] モデル取得失敗', err); return null; });
+    .catch(err => {
+      beastLoading = null; // A failed network request can be retried next battle.
+      console.warn('[Zelgrim] モデル取得失敗', err);
+      return null;
+    });
   return beastLoading;
 }
 
@@ -194,26 +198,87 @@ function createBeastVisual(shade) {
   const head = model.model.getObjectByName('ZelgrimHead');
   shade.__zelgrimMotion = { armL, armR, legL, legR, head, phase:0 };
 }
-function retireBeast(shade) {
-  if (!shade || shade.__maouRetiring) return;
-  shade.__maouRetiring = true;
-  shade.dead = true;
-  shade.hp = 0;
-  shade.root.visible = false;
-  const battle = shade.battle;
-  const cleanup = () => {
-    shade.root.removeFromParent();
-    if (shade.modelInstance) {
-      disposeModel(shade.modelInstance, shade.mixer);
-      shade.modelInstance = null;
-    }
-    shade.__zelgrimMotion = null;
-    const idx = battle?.fighters?.indexOf(shade) ?? -1;
+// V7.3: Prebuild the complete tiny Fighter BEFORE gameplay and park it outside
+// the fighters list. Egg-hatching never constructs a Fighter, Mesh or animation.
+// The pool is per Battle and per Maou, so one Maou can have only one beast.
+let ZelgrimFighterConstructor = null;
+function prepareZelgrim(battle, owner) {
+  if (!battle || !owner || owner.remoteAuth || battle.__zelgrimDisposed) return;
+  const pool = (battle.__zelgrimPool ||= new Map());
+  const pending = (battle.__zelgrimPreparing ||= new Set());
+  if (pool.has(owner) || pending.has(owner)) return;
+  pending.add(owner);
+  void readyBeast().then(asset => {
+    if (!asset?.scene || battle.__zelgrimDisposed || battle.ended || owner.dead) return;
+    if (pool.has(owner) || !ZelgrimFighterConstructor) return;
+    // This executes as part of pre-battle setup, NOT when the egg hatches.
+    const beast = new ZelgrimFighterConstructor(battle, SHADE, {
+      team: owner.team, cpu: .87, player: false, name: BEAST_NAME,
+      pos: [0, 0], scale: .78, facing: 0
+    });
+    beast.maouOwner = owner;
+    beast.maouShade = true;
+    beast.maouShadeHits = 0;
+    beast.__zelgrimDormant = true;
+    beast.root.visible = false;
+    beast.root.removeFromParent();
+    // No user-facing HP row; ordinary HUD loops may still reference these.
+    beast.hudFill = {style: {width: ''}};
+    beast.hudPlate = {classList: {toggle() {}}};
+    pool.set(owner, beast);
+  }).catch(error => {
+    console.warn('[Zelgrim] 戦闘前の待機モデル作成に失敗', error);
+  }).finally(() => { pending.delete(owner); });
+}
+function activateZelgrim(battle, owner, at) {
+  const beast = battle.__zelgrimPool?.get(owner);
+  if (!beast || !beast.__zelgrimDormant || battle.ended || battle.__zelgrimDisposed || owner.dead) return false;
+  if (battle.fighters.includes(beast)) return false;
+  // ZERO GLB loading, ZERO model cloning and ZERO new Mesh here.
+  beast.maouOwner = owner;
+  beast.team = owner.team;
+  beast.maouShadeHits = 0;
+  beast.__maouRetiring = false;
+  beast.__zelgrimDormant = false;
+  beast.dead = false;
+  beast.hp = beast.maxHp;
+  beast.stun = 0;
+  beast.inv = 0;
+  beast.status = {};
+  beast.action = null;
+  beast.chantToken = null;
+  beast.pos.copy(at);
+  beast.netTarget.copy(at);
+  beast.vel.set(0, 0, 0);
+  beast.facing = owner.facing;
+  beast.root.visible = true;
+  battle.scene.add(beast.root);
+  battle.fighters.push(beast);
+  beast.sync();
+  return true;
+}
+function retireBeast(beast) {
+  if (!beast || beast.__maouRetiring || beast.__zelgrimDormant) return;
+  beast.__maouRetiring = true;
+  beast.dead = true;
+  beast.hp = 0;
+  beast.root.visible = false;
+  const battle = beast.battle;
+  const park = () => {
+    const idx = battle?.fighters?.indexOf(beast) ?? -1;
     if (idx >= 0) battle.fighters.splice(idx, 1);
+    beast.root.removeFromParent();
+    // Retain model and materials for the NEXT egg; do not clone or dispose.
+    beast.__zelgrimDormant = true;
+    beast.__maouRetiring = false;
+    beast.maouShadeHits = 0;
+    beast.inv = 0;
+    beast.action = null;
     return false;
   };
-  if (battle?.addEffect && !battle.ended) battle.addEffect(cleanup);
-  else cleanup();
+  // Remove only after the current battle iteration, never in a for-of update.
+  if (battle?.addEffect && !battle.ended) battle.addEffect(park);
+  else park();
 }
 function walkBeast(shade, dt) {
   const m = shade.__zelgrimMotion;
@@ -229,59 +294,58 @@ function walkBeast(shade, dt) {
 }
 function hatching(battle, f, spec, remote) {
   if (f.__maouEggPending || battle.fighters.some(a => a.key === SHADE && a.maouOwner === f && !a.dead)) {
-    if (!remote) battle.ui?.popup?.(f.pos, '魔卵獣ゼルグリムは1体まで', '#b4ffd1');
+    if (!remote) battle.ui?.popup?.(f.pos, BEAST_NAME + 'は1体まで', '#b4ffd1');
     return;
   }
+  // Never prepare a model on this path. It is prebuilt when Maou joins a battle.
   f.__maouEggPending = true;
-  // Lightweight egg (1 object) from mouth to ground; one 3-hit summoned beast.
   const egg = new THREE.Mesh(
     new THREE.SphereGeometry(.33, 8, 5),
     new THREE.MeshBasicMaterial({color:0xd2c9a5})
   );
-  const mouth = f.pos.clone().add(new THREE.Vector3(Math.sin(f.facing)*.22, Number(f.def?.height||3.7)*.67, Math.cos(f.facing)*.22));
-  const a = f.facing;
-  const spawn = f.pos.clone().add(new THREE.Vector3(Math.sin(a)*2.1,0,Math.cos(a)*2.1));
-  const end = spawn.clone().setY(.35), birth=.36;
-  egg.scale.set(.85, 1.25, .85);
-  egg.position.copy(mouth);battle.fx.add(egg);
-  let t=0;
-  const cleanEgg=(releaseLock=true)=>{egg.removeFromParent();egg.geometry.dispose();egg.material.dispose();if(releaseLock)f.__maouEggPending=false;};
+  const mouth = f.pos.clone().add(new THREE.Vector3(
+    Math.sin(f.facing)*.22, Number(f.def?.height||3.7)*.67, Math.cos(f.facing)*.22
+  ));
+  const a=f.facing;
+  const spawn=f.pos.clone().add(new THREE.Vector3(Math.sin(a)*2.1,0,Math.cos(a)*2.1));
+  const end=spawn.clone().setY(.35);
+  egg.scale.set(.85,1.25,.85);
+  egg.position.copy(mouth);
+  battle.fx.add(egg);
+  let age=0;
+  const clear=()=>{
+    egg.removeFromParent(); egg.geometry.dispose(); egg.material.dispose();
+    f.__maouEggPending=false;
+  };
   battle.addEffect(dt=>{
-    if (battle.ended || f.dead) { cleanEgg(); return false; }
-    t+=dt;const k=clamp(t/birth,0,1);
-    egg.position.copy(mouth).lerp(end,k);egg.position.y+=Math.sin(k*Math.PI)*.65;
-    egg.rotation.x+=dt*4;egg.rotation.z+=dt*3;
-    if(k<1)return true;
-    cleanEgg(false);
-    // If the tiny model is still loading, wait asynchronously. Never block a frame.
-    const finishBirth = () => readyBeast().then(asset => {
-      if (!asset) {
-        if (!remote) battle.ui?.popup?.(f.pos,'魔卵獣のモデルを読み込めませんでした','#ffd0a4');
-        return;
-      }
-      if (battle.ended || battle.__zelgrimDisposed || f.dead || remote || f.remoteAuth ||
-          battle.fighters.some(a=>a.key===SHADE&&a.maouOwner===f&&!a.dead)) return;
-      // Fighter.buildModel() below uses the cached 73KB asset, NEVER maou-lord.glb.
-      const beast = battle.add(SHADE, {team:f.team,cpu:.87,player:false,
-        pos:[spawn.x,spawn.z],name:BEAST_NAME,scale:.78,facing:f.facing});
-      beast.maouOwner = f;
-      beast.maouShadeHits = 0;
-      beast.maouShade = true;
-      // The beast has no HP bar, yet updateHud safely sees these stubs.
-      beast.hudFill = {style:{width:''}};
-      beast.hudPlate = {classList:{toggle(){}}};
+    if (battle.ended || battle.__zelgrimDisposed || f.dead || f.transformed) {
+      clear(); return false;
+    }
+    age += Math.min(.06, Math.max(0, Number(dt)||0));
+    const k = clamp(age/.36,0,1);
+    egg.position.copy(mouth).lerp(end,k);
+    egg.position.y += Math.sin(k*Math.PI)*.65;
+    egg.rotation.x += dt*4; egg.rotation.z += dt*3;
+    if (k<1) return true;
+    if (remote || f.remoteAuth) { clear(); return false; }
+    // If pre-battle preparation is still pending, let the egg sit safely.
+    // Time out instead of blocking the renderer or allocating new geometry.
+    if (!battle.__zelgrimPool?.has(f)) {
+      if (age<3.6) return true;
+      battle.ui?.popup?.(f.pos,'召喚獣の事前準備が未完了です。再度お試しください','#ffcf9f');
+      clear(); return false;
+    }
+    let ok=false;
+    try {ok=activateZelgrim(battle,f,spawn);}
+    catch(error) { console.warn('[Zelgrim activate]',error); }
+    if (ok) {
+      battle.spark?.(end.clone(),0xd5c58c,.40);
       battle.ui?.popup?.(f.pos,BEAST_NAME+' 誕生（耐久3撃）','#e1dfad');
-    }).catch(error => {
-      console.warn('[Zelgrim birth]',error);
-      if(!remote) battle.ui?.popup?.(f.pos,'召喚を中止しました','#ffd0a4');
-    }).finally(() => {f.__maouEggPending=false;});
-    battle.spark?.(end.clone(), 0xd5c58c, .40);
-    // Decouple creation from the physics/effect iteration, including fast devices.
-    if (typeof setTimeout === 'function') setTimeout(finishBirth, 0);
-    else void finishBirth();
+    } else battle.ui?.popup?.(f.pos,'召喚できません（次の卵で再試行できます）','#ffcf9f');
+    clear();
     return false;
   });
-  battle.ui?.popup?.(f.pos,'口卵術《翠影孵化》：卵1個・魔卵獣ゼルグリム1体（耐久3撃）','#b4ffd1');
+  battle.ui?.popup?.(f.pos,'口卵術《翠影孵化》：卵1個・'+BEAST_NAME+'1体（耐久3撃）','#b4ffd1');
 }
 function fullHeal(battle,f,remote){
   actionVisual(battle,f,{color:0xd8ffff,name:'無尽光輪《全生命復元》'},'s4');
@@ -319,12 +383,19 @@ export function installMaouCombat({Battle,Fighter}) {
   const FU=Fighter.prototype.update, FL=Fighter.prototype.startLight, FR=Fighter.prototype.receive;
   const FS=Fighter.prototype.applyStatus, FT=Fighter.prototype.tickStatus;
   const FB=Fighter.prototype.buildModel;
+  const BA=Battle.prototype.add;
   const BE=Battle.prototype.executeCast, BC=Battle.prototype.cast;
   const BH=Battle.prototype.applyHit, BD=Battle.prototype.dispose;
   // Intercept only this summon. The real player models are completely unchanged.
   Fighter.prototype.buildModel=function(gltf){
     if(this.key===SHADE){createBeastVisual(this);return;}
     return FB.call(this,gltf);
+  };
+  ZelgrimFighterConstructor = Fighter;
+  Battle.prototype.add=function(key, options){
+    const fighter=BA.call(this,key,options);
+    if (key===KEY && !fighter.remoteAuth) prepareZelgrim(this,fighter);
+    return fighter;
   };
   Fighter.prototype.update=function(dt,input){
     if(this.key===SHADE){
@@ -410,7 +481,17 @@ export function installMaouCombat({Battle,Fighter}) {
     for(const f of this.fighters||[]){
       stopAura(f,'rainbow');stopAura(f,'regen');
     }
-    // Original disposeModel handles tiny model clone materials.
+    // Dormant reservations are not in Battle.fighters and must be released here.
+    for (const beast of this.__zelgrimPool?.values?.() || []) {
+      if(this.fighters?.includes(beast)) continue; // original dispose handles live beasts
+      beast.root.removeFromParent();
+      if(beast.modelInstance){
+        disposeModel(beast.modelInstance,beast.mixer);
+        beast.modelInstance=null;
+      }
+    }
+    this.__zelgrimPool?.clear();
+    this.__zelgrimPreparing?.clear();
     return BD.call(this);
   };
 }
