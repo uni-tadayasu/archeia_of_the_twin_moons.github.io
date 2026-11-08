@@ -222,9 +222,14 @@ function prepareZelgrim(battle, owner) {
     beast.__zelgrimDormant = true;
     beast.root.visible = false;
     beast.root.removeFromParent();
-    // No user-facing HP row; ordinary HUD loops may still reference these.
-    beast.hudFill = {style: {width: ''}};
-    beast.hudPlate = {classList: {toggle() {}}};
+    // V7.4 CRITICAL FIX: updateHud() calls hudPlate.querySelector('b') on
+    // every fighter. Older plain-object placeholders lacked querySelector(),
+    // throwing a TypeError every frame immediately after hatching.
+    // Detached DOM nodes satisfy all HUD interfaces without drawing an HP bar.
+    beast.hudFill = document.createElement('u');
+    beast.hudPlate = document.createElement('div');
+    beast.hudPlate.hidden = true;
+    beast.hudLabel = null;
     pool.set(owner, beast);
   }).catch(error => {
     console.warn('[Zelgrim] 戦闘前の待機モデル作成に失敗', error);
@@ -403,10 +408,18 @@ export function installMaouCombat({Battle,Fighter}) {
       if(!this.maouOwner || this.maouOwner.dead || this.maouOwner.transformed){
         retireBeast(this);return;
       }
-      const result=FU.call(this,dt,input);
-      if(this.dead){retireBeast(this);return result;}
-      walkBeast(this,dt);
-      return result;
+      // A summon-side AI or animation error must NEVER abort the main
+      // battle render/update loop on a low-memory mobile device.
+      try {
+        const result=FU.call(this,dt,input);
+        if(this.dead){retireBeast(this);return result;}
+        walkBeast(this,dt);
+        return result;
+      } catch(error) {
+        console.error('[Zelgrim V7.4] 召喚獣を安全停止:',error);
+        retireBeast(this);
+        return;
+      }
     }
     if(this.key!==KEY)return FU.call(this,dt,input);
     const inp={...(input||{})};const holdingGuard=!!inp.guard,holdingAttack=!!inp.attack;
