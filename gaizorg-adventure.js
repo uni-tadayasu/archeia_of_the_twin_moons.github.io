@@ -67,10 +67,19 @@ export function setupGaizorgAdventure(ctx){
   });
   panel.querySelector('.ga-exit').addEventListener('click',()=>goTitle());
   warpButton.addEventListener('click',()=>enterPortal());
-  const titleButton=document.createElement('button');titleButton.type='button';titleButton.id='btn-adventure-mode';
-  titleButton.innerHTML='<span>アドベンチャー <small>ADVENTURE • 全10ステージ / 最終ボス：ガイゾルグ</small></span>';
-  const titleMenu=$('#scr-title .menu');
-  if(titleMenu){titleMenu.append(titleButton);}else document.body.append(titleButton);
+  // Current portal: display Adventure in the visible mode tiles, not the retired .menu.
+  const titleMenu=$('#scr-title .portal-modes') || $('#scr-title .menu');
+  let titleButton=document.getElementById('btn-adventure-mode');
+  if(!titleButton){
+    titleButton=document.createElement('button');titleButton.type='button';titleButton.id='btn-adventure-mode';
+    if(titleMenu?.classList.contains('portal-modes')){
+      titleButton.className='mode-tile';
+      titleButton.innerHTML='<span class="mode-icon">07</span><span class="mode-main"><b>アドベンチャー</b><small>全10ステージ / 最終ボス：ガイゾルグ</small></span><span class="tile-arrow">›</span>';
+    } else {
+      titleButton.innerHTML='<span>アドベンチャー <small>ADVENTURE • 全10ステージ / 最終ボス：ガイゾルグ</small></span>';
+    }
+    (titleMenu || $('#scr-title') || document.body).append(titleButton);
+  }
   titleButton.addEventListener('click',()=>{
     if(busy)return;
     state.mode='adventure';

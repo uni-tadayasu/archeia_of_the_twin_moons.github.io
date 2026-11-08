@@ -1,6 +1,6 @@
 // RF_GRAND_FOUR_20261108 main.js
 import * as THREE from 'three';
-import { setupGaizorgAdventure } from './gaizorg-adventure.js?v=20261108-grand-four-v3';
+import { setupGaizorgAdventure } from './gaizorg-adventure.js?v=adv-menu-v20261108b';
 import { installOperatorCombatFx } from './operator-combat-fx.js?v=20261108-grand-four-v3';
 import { renderExactPortrait } from './glb-portrait.js?v=20261108-grand-four-v3';
 // RF_OPERATOR_GIGANTES_MAIN_20261108
