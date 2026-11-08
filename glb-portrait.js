@@ -1,6 +1,6 @@
 /** Exact-GLB character select portrait, rendered on-demand, not AI recoloring. */
 import * as THREE from 'three';
-import { instantiateModel, disposeModel } from './model-runtime.js?v=20261108-grand-four-v3';
+import { instantiateModel, disposeModel } from './model-runtime.js?v=20261108-boss-final-v5';
 const cache=new Map();
 export async function renderExactPortrait(gltf,key){
   if(cache.has(key))return cache.get(key);
@@ -26,11 +26,11 @@ export async function renderExactPortrait(gltf,key){
       const rim=new THREE.DirectionalLight(0x976dff,2.1);rim.position.set(-6,6,-5);scene.add(rim);
       renderer=new THREE.WebGLRenderer({antialias:true,alpha:true,preserveDrawingBuffer:true,powerPreference:'low-power'});
       renderer.setPixelRatio(1);
-      renderer.setSize(480,640,false);
+      renderer.setSize(640,854,false);
       renderer.setClearColor(0x000000,0);
       renderer.outputColorSpace=THREE.SRGBColorSpace;
       renderer.render(scene,camera);
-      return renderer.domElement.toDataURL('image/webp',.91);
+      return renderer.domElement.toDataURL('image/webp',.95);
     }finally{
       if(instance)disposeModel(instance);
       renderer?.dispose();renderer?.forceContextLoss?.();
