@@ -3,6 +3,8 @@
  * All cloned material changes affect only clones, never the user's source GLB.
  */
 import * as THREE from 'three';
+import { FIGHTERS } from './data.js?v=20261108-maou-green-v6';
+import { disposeModel } from './model-runtime.js?v=20261108-maou-green-v6';
 const KEY = 'maou';
 const SHADE = 'maou_shade';
 const GOLD = 0xffe290;
@@ -157,44 +159,77 @@ function eyeLaser(battle, f, spec, remote) {
     light.removeFromParent();owned.forEach(x=>x.dispose?.());done=true;return false;
   });
 }
+// V6.1: exactly one egg and one living shadow per Maou. Never queue more than one.
+// A dead shadow is detached after the current battle frame to avoid accumulating GLBs.
+function retireShade(shade) {
+  if (!shade || shade.__maouRetiring) return;
+  shade.__maouRetiring = true;
+  shade.dead = true;
+  shade.hp = 0;
+  shade.root.visible = false;
+  const battle = shade.battle;
+  battle?.addEffect?.(() => {
+    shade.root.removeFromParent();
+    if (shade.modelInstance) {
+      disposeModel(shade.modelInstance, shade.mixer);
+      shade.modelInstance = null;
+    }
+    const idx = battle.fighters.indexOf(shade);
+    if (idx >= 0) battle.fighters.splice(idx, 1);
+    return false;
+  });
+}
 function hatching(battle, f, spec, remote) {
-  const existing=battle.fighters.filter(a=>a.key===SHADE&&a.maouOwner===f&&!a.dead).length;
-  const count=Math.max(0,4-existing);if(!count)return;
-  for(let i=0;i<count;i++){
-    const egg=new THREE.Mesh(new THREE.SphereGeometry(.33,12,8),new THREE.MeshStandardMaterial({color:0xc9e9a0,emissive:0x327d2e,emissiveIntensity:.4,roughness:.58}));
-    const mouth=f.pos.clone().add(new THREE.Vector3(Math.sin(f.facing)*.22,Number(f.def?.height||3.7)*.67,Math.cos(f.facing)*.22));
-    const a=f.facing+i*TAU/4;
-    const spawn=f.pos.clone().add(new THREE.Vector3(Math.sin(a)*2.1,0,Math.cos(a)*2.1));
-    const end=spawn.clone().setY(.35),birth=.36+i*.11;
-    egg.position.copy(mouth);battle.fx.add(egg);
-    let t=0,born=false;
-    battle.addEffect(dt=>{
-      t+=dt;const k=clamp(t/birth,0,1);
-      egg.position.copy(mouth).lerp(end,k);egg.position.y+=Math.sin(k*Math.PI)*.65;
-      egg.rotation.x+=dt*4;egg.rotation.z+=dt*3;
-      if(k<1)return true;
-      egg.removeFromParent();egg.geometry.dispose();egg.material.dispose();
-      battle.burst?.(end.clone(),0x56f56a,.85,{elem:3,color:0x5dff82});
-      if(!remote && !f.remoteAuth && !battle.ended && !f.dead && battle.assets?.[SHADE]){
-        try {
-          const shade=battle.add(SHADE,{team:f.team,cpu:.87,player:false,
-            pos:[spawn.x,spawn.z],name:'緑影の分身',scale:.78,facing:f.facing});
-          shade.maouOwner=f;shade.maouShadeHits=0;shade.maouShade=true;
-          shade.root.scale.setScalar(.74);shade.guardMesh.visible=false;
-          shade.modelInstance?.model?.traverse(node=>{
-            if(!node.isMesh)return;
-            for(const mat of (Array.isArray(node.material)?node.material:[node.material])){
-              if(mat.color)mat.color.lerp(new THREE.Color(0x3efa61),.72);
-              if(mat.emissive){mat.emissive.lerp(new THREE.Color(0x1cae45),.70);mat.emissiveIntensity=Math.max(.35,mat.emissiveIntensity||0);}
-              mat.needsUpdate=true;
-            }
-          });
-        }catch(error){console.warn('[魔王の分身]',error);}
-      }
-      return false;
-    });
+  if (f.__maouEggPending || battle.fighters.some(a => a.key === SHADE && a.maouOwner === f && !a.dead)) {
+    if (!remote) battle.ui?.popup?.(f.pos, '緑色の分身は1体まで', '#b4ffd1');
+    return;
   }
-  battle.ui?.popup?.(f.pos,'口卵術《翠影孵化》：分身4体・耐久3撃','#b4ffd1');
+  f.__maouEggPending = true;
+  // Lightweight egg (1 object) from mouth to ground, then 1 3-hit chasing clone.
+  const egg = new THREE.Mesh(
+    new THREE.SphereGeometry(.33, 10, 7),
+    new THREE.MeshStandardMaterial({color:0xc9e9a0,emissive:0x327d2e,emissiveIntensity:.4,roughness:.58})
+  );
+  const mouth = f.pos.clone().add(new THREE.Vector3(Math.sin(f.facing)*.22, Number(f.def?.height||3.7)*.67, Math.cos(f.facing)*.22));
+  const a = f.facing;
+  const spawn = f.pos.clone().add(new THREE.Vector3(Math.sin(a)*2.1,0,Math.cos(a)*2.1));
+  const end = spawn.clone().setY(.35), birth=.36;
+  egg.position.copy(mouth);battle.fx.add(egg);
+  let t=0;
+  const cleanEgg=()=>{egg.removeFromParent();egg.geometry.dispose();egg.material.dispose();f.__maouEggPending=false;};
+  battle.addEffect(dt=>{
+    if (battle.ended || f.dead) { cleanEgg(); return false; }
+    t+=dt;const k=clamp(t/birth,0,1);
+    egg.position.copy(mouth).lerp(end,k);egg.position.y+=Math.sin(k*Math.PI)*.65;
+    egg.rotation.x+=dt*4;egg.rotation.z+=dt*3;
+    if(k<1)return true;
+    cleanEgg();
+    battle.burst?.(end.clone(),0x56f56a,.85,{elem:3,color:0x5dff82});
+    if(!remote && !f.remoteAuth && battle.assets?.[SHADE] &&
+      !battle.fighters.some(a=>a.key===SHADE&&a.maouOwner===f&&!a.dead)){
+      try {
+        const shade=battle.add(SHADE,{team:f.team,cpu:.87,player:false,
+          pos:[spawn.x,spawn.z],name:'緑影の分身',scale:.78,facing:f.facing});
+        shade.maouOwner=f;shade.maouShadeHits=0;shade.maouShade=true;
+        shade.root.scale.setScalar(.74);shade.guardMesh.visible=false;
+        // Summoned fighters are added after buildHud(); keep them off the HP UI.
+        // Empty stand-ins also prevent updateHud() from dereferencing undefined.
+        shade.hudFill={style:{width:''}};
+        shade.hudPlate={classList:{toggle(){}}};
+        const green=new THREE.Color(0x3efa61), glow=new THREE.Color(0x1cae45);
+        shade.modelInstance?.model?.traverse(node=>{
+          if(!node.isMesh)return;
+          for(const mat of (Array.isArray(node.material)?node.material:[node.material])){
+            if(mat.color)mat.color.lerp(green,.72);
+            if(mat.emissive){mat.emissive.lerp(glow,.70);mat.emissiveIntensity=Math.max(.35,mat.emissiveIntensity||0);}
+            mat.needsUpdate=true;
+          }
+        });
+      } catch(error) { console.warn('[魔王の分身]',error); }
+    }
+    return false;
+  });
+  battle.ui?.popup?.(f.pos,'口卵術《翠影孵化》：卵1個・緑の分身1体（耐久3撃）','#b4ffd1');
 }
 function fullHeal(battle,f,remote){
   actionVisual(battle,f,{color:0xd8ffff,name:'無尽光輪《全生命復元》'},'s4');
@@ -218,13 +253,18 @@ function reviveIfEligible(f){
 export function installMaouCombat({Battle,Fighter}) {
   if(!Battle?.prototype||!Fighter?.prototype||Battle.prototype.__maouInstalled)return;
   Battle.prototype.__maouInstalled=true;
+  const eggSkill = FIGHTERS.maou?.skills?.find(s => s.kind === 'maou_egg');
+  if (eggSkill) {
+    eggSkill.count=1;
+    eggSkill.description='口から卵1個を産み、緑の分身1体が孵化。自動追尾攻撃・3回被弾で消滅・HPバーなし';
+  }
   const FU=Fighter.prototype.update, FL=Fighter.prototype.startLight, FR=Fighter.prototype.receive;
   const FS=Fighter.prototype.applyStatus, FT=Fighter.prototype.tickStatus;
   const BE=Battle.prototype.executeCast, BC=Battle.prototype.cast;
   const BH=Battle.prototype.applyHit, BD=Battle.prototype.dispose;
   Fighter.prototype.update=function(dt,input){
     if(this.key===SHADE){
-      if(this.maouOwner?.dead||this.maouOwner?.transformed){this.dead=true;this.hp=0;this.root.visible=false;}
+      if(this.maouOwner?.dead||this.maouOwner?.transformed)retireShade(this);
       return FU.call(this,dt,input);
     }
     if(this.key!==KEY)return FU.call(this,dt,input);
@@ -254,7 +294,7 @@ export function installMaouCombat({Battle,Fighter}) {
       if(this.dead||this.inv>0)return 0;
       this.maouShadeHits=(this.maouShadeHits||0)+1;this.inv=.3;
       this.battle?.spark?.(this.pos.clone().setY(.8),0x43ff75,.8);
-      if(this.maouShadeHits>=3){this.hp=0;this.dead=true;this.root.visible=false;
+      if(this.maouShadeHits>=3){retireShade(this);
         this.battle?.ui?.popup?.(this.pos,'分身消滅','#a8ffb4');}
       else this.battle?.ui?.popup?.(this.pos,`分身被弾 ${this.maouShadeHits}/3`,'#a8ffb4');
       return 1;
