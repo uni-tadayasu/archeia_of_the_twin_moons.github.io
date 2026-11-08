@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { setupGaizorgAdventure } from './gaizorg-adventure.js?v=20261108b';
 import { loadModel } from './model-runtime.js?v=valgard-exact-20261107';
 import { Battle, ARENA_R } from './game.js?v=audio-cast-20261107d';
 import { FIGHTERS, spellCastTime, STORY, ROSTER, UPGRADES, MAX_LV, STAGES, BGM, APEX_BGM, ENEMY_ROSTER, UPG_CAP, LB_MAX, lbMaxLv, lbMul, lbCost, WEAPONS, ARMORS, SUMMONS, STAT_LABEL, SPECIAL_KEYS, BOSS_ROSTER, currentEvent, sanitizeEvent, EV_FOE_KINDS } from './data.js?v=audio-cast-20261107d';
@@ -753,7 +754,8 @@ const MUSIC_FILES = {
   event: 'event-theme.mp3',
   boss: 'event-theme.mp3',  // ボス戦は実在するイベント音源を使用
   zarugureibu: 'zarugureibu-theme.mp3',
-  valgard: 'valgard-theme.mp3'
+  valgard: 'valgard-theme.mp3',
+  adventure: 'adventure-theme.mp3'
 };
 for (const [name, file] of Object.entries(MUSIC_FILES)) {
   const a = new Audio('assets/audio/' + file + '?v=20261107-valgard1');
@@ -828,7 +830,7 @@ function playTrack(name) {
   syncMusicTrack();
 }
 function syncMusicTrack() {
-  const key = shouldForceValgard() ? 'valgard' : musicKey(audio.wanted);
+  const key = state.mode === 'adventure' ? 'adventure' : shouldForceValgard() ? 'valgard' : musicKey(audio.wanted);
   if (!key || !audio.tracks[key]) return;
   const next = audio.tracks[key];
   const oldKey = audio.currentKey;
@@ -1552,13 +1554,13 @@ function canUse(k) {
   if (!d) return false;
   // Only Valgard remains exclusively for the chief. All other previously
   // chief-only fighters can be selected by authenticated operators as well.
-  if (k === 'valgard') return chiefUnlocked();
+  if (k === 'valgard' || k === 'gaizorg') return chiefUnlocked();
   if (d.special === 'chief') return operatorUnlocked();
   if (d.shop) return save.chars.includes(k) || operatorUnlocked();
   if (d.locked) return operatorUnlocked();
   return true;
 }
-const SELECT_KEYS = () => [...ROSTER, 'seraphel', 'chief', 'sovereign', 'bloodfiend', 'valgard', 'crimson'];
+const SELECT_KEYS = () => [...ROSTER, 'seraphel', 'chief', 'sovereign', 'bloodfiend', 'valgard', 'gaizorg', 'crimson'];
 function refreshTitle() {
   $('#btn-invade').hidden = !operatorUnlocked();
   if ($('#btn-evmaker')) $('#btn-evmaker').hidden = !chiefUnlocked();
@@ -1958,6 +1960,7 @@ function openStageSelect(crumb, onBack) {
 }
 
 function goTitle() {
+  gaizorgAdventure?.close();
   endBattle();
   leaveField();
   setStage(STAGES[0]);
@@ -2214,7 +2217,10 @@ function beginBattle(boss) {
   const participants = state.battle.fighters.map((f) => f.key);
   const ks = state.battle.fighters.filter((f) => f.team === 1 || state.mode === 'invade').map((f) => f.key);
   const apex = ks.some((k) => k === 'sovereign' || k === 'sovereign2') ? 2 : ks.includes('chief') || ks.includes('valgard') || ks.includes('bloodfiend') ? 1 : 0;
-  if (participants.some((k) => k === 'valgard')) {
+  if (state.mode === 'adventure') {
+    playTrack('adventure');
+    ui.banner({ name: '— ♪ ADVENTURE —' }, '休憩所と戦闘で同じBGM');
+  } else if (participants.some((k) => k === 'valgard')) {
     playTrack('valgard');
     ui.banner({ name: '— ♪ ヴァルガルド専用BGM —' }, '氷鋼覇王、降臨');
   } else if (participants.includes('bloodfiend')) {
@@ -2309,6 +2315,7 @@ function onBattleEnd(won) {
   if (!state.battle) {
     return;
   }
+  if (state.mode === 'adventure') { gaizorgAdventure.finish(won); return; }
   state.lastWin = won;
   if (state.mode === 'invade') {
     showResult(won ? '裁きは下った' : '旅人に退けられた', won ? '物語の灯をひとつ揺らした。運営の仕事、おつかれさま。' : 'なかなかの旅人だ。物語は続く。', '', false, false);
@@ -3095,15 +3102,15 @@ async function onInvaded(e) {
   $('#pause').hidden = true;
   const p = state.worldPeers?.[e.from];
   const apexOk = !apiEnabled() || tr === 'chief' || tr === 'op';
-  const chiefOnlyAttempt = p?.fk === 'valgard' && tr !== 'chief' && apiEnabled();
-  const ik = apexOk && !chiefOnlyAttempt && ['chief', 'sovereign', 'sovereign2', 'bloodfiend', 'valgard'].includes(p?.fk) && (!apiEnabled() || peerVerified(e.from, p.fk)) ? p.fk : 'seraphel';
+  const chiefOnlyAttempt = (p?.fk === 'valgard' || p?.fk === 'gaizorg') && tr !== 'chief' && apiEnabled();
+  const ik = apexOk && !chiefOnlyAttempt && ['chief', 'sovereign', 'sovereign2', 'bloodfiend', 'valgard', 'gaizorg'].includes(p?.fk) && (!apiEnabled() || peerVerified(e.from, p.fk)) ? p.fk : 'seraphel';
   b.add(ik, { team: 1, remote: true, netId: e.from, pos: p ? [p.x, p.z] : [0, -9], facing: Math.PI, name: `乱入者・${e.name}`, ...peerOpts(e.from, ik) });
   b.net = w;
   b.strictNet = apiEnabled();
   buildHud();
   ui.flash();
   sfx('burst');
-  const apex = ik === 'sovereign' || ik === 'sovereign2' ? 2 : ik === 'chief' || ik === 'bloodfiend' || ik === 'valgard' ? 1 : 0;
+  const apex = ik === 'sovereign' || ik === 'sovereign2' ? 2 : ik === 'chief' || ik === 'bloodfiend' || ik === 'valgard' || ik === 'gaizorg' ? 1 : 0;
   playTrack(ik === 'valgard' ? 'valgard' : ik === 'bloodfiend' ? 'zarugureibu' : apex ? 'apex:' + apex : 'boss');
   if (apex) ui.cutin(b.fighters[b.fighters.length - 1], FIGHTERS[ik].name, tr === 'chief' ? '運営長、降臨' : '運営、降臨');
   ui.banner({ name: '— 空が裂けた —' }, apex ? (tr === 'chief' ? '運営長が降りてきた！' : '運営が降りてきた！') : '裁定者が降りてきた！');
@@ -3131,7 +3138,7 @@ function renderInvadeList() {
 
 $('#invade-who').addEventListener('click', () => {
   sfx('ui');
-  const order = operatorUnlocked() ? ['seraphel', 'chief', 'sovereign', 'bloodfiend', ...(chiefUnlocked() ? ['valgard'] : [])] : ['seraphel'];
+  const order = operatorUnlocked() ? ['seraphel', 'chief', 'sovereign', 'bloodfiend', ...(chiefUnlocked() ? ['valgard', 'gaizorg'] : [])] : ['seraphel'];
   state.invadeKey = order[(order.indexOf(state.invadeKey) + 1) % order.length];
   $('#invade-who').textContent = `乱入する姿：${FIGHTERS[state.invadeKey].name}`;
 });
@@ -3166,7 +3173,7 @@ async function startInvade(p) {
   w.invade({ to: p.id, from: w.myId, name: '運営', tk });
   setStage(stageById(STORY[p.ch]?.stage));
   const b = makeBattle(w);
-  const ik = ['chief', 'sovereign', 'bloodfiend'].includes(state.invadeKey) && operatorUnlocked() || state.invadeKey === 'valgard' && chiefUnlocked() ? state.invadeKey : 'seraphel';
+  const ik = ['chief', 'sovereign', 'bloodfiend'].includes(state.invadeKey) && operatorUnlocked() || (state.invadeKey === 'valgard' || state.invadeKey === 'gaizorg') && chiefUnlocked() ? state.invadeKey : 'seraphel';
   b.add(ik, { team: 0, player: true, awk: save.awk, netId: w.myId, pos: [0, -9], name: FIGHTERS[ik].name + '（運営）', upg: upgFor(ik), gear: gearFor(ik) });
   b.add(peerKeyOf(p.id, p.fk), { team: 1, remote: true, netId: p.id, pos: [p.x, p.z], name: p.name, gear: { w: p.gw, a: p.ga }, ...peerOpts(p.id, peerKeyOf(p.id, p.fk)) });
   b.strictNet = apiEnabled();
@@ -3421,7 +3428,7 @@ $('#world-req-no').addEventListener('click', () => answerReq(false));
 
 // ---------- Pause ----------
 function togglePause() {
-  if ((!state.battle && !state.field) || document.querySelector('.screen.on')) {
+  if ((!state.battle && !state.field && !state.adventureRest) || document.querySelector('.screen.on')) {
     return;
   }
   if (state.invaded || state.mode === 'invade' || state.duel) {
@@ -3464,7 +3471,7 @@ function refreshOptions() {
   $('#opt-mute').textContent = audio.muted ? '音：黙らせる' : '音：鳴らす';
   $('#opt-diff').textContent = `CPUの強さ：${DIFFS[save.diff].n}`;
   $('#op-state').textContent = chiefUnlocked()
-    ? '運営長として認められています — 全運営キャラ・ヴァルガルドを選べます'
+    ? '運営長として認められています — 全運営キャラ・ヴァルガルド・ガイゾルグを選べます'
     : operatorUnlocked() ? '運営として認められています — ルミナリア・ヴェスペラ・ザルグレイヴなどを選べます（ヴァルガルドを除く）' : '運営の鍵・運営長の鍵・招待された運営キー（OP-…）を入力';
   $('#chief-panel').hidden = !chiefUnlocked();
   mailbox?.refreshAccess();
@@ -4097,7 +4104,7 @@ function pollPad(dt) {
     if (anyDown) {
       enterTitle();
     }
-  } else if (inBattleView() && !state.paused) {
+  } else if ((inBattleView() || state.adventureRest) && !state.paused) {
     padState.mx = mx;
     padState.mz = mz;
     padState.guard = btn(4) || btn(6) || btn(7);
@@ -4142,6 +4149,16 @@ function pollPad(dt) {
   pad.prev = g.buttons.map((b) => b.pressed || b.value > 0.5);
 }
 
+// GAIZORG-ADVENTURE-INSTALLED-v20261108b
+// 既存のゲーム状態と戦闘器を引き継ぐ追加モード。main.js 全体は作り直さない。
+const gaizorgAdventure = setupGaizorgAdventure({
+  THREE,scene,camera,Battle,FIGHTERS,STAGES,assets,state,save,
+  chiefUnlocked,openSelect,goTitle,show,makeBattle,endBattle,beginBattle,
+  buildHud,setStage,ensureAllModelsReady,playTrack,grant,persist,ui,
+  getArena:()=>arena,upgFor,gearFor,
+  setFog:(rest)=>{ if(rest && scene.fog){scene.fog.near=36;scene.fog.far=90;} }
+});
+
 // ---------- Loop ----------
 setupTouch();
 const timer = new THREE.Timer();
@@ -4175,6 +4192,8 @@ renderer.setAnimationLoop((time) => {
     state.battle.update(dt, state.paused ? { mx: 0, mz: 0 } : readInput());
     netTick(dt);
     updateHud();
+  } else if (state.adventureRest && !state.battle) {
+    gaizorgAdventure.update(dt, state.paused ? { mx:0,mz:0 } : readInput());
   } else if (state.field && !state.battle) {
     const live = !state.paused && !document.querySelector('.screen.on');
     state.field.update(live ? dt : 0, live ? readInput() : null, camera);

@@ -1134,3 +1134,30 @@ for (const key of ['chief', 'sovereign', 'sovereign2', 'bloodfiend']) {
   const d = FIGHTERS[key];
   if (d?.title) d.title = d.title.replace('（運営長', '（運営・運営長');
 }
+
+// GAIZORG-ADVENTURE-INSTALLED-v20261108b
+// 運営長だけが使用できる大型・炎属性キャラクター。通常戦闘と探索に共通。
+// このキーはオンライン対戦・協力でも既存の役職検証の対象にする。
+FIGHTERS.gaizorg = {
+  name:'ガイゾルグ',title:'熔殻の超甲獣（運営長専用）',
+  model:'assets/models/gaizorg-boss.glb',face:'assets/portraits/gaizorg.webp',
+  color:0xff7434,tint:null,height:4.25,hp:6000,speed:4.85,overGain:1.30,
+  locked:true,special:'chief',power:1.25,armor:.86,
+  light:{dmg:230,range:3.8,color:0xffb052},
+  skills:[
+    {name:'獄炎の息吹《ヴォルカニック・ブレス》',kind:'projectile',visual:'fire',
+     elem:0,color:0xff792b,damageType:'fire',cost:24,castTime:.65,count:6,spreadAng:.075,chain:.075,dmg:105,speed:22,radius:1.25,vivid:true},
+    {name:'剛爪破砕《タイタン・クロウ》',kind:'dash',elem:0,color:0xffaa58,
+     cost:21,speed:13,dur:.42,dmg:450,stun:.85,kb:12,vivid:true},
+    {name:'灼星火球《マグマ・スフィア》',kind:'projectile',visual:'orb',elem:0,
+     color:0xff7629,cost:26,castTime:.78,count:3,spreadAng:.13,chain:.10,dmg:250,speed:24,radius:1.3,vivid:true},
+    {name:'太古炎天術《紅星終焉》',kind:'judgment',visual:'meteor',finalVisual:'pillar',elem:0,
+     color:0xff6222,cost:46,castTime:2.65,count:12,spread:4.6,radius:2.3,
+     dmg:230,delay:.52,interval:.10,finalDmg:1000,finalRadius:8.5,vivid:true},
+    {name:'熔命の再生',kind:'heal',elem:0,color:0xffd287,cost:32,heal:950,radius:5.2,vivid:true}
+  ],
+  over:{name:'終極火界《地心ノヴァ》',kind:'judgment',visual:'meteor',
+    finalVisual:'nova',elem:0,color:0xffb03f,cost:0,castTime:2.95,count:15,
+    spread:6,radius:2.9,dmg:260,delay:.55,interval:.08,finalDmg:1500,finalRadius:10.0,vivid:true}
+};
+

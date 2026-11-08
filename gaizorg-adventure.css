@@ -1,0 +1,22 @@
+#gaizorg-adventure-ui[hidden]{display:none!important}
+#gaizorg-adventure-ui {position:fixed;z-index:10002;top:max(40px,env(safe-area-inset-top));left:clamp(8px,2.2vw,25px);width:min(390px,calc(100vw - 22px));pointer-events:auto;border:1px solid #e7b963;padding:16px 18px;color:#fff1d7;background:linear-gradient(145deg,rgba(19,16,35,.95),rgba(38,22,25,.88));box-shadow:0 22px 65px #000b, inset 0 0 30px #fd772119;backdrop-filter:blur(15px);border-radius:12px;font-family:'Hiragino Mincho ProN','Yu Mincho',serif}
+#gaizorg-adventure-ui .ga-title{font-size:clamp(19px,3vw,28px);font-weight:900;letter-spacing:.13em;color:#ffc477;text-shadow:0 0 18px #f769335e}
+#gaizorg-adventure-ui .ga-title small{display:block;font-size:12px;letter-spacing:.28em;color:#e6dae0;font-weight:400}
+#gaizorg-adventure-ui .ga-status{margin:14px 0;color:#f6e0c5;line-height:1.65;font-size:14px}
+#gaizorg-adventure-ui .ga-actions{display:flex;flex-wrap:wrap;gap:8px}
+#gaizorg-adventure-ui button{font:inherit;cursor:pointer;border:1px solid #dfad65;color:#ffedd3;background:#332232;border-radius:6px;min-height:38px;padding:8px 10px}
+#gaizorg-adventure-ui button:focus-visible{outline:3px solid #ffe5b5;outline-offset:2px}
+#gaizorg-adventure-ui .ga-warp{background:linear-gradient(90deg,#a6402e,#db7830);font-weight:800;flex:2}
+#gaizorg-adventure-ui .ga-exit{flex:1}
+#gaizorg-adventure-ui .ga-help{font-size:12px;color:#bfb6b8;line-height:1.7;margin-top:10px}
+#gaizorg-adventure-ui .ga-touch{display:none}
+@media(hover:none),(pointer:coarse){
+#gaizorg-adventure-ui{top:max(30px,env(safe-area-inset-top));width:min(330px,calc(100vw - 20px));padding:10px 12px}
+#gaizorg-adventure-ui .ga-title{font-size:20px}
+#gaizorg-adventure-ui .ga-status{margin:5px 0}
+#gaizorg-adventure-ui .ga-help{display:none}
+#gaizorg-adventure-ui .ga-touch{display:grid;justify-content:center;gap:2px;margin:8px auto 0;text-align:center}
+#gaizorg-adventure-ui .ga-touch button{min-width:58px;min-height:44px;font-size:23px;margin:2px;touch-action:none}
+}
+
+#gaizorg-adventure-ui .ga-touch button[data-axis="run"]{font-size:14px;font-weight:800;background:linear-gradient(140deg,#933a24,#de6c2f);min-width:64px}
