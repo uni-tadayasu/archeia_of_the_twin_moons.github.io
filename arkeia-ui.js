@@ -56,164 +56,25 @@
     schedule();
   }
 
-  // Menus scroll, while the existing back/navigation buttons remain visible.
-  // This affects presentation only; existing onclick handlers are unchanged.
+  // Back/return controls are NORMAL CONTENT, not sticky or viewport-fixed.
+  // They scroll away with their own menu; no click behaviour is modified.
   const scrollStyle = document.createElement('style');
-  scrollStyle.id = 'illustrated-patch-sticky-navigation';
+  scrollStyle.id = 'illustrated-patch-scrolling-back';
   scrollStyle.textContent = `
-    #ui .screen .topbar, #ui .screen .inner > .topbar,
+    #ui .screen .topbar, #ui .screen .topbar:has(> .back),
     #ui #scr-lobby .topbar, #ui #scr-result .topbar, #ui #scr-story .topbar {
-      position: sticky !important;
-      top: 0 !important;
-      bottom: auto !important;
-      left: auto !important;
-      right: auto !important;
-      z-index: 90 !important;
-      background: linear-gradient(180deg, rgba(13,25,41,.99),rgba(15,31,49,.96)) !important;
-      border-bottom: 1px solid rgba(216,194,147,.65) !important;
-      box-shadow: 0 10px 28px rgba(1,8,18,.42);
-      padding: 8px 10px 10px !important;
-      backdrop-filter: blur(14px) !important;
-      -webkit-backdrop-filter: blur(14px) !important;
-      isolation: isolate;
+      position:relative !important; top:auto !important; bottom:auto !important;
+      left:auto !important; right:auto !important; backdrop-filter:none !important;
+      -webkit-backdrop-filter:none !important; z-index:2 !important;
     }
-    #ui .screen .topbar .back,
-    #ui .screen .back,
-    #ui #select-back {
-      position: static !important;
-      inset: auto !important;
-      flex-shrink: 0;
+    #ui .screen .back, #ui .screen .topbar .back, #ui #select-back {
+      position:static !important; inset:auto !important; transform:none;
     }
-    #ui #scr-title .portal-header,
-    #ui .screen .portal-header {
-      position: sticky !important;
-      top: 0 !important;
-      z-index: 90 !important;
-      background-color: rgba(12,23,39,.96) !important;
-      backdrop-filter: blur(14px) !important;
-      -webkit-backdrop-filter: blur(14px) !important;
-    }
-    #ui .screen.on {
-      touch-action: pan-y;
-      overscroll-behavior-y: contain;
-      scroll-padding-top: 65px;
-    }
-    #ui .screen .inner { overflow: visible !important; }
-    @media (max-width:680px) {
-      #ui .screen .topbar { gap: 6px; padding: 7px 9px 9px !important; }
-      #ui .screen .topbar .back { min-height: 42px; }
-    }
-    @media (prefers-reduced-transparency: reduce) {
-      #ui .screen .topbar { background:#101f31 !important; }
-    }
+    #scr-title .portal-header { position:relative !important; top:auto !important; }
+    #ui .screen.on { touch-action:pan-y; overscroll-behavior-y:contain; }
+    @media(max-width:680px){#ui .screen .topbar{flex-shrink:0}}
   `;
   document.head.appendChild(scrollStyle);
-
-  // Stage selection -> real loading UI while main.js loads GLB models.
-  // No fictitious percentage, no long blocking delay, and safe dismissal on model errors.
-  function installStageLoadingScreen(){
-    if(document.getElementById('arkeia-stage-loading'))return;
-    const style=document.createElement('style');
-    style.id='arkeia-stage-loading-css';
-    style.textContent=`
-      #arkeia-stage-loading[hidden]{display:none!important}
-      #arkeia-stage-loading{position:fixed;inset:0;z-index:9998;display:grid;place-items:center;
-        padding:clamp(16px,4vw,40px);overflow:auto;color:#f6f0e3;
-        background:#07101d;isolation:isolate;font-family:serif;}
-      #arkeia-stage-loading .sl-stage-art{position:absolute;inset:0;background-position:center;
-        background-size:cover;opacity:.44;filter:saturate(.75) contrast(1.1) brightness(.8);z-index:-2}
-      #arkeia-stage-loading .sl-vignette{position:absolute;inset:0;z-index:-1;
-        background:radial-gradient(ellipse at 50% 40%,#162c42a0 0%,#081322ec 73%,#04090ffb 100%)}
-      #arkeia-stage-loading .sl-center{position:relative;display:flex;flex-direction:column;
-        align-items:center;justify-content:center;gap:15px;width:min(560px,100%);
-        text-align:center;padding:24px 18px 30px}
-      #arkeia-stage-loading .sl-mark{position:relative;width:112px;height:112px;margin:6px auto 16px}
-      #arkeia-stage-loading .sl-mark::before,#arkeia-stage-loading .sl-mark::after{
-        content:'';position:absolute;inset:9px;border:2px solid #b6e8ff99;
-        border-radius:50%;box-shadow:0 0 18px #69caff5c,inset 0 0 14px #6aaaff22;
-        animation:arkeia-loading-orbit 3.5s linear infinite}
-      #arkeia-stage-loading .sl-mark::after{inset:0;border-color:#d7c38e84;
-        border-style:dashed;animation-duration:5.5s;animation-direction:reverse}
-      #arkeia-stage-loading .sl-moon{position:absolute;inset:24px;border-radius:50%;
-        background:radial-gradient(circle at 33% 27%,#f8ffff,#9dceef 38%,#315176 72%,#0a192f 100%);
-        box-shadow:0 0 23px #91d6ff80,0 0 65px #4ba6eb40}
-      #arkeia-stage-loading .sl-kicker{font:600 10px/1.5 system-ui,sans-serif;letter-spacing:.36em;color:#c6c1ac}
-      #arkeia-stage-loading .sl-title{font-size:clamp(26px,5vw,40px);font-weight:500;letter-spacing:.17em;
-        line-height:1.4;text-shadow:0 2px 22px #000d}
-      #arkeia-stage-loading .sl-stage{font-size:clamp(14px,2.2vw,19px);letter-spacing:.15em;color:#e5d3a8}
-      #arkeia-stage-loading .sl-label{font:13px/1.8 system-ui,sans-serif;letter-spacing:.08em;color:#c7dce9}
-      #arkeia-stage-loading .sl-track{position:relative;overflow:hidden;height:3px;width:min(340px,85%);
-        border-radius:8px;background:#b5c9da30;margin:5px 0}
-      #arkeia-stage-loading .sl-track::after{content:'';display:block;width:38%;height:100%;
-        background:linear-gradient(90deg,transparent,#b8efff,#ddbd7f,transparent);
-        animation:arkeia-loading-sweep 1.8s ease-in-out infinite}
-      #arkeia-stage-loading .sl-dismiss{margin-top:10px;padding:9px 18px;border:1px solid #9ba6ac90;
-        color:#f2e7d0;background:#102438bb;cursor:pointer;font-size:12px;letter-spacing:.1em;
-        min-height:38px;border-radius:4px}
-      #arkeia-stage-loading .sl-dismiss:hover{background:#1b3c57}
-      @keyframes arkeia-loading-orbit{to{transform:rotate(360deg)}}
-      @keyframes arkeia-loading-sweep{0%{transform:translateX(-130%)}100%{transform:translateX(380%)}}
-      @media(prefers-reduced-motion:reduce){#arkeia-stage-loading *{animation:none!important}}
-    `;
-    document.head.appendChild(style);
-    const overlay=document.createElement('div'); overlay.id='arkeia-stage-loading'; overlay.hidden=true;
-    overlay.setAttribute('role','status'); overlay.setAttribute('aria-live','polite');
-    overlay.innerHTML=`
-      <div class="sl-stage-art" aria-hidden="true"></div><div class="sl-vignette" aria-hidden="true"></div>
-      <div class="sl-center"><div class="sl-mark" aria-hidden="true"><div class="sl-moon"></div></div>
-        <div class="sl-kicker">RIFTFALL ARENA · WORLD LOADING</div>
-        <div class="sl-title">戦いの舞台へ</div><div class="sl-stage"></div>
-        <div class="sl-track" aria-hidden="true"></div>
-        <div class="sl-label">キャラクターとステージを読み込んでいます</div>
-        <button type="button" class="sl-dismiss">ロード画面を閉じる</button></div>`;
-    document.body.appendChild(overlay);
-    const art=overlay.querySelector('.sl-stage-art'),title=overlay.querySelector('.sl-stage');
-    const label=overlay.querySelector('.sl-label');
-    const select=document.getElementById('scr-select');
-    let openAt=0,hideTimer=0,noticeTimer=0,watcher=null,observer=null;
-    const hide=()=>{
-      clearTimeout(hideTimer);clearTimeout(noticeTimer);
-      if(watcher)watcher.disconnect();watcher=null;
-      overlay.hidden=true;overlay.removeAttribute('aria-busy');
-    };
-    const finish=()=>{
-      if(overlay.hidden)return;
-      clearTimeout(hideTimer);
-      hideTimer=setTimeout(hide,Math.max(0,420-(performance.now()-openAt)));
-    };
-    const start=(tile)=>{
-      if(!select?.classList.contains('on'))return;
-      const heading=document.getElementById('select-label')?.textContent||'';
-      if(!heading.includes('舞台'))return;
-      clearTimeout(hideTimer);clearTimeout(noticeTimer);
-      openAt=performance.now();
-      title.textContent=tile.querySelector('b')?.textContent?.trim()||'新たな舞台';
-      const pic=tile.querySelector('.sthumb');
-      art.style.backgroundImage=pic?.style?.backgroundImage || '';
-      label.textContent='キャラクターモデルとステージを読み込んでいます';
-      overlay.hidden=false;overlay.setAttribute('aria-busy','true');
-      if(watcher)watcher.disconnect();
-      watcher=new MutationObserver(()=>{
-        if(document.getElementById('arkeia-model-error')){hide();return;}
-        if(!select.classList.contains('on'))finish();
-      });
-      watcher.observe(document.body,{childList:true});
-      watcher.observe(select,{attributes:true,attributeFilter:['class']});
-      noticeTimer=setTimeout(()=>{
-        if(!overlay.hidden){label.textContent='読み込みが続いています。時間がかかる場合は接続状況をご確認ください。';}
-      },12000);
-    };
-    overlay.querySelector('.sl-dismiss').addEventListener('click',hide);
-    document.addEventListener('click',event=>{
-      const tile=event.target.closest?.('#select-grid button.stage-tile');
-      if(tile&&!tile.disabled)start(tile);
-    },true);
-    // When main.js transitions to gameplay, the selection section loses .on.
-    // Cancel/return to menu or model load failure must not trap the player.
-    window.addEventListener('pagehide',hide);
-  }
-  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',installStageLoadingScreen,{once:true});
-  else installStageLoadingScreen();
 
   // Patch the SAME ESM module instances that main.js uses. This is visual only.
   const VISUAL_VERSION = 'painted-cg-20261107a';
@@ -1523,7 +1384,6 @@
       });
     }
 
-
     function performEvolvedFollowVisual(b,f,slot,net){
       if(!b?.fx || !f || f.dead || !/^f\d+$/.test(slot)) return;
       const idx=+slot.slice(1);
@@ -1531,61 +1391,133 @@
       const elem=Number(spec.elem)||0;
       const name=`${spec.name||''}`;
       const kind=`${spec.kind||''}`;
+      const actor=`${f.key||f.id||f.name||'fighter'}`;
+      const support=/heal|cure|regen|earth|再生|回復|healer/i.test(name+kind);
       const target=findTarget(b,f,net);
-      const support=/heal|cure|regen|earth|再生|回復/i.test(name+kind);
-      const point=support?f.pos:(target?.pos || new THREE.Vector3(f.pos.x+(Math.sin(f.facing||0)*3.6),0,f.pos.z+(Math.cos(f.facing||0)*3.6)));
+      const point=support?f.pos:(target?.pos || new THREE.Vector3(f.pos.x+(Math.sin(f.facing||0)*3.8),0,f.pos.z+(Math.cos(f.facing||0)*3.8)));
+      const hash=(str)=>{ let h=2166136261>>>0; for(let i=0;i<str.length;i++){ h^=str.charCodeAt(i); h=Math.imul(h,16777619);} return h>>>0; };
+      let seed=hash(`${actor}|${slot}|${name}|${kind}|${elem}`);
+      const rand=()=>((seed=(Math.imul(seed,1664525)+1013904223)>>>0)/4294967296);
       const root=new THREE.Group(); b.fx.add(root);
       const mats=[], geos=[];
-      const palette={
-        0:[0xe8f6ff,0x8ad6ff,0x4da3ff],
-        1:[0xfff0a6,0xffc76c,0xff8c48],
-        2:[0xf3e0ff,0xc49bff,0x8f67ff],
-        3:[0xbef7ff,0x74dcff,0x35a6ff],
-        4:[0xffb8d2,0xff7bac,0xf5518f],
-        5:[0xe8f9ff,0xc7efff,0x8fd6ff]
-      };
-      const [c0,c1,c2]=palette[elem]||palette[0];
+      const palette=[
+        [0xe8f7ff,0x9adfff,0x5eacff],[0xfff0bd,0xffc86b,0xff9153],[0xf3e3ff,0xcbabff,0x8a64ff],
+        [0xc9ffff,0x6be0ff,0x249dff],[0xffc6d9,0xff7db0,0xf05d92],[0xeaf5ff,0xd8ecff,0x9dc8ff],
+        [0xdfffd9,0x9dff96,0x4fd763],[0xffdeb9,0xffaf63,0xff6d2e],[0xd9fff1,0x84f0d1,0x2bc0a4],[0xffd9f5,0xff98e1,0xd45cff]
+      ];
+      const [c0,c1,c2]=palette[elem]||palette[seed%palette.length];
+      const tintPick=(arr,ofs=0)=>arr[(Math.floor(rand()*arr.length)+ofs)%arr.length];
       const make=(id,pos,w,h,flat=false,op=1,color=0xffffff,additive=true)=>{
         const map=tex(id); if(!map) return null;
         const opts={map,transparent:true,opacity:op,color,depthWrite:false,depthTest:flat,blending:additive?THREE.AdditiveBlending:THREE.NormalBlending,side:THREE.DoubleSide,fog:false};
         const mat=flat?new THREE.MeshBasicMaterial(opts):new THREE.SpriteMaterial(opts);
         const obj=flat?new THREE.Mesh(new THREE.PlaneGeometry(1,1),mat):new THREE.Sprite(mat);
         obj.position.copy(pos); obj.scale.set(w,h,1); obj.renderOrder=flat?5:8; if(flat)obj.rotation.x=-Math.PI/2;
-        root.add(obj); mats.push(mat); if(flat)geos.push(obj.geometry); return obj;
+        root.add(obj); mats.push(mat); if(flat) geos.push(obj.geometry); return obj;
       };
-      const floor=make('heaven',new THREE.Vector3(point.x,.08,point.z),5.4,5.4,true,0,c1);
-      const floor2=make('earth',new THREE.Vector3(point.x,.09,point.z),4.2,4.2,true,0,c0);
-      const halo=make('shockHalo',new THREE.Vector3(point.x,.12,point.z),3.4,3.4,true,0,c0);
-      const mist=make('mist',new THREE.Vector3(point.x,1.4,point.z),6.2,4.8,false,0,c0,true);
-      const veil=make('sparkVeil',new THREE.Vector3(point.x,2.2,point.z),6.2,6.2,false,0,c1,true);
-      const storm=make('sacredFlares',new THREE.Vector3(point.x,2.5,point.z),7.2,7.2,false,0,c1,true);
-      const pillar=make('pillar',new THREE.Vector3(point.x,3.5,point.z),4.8,13.5,false,0,c2,true);
-      const bladeA=make('bladeWake',new THREE.Vector3(point.x,1.55,point.z),5.0,8.2,false,0,c0,true);
-      const bladeB=make('royalSlash',new THREE.Vector3(point.x,1.25,point.z),7.0,3.4,false,0,c1,true);
-      const boltA=make('boltA',new THREE.Vector3(point.x,4.8,point.z),2.8,9.5,false,0,c0,true);
-      const boltB=make('boltB',new THREE.Vector3(point.x,4.6,point.z),2.8,9.2,false,0,c1,true);
-      const bloom=support?make('healBloom',new THREE.Vector3(point.x,2.6,point.z),8.6,8.6,false,0,c0,true):null;
+      const floorPool=['heaven','earth','warpRing','shockHalo'];
+      const crownPool=['celestialGate','sparkVeil','storm','stormThreads','swordWings','sacredFlares','iceCrown'];
+      const finPool=['bladeWake','royalSlash','boltA','boltB','boltC','pillar','iceBurst','nova','sword'];
+      const accentPool=['mist','healBloom','planetWarm','planetCold','planetEarth','friction'];
+      const floorAId=tintPick(floorPool);
+      let floorBId=tintPick(floorPool,1); if(floorBId===floorAId) floorBId=floorPool[(floorPool.indexOf(floorAId)+1)%floorPool.length];
+      const crownId=tintPick(crownPool), finAId=tintPick(finPool), finBId=tintPick(finPool,2), accentId=tintPick(accentPool);
+      const attackModes=['cross','meteor','prison','orbit','spiral','judgment','cascade','bloom'];
+      const supportModes=['sanctuary','rebirth','constellation','bloom'];
+      const mode=support?supportModes[seed%supportModes.length]:attackModes[seed%attackModes.length];
+      const floorA=make(floorAId,new THREE.Vector3(point.x,.08,point.z),5.2+rand()*2.4,5.2+rand()*2.4,true,0,c1,true);
+      const floorB=make(floorBId,new THREE.Vector3(point.x,.09,point.z),4.0+rand()*1.8,4.0+rand()*1.8,true,0,c0,true);
+      const veil=make(crownId,new THREE.Vector3(point.x,2.4,point.z),6.2+rand()*2.5,6.2+rand()*2.5,false,0,c1,true);
+      const mist=make('mist',new THREE.Vector3(point.x,1.4,point.z),5.5+rand()*1.8,4.2+rand()*1.3,false,0,c0,true);
+      const accent=make(accentId,new THREE.Vector3(point.x,support?2.8:2.0,point.z),6.0+rand()*4.2,6.0+rand()*4.2,false,0,c0,true);
+      const finA=make(finAId,new THREE.Vector3(point.x,1.8,point.z),4.8+rand()*3.0,4.8+rand()*4.8,false,0,c2,true);
+      const finB=make(finBId,new THREE.Vector3(point.x,2.4,point.z),4.2+rand()*4.0,4.2+rand()*4.0,false,0,c1,true);
+      const finC=make(rand()>.5?'boltC':'pillar',new THREE.Vector3(point.x,4.2,point.z),2.4+rand()*2.4,8.0+rand()*5.0,false,0,c0,true);
+      const satellites=[];
+      const satCount=(support?4:5)+(seed%3);
+      const satPool=support?['healBloom','sparkVeil','shockHalo','planetEarth','nova']:['bladeWake','boltA','boltB','sacredFlares','stormThreads','iceBurst','royalSlash'];
+      for(let i=0;i<satCount;i++){
+        const tid=satPool[(i+Math.floor(rand()*satPool.length))%satPool.length];
+        const sp=make(tid,new THREE.Vector3(point.x,1.2+rand()*2.8,point.z),1.2+rand()*2.1,1.2+rand()*2.1,false,0,i%2?c0:c1,true);
+        satellites.push({sp, r:1.4+rand()*2.9, h:.9+rand()*3.8, speed:(.7+rand()*1.8)*(i%2?-1:1), phase:rand()*TAU, grow:.8+rand()*1.6});
+      }
+      const petals=[];
+      const trailCount=3+(seed%4);
+      for(let i=0;i<trailCount;i++){
+        const sp=make((i+seed)%2?'sparkVeil':'sacredFlares', new THREE.Vector3(point.x,2.0,point.z), 1.6+rand()*2.4,1.6+rand()*2.4,false,0,i%2?c1:c2,true);
+        petals.push({sp, drift:(rand()-.5)*1.8, rise:.5+rand()*1.6, phase:rand()*TAU});
+      }
       let elapsed=0, cleaned=false;
       const clean=()=>{ if(cleaned) return; cleaned=true; root.removeFromParent(); for(const m of mats)m.dispose(); for(const g of geos)g.dispose(); };
       b.addEffect(dt=>{
-        if(cleaned)return false;
+        if(cleaned) return false;
         dt=clamp(Number(dt)||0,0,.065); elapsed+=dt;
-        const t=elapsed, fadeIn=clamp(t/.18,0,1), fadeOut=1-clamp((t-1.08)/.54,0,1);
-        const livePoint=support?f.pos:(target?.pos || point);
-        const px=livePoint.x, pz=livePoint.z;
-        if(floor){ floor.position.set(px,.08,pz); floor.material.opacity=.82*fadeIn*fadeOut; floor.rotation.z+=dt*.8; floor.scale.setScalar(5.4*(.78+.22*fadeIn)); }
-        if(floor2){ floor2.position.set(px,.09,pz); floor2.material.opacity=.65*fadeIn*fadeOut; floor2.rotation.z-=dt*1.05; floor2.scale.setScalar(4.2*(.8+.28*fadeIn)); }
-        if(halo){ halo.position.set(px,.12,pz); halo.material.opacity=.84*clamp((t-.1)/.12,0,1)*(1-clamp((t-1.0)/.38,0,1)); halo.scale.setScalar(3.4+6.8*clamp((t-.15)/.9,0,1)); }
-        if(mist){ mist.position.set(px,1.35,pz); mist.material.opacity=.26*fadeIn*fadeOut; mist.position.y=1.35+.18*Math.sin(t*5.2); }
-        if(veil){ veil.position.set(px,2.2,pz); veil.material.opacity=.42*fadeIn*fadeOut; veil.material.rotation-=dt*.35; }
-        if(storm){ storm.position.set(px,2.5,pz); storm.material.opacity=.58*clamp((t-.12)/.16,0,1)*(1-clamp((t-1.12)/.42,0,1)); storm.material.rotation+=dt*.22; }
-        if(pillar){ pillar.position.set(px,3.4,pz); pillar.material.opacity=.38*clamp((t-.06)/.14,0,1)*fadeOut; pillar.scale.set(4.8,13.5+.5*Math.sin(t*6),1); }
-        if(bladeA){ bladeA.position.set(px,1.55,pz); bladeA.material.opacity=.72*clamp((t-.14)/.12,0,1)*(1-clamp((t-.78)/.28,0,1)); bladeA.material.rotation+=dt*.8; }
-        if(bladeB){ bladeB.position.set(px,1.25,pz); bladeB.material.opacity=.94*clamp((t-.18)/.14,0,1)*(1-clamp((t-.84)/.26,0,1)); }
-        if(boltA){ boltA.position.set(px+Math.sin(t*7)*.4,4.8,pz); boltA.material.opacity=(support?0:.92)*clamp((t-.08)/.1,0,1)*(1-clamp((t-.64)/.22,0,1)); }
-        if(boltB){ boltB.position.set(px-Math.sin(t*6.5)*.38,4.6,pz); boltB.material.opacity=(support?0:.86)*clamp((t-.16)/.1,0,1)*(1-clamp((t-.72)/.24,0,1)); }
-        if(bloom){ bloom.position.set(px,2.6,pz); bloom.material.opacity=.88*fadeIn*fadeOut; bloom.material.rotation+=dt*.14; }
-        if(t>=1.62 || f.dead){ clean(); return false; }
+        const t=elapsed, fadeIn=clamp(t/.18,0,1), fadeOut=1-clamp((t-1.15)/.55,0,1);
+        const live=support?f.pos:(target?.pos || point); const px=live.x, pz=live.z;
+        const pulse=.75+.25*Math.sin(t*(4.2+(seed%5)));
+        if(floorA){ floorA.position.set(px,.08,pz); floorA.material.opacity=.78*fadeIn*fadeOut; floorA.rotation.z+=dt*(.7+(seed%5)*.09); floorA.scale.setScalar((5.2+(seed%7)*.18) * (.82+.16*pulse)); }
+        if(floorB){ floorB.position.set(px,.09,pz); floorB.material.opacity=.62*fadeIn*fadeOut; floorB.rotation.z-=dt*(1.0+(seed%7)*.11); floorB.scale.setScalar((4.2+(seed%5)*.23) * (.88+.18*Math.sin(t*3.4+1.1))); }
+        if(veil){ veil.position.set(px,2.25 + .12*Math.sin(t*4.4),pz); veil.material.opacity=.44*fadeIn*fadeOut; veil.material.rotation += dt*(mode==='spiral'||mode==='constellation' ? -.34 : .22); veil.scale.set((6.2+(seed%6)*.25)*(.92+.10*pulse),(6.2+(seed%4)*.42)*(.92+.10*pulse),1); }
+        if(mist){ mist.position.set(px,1.28+.18*Math.sin(t*5.1),pz); mist.material.opacity=.20*fadeIn*fadeOut; }
+        if(accent){ accent.position.set(px, support?2.7:2.0, pz); accent.material.opacity=(support ? .82 : .48)*clamp((t-.08)/.18,0,1)*(mode==='rebirth' ? fadeOut*1.08 : fadeOut); accent.material.rotation += dt*(.06+(seed%5)*.03); accent.scale.set((6.0+(seed%9)*.36)*(.86+.16*fadeIn),(6.0+(seed%7)*.34)*(.86+.16*fadeIn),1); }
+        if(finA){
+          let y=1.9, rot=0, op=.75*clamp((t-.14)/.12,0,1)*(1-clamp((t-.88)/.26,0,1));
+          if(mode==='meteor'){ y=3.8-2.2*clamp((t-.1)/.34,0,1); rot=t*2.1; }
+          else if(mode==='cross'){ rot=.75+t*.2; }
+          else if(mode==='orbit'){ rot=t*1.4; }
+          else if(mode==='judgment'){ y=4.6-2.9*clamp((t-.18)/.42,0,1); rot=-.12; }
+          else if(mode==='prison'){ y=2.3+Math.sin(t*10)*.2; rot=t*.6; }
+          else if(mode==='bloom' || mode==='sanctuary'){ y=2.1+.3*Math.sin(t*5); rot=-t*.24; }
+          finA.position.set(px,y,pz); finA.material.opacity=op; finA.material.rotation=rot;
+        }
+        if(finB){
+          let y=1.4, op=.88*clamp((t-.2)/.14,0,1)*(1-clamp((t-.96)/.26,0,1));
+          if(mode==='cascade') y=2.9-1.3*clamp((t-.15)/.32,0,1);
+          else if(mode==='spiral') y=1.4+.6*Math.sin(t*7+1.2);
+          else if(mode==='rebirth') y=2.8+.3*Math.cos(t*4);
+          finB.position.set(px,y,pz); finB.material.opacity=op; finB.material.rotation += (mode==='cross' ? -dt*1.0 : dt*.42);
+        }
+        if(finC){
+          const appear=clamp((t-.08)/.12,0,1), vanish=(1-clamp((t-.74)/.26,0,1));
+          finC.position.set(px + (mode==='cross' ? Math.sin(t*8)*.35 : 0), mode==='judgment' ? 4.8-1.4*clamp((t-.14)/.35,0,1) : 4.2, pz);
+          finC.material.opacity=(support ? 0 : .72)*appear*vanish;
+          finC.scale.set(finC.scale.x, (8.0+(seed%6)) * (.92+.18*appear),1);
+        }
+        satellites.forEach((s,i)=>{
+          if(!s.sp) return;
+          const a=s.phase+t*s.speed;
+          let x=px, y=s.h, z=pz;
+          if(mode==='orbit' || mode==='constellation'){
+            x+=Math.cos(a)*s.r; z+=Math.sin(a)*s.r; y=1.0+s.h*.45+.35*Math.sin(a*1.6);
+          }else if(mode==='spiral' || mode==='rebirth'){
+            const rr=s.r*(1-clamp((t-.15)/1.1,0,1)*.45); x+=Math.cos(a+t*.8)*rr; z+=Math.sin(a+t*.8)*rr; y=1.0+s.h*clamp((t/.9),0,1);
+          }else if(mode==='meteor' || mode==='cascade'){
+            x+=Math.cos(a)*(.5+s.r*.38); z+=Math.sin(a)*(.5+s.r*.38); y=4.8 - ((t*2.4+i*.22)%(4.6+s.h*.1));
+          }else if(mode==='prison'){
+            x+=Math.cos(a)*(2.0+s.r*.25); z+=Math.sin(a)*(2.0+s.r*.25); y=.8+s.h*.5;
+          }else if(mode==='cross'){
+            x+=Math.sin(a*1.5)*(1.1+s.r*.3); z+=Math.sin(a)*(1.1+s.r*.3); y=1.4+s.h*.35;
+          }else if(mode==='bloom' || mode==='sanctuary'){
+            x+=Math.cos(a)*(1.0+s.r*.25); z+=Math.sin(a)*(1.0+s.r*.25); y=1.2+s.h*.38+.22*Math.sin(t*5+i);
+          }else if(mode==='judgment'){
+            x+=Math.sin(a)*.8; z+=Math.cos(a)*.8; y=5.1-((t*1.9+i*.18)%(3.6+s.h*.1));
+          }
+          s.sp.position.set(x,y,z);
+          s.sp.material.opacity=(support ? .66 : .74)*fadeIn*fadeOut*(.6+.4*Math.sin(t*4+i));
+          s.sp.material.rotation += dt*(.16+s.grow*.12)*(i%2?1:-1);
+          const sc=s.grow*(.82+.18*Math.sin(t*6+i)); s.sp.scale.set(sc*1.7,sc*1.7,1);
+        });
+        petals.forEach((p,i)=>{
+          if(!p.sp) return;
+          let x=px + Math.sin(t*2.6 + p.phase) * (1.2+i*.32) + p.drift*t*.35;
+          let z=pz + Math.cos(t*2.2 + p.phase) * (1.2+i*.28) - p.drift*t*.24;
+          let y=1.0 + p.rise*t + .25*Math.sin(t*6+p.phase);
+          if(support){ x=px + Math.cos(t*2.1+p.phase)*(1.0+i*.2); z=pz + Math.sin(t*2.1+p.phase)*(1.0+i*.2); y=1.1+p.rise*.45*t; }
+          p.sp.position.set(x,y,z);
+          p.sp.material.opacity=.28*fadeOut*(1-clamp((t-1.0)/.45,0,1));
+          p.sp.material.rotation += dt*(.5+i*.08);
+        });
+        if(t>=1.72 || f.dead){ clean(); return false; }
         return true;
       });
     }
@@ -1641,23 +1573,42 @@
       this.__astralFxCleanups?.clear();
       return previousDispose?.apply(this,args);
     };
-    // Valgard voice uses the pre-rendered deep male clips in voice.js ONLY.
-    // Do not run speechSynthesis here; the OS may select a female voice and
-    // overlap the actual MP3 voice at the start of each attack.
+    // Dedicated synthesized Valgard calls. Playback follows the user's
+    // audio settings; Chrome/Edge uses the installed Japanese TTS voice.
+    // Only skill usage, not a recurring per-frame effect.
+    let nextLineAt=0;
+    function sayValgardLine(line){
+      try{
+        if(typeof window==='undefined' || !window.speechSynthesis ||
+           typeof SpeechSynthesisUtterance==='undefined')return;
+        if(window.localStorage?.getItem('arkeia-muted')==='1')return;
+        const volume=clamp((+(window.localStorage?.getItem('arkeia-voice-volume')??75))/100,0,1);
+        if(volume===0)return;
+        const now=performance.now();
+        if(now<nextLineAt)return;
+        nextLineAt=now+1050;
+        const utterance=new SpeechSynthesisUtterance(line);
+        utterance.lang='ja-JP';utterance.rate=.82;utterance.pitch=.58;
+        utterance.volume=volume*.92;
+        const options=window.speechSynthesis.getVoices?.()||[];
+        const japanese=options.filter(v=>/^ja(?:-|_)/i.test(v.lang||''));
+        if(japanese.length)utterance.voice=japanese.find(v=>v.localService)||japanese[0];
+        window.speechSynthesis.speak(utterance);
+      }catch(error){console.warn('[Arkeia] Japanese cast voice unavailable.',error);}
+    }
     const previous=Battle.prototype.executeCast;
     Battle.prototype.executeCast=function(f,slot,net){
-      const selectedAstral=!!f && f.key==='valgard' && slot==='s2' && f.def?.skills?.[2]?.kind==='astral_judgment_painted';
-      const selectedSpear=!!f && f.key==='valgard' && slot==='s0' && f.def?.skills?.[0]?.kind==='shining_spear_painted';
+      const selectedAstral=!!f && f.key==='valgard' && (slot==='s2'||slot==='f2') && f.def?.skills?.[2]?.kind==='astral_judgment_painted';
+      const selectedSpear=!!f && f.key==='valgard' && (slot==='s0'||slot==='f0') && f.def?.skills?.[0]?.kind==='shining_spear_painted';
       const selectedLast=!!f && f.key==='valgard' && slot==='over' && f.def?.over?.kind==='last_vanisher_painted';
       const selectedBlue=!!f && f.key==='valgard' && slot==='hi' && f.def?.hi?.kind==='blue_earth_painted';
       const outcome=previous.call(this,f,slot,net);
-      if(f && !f.remoteAuth && !this.net && /^f\d+$/.test(slot)){
-        // The real chant circle already begins in game.js at chant START.
-        // Give only the new independent follow-up its distinctive impact artwork.
-        performEvolvedFollowVisual(this,f,slot,net);
+      if(f && !f.remoteAuth && !this.net && (slot==='over'||slot==='hi'||/^[sf]\d+$/.test(slot))){
+        showCastingCircle(this,f,slot);
+        if(/^f\d+$/.test(slot)) performEvolvedFollowVisual(this,f,slot,net);
       }
-      if(f?.key==='valgard' && !f.remoteAuth && !this.net &&
-         (slot==='s1'||slot==='s3'||slot==='s4')){
+      if(f?.key==='valgard' && !f.remoteAuth && !this.net && (slot==='over'||slot==='hi'||/^[sf]\d+$/.test(slot))){
+        sayValgardLine(selectedAstral?'力の違いを見せてやる':selectedSpear?'これはよけられまい':'これでどうだ');
         performValgardCinematic(this,f,slot,net);
       }
       if(selectedSpear)performShiningSpear(this,f,net,slot==='f0'?.65:1);
