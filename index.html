@@ -28,9 +28,9 @@
     <script type="application/ld+json">
       {"@context":"https://schema.org","@type":"VideoGame","name":"双月のアルケイア","alternateName":"Arkeia of Twin Moons","description":"100人の戦士と全100章の物語を楽しめる、ブラウザ3Dアリーナファンタジーアクション。","image":"assets/app-icon.webp","genre":["Action","Fighting","Fantasy","RPG"],"gamePlatform":["Web browser","PC","Mobile"],"playMode":["SinglePlayer","MultiPlayer","CoOp"],"applicationCategory":"Game","operatingSystem":"Any","inLanguage":"ja","isAccessibleForFree":true,"offers":{"@type":"Offer","price":"0","priceCurrency":"JPY"},"publisher":{"@type":"Organization","name":"KASAI SOLUTIONS INC."},"author":{"@type":"Organization","name":"KASAI SOLUTIONS INC."},"copyrightHolder":{"@type":"Organization","name":"KASAI SOLUTIONS INC."},"copyrightNotice":"© KASAI SOLUTIONS INC. All rights reserved.","musicBy":{"@type":"Organization","name":"KASAI SOLUTIONS INC."},"keywords":"3Dアクション,覚醒,秘奥義,追加技,オンライン対戦,ブラウザゲーム"}
     </script>
-    <link rel="modulepreload" href="./main.js?v=adv-menu-v20261108b" />
-    <link rel="modulepreload" href="./game.js?v=20261108-grand-four-v3" />
-    <link rel="modulepreload" href="./data.js?v=20261108-grand-four-v3" />
+    <link rel="modulepreload" href="./main.js?v=20261108-boss-final-v5" />
+    <link rel="modulepreload" href="./game.js?v=20261108-boss-final-v5" />
+    <link rel="modulepreload" href="./data.js?v=20261108-boss-final-v5" />
     <link rel="preconnect" href="https://esm.sh" crossorigin>
     <meta name="author" content="KASAI SOLUTIONS INC." />
     <meta name="copyright" content="© KASAI SOLUTIONS INC. All rights reserved." />
@@ -60,7 +60,7 @@
     <link rel="stylesheet" href="./rosebud-game-defaults.css" />
     <link rel="stylesheet" href="./arkeia-ui.css?v=20261106a" />
     <link rel="stylesheet" href="./mailbox.css?v=mail-20261107" />
-    <script defer src="./arkeia-ui.js?v=20261106a"></script>
+    <script defer src="./arkeia-ui.js?v=20261108-boss-final-v5"></script>
     <script src="./rosebud-game-defaults.js" defer></script>
     <script type="importmap">
       {
@@ -438,6 +438,7 @@
               <button class="mode-tile" data-go="online-vs"><span class="mode-icon">04</span><span class="mode-main"><b>オンライン対戦</b><small>合言葉で決闘 / VERSUS</small></span><span class="tile-arrow">›</span></button>
               <button class="mode-tile" data-go="online-coop"><span class="mode-icon">05</span><span class="mode-main"><b>オンライン協力</b><small>力を合わせて討伐 / CO-OP</small></span><span class="tile-arrow">›</span></button>
               <button class="mode-tile" data-go="event"><span class="mode-icon">06</span><span class="mode-main"><b>期間イベント</b><small>今週の試練 / EVENT</small></span><span class="tile-arrow">›</span></button>
+              <button id="btn-adventure-mode" class="mode-tile" type="button"><span class="mode-icon">07</span><span class="mode-main"><b>アドベンチャー</b><small>全10ステージ / 最終ボス：ガイゾルグ</small></span><span class="tile-arrow">›</span></button>
             </nav>
           </section>
 
@@ -637,6 +638,6 @@
         </div>
       </div>
     </main>
-    <script type="module" src="main.js?v=adv-menu-v20261108b"></script>
+    <script type="module" src="main.js?v=20261108-boss-final-v5"></script>
 </body>
 </html>

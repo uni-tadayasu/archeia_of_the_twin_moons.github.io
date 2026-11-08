@@ -131,7 +131,7 @@ async function restoreInMemoryTextures(gltf, detached, sourceUrl = '') {
   if (!detached?.images.length || !detached.materials.length) return;
   // The ice warlord model must keep the unmodified texture atlas orientation.
   // Preserve this GLB without changing how the other fighters are decoded.
-  const preserveOrientation = /(?:^|\/)iron-warlord\.glb(?:[?#]|$)/i.test(sourceUrl);
+  const preserveOrientation = /(?:^|\/)(?:iron-warlord(?:-f2)?|gaizorg-boss|valdarion|operator-gigantes|chief-empress)\.glb(?:[?#]|$)/i.test(sourceUrl);
   const decoded = await Promise.all(detached.images.map((image, i) =>
     decodeInMemoryImage(image, i, preserveOrientation)
   ));
@@ -253,7 +253,7 @@ export function instantiateModel(gltf, height, tint = null) {
   const wrapper = new THREE.Group();
   const materials = new Set();
   const tintColor = tint == null ? null : new THREE.Color(tint);
-  const preserveSourceMaterial = /(?:^|\/)(?:iron-warlord|operator-gigantes|gaizorg-boss|valdarion)\.glb(?:[?#]|$)/i.test(gltf.userData?.arkeiaSource || '');
+  const preserveSourceMaterial = /(?:^|\/)(?:iron-warlord(?:-f2)?|operator-gigantes|gaizorg-boss|valdarion|chief-empress)\.glb(?:[?#]|$)/i.test(gltf.userData?.arkeiaSource || '');
   model.traverse((o) => {
     if (!o.isMesh) return;
     o.castShadow = true;

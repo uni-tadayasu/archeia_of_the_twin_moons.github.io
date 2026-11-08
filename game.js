@@ -3,9 +3,9 @@ import { createNullGuardAura, tickNullGuardAura, disposeNullGuardAura } from './
 import * as THREE from 'three';
 import { attachValgardMotion } from './valgard-motion.js?v=20261108-grand-four-v3';
 import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js';
-import { FIGHTERS, ELEMS, spellCastTime } from './data.js?v=20261108-grand-four-v3';
+import { FIGHTERS, ELEMS, spellCastTime } from './data.js?v=20261108-boss-final-v5';
 import { makeGear, animGear } from './gear.js';
-import { instantiateModel, disposeModel, loadModel } from './model-runtime.js?v=20261108-grand-four-v3';
+import { instantiateModel, disposeModel, loadModel } from './model-runtime.js?v=20261108-boss-final-v5';
 
 // 召喚獣の見た目と性能（HPは使い手の最大HPに比例）
 const SUMMON_DEFS = {
@@ -1217,6 +1217,9 @@ export class Fighter {
 
   // 体力が半分を切ったら第二形態へ変身（form2 を持つ戦士のみ・1回だけ）
   checkTransform(force = false) {
+    // RF_VALGARD2_ONLY_AT_ZERO_20261108: first form revives only at HP = 0.
+    if(this.key==='valgard'&&this.hp>0)return false;
+    if(this.key==='valgard2')return false;
     if (this.transformed || !this.def.form2) return false;
     if (!force && (this.remoteAuth || this.hp > this.maxHp * 0.5)) return false;
     const nk = this.def.form2;

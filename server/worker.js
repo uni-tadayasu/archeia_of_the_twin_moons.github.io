@@ -1338,7 +1338,50 @@ FIGHTERS.valdarion = {
     castTime:2.65,elem:6,nullElement:true,color:0xf5e4ff,vivid:true}
 };
 
-const CHIEF_ONLY = new Set(['valgard', 'gaizorg', 'valdarion']);
+// RF_CHIEF_BOSS_STATS_20261108
+(()=>{const fire=0xff612a,ember=0xffba55,voidC=0xbda0ff;
+if (FIGHTERS.gaizorg) {
+  Object.assign(FIGHTERS.gaizorg, {
+    name:'ガイゾルグ', title:'炎獄超甲獣・運営長専用',attribute:'炎',
+    color:fire,tint:null,height:4.35,hp:14800,speed:5.65,
+    power:1.65,armor:0.47,overGain:1.75,fluxMul:2.25,
+    permanentSuperArmor:true,staggerImmune:true,knockbackImmune:true,
+    ringArt:{name:'炎獄魔法陣《灼魂の焔界》',duration:30,radius:6.1,burnSeconds:10,attackMultiplier:0.5,cooldown:0},
+    light:{dmg:290,range:4.1,color:0xffd58c,claws:true},
+    skills:[
+      {name:'爆炎散華《ヴォルカニック・バラージ》',kind:'projectile',visual:'fire',count:9,spreadAng:.12,chain:.045,dmg:140,speed:24,radius:.86,cost:22,castTime:.55,elem:0,color:0xff7b30,vivid:true},
+      {name:'熔爪断撃《タイタン・クロウ》',kind:'dash',dmg:420,speed:23,dur:.38,stun:.62,kb:7,cost:18,castTime:.48,elem:0,color:0xffc269,vivid:true},
+      {name:'灼星火球《マグマ・スフィア》',kind:'projectile',visual:'orb',count:5,spreadAng:.16,dmg:210,speed:22,radius:1.15,cost:25,castTime:.85,elem:0,color:0xff4e19,vivid:true},
+      {name:'連続火炎放射《インフェルノ・ブレス》',kind:'projectile',visual:'fire',count:3,spreadAng:.12,dmg:110,speed:28,radius:.68,cost:12,castTime:.38,elem:0,color:0xffa12e,holdToChannel:true,vivid:true},
+      {name:'灼魂再生《マグマ・リバイブ》',kind:'heal',heal:1500,radius:5.5,cost:30,elem:0,color:0xffcf93,vivid:true}
+    ],
+    over:{name:'炎獄天墜《スカーレット・インパクト》',kind:'judgment',visual:'meteor',finalVisual:'pillar',count:12,spread:5.3,radius:2.5,dmg:285,delay:.38,interval:.075,finalDmg:1550,finalRadius:9.6,castTime:2.3,elem:0,color:0xff6a29,vivid:true},
+    hi:{name:'太古禁呪《原初火界・ノヴァ》',kind:'judgment',visual:'meteor',finalVisual:'nova',count:17,spread:7,radius:2.7,dmg:330,delay:.45,interval:.06,finalDmg:2300,finalRadius:11.3,castTime:3.2,elem:0,color:0xffc35e,hi:true,vivid:true}
+  });
+}
+if (FIGHTERS.valdarion) {
+  Object.assign(FIGHTERS.valdarion, {
+    name:'虚無機神ヴァルダリオン',title:'無の最高神・運営長専用',attribute:'無',nullElement:true,
+    color:0xcbbaff,tint:null,height:4.25,hp:19500,speed:6.65,
+    power:1.9,armor:0.36,fluxMul:2.6,overGain:1.9,
+    permanentSuperArmor:true,staggerImmune:true,knockbackImmune:true,
+    guardArt:{name:'絶対零域《無限封界》',duration:30,radius:6.4,immobilizeUntilHit:true},
+    light:{dmg:310,range:3.7,color:0xf0ddff,shadowClones:4},
+    skills:[
+      {name:'虚無の終光《アビス・ゼロ》',kind:'projectile',visual:'orb',count:6,spreadAng:.13,chain:.045,dmg:195,speed:29,radius:1,cost:24,castTime:.55,elem:6,color:0xcbadff,nullElement:true,vivid:true},
+      {name:'絶界断刀《ゼロ・エクスカリオン》',kind:'dash',dmg:520,speed:28,dur:.39,cost:24,elem:6,color:0xe5d8ff,nullElement:true,vivid:true},
+      {name:'四重虚空《クアドラ・ネメシス》',kind:'rain',visual:'crystal',count:14,spread:4.7,radius:2,dmg:240,delay:.24,interval:.065,cost:32,elem:6,color:0xb389ff,nullElement:true,vivid:true},
+      {name:'因果消去《リアリティ・オーバーライト》',kind:'judgment',visual:'nova',finalVisual:'pillar',count:16,spread:6.4,radius:2.4,dmg:300,delay:.42,interval:.065,finalDmg:1750,finalRadius:10.2,cost:39,castTime:2.3,elem:6,color:0xe9d6ff,nullElement:true,vivid:true},
+      {name:'無限再誕《ヌル・リジェネシス》',kind:'heal',heal:2200,radius:5.5,cost:30,elem:6,color:0xc4e8ff,nullElement:true,vivid:true}
+    ],
+    over:{name:'世界断章《エターナル・ヌル》',kind:'judgment',visual:'nova',finalVisual:'pillar',count:19,spread:7,radius:2.8,dmg:360,delay:.38,interval:.055,finalDmg:2500,finalRadius:11.3,castTime:2.7,elem:6,color:0xf3e5ff,nullElement:true,vivid:true},
+    hi:{name:'至高禁呪《原初の空白》',kind:'judgment',visual:'pillar',finalVisual:'nova',count:23,spread:7.5,radius:3.1,dmg:400,delay:.4,interval:.05,finalDmg:3200,finalRadius:12,castTime:3.05,elem:6,color:0xffffff,nullElement:true,hi:true,vivid:true}
+  });
+}
+
+
+})();
+const CHIEF_ONLY = new Set(['valgard', 'gaizorg', 'valdarion', 'valgard2']);
 
 // ---------- ルート ----------
 export default {
@@ -2242,3 +2285,6 @@ export class Limiter {
     return new Response('ok');
   }
 }
+
+// RF_VALGARD2_SERVER_20261108
+if(FIGHTERS.valgard){const base=FIGHTERS.valgard;base.form2='valgard2';FIGHTERS.valgard2={...base,name:'ヴァルガルド・第二形態',model:'assets/models/iron-warlord-f2.glb',form2:null,hidden:true,locked:true,special:'chief',skills:base.skills,over:base.over}}

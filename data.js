@@ -1223,3 +1223,11 @@ FIGHTERS.valdarion = {
     castTime:2.65,elem:6,nullElement:true,color:0xf5e4ff,vivid:true}
 };
 
+
+// RF_VALGARD2_HP0_20261108
+if (FIGHTERS.valgard) {
+  const base=FIGHTERS.valgard;
+  base.form2='valgard2';base.transformOnlyAtZero=true;
+  FIGHTERS.valgard2={...base,name:'ヴァルガルド・第二形態',title:'蘇生せし氷鋼覇王（運営長専用）',model:'assets/models/iron-warlord-f2.glb',face:base.face,hidden:true,locked:true,special:'chief',form2:null,transformOnlyAtZero:false,manualBase:'valgard',skills:base.skills,over:base.over,light:base.light};
+  Object.defineProperty(FIGHTERS.valgard2,'hi',{configurable:true,enumerable:true,get(){return FIGHTERS.valgard.hi},set(value){FIGHTERS.valgard.hi=value}});
+}

@@ -1,12 +1,14 @@
+import './boss-abilities.js?v=20261108-boss-final-v5';
+import './exact-model-portraits.js?v=20261108-boss-final-v5';
 // RF_GRAND_FOUR_20261108 main.js
 import * as THREE from 'three';
-import { setupGaizorgAdventure } from './gaizorg-adventure.js?v=adv-menu-v20261108b';
+import { setupGaizorgAdventure } from './gaizorg-adventure.js?v=20261108-boss-final-v5';
 import { installOperatorCombatFx } from './operator-combat-fx.js?v=20261108-grand-four-v3';
-import { renderExactPortrait } from './glb-portrait.js?v=20261108-grand-four-v3';
+import { renderExactPortrait } from './glb-portrait.js?v=20261108-boss-final-v5';
 // RF_OPERATOR_GIGANTES_MAIN_20261108
-import { loadModel } from './model-runtime.js?v=20261108-grand-four-v3';
-import { Battle, ARENA_R } from './game.js?v=audio-cast-20261107d';
-import { FIGHTERS, spellCastTime, STORY, ROSTER, UPGRADES, MAX_LV, STAGES, BGM, APEX_BGM, ENEMY_ROSTER, UPG_CAP, LB_MAX, lbMaxLv, lbMul, lbCost, WEAPONS, ARMORS, SUMMONS, STAT_LABEL, SPECIAL_KEYS, BOSS_ROSTER, currentEvent, sanitizeEvent, EV_FOE_KINDS } from './data.js?v=20261108-grand-four-v3';
+import { loadModel } from './model-runtime.js?v=20261108-boss-final-v5';
+import { Battle, ARENA_R } from './game.js?v=20261108-boss-final-v5';
+import { FIGHTERS, spellCastTime, STORY, ROSTER, UPGRADES, MAX_LV, STAGES, BGM, APEX_BGM, ENEMY_ROSTER, UPG_CAP, LB_MAX, lbMaxLv, lbMul, lbCost, WEAPONS, ARMORS, SUMMONS, STAT_LABEL, SPECIAL_KEYS, BOSS_ROSTER, currentEvent, sanitizeEvent, EV_FOE_KINDS } from './data.js?v=20261108-boss-final-v5';
 import { sayBattle, setVoiceMuted, setVoiceVolume, stopVoices } from './voice.js?v=audio-cast-20261107d';
 import { initSocial, uiConfirm } from './social.js?v=valgard-exact-20261107';
 import { initMailbox } from './mailbox.js?v=audio-cast-20261107d';
@@ -229,7 +231,7 @@ async function ensureAllModelsReady(requiredKeys = null) {
   // 変身先も同時に準備し、通常攻撃で形態が変わった瞬間にGLBがなくなる問題を防止。
   const requiredExpanded = requiredKeys?.flatMap((key) => {
     const d = FIGHTERS[key];
-    return [key, d?.manualForm2, d?.manualBase].filter(Boolean);
+    return [key, d?.form2, d?.manualForm2, d?.manualBase].filter(Boolean);
   });
   const requested = requiredExpanded?.length
     ? [...new Set(requiredExpanded.map((key) => FIGHTERS[key]?.model).filter(Boolean))]
@@ -1540,7 +1542,7 @@ const peerVerified = (id, k) => {
     delete profOk[id];
     return false;
   }
-  return v.k === k;
+  return v.k === k || (k === 'valgard2' && v.k === 'valgard');
 };
 // 相手キャラの決定：サーバー運用時、使用権の要るキャラは検証済みの時だけ出す（それ以外は標準キャラ）
 function peerKeyOf(id, fk) {
@@ -1698,7 +1700,7 @@ function openSelect(label, crumb, cb, { allowLocked = false, onBack = goTitle } 
       };
       // For special GLBs, render the actual uploaded 3D model into a portrait.
       // Fall back to the included selection artwork if WebGL is unavailable.
-      if ((['valgard', 'operator_gigantes', 'gaizorg', 'valdarion'].includes(k)) && !locked) {
+      if ((['valgard', 'operator_gigantes', 'gaizorg', 'valdarion', 'chief'].includes(k)) && !locked) {
         loadModel(d.model).then((gltf) => renderExactPortrait(gltf, k)).then((uri) => {
           if (!uri || !card.isConnected || !FIGHTERS[k]) return;
           if (!d.originalSelectFace) d.originalSelectFace = d.face;
@@ -2315,6 +2317,7 @@ function updateHud() {
   for (const f of b.fighters) {
     f.hudFill.style.width = (f.hp / f.maxHp) * 100 + '%';
     f.hudPlate.classList.toggle('down', f.dead);
+    const realName=f.hudPlate?.querySelector('b');if(realName&&realName.textContent!==f.name)realName.textContent=f.name;
     if (f.key === 'valdarion' && f.hudLabel) {
       f.hudLabel.textContent = f.name + (f.nullGuardTime > 0 ? ` 【無傷の煌鎧 ${Math.ceil(f.nullGuardTime)}秒】` : '');
     }
@@ -2608,7 +2611,7 @@ function resetFieldLight() {
 async function enterField() {
   // フィールドは物語でしか使わないので必要になった時だけ読み込む（初回表示を軽く）
   if (!(await ensureAllModelsReady())) return;
-  const { Field } = await import('./field.js?v=audio-cast-20261107d');
+  const { Field } = await import('./field.js?v=20261108-boss-final-v5');
   leaveField();
   const ch = STORY[state.chapter];
   const st = stageById(ch.stage);
