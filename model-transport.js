@@ -1,7 +1,8 @@
+// RF_GRAND_FOUR_20261108 model-transport.js
 // Arkeia: model file transport with explicit URL and HTTP diagnostics.
 // Use the DOCUMENT location first, not import.meta.url, which can be rewritten
 // to a transient blob:/CDN module by browser game hosts.
-const DEFAULT_TIMEOUT_MS = 15000;
+const DEFAULT_TIMEOUT_MS = 90000;
 
 function asURL(value, base) {
   try { return new URL(value, base); } catch { return null; }
@@ -80,7 +81,7 @@ export async function getModelBytes(path, moduleURL = null) {
         errors.push(`${url.href}：HTTP ${error.httpStatus}（公開先にモデルがない、または閲覧禁止）`);
         continue;
       }
-      try { return await attemptXHR(url, 10000); }
+      try { return await attemptXHR(url, 90000); }
       catch (xhrError) {
         errors.push(`${url.href}：fetch=${errText(error)} / XHR=${errText(xhrError)}`);
       }

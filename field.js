@@ -1,9 +1,10 @@
+// RF_GRAND_FOUR_20261108 field.js
 // ストーリーモードのフィールド：町 → 野 → ダンジョン（迷宮）を歩いて目的地へ。
 // 魔物は姿が見える「シンボルエンカウント」。触れると戦闘、目的地の祭壇で章の決戦。
 import * as THREE from 'three';
-import { attachValgardMotion } from './valgard-motion.js?v=valgard-exact-20261107';
-import { instantiateModel } from './model-runtime.js?v=valgard-exact-20261107';
-import { FIGHTERS } from './data.js?v=audio-cast-20261107d';
+import { attachValgardMotion } from './valgard-motion.js?v=20261108-grand-four-v3';
+import { instantiateModel } from './model-runtime.js?v=20261108-grand-four-v3';
+import { FIGHTERS } from './data.js?v=20261108-grand-four-v3';
 import { makeGear, animGear, removeGear } from './gear.js';
 
 function rng(seed) {

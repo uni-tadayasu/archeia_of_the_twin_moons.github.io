@@ -1,9 +1,12 @@
+// RF_GRAND_FOUR_20261108 gaizorg-adventure.js
 /**
  * Riftfall Arena – Gaizorg Adventure (original extension, 2026-11-08).
  * Builds a small freely walkable rest camp, stage portal and a 10-battle chapter.
  * Runs inside the game's existing scene/battle system; no new renderer or audio loop.
  */
-import { instantiateModel, disposeModel } from './model-runtime.js?v=valgard-exact-20261107';
+import { instantiateModel, disposeModel } from './model-runtime.js?v=20261108-grand-four-v3';
+import { attachValgardMotion } from './valgard-motion.js?v=20261108-grand-four-v3';
+// RF_OPERATOR_GIGANTES_ADVENTURE_20261108
 
 const STAGE_PLAN = [
   {name:'熾火の門',stage:'moon',foes:['m0','m6'],hp:0.85,atk:.83,award:90},
@@ -22,7 +25,7 @@ const clamp=(x,a,b)=>Math.min(b,Math.max(a,x));
 
 export function setupGaizorgAdventure(ctx){
   const {THREE, scene, camera, FIGHTERS, STAGES, assets, state, save,
-    chiefUnlocked, openSelect, goTitle, show, makeBattle, endBattle,
+    chiefUnlocked, operatorOnlyUnlocked, openSelect, goTitle, show, makeBattle, endBattle,
     beginBattle, buildHud, setStage, ensureAllModelsReady, playTrack, grant, persist, ui}=ctx;
   const $=(q)=>document.querySelector(q);
   let rest=null,activeStage=0,busy=false,alive=true;
@@ -176,6 +179,7 @@ export function setupGaizorgAdventure(ctx){
     if(!rest)return;
     scene.remove(rest.group);
     if(rest.mixer)rest.mixer.stopAllAction();
+    rest.motion?.stop();
     if(rest.instance)disposeModel(rest.instance,rest.mixer);
     for(const asset of rest.owned)asset?.dispose?.();
     rest=null;
@@ -189,6 +193,8 @@ export function setupGaizorgAdventure(ctx){
     busy=true;
     try{
       if(key==='gaizorg' && !chiefUnlocked()){ui.banner({name:'使用権限がありません'},'ガイゾルグは運営長専用です');goTitle();return;}
+      if(key==='valdarion' && !chiefUnlocked()){ui.banner({name:'使用権限がありません'},'ヴァルダリオンは運営長専用です');goTitle();return;}
+      if(key==='operator_gigantes' && !operatorOnlyUnlocked()){ui.banner({name:'使用権限がありません'},'機神ギガンテスは運営専用です');goTitle();return;}
       if(!FIGHTERS[key])key='rowen';
       progress.lastPlayer=key;saveData(); state.myKey=key;
       await enterRest();
@@ -206,11 +212,12 @@ export function setupGaizorgAdventure(ctx){
     const instance=instantiateModel(original,(def.height||1.8)*(k==='gaizorg'?1.1:1),k==='gaizorg'?null:def.tint);
     p.add(instance.wrapper);
     const mixer=new THREE.AnimationMixer(instance.model);
+    const motion=attachValgardMotion(instance.model,k);
     const clips=original?.animations||[];
     const walk=clips.find(c=>/walk/i.test(c.name));
     const run=clips.find(c=>/run/i.test(c.name));
     const idle=clips.find(c=>/idle/i.test(c.name));
-    rest={...env,p,instance,mixer,walk,run,idle,action:null,owned:env.owned,pos:new THREE.Vector3(0,0,8),facing:0,portalHold:0};
+    rest={...env,p,instance,mixer,motion,walk,run,idle,action:null,owned:env.owned,pos:new THREE.Vector3(0,0,8),facing:0,portalHold:0};
     if(idle)rest.action=mixer.clipAction(idle).play();
     state.adventureRest=true;state.battle=null;state.field=null;state.mode='adventure';
     show(null);panel.hidden=false;
@@ -247,8 +254,9 @@ export function setupGaizorgAdventure(ctx){
     }
     rest.p.position.copy(rest.pos);rest.p.rotation.y=rest.facing;
     animation(moving,running);rest.mixer.update(dt);
+    rest.motion?.update(dt,moving?(running?'run':'walk'):false);
     // A little idle motion for models with no authored animation.
-    if(!rest.walk && !rest.run && !rest.idle)rest.instance.wrapper.position.y=Math.abs(Math.sin(performance.now()/170))*(moving?.09:.02);
+    if(!rest.walk && !rest.run && !rest.idle && !rest.motion)rest.instance.wrapper.position.y=Math.abs(Math.sin(performance.now()/170))*(moving?.09:.02);
     rest.portal.rotation.z+=dt*.45;
     rest.portalM.opacity=.65+.18*Math.sin(performance.now()*.004);
     rest.rune.rotation.z-=dt*.42;

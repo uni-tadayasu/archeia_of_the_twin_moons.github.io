@@ -1,10 +1,11 @@
+// RF_GRAND_FOUR_20261108 model-runtime.js
 // Arkeia: one glTF pipeline for fighters, field actors and summons.
 // No replacement geometry is created when a file fails to load.
 import * as THREE from 'three';
 import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { separateEmbeddedTextures } from './model-image-fix.js?v=model-fetch-v20261107';
-import { getModelBytes, modelURLCandidates } from './model-transport.js?v=model-fetch-v20261107';
+import { getModelBytes, modelURLCandidates } from './model-transport.js?v=20261108-grand-four-v3';
 
 const cache = new Map();
 const pending = new Map();
@@ -211,8 +212,8 @@ export function loadModel(url) {
       );
       const detached = hasEmbeddedImages ? separateEmbeddedTextures(payload, doc) : null;
       const loader = await newLoader();
-      const result = await deadline(loader.parseAsync(detached ? detached.glb : payload, sourceDir), 50000, 'GLB解析タイムアウト');
-      if (detached) await deadline(restoreInMemoryTextures(result, detached, key), 35000, '内蔵WebPの直接デコードがタイムアウト');
+      const result = await deadline(loader.parseAsync(detached ? detached.glb : payload, sourceDir), 120000, 'GLB解析タイムアウト');
+      if (detached) await deadline(restoreInMemoryTextures(result, detached, key), 90000, '内蔵WebPの直接デコードがタイムアウト');
       let visibleMeshes = 0;
       result.scene?.traverse((node) => {
         if (node.isMesh && node.geometry?.attributes?.position?.count) visibleMeshes++;
@@ -252,7 +253,7 @@ export function instantiateModel(gltf, height, tint = null) {
   const wrapper = new THREE.Group();
   const materials = new Set();
   const tintColor = tint == null ? null : new THREE.Color(tint);
-  const preserveSourceMaterial = /(?:^|\/)iron-warlord\.glb(?:[?#]|$)/i.test(gltf.userData?.arkeiaSource || '');
+  const preserveSourceMaterial = /(?:^|\/)(?:iron-warlord|operator-gigantes|gaizorg-boss|valdarion)\.glb(?:[?#]|$)/i.test(gltf.userData?.arkeiaSource || '');
   model.traverse((o) => {
     if (!o.isMesh) return;
     o.castShadow = true;

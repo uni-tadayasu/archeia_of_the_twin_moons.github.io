@@ -1,8 +1,12 @@
+// RF_GRAND_FOUR_20261108 main.js
 import * as THREE from 'three';
-import { setupGaizorgAdventure } from './gaizorg-adventure.js?v=20261108b';
-import { loadModel } from './model-runtime.js?v=valgard-exact-20261107';
+import { setupGaizorgAdventure } from './gaizorg-adventure.js?v=20261108-grand-four-v3';
+import { installOperatorCombatFx } from './operator-combat-fx.js?v=20261108-grand-four-v3';
+import { renderExactPortrait } from './glb-portrait.js?v=20261108-grand-four-v3';
+// RF_OPERATOR_GIGANTES_MAIN_20261108
+import { loadModel } from './model-runtime.js?v=20261108-grand-four-v3';
 import { Battle, ARENA_R } from './game.js?v=audio-cast-20261107d';
-import { FIGHTERS, spellCastTime, STORY, ROSTER, UPGRADES, MAX_LV, STAGES, BGM, APEX_BGM, ENEMY_ROSTER, UPG_CAP, LB_MAX, lbMaxLv, lbMul, lbCost, WEAPONS, ARMORS, SUMMONS, STAT_LABEL, SPECIAL_KEYS, BOSS_ROSTER, currentEvent, sanitizeEvent, EV_FOE_KINDS } from './data.js?v=audio-cast-20261107d';
+import { FIGHTERS, spellCastTime, STORY, ROSTER, UPGRADES, MAX_LV, STAGES, BGM, APEX_BGM, ENEMY_ROSTER, UPG_CAP, LB_MAX, lbMaxLv, lbMul, lbCost, WEAPONS, ARMORS, SUMMONS, STAT_LABEL, SPECIAL_KEYS, BOSS_ROSTER, currentEvent, sanitizeEvent, EV_FOE_KINDS } from './data.js?v=20261108-grand-four-v3';
 import { sayBattle, setVoiceMuted, setVoiceVolume, stopVoices } from './voice.js?v=audio-cast-20261107d';
 import { initSocial, uiConfirm } from './social.js?v=valgard-exact-20261107';
 import { initMailbox } from './mailbox.js?v=audio-cast-20261107d';
@@ -11,6 +15,7 @@ import { connect, issueInvite, redeemInvite, syncPush, syncPullV } from './net.j
 import { apiEnabled, api, verifyToken } from './api.js';
 
 const $ = (s) => document.querySelector(s);
+installOperatorCombatFx(Battle);
 const isTouch = matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window;
 
 // ---------- Renderer / scene ----------
@@ -1439,6 +1444,14 @@ function operatorUnlocked() {
   if (apiEnabled()) return !!roleState.r;
   return localStorage.getItem('arkeia-op') === '1' || sessionStorage.getItem('arkeia-op') === '1' || localStorage.getItem('arkeia-op-reg') === '1' || chiefUnlocked();
 }
+// Strict OP-only: the chief role does not grant access to this unit.
+function operatorOnlyUnlocked() {
+  if (apiEnabled()) return roleState.r === 'op';
+  return !chiefUnlocked() && (
+    localStorage.getItem('arkeia-op') === '1' || sessionStorage.getItem('arkeia-op') === '1' ||
+    localStorage.getItem('arkeia-op-reg') === '1'
+  );
+}
 // ---- サーバー検証の戦闘プロフィール（強化・装備・キャラ使用権） ----
 const profState = { key: '', tok: '', at: 0, busy: false };
 async function refreshProfile(key) {
@@ -1554,13 +1567,14 @@ function canUse(k) {
   if (!d) return false;
   // Only Valgard remains exclusively for the chief. All other previously
   // chief-only fighters can be selected by authenticated operators as well.
-  if (k === 'valgard' || k === 'gaizorg') return chiefUnlocked();
+  if (k === 'operator_gigantes') return operatorOnlyUnlocked();
+  if (k === 'valgard' || k === 'gaizorg' || k === 'valdarion') return chiefUnlocked();
   if (d.special === 'chief') return operatorUnlocked();
   if (d.shop) return save.chars.includes(k) || operatorUnlocked();
   if (d.locked) return operatorUnlocked();
   return true;
 }
-const SELECT_KEYS = () => [...ROSTER, 'seraphel', 'chief', 'sovereign', 'bloodfiend', 'valgard', 'gaizorg', 'crimson'];
+const SELECT_KEYS = () => [...ROSTER, 'seraphel', 'chief', 'sovereign', 'bloodfiend', 'valgard', 'gaizorg', 'operator_gigantes', 'valdarion', 'crimson'];
 function refreshTitle() {
   $('#btn-invade').hidden = !operatorUnlocked();
   if ($('#btn-evmaker')) $('#btn-evmaker').hidden = !chiefUnlocked();
@@ -1656,6 +1670,7 @@ function openSelect(label, crumb, cb, { allowLocked = false, onBack = goTitle } 
     const locked = !canUse(k) && !allowLocked;
     const card = document.createElement('button');
     card.className = 'card' + (locked ? ' locked' : '');
+    card.dataset.specialKey = k;
     card.style.setProperty('--c', '#' + d.color.toString(16).padStart(6, '0'));
     const t = document.createElement('em');
     t.textContent = locked ? '名を封じられし者' : d.title;
@@ -1681,6 +1696,15 @@ function openSelect(label, crumb, cb, { allowLocked = false, onBack = goTitle } 
         img.style.display = 'none';
         card.title = 'キャラクター画像が読み込めませんでした';
       };
+      // For special GLBs, render the actual uploaded 3D model into a portrait.
+      // Fall back to the included selection artwork if WebGL is unavailable.
+      if ((['valgard', 'operator_gigantes', 'gaizorg', 'valdarion'].includes(k)) && !locked) {
+        loadModel(d.model).then((gltf) => renderExactPortrait(gltf, k)).then((uri) => {
+          if (!uri || !card.isConnected || !FIGHTERS[k]) return;
+          if (!d.originalSelectFace) d.originalSelectFace = d.face;
+          d.face = uri; img.src = uri; img.alt = d.name + '（実際の3Dモデルから描画）';
+        }).catch((e) => console.warn('[model portrait]', k, e?.message || e));
+      }
       // Use the portrait painted for this character's actual GLB model.
       if (locked) img.style.filter = 'brightness(0)';
       card.append(img);
@@ -2216,7 +2240,7 @@ function beginBattle(boss) {
   // 添付の実音源を再生。ザルグレイヴが戦闘に参加したときは敵味方を問わず最優先。
   const participants = state.battle.fighters.map((f) => f.key);
   const ks = state.battle.fighters.filter((f) => f.team === 1 || state.mode === 'invade').map((f) => f.key);
-  const apex = ks.some((k) => k === 'sovereign' || k === 'sovereign2') ? 2 : ks.includes('chief') || ks.includes('valgard') || ks.includes('bloodfiend') ? 1 : 0;
+  const apex = ks.some((k) => k === 'sovereign' || k === 'sovereign2') ? 2 : ks.includes('chief') || ks.includes('valgard') || ks.includes('bloodfiend') || ks.includes('valdarion') ? 1 : 0;
   if (state.mode === 'adventure') {
     playTrack('adventure');
     ui.banner({ name: '— ♪ ADVENTURE —' }, '休憩所と戦闘で同じBGM');
@@ -2278,6 +2302,7 @@ function buildHud() {
     plate.append(n, bar);
     f.hudFill = fill;
     f.hudPlate = plate;
+    f.hudLabel = n;
     (f.team === 0 ? L : R).append(plate);
   }
 }
@@ -2290,6 +2315,9 @@ function updateHud() {
   for (const f of b.fighters) {
     f.hudFill.style.width = (f.hp / f.maxHp) * 100 + '%';
     f.hudPlate.classList.toggle('down', f.dead);
+    if (f.key === 'valdarion' && f.hudLabel) {
+      f.hudLabel.textContent = f.name + (f.nullGuardTime > 0 ? ` 【無傷の煌鎧 ${Math.ceil(f.nullGuardTime)}秒】` : '');
+    }
   }
   const me = b.fighters.find((f) => f.isPlayer);
   if (me) {
@@ -3102,8 +3130,9 @@ async function onInvaded(e) {
   $('#pause').hidden = true;
   const p = state.worldPeers?.[e.from];
   const apexOk = !apiEnabled() || tr === 'chief' || tr === 'op';
-  const chiefOnlyAttempt = (p?.fk === 'valgard' || p?.fk === 'gaizorg') && tr !== 'chief' && apiEnabled();
-  const ik = apexOk && !chiefOnlyAttempt && ['chief', 'sovereign', 'sovereign2', 'bloodfiend', 'valgard', 'gaizorg'].includes(p?.fk) && (!apiEnabled() || peerVerified(e.from, p.fk)) ? p.fk : 'seraphel';
+  const chiefOnlyAttempt = (['valgard', 'gaizorg', 'valdarion'].includes(p?.fk)) && tr !== 'chief' && apiEnabled();
+    const opOnlyAttempt = p?.fk === 'operator_gigantes' && tr !== 'op' && apiEnabled();
+  const ik = apexOk && !chiefOnlyAttempt && !opOnlyAttempt && ['chief', 'sovereign', 'sovereign2', 'bloodfiend', 'valgard', 'gaizorg', 'operator_gigantes', 'valdarion'].includes(p?.fk) && (!apiEnabled() || peerVerified(e.from, p.fk)) ? p.fk : 'seraphel';
   b.add(ik, { team: 1, remote: true, netId: e.from, pos: p ? [p.x, p.z] : [0, -9], facing: Math.PI, name: `乱入者・${e.name}`, ...peerOpts(e.from, ik) });
   b.net = w;
   b.strictNet = apiEnabled();
@@ -3138,7 +3167,7 @@ function renderInvadeList() {
 
 $('#invade-who').addEventListener('click', () => {
   sfx('ui');
-  const order = operatorUnlocked() ? ['seraphel', 'chief', 'sovereign', 'bloodfiend', ...(chiefUnlocked() ? ['valgard', 'gaizorg'] : [])] : ['seraphel'];
+  const order = operatorUnlocked() ? ['seraphel', 'chief', 'sovereign', 'bloodfiend', ...(chiefUnlocked() ? ['valgard', 'gaizorg', 'valdarion'] : []), ...(operatorOnlyUnlocked() ? ['operator_gigantes'] : [])] : ['seraphel'];
   state.invadeKey = order[(order.indexOf(state.invadeKey) + 1) % order.length];
   $('#invade-who').textContent = `乱入する姿：${FIGHTERS[state.invadeKey].name}`;
 });
@@ -3173,7 +3202,7 @@ async function startInvade(p) {
   w.invade({ to: p.id, from: w.myId, name: '運営', tk });
   setStage(stageById(STORY[p.ch]?.stage));
   const b = makeBattle(w);
-  const ik = ['chief', 'sovereign', 'bloodfiend'].includes(state.invadeKey) && operatorUnlocked() || (state.invadeKey === 'valgard' || state.invadeKey === 'gaizorg') && chiefUnlocked() ? state.invadeKey : 'seraphel';
+  const ik = (['chief', 'sovereign', 'bloodfiend'].includes(state.invadeKey) && operatorUnlocked()) || ((['valgard', 'gaizorg', 'valdarion'].includes(state.invadeKey)) && chiefUnlocked()) || (state.invadeKey === 'operator_gigantes' && operatorOnlyUnlocked()) ? state.invadeKey : 'seraphel';
   b.add(ik, { team: 0, player: true, awk: save.awk, netId: w.myId, pos: [0, -9], name: FIGHTERS[ik].name + '（運営）', upg: upgFor(ik), gear: gearFor(ik) });
   b.add(peerKeyOf(p.id, p.fk), { team: 1, remote: true, netId: p.id, pos: [p.x, p.z], name: p.name, gear: { w: p.gw, a: p.ga }, ...peerOpts(p.id, peerKeyOf(p.id, p.fk)) });
   b.strictNet = apiEnabled();
@@ -4153,7 +4182,7 @@ function pollPad(dt) {
 // 既存のゲーム状態と戦闘器を引き継ぐ追加モード。main.js 全体は作り直さない。
 const gaizorgAdventure = setupGaizorgAdventure({
   THREE,scene,camera,Battle,FIGHTERS,STAGES,assets,state,save,
-  chiefUnlocked,openSelect,goTitle,show,makeBattle,endBattle,beginBattle,
+  chiefUnlocked,operatorOnlyUnlocked,openSelect,goTitle,show,makeBattle,endBattle,beginBattle,
   buildHud,setStage,ensureAllModelsReady,playTrack,grant,persist,ui,
   getArena:()=>arena,upgFor,gearFor,
   setFog:(rest)=>{ if(rest && scene.fog){scene.fog.near=36;scene.fog.far=90;} }

@@ -1,0 +1,27 @@
+/* Ritzfall: exact model portraits and distinct role-only characters */
+#select-grid .card { position:relative; overflow:hidden; }
+#select-grid .card:has(img[src*="operator-gigantes"])::after {
+  content:"運営専用"; position:absolute;top:8px;right:8px;
+  font-size:11px;padding:3px 7px;z-index:2;
+  border:1px solid #d5aaff;background:rgba(30,13,50,.92);color:#f2ddff;
+  border-radius:4px;font-weight:700;letter-spacing:.08em;
+}
+#select-grid .card:has(img[src*="valgard"])::after {
+  content:"運営長専用";position:absolute;top:8px;right:8px;
+  font-size:11px;padding:3px 7px;z-index:2;
+  border:1px solid #abedff;background:rgba(14,34,61,.9);color:#e8faff;
+  border-radius:4px;font-weight:700;letter-spacing:.08em;
+}
+#select-grid .card img.face { object-fit:contain;object-position:center center; }
+
+#select-grid .card[data-special-key="valdarion"]::after,
+#select-grid .card[data-special-key="gaizorg"]::after {
+  content:"運営長専用";position:absolute;top:7px;right:7px;z-index:3;
+  padding:3px 7px;font-size:11px;color:#f7edff;
+  border:1px solid #d7b7ff;background:#2a153cda;border-radius:5px;
+}
+#select-grid .card[data-special-key="operator_gigantes"]::after {
+  content:"運営専用";position:absolute;top:7px;right:7px;z-index:3;
+  padding:3px 7px;font-size:11px;color:#fae9ff;
+  border:1px solid #b990fa;background:#231239df;border-radius:5px;
+}

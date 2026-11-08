@@ -1,9 +1,11 @@
+// RF_GRAND_FOUR_20261108 game.js
+import { createNullGuardAura, tickNullGuardAura, disposeNullGuardAura } from './null-guard.js?v=20261108-grand-four-v3';
 import * as THREE from 'three';
-import { attachValgardMotion } from './valgard-motion.js?v=valgard-exact-20261107';
+import { attachValgardMotion } from './valgard-motion.js?v=20261108-grand-four-v3';
 import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js';
-import { FIGHTERS, ELEMS, spellCastTime } from './data.js?v=audio-cast-20261107d';
+import { FIGHTERS, ELEMS, spellCastTime } from './data.js?v=20261108-grand-four-v3';
 import { makeGear, animGear } from './gear.js';
-import { instantiateModel, disposeModel, loadModel } from './model-runtime.js?v=valgard-exact-20261107';
+import { instantiateModel, disposeModel, loadModel } from './model-runtime.js?v=20261108-grand-four-v3';
 
 // 召喚獣の見た目と性能（HPは使い手の最大HPに比例）
 const SUMMON_DEFS = {
@@ -722,6 +724,10 @@ export class Fighter {
     this.dotAcc = 0;
     this.stFx = 0;
     this.guard = false;
+    this.nullGuardTime = 0;
+    this.nullGuardCooldown = 0;
+    this.nullGuardPressed = false;
+    this.nullGuardAura = null;
     this.inv = 0;
     this.dead = false;
     // 覚醒：受けたダメージを蓄積（戦いをまたいで持ち越せる）→ 満タンで覚醒
@@ -854,6 +860,24 @@ export class Fighter {
     const st = this.status;
     this.flux = Math.min(100, this.flux + (st.para ? 0 : this.fluxRate) * dt);
     this.guard = false;
+    // Valdarion: 30 seconds of sparkles, 50% damage, no stagger/knockback.
+    // Holding the guard key does not stop movement or attacks.
+    if (this.key === 'valdarion') {
+      this.nullGuardTime = Math.max(0, this.nullGuardTime - dt);
+      this.nullGuardCooldown = Math.max(0, this.nullGuardCooldown - dt);
+      if (this.nullGuardTime > 0) tickNullGuardAura(this, dt);
+      else disposeNullGuardAura(this);
+      if (inp.guard && !this.nullGuardPressed && !this.nullGuardTime && !this.nullGuardCooldown) {
+        this.nullGuardTime = 30;
+        this.nullGuardCooldown = 75; // Reusable 45 seconds after the 30-second effect expires.
+        this.stun = 0;
+        this.status = {};
+        createNullGuardAura(this);
+        this.battle.ui.popup?.(this.pos, '絶対護装《無傷の煌鎧》 30秒', '#e4c9ff');
+        this.battle.ui.sfx?.('burst');
+      }
+      this.nullGuardPressed = !!inp.guard;
+    }
     let moving = false;
     // 追加技：技を出した後、同じボタンを長押しし続けると発動（全モード共通）
     const fa = this.followArm;
@@ -871,7 +895,7 @@ export class Fighter {
       this.stun -= dt;
     } else if (this.action) {
       this.tickAction(dt);
-    } else if (inp.guard && this.y <= 0) {
+    } else if (inp.guard && this.key !== 'valdarion' && this.y <= 0) {
       this.guard = true;
     } else {
       const len = Math.hypot(inp.mx, inp.mz);
@@ -938,8 +962,8 @@ export class Fighter {
     if (!info || this.dead || this.remoteAuth) {
       return;
     }
-    // 覚醒中は状態異常を受けない
-    if (this.awakened > 0) {
+    // 覚醒中または虚無機神の護装中は状態異常を受けない
+    if (this.awakened > 0 || (this.key === 'valdarion' && this.nullGuardTime > 0)) {
       this.battle.ui.popup(this.pos, '無効', '#ff8090');
       return;
     }
@@ -1136,6 +1160,14 @@ export class Fighter {
     if (this.dead) {
       return 0;
     }
+    const nullSuperArmor = this.key === 'valdarion' && this.nullGuardTime > 0;
+    if (nullSuperArmor) {
+      dmg *= 0.5;
+      stun = 0;
+      kx = kz = 0;
+      // Keep an attack, spell chant and movement running after taking damage.
+      this.stun = 0;
+    }
     if (this.guard) {
       const f = this.forward();
       const dirLen = Math.hypot(kx, kz) || 1;
@@ -1165,7 +1197,7 @@ export class Fighter {
       this.action = null;
       this.visual.rotation.y = 0;
     }
-    if (this.awakened <= 0) this.vel.set(kx, 0, kz);
+    if (this.awakened <= 0 && !nullSuperArmor) this.vel.set(kx, 0, kz);
     this.inv = 0.04;
     this.hitFlash = 0.15;
     this.over = Math.min(100, this.over + dmg * 0.06 * this.og);
@@ -1510,7 +1542,7 @@ export class Battle {
 
   // 属性技は確率で状態異常（奥義は高確率）
   rollStatus(att, spec) {
-    if (!spec || spec.elem == null || spec.kind === 'heal') {
+    if (!spec || spec.elem == null || spec.kind === 'heal' || att.def?.nullElement || spec.nullElement) {
       return null;
     }
     const chance = spec === att.def.over || spec.hi ? 0.4 : 0.25;
@@ -3076,6 +3108,7 @@ export class Battle {
     for (const f of this.fighters) {
       this.scene.remove(f.root);
       if (f.redMats) f.endAwaken();
+      disposeNullGuardAura(f);
       disposeModel(f.modelInstance, f.mixer);
       f.modelInstance = null;
     }
