@@ -3,10 +3,22 @@
  * All cloned material changes affect only clones, never the user's source GLB.
  */
 import * as THREE from 'three';
-import { FIGHTERS } from './data.js?v=20261108-maou-green-v6';
-import { disposeModel } from './model-runtime.js?v=20261108-maou-green-v6';
+import { FIGHTERS } from './data.js?v=rf-mobile-v7-20261109';
+import { instantiateModel, disposeModel, loadModel } from './model-runtime.js?v=rf-mobile-v7-20261109';
 const KEY = 'maou';
 const SHADE = 'maou_shade';
+const BEAST_NAME = '魔卵獣ゼルグリム';
+const BEAST_ASSET = 'assets/models/maou-egg-zelgrim.glb';
+let beastAsset = null;
+let beastLoading = null;
+function readyBeast() {
+  if (beastAsset) return Promise.resolve(beastAsset);
+  if (!beastLoading) beastLoading = loadModel(BEAST_ASSET)
+    .then(g => { beastAsset = g; return g; })
+    .catch(err => { console.warn('[Zelgrim] モデル取得失敗', err); return null; });
+  return beastLoading;
+}
+
 const GOLD = 0xffe290;
 const CRIMSON = 0xff1238;
 const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, Number(v) || 0));
@@ -160,50 +172,29 @@ function eyeLaser(battle, f, spec, remote) {
     light.removeFromParent();owned.forEach(x=>x.dispose?.());done=true;return false;
   });
 }
-// V7.1: One extremely low-poly green shadow, no GLB cloning / skinning / textures.
-// The standard Fighter AI, hit detection and skills are reused, but the render
-// object is a tiny set of untextured primitives (about 56 triangles total).
-function createCheapShadeModel(shade) {
-  const h = Math.max(1, Number(shade.def?.height || 2.55) * (shade.scale || 1));
-  const geo = new THREE.OctahedronGeometry(1, 0); // shared by all parts: 8 triangles
-  const green = new THREE.MeshBasicMaterial({ color: 0x37ef62 });
-  const eyes = new THREE.MeshBasicMaterial({ color: 0x124321 });
-  const shape = new THREE.Group();
-  shape.name = 'maou-green-shadow-ultralight';
-  const part = (x, y, z, sx, sy, sz, mat = green) => {
-    const m = new THREE.Mesh(geo, mat);
-    m.position.set(x, y, z);
-    m.scale.set(sx, sy, sz);
-    shape.add(m);
-    return m;
-  };
-  part(0, h*.48, 0, h*.225, h*.28, h*.18); // body
-  part(0, h*.80, 0, h*.19, h*.19, h*.17); // head
-  const left = part(-h*.285, h*.50, 0, h*.09, h*.185, h*.09); // arms
-  const right = part(h*.285, h*.50, 0, h*.09, h*.185, h*.09);
-  part(-h*.07, h*.83, h*.155, h*.027, h*.035, h*.022, eyes);
-  part(h*.07, h*.83, h*.155, h*.027, h*.035, h*.022, eyes);
-  shade.visual.add(shape);
-  // These lightweight stubs satisfy the existing Fighter.sync() interface.
-  shade.modelInstance = null;
+// V7.2: independent summon with a dedicated 73KB sculpted GLB.
+// Never clone the original 20MB Maou mesh or skin. One asset is cached globally.
+function createBeastVisual(shade) {
+  if (!beastAsset?.scene) throw new Error('魔卵獣モデルの準備ができていません');
+  const model = instantiateModel(beastAsset, shade.def.height * shade.scale, null);
+  shade.modelInstance = model;
+  shade.visual.add(model.wrapper);
+  shade.mixer = null; // static 73KB mesh; animate small limb nodes, no skeleton update
   shade.valgardMotion = null;
-  shade.mixer = null;
   shade.clips = {};
   shade.gear = null;
   shade.ringMesh = new THREE.Group();
   shade.guardMesh = new THREE.Group();
   shade.guardMesh.visible = false;
   shade.root.add(shade.ringMesh, shade.guardMesh);
-  shade.__maouCheap = { shape, resources: [geo, green, eyes], left, right };
+  const armL = model.model.getObjectByName('ZelgrimLeftArm');
+  const armR = model.model.getObjectByName('ZelgrimRightArm');
+  const legL = model.model.getObjectByName('ZelgrimLeftLeg');
+  const legR = model.model.getObjectByName('ZelgrimRightLeg');
+  const head = model.model.getObjectByName('ZelgrimHead');
+  shade.__zelgrimMotion = { armL, armR, legL, legR, head, phase:0 };
 }
-function releaseCheapShade(shade) {
-  const owned = shade?.__maouCheap;
-  if (!owned) return;
-  shade.__maouCheap = null;
-  owned.shape.removeFromParent();
-  for (const resource of owned.resources) resource.dispose();
-}
-function retireShade(shade) {
+function retireBeast(shade) {
   if (!shade || shade.__maouRetiring) return;
   shade.__maouRetiring = true;
   shade.dead = true;
@@ -212,28 +203,40 @@ function retireShade(shade) {
   const battle = shade.battle;
   const cleanup = () => {
     shade.root.removeFromParent();
-    releaseCheapShade(shade);
     if (shade.modelInstance) {
       disposeModel(shade.modelInstance, shade.mixer);
       shade.modelInstance = null;
     }
+    shade.__zelgrimMotion = null;
     const idx = battle?.fighters?.indexOf(shade) ?? -1;
     if (idx >= 0) battle.fighters.splice(idx, 1);
     return false;
   };
-  if (battle?.addEffect) battle.addEffect(cleanup);
+  if (battle?.addEffect && !battle.ended) battle.addEffect(cleanup);
   else cleanup();
+}
+function walkBeast(shade, dt) {
+  const m = shade.__zelgrimMotion;
+  if (!m) return;
+  const moving = (shade.vel?.lengthSq?.() || 0) > .15;
+  m.phase += Math.min(.04,Math.max(0,dt)) * (moving ? 9.5 : 1.5);
+  const sway = moving ? Math.sin(m.phase) * .33 : Math.sin(m.phase) * .045;
+  if (m.armL) m.armL.rotation.x = sway;
+  if (m.armR) m.armR.rotation.x = -sway;
+  if (m.legL) m.legL.rotation.x = -sway * .9;
+  if (m.legR) m.legR.rotation.x = sway * .9;
+  if (m.head) m.head.rotation.y = Math.sin(m.phase*.35) * .05;
 }
 function hatching(battle, f, spec, remote) {
   if (f.__maouEggPending || battle.fighters.some(a => a.key === SHADE && a.maouOwner === f && !a.dead)) {
-    if (!remote) battle.ui?.popup?.(f.pos, '緑色の分身は1体まで', '#b4ffd1');
+    if (!remote) battle.ui?.popup?.(f.pos, '魔卵獣ゼルグリムは1体まで', '#b4ffd1');
     return;
   }
   f.__maouEggPending = true;
-  // Lightweight egg (1 object) from mouth to ground, then 1 3-hit chasing clone.
+  // Lightweight egg (1 object) from mouth to ground; one 3-hit summoned beast.
   const egg = new THREE.Mesh(
     new THREE.SphereGeometry(.33, 8, 5),
-    new THREE.MeshBasicMaterial({color:0xaaf2a4})
+    new THREE.MeshBasicMaterial({color:0xd2c9a5})
   );
   const mouth = f.pos.clone().add(new THREE.Vector3(Math.sin(f.facing)*.22, Number(f.def?.height||3.7)*.67, Math.cos(f.facing)*.22));
   const a = f.facing;
@@ -250,29 +253,35 @@ function hatching(battle, f, spec, remote) {
     egg.rotation.x+=dt*4;egg.rotation.z+=dt*3;
     if(k<1)return true;
     cleanEgg(false);
-    const finishBirth=()=>{
-      try {
-        if (battle.ended || f.dead || remote || f.remoteAuth ||
-            battle.fighters.some(a=>a.key===SHADE&&a.maouOwner===f&&!a.dead)) return;
-        // Fighter AI and collision remain intact. Its buildModel() is intercepted
-        // to create a tiny green primitive, never the 20MB Maou GLB.
-        const shade=battle.add(SHADE,{team:f.team,cpu:.87,player:false,
-          pos:[spawn.x,spawn.z],name:'緑影の分身',scale:.78,facing:f.facing});
-        shade.maouOwner=f;shade.maouShadeHits=0;shade.maouShade=true;
-        // No HP bar, and updateHud() can still safely inspect this actor.
-        shade.hudFill={style:{width:''}};
-        shade.hudPlate={classList:{toggle(){}}};
-      } catch(error) {
-        console.warn('[魔王の分身]',error);
-        battle.ui?.popup?.(f.pos,'分身の表示に失敗しました','#c5ffdc');
-      } finally { f.__maouEggPending=false; }
-    };
-    battle.spark?.(end.clone(), 0x56f56a, .45);
-    if(typeof requestAnimationFrame==='function') requestAnimationFrame(finishBirth);
-    else finishBirth();
+    // If the tiny model is still loading, wait asynchronously. Never block a frame.
+    const finishBirth = () => readyBeast().then(asset => {
+      if (!asset) {
+        if (!remote) battle.ui?.popup?.(f.pos,'魔卵獣のモデルを読み込めませんでした','#ffd0a4');
+        return;
+      }
+      if (battle.ended || battle.__zelgrimDisposed || f.dead || remote || f.remoteAuth ||
+          battle.fighters.some(a=>a.key===SHADE&&a.maouOwner===f&&!a.dead)) return;
+      // Fighter.buildModel() below uses the cached 73KB asset, NEVER maou-lord.glb.
+      const beast = battle.add(SHADE, {team:f.team,cpu:.87,player:false,
+        pos:[spawn.x,spawn.z],name:BEAST_NAME,scale:.78,facing:f.facing});
+      beast.maouOwner = f;
+      beast.maouShadeHits = 0;
+      beast.maouShade = true;
+      // The beast has no HP bar, yet updateHud safely sees these stubs.
+      beast.hudFill = {style:{width:''}};
+      beast.hudPlate = {classList:{toggle(){}}};
+      battle.ui?.popup?.(f.pos,BEAST_NAME+' 誕生（耐久3撃）','#e1dfad');
+    }).catch(error => {
+      console.warn('[Zelgrim birth]',error);
+      if(!remote) battle.ui?.popup?.(f.pos,'召喚を中止しました','#ffd0a4');
+    }).finally(() => {f.__maouEggPending=false;});
+    battle.spark?.(end.clone(), 0xd5c58c, .40);
+    // Decouple creation from the physics/effect iteration, including fast devices.
+    if (typeof setTimeout === 'function') setTimeout(finishBirth, 0);
+    else void finishBirth();
     return false;
   });
-  battle.ui?.popup?.(f.pos,'口卵術《翠影孵化》：卵1個・緑の分身1体（耐久3撃）','#b4ffd1');
+  battle.ui?.popup?.(f.pos,'口卵術《翠影孵化》：卵1個・魔卵獣ゼルグリム1体（耐久3撃）','#b4ffd1');
 }
 function fullHeal(battle,f,remote){
   actionVisual(battle,f,{color:0xd8ffff,name:'無尽光輪《全生命復元》'},'s4');
@@ -296,10 +305,16 @@ function reviveIfEligible(f){
 export function installMaouCombat({Battle,Fighter}) {
   if(!Battle?.prototype||!Fighter?.prototype||Battle.prototype.__maouInstalled)return;
   Battle.prototype.__maouInstalled=true;
+  void readyBeast(); // tiny GLB loads once; no decoding at the moment of hatching
+  if (FIGHTERS[SHADE]) {
+    FIGHTERS[SHADE].name = BEAST_NAME;
+    FIGHTERS[SHADE].title = '魔王の魔卵から生まれる召喚獣';
+    FIGHTERS[SHADE].model = BEAST_ASSET;
+  }
   const eggSkill = FIGHTERS.maou?.skills?.find(s => s.kind === 'maou_egg');
   if (eggSkill) {
     eggSkill.count=1;
-    eggSkill.description='口から卵1個を産み、緑の分身1体が孵化。自動追尾攻撃・3回被弾で消滅・HPバーなし';
+    eggSkill.description='口から卵1個を産み、魔卵獣ゼルグリムが1体孵化。自動追尾攻撃・3回被弾で消滅・HPバーなし';
   }
   const FU=Fighter.prototype.update, FL=Fighter.prototype.startLight, FR=Fighter.prototype.receive;
   const FS=Fighter.prototype.applyStatus, FT=Fighter.prototype.tickStatus;
@@ -308,24 +323,18 @@ export function installMaouCombat({Battle,Fighter}) {
   const BH=Battle.prototype.applyHit, BD=Battle.prototype.dispose;
   // Intercept only this summon. The real player models are completely unchanged.
   Fighter.prototype.buildModel=function(gltf){
-    if(this.key===SHADE){createCheapShadeModel(this);return;}
+    if(this.key===SHADE){createBeastVisual(this);return;}
     return FB.call(this,gltf);
   };
   Fighter.prototype.update=function(dt,input){
     if(this.key===SHADE){
       if(this.__maouRetiring)return;
       if(!this.maouOwner || this.maouOwner.dead || this.maouOwner.transformed){
-        retireShade(this);return;
+        retireBeast(this);return;
       }
       const result=FU.call(this,dt,input);
-      if(this.dead){retireShade(this);return result;}
-      const shape=this.__maouCheap;
-      if(shape){
-        const speed=this.vel?.lengthSq?.()||0;
-        const swing=speed>.12 ? Math.sin(performance.now()*.014)*.37 : .04;
-        shape.left.rotation.x=swing;
-        shape.right.rotation.x=-swing;
-      }
+      if(this.dead){retireBeast(this);return result;}
+      walkBeast(this,dt);
       return result;
     }
     if(this.key!==KEY)return FU.call(this,dt,input);
@@ -355,9 +364,9 @@ export function installMaouCombat({Battle,Fighter}) {
       if(this.dead||this.inv>0)return 0;
       this.maouShadeHits=(this.maouShadeHits||0)+1;this.inv=.3;
       this.battle?.spark?.(this.pos.clone().setY(.8),0x43ff75,.8);
-      if(this.maouShadeHits>=3){retireShade(this);
-        this.battle?.ui?.popup?.(this.pos,'分身消滅','#a8ffb4');}
-      else this.battle?.ui?.popup?.(this.pos,`分身被弾 ${this.maouShadeHits}/3`,'#a8ffb4');
+      if(this.maouShadeHits>=3){retireBeast(this);
+        this.battle?.ui?.popup?.(this.pos,BEAST_NAME+' 消滅','#a8ffb4');}
+      else this.battle?.ui?.popup?.(this.pos,`${BEAST_NAME} 被弾 ${this.maouShadeHits}/3`,'#a8ffb4');
       return 1;
     }
     if(this.key!==KEY)return FR.call(this,damage,stun,kx,kz);
@@ -397,10 +406,11 @@ export function installMaouCombat({Battle,Fighter}) {
     return BH.call(this,att,tgt,...rest);
   };
   Battle.prototype.dispose=function(){
+    this.__zelgrimDisposed=true;
     for(const f of this.fighters||[]){
       stopAura(f,'rainbow');stopAura(f,'regen');
-      if(f.key===SHADE)releaseCheapShade(f);
     }
+    // Original disposeModel handles tiny model clone materials.
     return BD.call(this);
   };
 }
