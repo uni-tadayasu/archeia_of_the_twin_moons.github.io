@@ -68,6 +68,26 @@ function attemptXHR(url, timeoutMs) {
 }
 
 export async function getModelBytes(path, moduleURL = null) {
+  // RIFTFALL-25MB-MODEL-CHUNKS: reconstruct exact glb from <25MB parts.
+  if (/\.glb(?:[?#]|$)/i.test(String(path))) {
+    const url = new URL(String(path).split(/[?#]/)[0] + '.parts.json', document.baseURI);
+    let manifest = null;
+    try { const resp = await fetch(url.href, {cache:'no-store'}); if (resp.ok) manifest = await resp.json(); } catch(e) {}
+    if (manifest) {
+      if (!Array.isArray(manifest.parts) || manifest.parts.length < 2 || manifest.parts.length > 30 || !Number.isSafeInteger(manifest.byteLength)) throw Error('モデルの分割マニフェストが不正です');
+      const merged = new Uint8Array(manifest.byteLength);let at=0;
+      for(const part of manifest.parts) {
+        if(typeof part !== 'string' || !/^[a-z0-9._-]+\.bin$/i.test(part)) throw Error('モデルの分割パスが不正です');
+        const resp=await fetch(new URL(part,url).href,{cache:'no-store'});if(!resp.ok) throw Error(part+': HTTP '+resp.status);
+        const chunk=new Uint8Array(await resp.arrayBuffer());
+        if(at+chunk.byteLength>merged.byteLength) throw Error('モデルの結合長が不正です');
+        merged.set(chunk,at);at+=chunk.length;
+      }
+      if(at!==merged.length || new DataView(merged.buffer).getUint32(0,true)!==0x46546c67) throw Error('GLB結合結果が不正です');
+      return merged.buffer;
+    }
+  }
+
   const candidates = modelURLCandidates(path, moduleURL);
   const errors = [];
   for (const url of candidates) {
