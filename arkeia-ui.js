@@ -56,25 +56,234 @@
     schedule();
   }
 
-  // Back/return controls are NORMAL CONTENT, not sticky or viewport-fixed.
-  // They scroll away with their own menu; no click behaviour is modified.
+  // RIFT UI: attractive, sticky navigation. A floating back button provides
+  // reliable fallback when the sticky header is enclosed by a centered .inner.
   const scrollStyle = document.createElement('style');
-  scrollStyle.id = 'illustrated-patch-scrolling-back';
+  scrollStyle.id = 'riftfall-premium-ui-20261108';
   scrollStyle.textContent = `
-    #ui .screen .topbar, #ui .screen .topbar:has(> .back),
-    #ui #scr-lobby .topbar, #ui #scr-result .topbar, #ui #scr-story .topbar {
-      position:relative !important; top:auto !important; bottom:auto !important;
-      left:auto !important; right:auto !important; backdrop-filter:none !important;
-      -webkit-backdrop-filter:none !important; z-index:2 !important;
+    :root {--rift-accent:#80dcff;--rift-glow:rgba(83,174,255,.32);--rift-gold:#e4c78d;}
+    :root[data-rift-theme="ember"] {--rift-accent:#ffbd7b;--rift-glow:rgba(255,126,63,.3);--rift-gold:#ffddae;}
+    :root[data-rift-theme="royal"] {--rift-accent:#c9b2ff;--rift-glow:rgba(152,119,255,.3);--rift-gold:#f2d598;}
+    :root[data-rift-theme="frost"] {--rift-accent:#80dcff;--rift-glow:rgba(83,174,255,.32);--rift-gold:#e4c78d;}
+    #ui .screen:not(#scr-press) {
+      background:radial-gradient(ellipse at 18% 9%,var(--rift-glow),transparent 43%),
+        radial-gradient(ellipse at 91% 83%,rgba(111,70,184,.16),transparent 40%),
+        linear-gradient(165deg,rgba(6,17,34,.91),rgba(20,16,42,.94))!important;
+      scrollbar-width:thin; scrollbar-color:var(--rift-accent) #172238;
     }
-    #ui .screen .back, #ui .screen .topbar .back, #ui #select-back {
-      position:static !important; inset:auto !important; transform:none;
+    #ui .screen .topbar,#ui .screen .inner > .topbar,
+    #ui #scr-select .topbar,#ui #scr-lobby .topbar,#ui #scr-story .topbar,
+    #ui #scr-result .topbar {
+      position:sticky!important;top:0!important;bottom:auto!important;left:auto!important;right:auto!important;
+      width:100%!important;z-index:180!important;isolation:isolate;
+      background:linear-gradient(115deg,rgba(9,29,48,.985),rgba(26,24,51,.97))!important;
+      border:1px solid rgba(213,192,143,.45)!important;
+      border-radius:12px!important;padding:8px 12px!important;
+      box-shadow:0 9px 30px #0308169e,0 0 25px var(--rift-glow)!important;
+      backdrop-filter:blur(20px)!important;-webkit-backdrop-filter:blur(20px)!important;
     }
-    #scr-title .portal-header { position:relative !important; top:auto !important; }
-    #ui .screen.on { touch-action:pan-y; overscroll-behavior-y:contain; }
-    @media(max-width:680px){#ui .screen .topbar{flex-shrink:0}}
+    #ui .screen .back,#ui .screen .topbar .back,#ui #select-back {
+      position:relative!important;inset:auto!important;transform:none!important;
+      border-radius:9px!important;border-color:var(--rift-gold)!important;
+      color:#fff4de!important;box-shadow:0 0 0 1px #ffffff1c inset;
+      min-height:38px;flex-shrink:0;
+    }
+    #ui #scr-title .portal-header {position:sticky!important;top:0!important;z-index:180!important;
+      background:linear-gradient(120deg,rgba(10,25,42,.96),rgba(32,21,55,.95))!important;
+      backdrop-filter:blur(18px)!important;-webkit-backdrop-filter:blur(18px)!important;}
+    #ui .screen.on {touch-action:pan-y;overscroll-behavior-y:contain;scroll-padding-top:76px;}
+    #ui .screen .inner {overflow:visible!important;}
+    #ui .screen .card,#ui .screen .btn,#ui .screen .menu button {
+      border-radius:12px!important;
+      box-shadow:0 6px 22px rgba(0,7,23,.28),0 1px 0 rgba(255,255,255,.08) inset;
+      transition:border-color .15s,box-shadow .15s,transform .16s,filter .16s;
+    }
+    #ui .screen .card:not(:disabled):hover,#ui .screen .btn:not(:disabled):hover,#ui .screen .menu button:not(:disabled):hover {
+      box-shadow:0 12px 30px rgba(0,5,18,.5),0 0 20px var(--rift-glow);
+      border-color:var(--rift-accent)!important;filter:brightness(1.06);
+    }
+    #ui .screen .card {position:relative;overflow:visible;}
+    #ui .screen .label {color:#fff3dc;text-shadow:0 0 16px var(--rift-glow);border-color:var(--rift-gold);}
+    #ui .screen .select-tools input {border-radius:10px;border-color:#c9bb9a!important;}
+    :root[data-rift-density="compact"] #select-grid{gap:5px!important;grid-template-columns:repeat(auto-fill,minmax(118px,1fr))!important;}
+    :root[data-rift-density="compact"] #select-grid .card{padding:6px!important;gap:2px!important;}
+    .rift-card-favorite {position:absolute;right:7px;top:4px;display:grid;place-items:center;
+      width:30px;height:30px;border-radius:50%;color:#6b5b7c;background:#fff5e8f2;
+      border:1px solid rgba(50,41,68,.28);font:600 20px/1 system-ui,sans-serif;
+      cursor:pointer;z-index:8;box-shadow:0 3px 7px #0002;}
+    .rift-card-favorite[aria-pressed="true"] {color:#eab33e;background:#21324b;}
+    .rift-is-filtered {display:none!important;}
+    .rift-gift-button,.rift-utility button,.rift-filter-tools button,.rift-filter-tools select {
+      cursor:pointer;font:600 12px/1.4 system-ui,sans-serif;color:#fff3de;
+      border:1px solid rgba(213,191,149,.65);border-radius:11px;
+      background:linear-gradient(150deg,rgba(34,52,79,.95),rgba(26,30,56,.96));
+      padding:8px 10px;min-height:36px;
+    }
+    .rift-gift-button:hover,.rift-utility button:hover,.rift-filter-tools button:hover {border-color:var(--rift-accent);}
+    .rift-gift-button {display:flex;align-items:center;justify-content:center;gap:9px;
+      box-shadow:0 8px 24px #02071380,0 0 25px var(--rift-glow);width:100%;max-width:500px;margin:7px auto!important;}
+    .rift-utility {position:fixed;bottom:calc(15px + env(safe-area-inset-bottom));right:calc(12px + env(safe-area-inset-right));
+      z-index:10050;display:flex;gap:5px;flex-wrap:wrap;max-width:min(94vw,420px);justify-content:flex-end;pointer-events:auto;}
+    .rift-utility[hidden],#rift-floating-back[hidden],#rift-gift-dialog[hidden],.rift-filter-tools[hidden]{display:none!important;}
+    #rift-floating-back {position:fixed;top:calc(35px + env(safe-area-inset-top));
+      left:calc(9px + env(safe-area-inset-left));z-index:10550;
+      color:#fff5df;border:1px solid var(--rift-gold);border-radius:12px;
+      padding:12px 16px;min-height:44px;background:rgba(11,27,45,.98);
+      box-shadow:0 10px 30px #000b,0 0 18px var(--rift-glow);
+      font:600 13px/1.3 system-ui,sans-serif;pointer-events:auto;}
+    .rift-filter-tools{display:flex;flex-wrap:wrap;gap:7px;align-items:center;justify-content:center;
+      width:100%;max-width:870px;margin:8px auto;padding:7px;border:1px solid #c0ab8055;
+      background:linear-gradient(140deg,#162942e8,#24233ae8);border-radius:13px;}
+    .rift-filter-tools button[aria-pressed="true"]{border-color:var(--rift-accent);background:#315370;}
+    .rift-gift-dialog{position:fixed;inset:0;background:rgba(2,8,22,.8);z-index:12000;
+      display:grid;place-items:center;padding:16px;pointer-events:auto;backdrop-filter:blur(8px);}
+    .rift-gift-panel{position:relative;max-width:620px;width:100%;max-height:92vh;overflow:auto;
+      background:radial-gradient(circle at 45% 0%,rgba(80,136,194,.23),transparent 50%),
+        linear-gradient(150deg,#18253e,#111b35 65%,#242044);color:#fff2db;
+      border:1px solid #d2ba88;border-radius:18px;padding:clamp(16px,3vw,26px);
+      box-shadow:0 24px 70px #000c,0 0 40px var(--rift-glow);
+      font-family:system-ui,'Hiragino Kaku Gothic ProN',sans-serif;}
+    .rift-gift-panel h2{margin:2px 36px 8px 0;font-size:clamp(20px,4vw,28px);letter-spacing:.05em;}
+    .rift-gift-panel p{line-height:1.65;color:#dbd7cf;}
+    .rift-gift-close{position:absolute;top:11px;right:12px;cursor:pointer;color:#fff;
+      background:#2f3652;border:1px solid #b6a47a;border-radius:9px;min-height:39px;min-width:39px;font-size:20px;}
+    .rift-gift-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:11px;margin:16px 0;}
+    .rift-gift-card{border:1px solid #c9ad786d;border-radius:14px;padding:16px;
+      background:linear-gradient(150deg,rgba(64,87,115,.35),rgba(24,29,57,.94));}
+    .rift-gift-card b{display:block;font-size:16px;color:#ffe9be;margin-bottom:9px;}
+    .rift-gift-card strong{font-size:24px;display:block;color:var(--rift-accent);}
+    .rift-gift-card small{display:block;min-height:34px;color:#d9dcf0;line-height:1.55;margin-top:7px;}
+    .rift-gift-card button{margin-top:10px;width:100%;padding:11px;border-radius:10px;
+      background:#d3b87a;color:#121e31;border:0;font:700 13px/1.3 system-ui,sans-serif;cursor:pointer;}
+    .rift-gift-card button:disabled{background:#38475d;color:#c1ccd7;cursor:default;}
+    .rift-streak-track{display:flex;gap:7px;flex-wrap:wrap;align-items:center;justify-content:center;
+      border:1px solid #d7c49450;background:#122137a6;border-radius:12px;padding:10px;}
+    .rift-streak-day{min-width:56px;flex:1;text-align:center;color:#e9e4dc;font:600 11px/1.65 system-ui,sans-serif;
+      padding:6px 2px;border:1px solid #6477926b;border-radius:9px;}
+    .rift-streak-day[data-active="true"]{border-color:#e4c68c;color:#fff4bf;
+      background:linear-gradient(145deg,#4e4655,#6b4b39);box-shadow:0 0 16px #e4b26c44;}
+    .rift-streak-day b{display:block;font-size:15px;}
+    #rift-toast{position:fixed;bottom:80px;left:50%;transform:translateX(-50%);
+      z-index:13000;background:#132a41;color:#fff4da;border:1px solid var(--rift-gold);
+      padding:10px 16px;border-radius:12px;box-shadow:0 8px 35px #0008;
+      font:600 13px/1.5 system-ui,sans-serif;max-width:90vw;text-align:center;pointer-events:none;}
+    #rift-toast[hidden]{display:none!important;}
+    @media(max-width:640px){
+      .rift-gift-grid{grid-template-columns:1fr;}
+      .rift-utility{bottom:calc(8px + env(safe-area-inset-bottom));right:6px;left:6px;max-width:none;}
+      .rift-utility button{padding:6px 8px;flex:1;white-space:nowrap;min-height:39px;}
+      #rift-floating-back{top:calc(33px + env(safe-area-inset-top));min-height:43px;}
+      #ui .screen .topbar{padding:8px 9px!important;}
+    }
+    @media(prefers-reduced-motion:reduce){#ui .screen .card,#ui .screen .btn{transition:none!important;}}
   `;
   document.head.appendChild(scrollStyle);
+
+  // Stage selection -> real loading UI while main.js loads GLB models.
+  // No fictitious percentage, no long blocking delay, and safe dismissal on model errors.
+  function installStageLoadingScreen(){
+    if(document.getElementById('arkeia-stage-loading'))return;
+    const style=document.createElement('style');
+    style.id='arkeia-stage-loading-css';
+    style.textContent=`
+      #arkeia-stage-loading[hidden]{display:none!important}
+      #arkeia-stage-loading{position:fixed;inset:0;z-index:9998;display:grid;place-items:center;
+        padding:clamp(16px,4vw,40px);overflow:auto;color:#f6f0e3;
+        background:#07101d;isolation:isolate;font-family:serif;}
+      #arkeia-stage-loading .sl-stage-art{position:absolute;inset:0;background-position:center;
+        background-size:cover;opacity:.44;filter:saturate(.75) contrast(1.1) brightness(.8);z-index:-2}
+      #arkeia-stage-loading .sl-vignette{position:absolute;inset:0;z-index:-1;
+        background:radial-gradient(ellipse at 50% 40%,#162c42a0 0%,#081322ec 73%,#04090ffb 100%)}
+      #arkeia-stage-loading .sl-center{position:relative;display:flex;flex-direction:column;
+        align-items:center;justify-content:center;gap:15px;width:min(560px,100%);
+        text-align:center;padding:24px 18px 30px}
+      #arkeia-stage-loading .sl-mark{position:relative;width:112px;height:112px;margin:6px auto 16px}
+      #arkeia-stage-loading .sl-mark::before,#arkeia-stage-loading .sl-mark::after{
+        content:'';position:absolute;inset:9px;border:2px solid #b6e8ff99;
+        border-radius:50%;box-shadow:0 0 18px #69caff5c,inset 0 0 14px #6aaaff22;
+        animation:arkeia-loading-orbit 3.5s linear infinite}
+      #arkeia-stage-loading .sl-mark::after{inset:0;border-color:#d7c38e84;
+        border-style:dashed;animation-duration:5.5s;animation-direction:reverse}
+      #arkeia-stage-loading .sl-moon{position:absolute;inset:24px;border-radius:50%;
+        background:radial-gradient(circle at 33% 27%,#f8ffff,#9dceef 38%,#315176 72%,#0a192f 100%);
+        box-shadow:0 0 23px #91d6ff80,0 0 65px #4ba6eb40}
+      #arkeia-stage-loading .sl-kicker{font:600 10px/1.5 system-ui,sans-serif;letter-spacing:.36em;color:#c6c1ac}
+      #arkeia-stage-loading .sl-title{font-size:clamp(26px,5vw,40px);font-weight:500;letter-spacing:.17em;
+        line-height:1.4;text-shadow:0 2px 22px #000d}
+      #arkeia-stage-loading .sl-stage{font-size:clamp(14px,2.2vw,19px);letter-spacing:.15em;color:#e5d3a8}
+      #arkeia-stage-loading .sl-label{font:13px/1.8 system-ui,sans-serif;letter-spacing:.08em;color:#c7dce9}
+      #arkeia-stage-loading .sl-track{position:relative;overflow:hidden;height:3px;width:min(340px,85%);
+        border-radius:8px;background:#b5c9da30;margin:5px 0}
+      #arkeia-stage-loading .sl-track::after{content:'';display:block;width:38%;height:100%;
+        background:linear-gradient(90deg,transparent,#b8efff,#ddbd7f,transparent);
+        animation:arkeia-loading-sweep 1.8s ease-in-out infinite}
+      #arkeia-stage-loading .sl-dismiss{margin-top:10px;padding:9px 18px;border:1px solid #9ba6ac90;
+        color:#f2e7d0;background:#102438bb;cursor:pointer;font-size:12px;letter-spacing:.1em;
+        min-height:38px;border-radius:4px}
+      #arkeia-stage-loading .sl-dismiss:hover{background:#1b3c57}
+      @keyframes arkeia-loading-orbit{to{transform:rotate(360deg)}}
+      @keyframes arkeia-loading-sweep{0%{transform:translateX(-130%)}100%{transform:translateX(380%)}}
+      @media(prefers-reduced-motion:reduce){#arkeia-stage-loading *{animation:none!important}}
+    `;
+    document.head.appendChild(style);
+    const overlay=document.createElement('div'); overlay.id='arkeia-stage-loading'; overlay.hidden=true;
+    overlay.setAttribute('role','status'); overlay.setAttribute('aria-live','polite');
+    overlay.innerHTML=`
+      <div class="sl-stage-art" aria-hidden="true"></div><div class="sl-vignette" aria-hidden="true"></div>
+      <div class="sl-center"><div class="sl-mark" aria-hidden="true"><div class="sl-moon"></div></div>
+        <div class="sl-kicker">RIFTFALL ARENA · WORLD LOADING</div>
+        <div class="sl-title">戦いの舞台へ</div><div class="sl-stage"></div>
+        <div class="sl-track" aria-hidden="true"></div>
+        <div class="sl-label">キャラクターとステージを読み込んでいます</div>
+        <button type="button" class="sl-dismiss">ロード画面を閉じる</button></div>`;
+    document.body.appendChild(overlay);
+    const art=overlay.querySelector('.sl-stage-art'),title=overlay.querySelector('.sl-stage');
+    const label=overlay.querySelector('.sl-label');
+    const select=document.getElementById('scr-select');
+    let openAt=0,hideTimer=0,noticeTimer=0,watcher=null,observer=null;
+    const hide=()=>{
+      clearTimeout(hideTimer);clearTimeout(noticeTimer);
+      if(watcher)watcher.disconnect();watcher=null;
+      overlay.hidden=true;overlay.removeAttribute('aria-busy');
+    };
+    const finish=()=>{
+      if(overlay.hidden)return;
+      clearTimeout(hideTimer);
+      hideTimer=setTimeout(hide,Math.max(0,420-(performance.now()-openAt)));
+    };
+    const start=(tile)=>{
+      if(!select?.classList.contains('on'))return;
+      const heading=document.getElementById('select-label')?.textContent||'';
+      if(!heading.includes('舞台'))return;
+      clearTimeout(hideTimer);clearTimeout(noticeTimer);
+      openAt=performance.now();
+      title.textContent=tile.querySelector('b')?.textContent?.trim()||'新たな舞台';
+      const pic=tile.querySelector('.sthumb');
+      art.style.backgroundImage=pic?.style?.backgroundImage || '';
+      label.textContent='キャラクターモデルとステージを読み込んでいます';
+      overlay.hidden=false;overlay.setAttribute('aria-busy','true');
+      if(watcher)watcher.disconnect();
+      watcher=new MutationObserver(()=>{
+        if(document.getElementById('arkeia-model-error')){hide();return;}
+        if(!select.classList.contains('on'))finish();
+      });
+      watcher.observe(document.body,{childList:true});
+      watcher.observe(select,{attributes:true,attributeFilter:['class']});
+      noticeTimer=setTimeout(()=>{
+        if(!overlay.hidden){label.textContent='読み込みが続いています。時間がかかる場合は接続状況をご確認ください。';}
+      },12000);
+    };
+    overlay.querySelector('.sl-dismiss').addEventListener('click',hide);
+    document.addEventListener('click',event=>{
+      const tile=event.target.closest?.('#select-grid button.stage-tile');
+      if(tile&&!tile.disabled)start(tile);
+    },true);
+    // When main.js transitions to gameplay, the selection section loses .on.
+    // Cancel/return to menu or model load failure must not trap the player.
+    window.addEventListener('pagehide',hide);
+  }
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',installStageLoadingScreen,{once:true});
+  else installStageLoadingScreen();
 
   // Patch the SAME ESM module instances that main.js uses. This is visual only.
   const VISUAL_VERSION = 'painted-cg-20261107a';
@@ -2782,5 +2991,372 @@
     };
 
   }
+
+  // Premium menu utilities, accessible navigation and locally-persisted gifts.
+  // This is an opt-in overlay over the existing game, not a replacement for its logic.
+  (() => {
+    const safeGet = (key, fallback = '') => { try { return localStorage.getItem(key) ?? fallback; } catch { return fallback; } };
+    const safeSet = (key, val) => { try { localStorage.setItem(key, val); return true; } catch { return false; } };
+    const fromJson = (text, fallback) => { try { return JSON.parse(text) ?? fallback; } catch { return fallback; } };
+    const $ = (selector, root = document) => root.querySelector(selector);
+    const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
+    const JST_MS = 9 * 3600000;
+    const TIMED_MS = 30 * 60000;
+    const TIMED_REWARD = 120;
+    const DAILY_REWARDS = [300, 350, 400, 450, 550, 700, 1200];
+    const SAVE_KEY = 'arkeia-save-v1';
+    const GIFT_KEY = 'riftfall-gifts-v2';
+    const FAV_KEY = 'riftfall-ui-favorites-v1';
+    const RECENT_KEY = 'riftfall-ui-recent-v1';
+    const THEME_KEY = 'riftfall-ui-theme-v1';
+    const DENSITY_KEY = 'riftfall-ui-density-v1';
+    const dayJST = (ms) => Math.floor((ms + JST_MS) / 86400000);
+    const num = (value) => Number.isFinite(Number(value)) ? Number(value) : 0;
+    const int = (value, min, max) => Math.min(max, Math.max(min, Math.trunc(num(value))));
+    const format = (value) => Math.floor(value).toLocaleString('ja-JP');
+    const duration = (ms) => {
+      const s = Math.max(0, Math.ceil(ms / 1000));
+      return `${Math.floor(s / 3600) ? `${Math.floor(s / 3600)}時間 ` : ''}${String(Math.floor(s % 3600 / 60)).padStart(2, '0')}分${String(s % 60).padStart(2, '0')}秒`;
+    };
+    function toast(message) {
+      const el = document.getElementById('rift-toast');
+      if (!el) return;
+      el.textContent = String(message);
+      el.hidden = false;
+      clearTimeout(toast.token);
+      toast.token = setTimeout(() => { el.hidden = true; }, 3500);
+    }
+    const themeNames = ['frost', 'royal', 'ember'];
+    let theme = safeGet(THEME_KEY, 'frost');
+    if (!themeNames.includes(theme)) theme = 'frost';
+    let density = safeGet(DENSITY_KEY, 'comfortable');
+    if (!['comfortable', 'compact'].includes(density)) density = 'comfortable';
+    document.documentElement.dataset.riftTheme = theme;
+    document.documentElement.dataset.riftDensity = density;
+    const toastEl = document.createElement('div');
+    toastEl.id = 'rift-toast'; toastEl.setAttribute('role', 'status'); toastEl.hidden = true;
+    document.body.appendChild(toastEl);
+
+    // Reliable floating fallback for all menu Back buttons, even when .topbar
+    // cannot remain sticky due to ancestor positioning or browser quirks.
+    const floatBack = document.createElement('button');
+    floatBack.id = 'rift-floating-back'; floatBack.type = 'button';
+    floatBack.textContent = '‹ 戻る'; floatBack.hidden = true;
+    floatBack.addEventListener('click', () => {
+      const current = $('#ui .screen.on');
+      const original = current?.querySelector('.topbar .back:not([disabled]), .portal-header .back:not([disabled])');
+      if (original && !original.hidden) original.click();
+    });
+    document.body.append(floatBack);
+
+    const tools = document.createElement('nav');
+    tools.className = 'rift-utility'; tools.id = 'rift-utility';
+    tools.setAttribute('aria-label', 'メニュー便利操作'); tools.hidden = true;
+    tools.innerHTML = '<button type="button" data-ui-act="gift">🎁 贈り物</button>' +
+      '<button type="button" data-ui-act="search">⌕ 検索</button>' +
+      '<button type="button" data-ui-act="density">▦ 表示切替</button>' +
+      '<button type="button" data-ui-act="theme">✦ 色変更</button>' +
+      '<button type="button" data-ui-act="top">↑ 上へ</button>';
+    document.body.append(tools);
+
+    function currentScreen() { return $('#ui .screen.on'); }
+    function updateToolbar() {
+      const current = currentScreen();
+      const allowed = !!current && !['scr-press', 'scr-story'].includes(current.id);
+      tools.hidden = !allowed || !!$('#rift-gift-dialog:not([hidden])');
+      const original = current?.querySelector('.topbar .back:not([disabled]), .portal-header .back:not([disabled])');
+      const rect = original?.getBoundingClientRect();
+      const isVisible = !!(rect && rect.width > 0 && rect.height > 0 && rect.top >= 12 && rect.bottom <= window.innerHeight - 5);
+      floatBack.hidden = !original || !allowed || isVisible || !!$('#rift-gift-dialog:not([hidden])');
+      if (original && !floatBack.hidden) floatBack.textContent = `‹ ${original.textContent?.trim() || '戻る'}`;
+      const search = $('[data-ui-act="search"]', tools);
+      if (search) search.hidden = current?.id !== 'scr-select';
+      const up = $('[data-ui-act="top"]', tools);
+      if (up) up.hidden = !current || current.scrollTop < 90;
+    }
+    let queuedLayout = false;
+    const scheduleToolbar = () => {
+      if (queuedLayout) return;
+      queuedLayout = true;
+      requestAnimationFrame(() => { queuedLayout = false; updateToolbar(); });
+    };
+    document.addEventListener('scroll', scheduleToolbar, true);
+    window.addEventListener('resize', scheduleToolbar);
+    document.addEventListener('click', scheduleToolbar);
+    new MutationObserver(scheduleToolbar).observe($('#ui') || document.body, {
+      attributes: true, subtree: true, attributeFilter: ['class', 'hidden']
+    });
+    tools.addEventListener('click', (event) => {
+      const action = event.target.closest('button')?.dataset.uiAct;
+      if (!action) return;
+      const screen = currentScreen();
+      if (action === 'gift') openGift();
+      if (action === 'search') { $('#select-search')?.focus(); $('#select-search')?.scrollIntoView({ block: 'center', behavior: 'smooth' }); }
+      if (action === 'top') screen?.scrollTo({ top: 0, behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
+      if (action === 'density') {
+        density = density === 'compact' ? 'comfortable' : 'compact';
+        document.documentElement.dataset.riftDensity = density;
+        safeSet(DENSITY_KEY, density);
+        toast(density === 'compact' ? 'コンパクト表示に変更' : 'ゆったり表示に変更');
+      }
+      if (action === 'theme') {
+        theme = themeNames[(themeNames.indexOf(theme) + 1) % themeNames.length];
+        document.documentElement.dataset.riftTheme = theme;
+        safeSet(THEME_KEY, theme);
+        const label = { frost: '氷晶', royal: '星宮', ember: '紅焔' }[theme];
+        toast(`テーマを「${label}」に変更`);
+      }
+      scheduleToolbar();
+    });
+
+    // Search, favorites, sorting, recent selections: applies to dynamically
+    // inserted stage cards and fighter cards without changing their click logic.
+    const favorites = new Set(fromJson(safeGet(FAV_KEY, '[]'), []).filter(v => typeof v === 'string').slice(0, 1000));
+    let recents = fromJson(safeGet(RECENT_KEY, '[]'), []).filter(v => typeof v === 'string').slice(0, 40);
+    let filterMode = 'all';
+    let sortMode = 'original';
+    const cardOrder = new WeakMap();
+    let orderCounter = 0;
+    const grid = $('#select-grid');
+    const filterTools = document.createElement('div');
+    filterTools.className = 'rift-filter-tools'; filterTools.setAttribute('aria-label', 'カード一覧表示');
+    filterTools.innerHTML = '<button type="button" data-filter="all" aria-pressed="true">すべて</button>' +
+      '<button type="button" data-filter="favorites" aria-pressed="false">★ お気に入り</button>' +
+      '<button type="button" data-filter="recent" aria-pressed="false">◷ 最近選択</button>' +
+      '<select aria-label="並び順" id="rift-sort"><option value="original">通常の並び順</option>' +
+      '<option value="name">名前順</option><option value="favorites">お気に入り優先</option></select>';
+    const selectTools = $('#scr-select .select-tools');
+    if (selectTools?.parentNode) selectTools.insertAdjacentElement('afterend', filterTools);
+    else if (grid?.parentNode) grid.parentNode.insertBefore(filterTools, grid);
+    function cardId(card) {
+      if (card.dataset.riftId) return card.dataset.riftId;
+      const b = card.querySelector('b');
+      const name = b?.textContent?.trim() || card.dataset.search || card.textContent?.slice(0, 30) || 'unknown';
+      const title = card.querySelector('em')?.textContent?.trim() || '';
+      card.dataset.riftId = `${card.classList.contains('stage-tile') ? 'stage' : 'fighter'}:${name}:${title}`;
+      return card.dataset.riftId;
+    }
+    function saveFavorites() { safeSet(FAV_KEY, JSON.stringify([...favorites].slice(0, 1000))); }
+    function refreshFilters() {
+      if (!grid) return;
+      const cards = $$('.card', grid);
+      const searchValue = ($('#select-search')?.value || '').trim().toLocaleLowerCase();
+      let count = 0;
+      cards.forEach((card, index) => {
+        const key = cardId(card);
+        if (!cardOrder.has(card)) cardOrder.set(card, ++orderCounter);
+        const star = $('.rift-card-favorite', card);
+        if (star) { star.setAttribute('aria-pressed', favorites.has(key) ? 'true' : 'false'); star.textContent = favorites.has(key) ? '★' : '☆'; }
+        const allowed = filterMode === 'favorites' ? favorites.has(key) : filterMode === 'recent' ? recents.includes(key) : true;
+        const text = `${card.dataset.search || ''} ${card.textContent || ''}`.toLocaleLowerCase();
+        const matched = !searchValue || text.includes(searchValue);
+        card.classList.toggle('rift-is-filtered', !allowed || !matched);
+        const baseOrder = cardOrder.get(card) || index;
+        card.style.order = String(sortMode === 'name' ? 10000 : sortMode === 'favorites' ? (favorites.has(key) ? 0 : 100000) + baseOrder : baseOrder);
+        if (!card.hidden && !card.classList.contains('rift-is-filtered')) count++;
+      });
+      if (sortMode === 'name') {
+        const sorted = cards.slice().sort((a, b) => cardId(a).localeCompare(cardId(b), 'ja'));
+        sorted.forEach((c, i) => { c.style.order = String(i); });
+      }
+      const ctr = $('#select-counter'); if (ctr) ctr.textContent = `${count} / ${cards.length} 件`;
+      const empty = $('#select-empty'); if (empty) empty.hidden = !(cards.length && count === 0);
+    }
+    function attachCards() {
+      if (!grid) return;
+      for (const card of $$('.card', grid)) {
+        if (card.dataset.riftEnhanced) continue;
+        card.dataset.riftEnhanced = '1';
+        const key = cardId(card);
+        const fav = document.createElement('span');
+        fav.className = 'rift-card-favorite'; fav.setAttribute('role', 'button'); fav.tabIndex = 0;
+        fav.setAttribute('aria-label', 'お気に入りに登録・解除');
+        fav.textContent = favorites.has(key) ? '★' : '☆';
+        fav.setAttribute('aria-pressed', favorites.has(key) ? 'true' : 'false');
+        function toggle(event) {
+          event.preventDefault(); event.stopPropagation();
+          if (favorites.has(key)) favorites.delete(key); else favorites.add(key);
+          saveFavorites(); refreshFilters();
+          toast(favorites.has(key) ? 'お気に入りに追加しました' : 'お気に入りを解除しました');
+        }
+        fav.addEventListener('click', toggle);
+        fav.addEventListener('keydown', event => {
+          if (event.key === 'Enter' || event.key === ' ') toggle(event);
+        });
+        card.appendChild(fav);
+        card.addEventListener('click', event => {
+          if (event.defaultPrevented || card.disabled) return;
+          recents = [key, ...recents.filter(x => x !== key)].slice(0, 30);
+          safeSet(RECENT_KEY, JSON.stringify(recents));
+        });
+      }
+      refreshFilters();
+    }
+    filterTools.addEventListener('click', event => {
+      const b = event.target.closest('button[data-filter]'); if (!b) return;
+      filterMode = b.dataset.filter;
+      $$('[data-filter]', filterTools).forEach(el => el.setAttribute('aria-pressed', String(el.dataset.filter === filterMode)));
+      refreshFilters();
+    });
+    $('#rift-sort')?.addEventListener('change', event => { sortMode = event.target.value; refreshFilters(); });
+    $('#select-search')?.addEventListener('input', () => setTimeout(refreshFilters, 0));
+    if (grid) {
+      new MutationObserver(() => { attachCards(); }).observe(grid, { childList: true });
+      attachCards();
+    }
+
+    // Daily (JST calendar day) and elapsed-time gifts credited into the
+    // existing local shard save. Reload once after claiming because main.js
+    // holds save in its module closure and must reload that updated snapshot.
+    const readSave = () => fromJson(safeGet(SAVE_KEY, '{}'), {});
+    const giftDefault = (now) => ({ dailyKey: -1, streak: 0, nextTimedAt: now + TIMED_MS, lastObservedAt: now });
+    function readGifts(now) {
+      const sidecar = fromJson(safeGet(GIFT_KEY, '{}'), {});
+      const carried = readSave()?.giftClaims || {};
+      const pick = (name, initial) => Math.max(num(sidecar[name]), num(carried[name]), initial);
+      return {
+        dailyKey: Math.trunc(pick('dailyKey', -1)),
+        streak: int(sidecar.dailyKey >= carried.dailyKey ? sidecar.streak : carried.streak, 0, 7),
+        nextTimedAt: pick('nextTimedAt', now + (sidecar.nextTimedAt || carried.nextTimedAt ? 0 : TIMED_MS)),
+        lastObservedAt: pick('lastObservedAt', now)
+      };
+    }
+    if (!safeGet(GIFT_KEY)) safeSet(GIFT_KEY, JSON.stringify(giftDefault(Date.now())));
+    function giftSnapshot() {
+      const now = Date.now(), gift = readGifts(now);
+      const stable = now + 60 * 1000 >= gift.lastObservedAt;
+      const day = dayJST(now);
+      const isDaily = stable && day > gift.dailyKey;
+      const upcomingStreak = day === gift.dailyKey + 1 ? Math.min(7, gift.streak + 1) : 1;
+      const currentStreak = isDaily ? upcomingStreak : gift.streak;
+      return { now, day, gift, stable, isDaily, nextTimed: stable && now >= gift.nextTimedAt,
+        currentStreak, dailyReward: DAILY_REWARDS[Math.max(0, currentStreak - 1)] };
+    }
+    let claiming = false;
+    function grantGift(kind) {
+      if (claiming) return;
+      const snapshot = giftSnapshot();
+      if (!snapshot.stable) { toast('端末の時刻を確認してください'); renderGifts(); return; }
+      const isDaily = kind === 'daily';
+      if (isDaily ? !snapshot.isDaily : !snapshot.nextTimed) { toast('まだ受け取れません'); return; }
+      const currentSave = readSave();
+      const shardBalance = int(currentSave.shards, 0, 999999);
+      const amount = isDaily ? snapshot.dailyReward : TIMED_REWARD;
+      if (shardBalance + amount > 999999) { toast('灯晶の上限に近いため、先に灯晶を使ってください'); return; }
+      claiming = true;
+      const gifts = { ...snapshot.gift, lastObservedAt: snapshot.now };
+      if (isDaily) {
+        gifts.dailyKey = snapshot.day;
+        gifts.streak = snapshot.currentStreak;
+      } else gifts.nextTimedAt = snapshot.now + TIMED_MS;
+      const updated = { ...currentSave, shards: shardBalance + amount, giftClaims: gifts };
+      const previousSave = safeGet(SAVE_KEY, '{}');
+      const previousGift = safeGet(GIFT_KEY, '{}');
+      if (!safeSet(SAVE_KEY, JSON.stringify(updated)) || !safeSet(GIFT_KEY, JSON.stringify(gifts))) {
+        safeSet(SAVE_KEY, previousSave);
+        safeSet(GIFT_KEY, previousGift);
+        claiming = false; toast('保存できませんでした。ブラウザの保存容量・設定を確認してください'); return;
+      }
+      // Existing account sync is maintained by the original game. This flag
+      // merely marks a pending local change; server validation is not implied.
+      if ((safeGet('arkeia-sync') || '').length === 12) safeSet('arkeia-sync-dirty', '1');
+      const count = $('#title-shards'); if (count) count.textContent = `灯晶　${format(updated.shards)}`;
+      toast(`灯晶 +${format(amount)} を獲得しました！ 保存を反映します`);
+      renderGifts();
+      setTimeout(() => window.location.reload(), 950);
+    }
+    const dialog = document.createElement('div');
+    dialog.className = 'rift-gift-dialog'; dialog.id = 'rift-gift-dialog'; dialog.hidden = true;
+    dialog.setAttribute('role', 'dialog'); dialog.setAttribute('aria-modal', 'true');
+    dialog.setAttribute('aria-label', '贈り物の受取');
+    dialog.innerHTML = '<div class="rift-gift-panel"><button class="rift-gift-close" type="button" aria-label="閉じる">×</button>' +
+      '<h2>✦ 天晶の贈り物</h2><p>毎日の冒険と、時間の経過に感謝を。灯晶を受け取って旅の準備を整えましょう。</p>' +
+      '<div class="rift-gift-grid"><section class="rift-gift-card"><b>☀ デイリープレゼント</b>' +
+      '<strong id="rift-daily-reward">—</strong><small id="rift-daily-time">準備中...</small>' +
+      '<button type="button" id="rift-claim-daily">デイリーを受け取る</button></section>' +
+      '<section class="rift-gift-card"><b>⌛ 時間経過プレゼント</b><strong>灯晶 +120</strong>' +
+      '<small id="rift-timed-time">準備中...</small><button type="button" id="rift-claim-timed">時間報酬を受け取る</button></section></div>' +
+      '<div id="rift-streak-track" class="rift-streak-track" aria-label="連続ログイン報酬"></div>' +
+      '<p style="font-size:12px">毎日0時（日本時間）に更新。時間報酬は30分ごとに受取可能です。受取後、保存内容の反映のためゲームを再読み込みします。</p>' +
+      '<p style="font-size:11px;color:#e6bf91">※ブラウザのローカルセーブで管理します。端末時刻の変更や複数端末間の厳密な不正受取防止にはサーバー側の対応が必要です。</p></div>';
+    document.body.append(dialog);
+    let previousFocus = null;
+    function closeGift() {
+      dialog.hidden = true;
+      previousFocus?.focus?.();
+      scheduleToolbar();
+    }
+    function openGift() {
+      previousFocus = document.activeElement;
+      dialog.hidden = false;
+      renderGifts();
+      $('.rift-gift-close', dialog)?.focus();
+      scheduleToolbar();
+    }
+    dialog.addEventListener('click', (event) => { if (event.target === dialog) closeGift(); });
+    $('.rift-gift-close', dialog)?.addEventListener('click', closeGift);
+    $('#rift-claim-daily')?.addEventListener('click', () => grantGift('daily'));
+    $('#rift-claim-timed')?.addEventListener('click', () => grantGift('timed'));
+    function renderGifts() {
+      const s = giftSnapshot();
+      const daily = $('#rift-daily-reward');
+      const dailyTime = $('#rift-daily-time');
+      const timedTime = $('#rift-timed-time');
+      const dBtn = $('#rift-claim-daily');
+      const tBtn = $('#rift-claim-timed');
+      if (daily) daily.textContent = `灯晶 +${format(s.dailyReward)}`;
+      if (dailyTime) dailyTime.textContent = !s.stable ? '端末時刻に異常があります' :
+        s.isDaily ? `受取可能 ／ 連続 ${s.currentStreak}日目` : `本日受取済み ／ 次の更新まで ${duration(((s.day + 1) * 86400000 - JST_MS) - s.now)}`;
+      if (timedTime) timedTime.textContent = !s.stable ? '端末時刻に異常があります' :
+        s.nextTimed ? '受取可能 ／ 30分ごとに更新' : `次のプレゼントまで ${duration(s.gift.nextTimedAt - s.now)}`;
+      if (dBtn) dBtn.disabled = claiming || !s.isDaily;
+      if (tBtn) tBtn.disabled = claiming || !s.nextTimed;
+      const streakTrack = $('#rift-streak-track');
+      if (streakTrack && streakTrack.children.length !== 7) {
+        for (let i = 0; i < 7; i++) {
+          const day = document.createElement('span');
+          day.className = 'rift-streak-day';
+          day.innerHTML = `${i + 1}日目 <b>+${format(DAILY_REWARDS[i])}</b>`;
+          streakTrack.append(day);
+        }
+      }
+      if (streakTrack) [...streakTrack.children].forEach((el, i) => {
+        el.dataset.active = String(i + 1 === s.currentStreak);
+      });
+      const titleBtn = $('#rift-title-gift');
+      if (titleBtn) titleBtn.textContent = (s.isDaily || s.nextTimed) ?
+        '🎁 受け取り可能なプレゼントがあります' : '🎁 デイリー・時間プレゼントを確認';
+    }
+    const title = $('#scr-title');
+    if (title && !$('#rift-title-gift')) {
+      const btn = document.createElement('button');
+      btn.type = 'button'; btn.className = 'rift-gift-button'; btn.id = 'rift-title-gift';
+      btn.addEventListener('click', openGift);
+      const inner = $('.inner', title);
+      const anchor = $('.menu', inner || title);
+      if (anchor) anchor.insertAdjacentElement('beforebegin', btn);
+      else (inner || title).appendChild(btn);
+    }
+    renderGifts();
+    setInterval(() => { if (!dialog.hidden || currentScreen()?.id === 'scr-title') renderGifts(); }, 1000);
+    window.addEventListener('storage', (event) => {
+      if ([GIFT_KEY, SAVE_KEY].includes(event.key)) renderGifts();
+      if (event.key === FAV_KEY) { const list = fromJson(event.newValue, []); favorites.clear(); list.forEach(x => favorites.add(x)); refreshFilters(); }
+    });
+    document.addEventListener('keydown', event => {
+      const k = event.key.toLowerCase();
+      if (event.key === 'Escape') {
+        if (!dialog.hidden) { event.preventDefault(); closeGift(); return; }
+        if (event.target?.matches?.('input, textarea, select')) { event.target.blur(); return; }
+        const back = currentScreen()?.querySelector('.topbar .back:not([disabled])');
+        if (back) { event.preventDefault(); back.click(); }
+      }
+      if ((event.ctrlKey || event.metaKey) && k === 'k') {
+        if ($('#scr-select.on') && $('#select-search')) { event.preventDefault(); $('#select-search').focus(); }
+      }
+      if (event.altKey && k === 'g' && currentScreen()) { event.preventDefault(); openGift(); }
+    });
+    scheduleToolbar();
+  })();
 
 })();
