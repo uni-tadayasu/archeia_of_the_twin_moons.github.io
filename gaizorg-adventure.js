@@ -1,4 +1,4 @@
-// RF_NEPT_V14_ADVENTURE
+// RF_UDAIJIN_REST_MOTION_V22
 // RF_BATTLE_FIX_V9_1_20261109
 // RF_GRAND_FOUR_20261108 gaizorg-adventure.js
 /**
@@ -70,12 +70,11 @@ export function setupGaizorgAdventure(ctx){
   });
   panel.querySelector('.ga-exit').addEventListener('click',()=>goTitle());
   panel.querySelector('.ga-reset').addEventListener('click',async()=>{
-    if (busy||!rest)return;
+    if(busy||!rest)return;
     const yes=await rfAdventureDialog('最初から始めますか？','進行状況をステージ1に戻します。\n灯晶・所持品・強化は変更されません。',
       [['ステージ1に戻す',true,true],['キャンセル',false]]);
     if(yes!==true)return;
-    rfFreshAdventure();
-    await enterRest();
+    rfFreshAdventure();await enterRest();
     ui.banner?.({name:'— 冒険を最初から —'},'ステージ1から再開できます');
   });
   warpButton.addEventListener('click',()=>enterPortal());
@@ -92,11 +91,10 @@ export function setupGaizorgAdventure(ctx){
     }
     (titleMenu || $('#scr-title') || document.body).append(titleButton);
   }
-  // RF_ADVENTURE_RESTART_V18: Fresh start resets ONLY Adventure progress, never inventory/currency/upgrades.
-  function rfAdventureDialog(title, message, choices) {
+  // RF_ADVENTURE_RESTART_V18: reset ONLY Adventure progress, never inventory/currency/upgrades.
+  function rfAdventureDialog(title,message,choices){
     return new Promise(resolve=>{
-      const prev=document.activeElement;
-      const overlay=document.createElement('div');
+      const prev=document.activeElement,overlay=document.createElement('div');
       overlay.style.cssText='position:fixed;inset:0;z-index:200100;display:grid;place-items:center;padding:16px;background:rgba(3,9,20,.78);pointer-events:auto';
       const card=document.createElement('div');card.setAttribute('role','dialog');card.setAttribute('aria-modal','true');
       card.style.cssText='box-sizing:border-box;width:min(440px,calc(100vw - 24px));max-height:85dvh;overflow-y:auto;color:#eaf9ff;background:linear-gradient(130deg,#102e45,#0b1525);border:1px solid #8deaff;border-radius:12px;padding:20px;box-shadow:0 20px 60px #0009;font:14px/1.7 system-ui,sans-serif';
@@ -112,31 +110,21 @@ export function setupGaizorgAdventure(ctx){
       window.addEventListener('keydown',onKey,true);actions.querySelector('button')?.focus();
     });
   }
-  function rfFreshAdventure() {
-    progress.unlocked=1;
-    progress.cleared=false;
-    activeStage=0;
-    saveData();
-  }
-  function rfChooseHero() {
-    state.mode='adventure';
-    openSelect('冒険に出る戦士を選ぶ','アドベンチャー › 使用キャラクター',k=>start(k),{onBack:goTitle});
-  }
+  function rfFreshAdventure(){progress.unlocked=1;progress.cleared=false;activeStage=0;saveData();}
+  function rfChooseHero(){state.mode='adventure';openSelect('冒険に出る戦士を選ぶ','アドベンチャー › 使用キャラクター',k=>start(k),{onBack:goTitle});}
   titleButton.addEventListener('click',async()=>{
     if(busy)return;
     const mode=await rfAdventureDialog('アドベンチャーモード',
       '進行状況：'+(progress.cleared?'全10ステージ踏破':'ステージ'+Math.min(10,progress.unlocked)+'まで解放')+'\n続きから遊ぶか、ステージ1からやり直すかを選択してください。',
       [['続きから','resume'],['最初から始める','fresh'],['キャンセル',null]]);
-    if(mode==='fresh') {
-      const accepted=await rfAdventureDialog('最初から始めますか？',
-        'アドベンチャーのステージ進行のみステージ1に戻します。\n灯晶・キャラクター・強化・装備は消えません。',
+    if(mode==='fresh'){
+      const yes=await rfAdventureDialog('最初から始めますか？','アドベンチャーのステージ進行のみステージ1に戻します。\n灯晶・キャラクター・強化・装備は消えません。',
         [['最初から始める',true,true],['戻る',false]]);
-      if(accepted!==true)return;
+      if(yes!==true)return;
       rfFreshAdventure();
-    } else if(mode!=='resume') return;
+    }else if(mode!=='resume')return;
     rfChooseHero();
   });
-
 
   // Register a safe runtime hook for original boss techniques. The base engine
   // handles damage and collision, while this draws layered illustration FX only.
@@ -241,6 +229,7 @@ export function setupGaizorgAdventure(ctx){
     scene.remove(rest.group);
     if(rest.mixer)rest.mixer.stopAllAction();
     rest.motion?.stop();
+    rest.udaMotion?.dispose();
     if(rest.instance)disposeModel(rest.instance,rest.mixer);
     for(const asset of rest.owned)asset?.dispose?.();
     rest=null;
@@ -255,7 +244,6 @@ export function setupGaizorgAdventure(ctx){
     try{
       if(key==='gaizorg' && !chiefUnlocked()){ui.banner({name:'使用権限がありません'},'ガイゾルグは運営長専用です');goTitle();return;}
       if(key==='valdarion' && !chiefUnlocked()){ui.banner({name:'使用権限がありません'},'ヴァルダリオンは運営長専用です');goTitle();return;}
-      if(key==='nepterion' && !chiefUnlocked()){ui.banner({name:'使用権限がありません'},'ネプテリオンは運営長専用です');goTitle();return;}
       if(key==='udaijin' && !chiefUnlocked()){ui.banner({name:'使用権限がありません'},'右大臣は運営長専用です');goTitle();return;}
       if(key==='operator_gigantes' && !operatorOnlyUnlocked()){ui.banner({name:'使用権限がありません'},'機神ギガンテスは運営専用です');goTitle();return;}
       if(!FIGHTERS[key])key='rowen';
@@ -276,11 +264,12 @@ export function setupGaizorgAdventure(ctx){
     p.add(instance.wrapper);
     const mixer=new THREE.AnimationMixer(instance.model);
     const motion=attachValgardMotion(instance.model,k);
+    const udaMotion=k==='udaijin' ? window.__rfAttachUdaijinRestMotion?.(instance.model,original?.animations||[]) : null;
     const clips=original?.animations||[];
     const walk=clips.find(c=>/walk/i.test(c.name));
     const run=clips.find(c=>/run/i.test(c.name));
     const idle=clips.find(c=>/idle/i.test(c.name));
-    rest={...env,p,instance,mixer,motion,walk,run,idle,action:null,owned:env.owned,pos:new THREE.Vector3(0,0,8),facing:0,portalHold:0};
+    rest={...env,p,instance,mixer,motion,udaMotion,walk,run,idle,action:null,owned:env.owned,pos:new THREE.Vector3(0,0,8),facing:0,portalHold:0};
     if(idle)rest.action=mixer.clipAction(idle).play();
     state.adventureRest=true;state.battle=null;state.field=null;state.mode='adventure';
     state.battleLoading=false;
@@ -320,6 +309,7 @@ export function setupGaizorgAdventure(ctx){
     rest.p.position.copy(rest.pos);rest.p.rotation.y=rest.facing;
     animation(moving,running);rest.mixer.update(dt);
     rest.motion?.update(dt,moving?(running?'run':'walk'):false);
+    rest.udaMotion?.update(dt,moving,running);
     // A little idle motion for models with no authored animation.
     if(!rest.walk && !rest.run && !rest.idle && !rest.motion)rest.instance.wrapper.position.y=Math.abs(Math.sin(performance.now()/170))*(moving?.09:.02);
     rest.portal.rotation.z+=dt*.45;

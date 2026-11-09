@@ -1,4 +1,4 @@
-// RF_UDAIJIN_EXACT_V21 右大臣 – chief-exclusive curse fighter.
+// RF_UDAIJIN_MOTION_V22 右大臣 – chief-exclusive curse fighter.
 // Exact source geometry, materials and textures; procedural remeshing disabled.
 import * as THREE from 'three';
 const KEY='udaijin', CURSE_TIME=30, CURSE_RADIUS=5.65;
@@ -219,76 +219,272 @@ function eyeLaser(b,f){
 // 20-bone automatic runtime rig. Does not alter or re-export the user's GLB.
 // V21 EXACT GLB: never remesh, recalculate weights, or alter the original GLB scene.
 // This fixes the distorted appearance caused by the old procedural 20-bone conversion.
+// RF_UDAIJIN_MOTION_V22: runtime motion controller.
+// Original GLB bytes, original mesh topology, UVs, textures and original bind pose are retained.
+// Authored clips take precedence; named bones are posed when suitable. Otherwise lightweight
+// GPU vertex motions imitate articulated joints, leaving the source geometry intact.
+const UD_MOTION_KEYWORDS={
+ idle:/idle|wait|stand|待機/i,
+ walk:/walk|walking|歩行/i,
+ run:/run|running|sprint|走行/i,
+ attack:/attack|punch|swing|slash|strike|hit|攻撃/i,
+ cast:/cast|spell|magic|chant|詠唱|魔法/i
+};
+const udAxisX=new THREE.Vector3(1,0,0),udAxisY=new THREE.Vector3(0,1,0),udAxisZ=new THREE.Vector3(0,0,1);
+const udTempQ=new THREE.Quaternion(),udTempQ2=new THREE.Quaternion();
+function udClipMap(clips){
+  const entries=Object.entries(UD_MOTION_KEYWORDS);
+  return Object.fromEntries(entries.map(([k,re])=>[k,clips.find(c=>re.test(c.name||''))||null]));
+}
+function udNamedBones(model){
+  const bones=[];model.traverse(o=>{if(o.isBone)bones.push(o);});
+  const normalized=b=>String(b?.name||'').toLowerCase().replace(/mixamorig/g,'').replace(/[^a-z0-9]/g,'');
+  const side=(name,p)=>p==='l'?/left|^l(?:arm|leg|thigh|hand|fore|foot|shin)/.test(name):/right|^r(?:arm|leg|thigh|hand|fore|foot|shin)/.test(name);
+  const find=(p,re)=>bones.find(b=>side(normalized(b),p)&&re.test(normalized(b)))||null;
+  const center=re=>bones.find(b=>re.test(normalized(b))&&!/left|right/.test(normalized(b)))||null;
+  const mapped={
+    hips:center(/hips|pelvis|hiproot/),spine:center(/spine|waist/),chest:center(/chest|spine2|spine3/),
+    neck:center(/neck/),head:center(/head/),
+    lArm:find('l',/upperarm|shoulder|leftarm$/),rArm:find('r',/upperarm|shoulder|rightarm$/),
+    lFore:find('l',/forearm|lowerarm|elbow/),rFore:find('r',/forearm|lowerarm|elbow/),
+    lHand:find('l',/hand|wrist/),rHand:find('r',/hand|wrist/),
+    lThigh:find('l',/thigh|upleg|upperleg/),rThigh:find('r',/thigh|upleg|upperleg/),
+    lShin:find('l',/calf|shin|lowerleg|knee/),rShin:find('r',/calf|shin|lowerleg|knee/),
+    lFoot:find('l',/foot|ankle/),rFoot:find('r',/foot|ankle/)
+  };
+  // Avoid shoulder matching the forearm, and hip-mapping errors on generic bones.
+  const filtered=Object.fromEntries(Object.entries(mapped).filter(([,v])=>v));
+  return filtered;
+}
+function udPoseNamedBones(controller,walk,run,attack,cast,time){
+  const bones=controller.bones,bases=controller.bases;
+  const stride=Math.sin(time*(run>walk?10.8:6.4));
+  const move=walk*.33+run*.59;
+  const sway=move*stride;
+  const bend=attack;
+  const pose=(name,x=0,y=0,z=0)=>{
+    const bone=bones[name],base=bases[name];if(!bone||!base)return;
+    bone.quaternion.copy(base);
+    if(x)bone.quaternion.multiply(udTempQ.setFromAxisAngle(udAxisX,x));
+    if(y)bone.quaternion.multiply(udTempQ2.setFromAxisAngle(udAxisY,y));
+    if(z)bone.quaternion.multiply(udTempQ.setFromAxisAngle(udAxisZ,z));
+  };
+  pose('hips',.035*sway,0,.025*sway);
+  pose('spine',-.12*bend-.035*cast,.06*bend);
+  pose('chest',-.11*bend-.10*cast,-.035*sway);
+  pose('neck',.014*stride);pose('head',-.025*sway+.07*cast);
+  pose('lArm',-.7*sway-.43*cast+.17*bend,0,-.07*cast);
+  pose('rArm',.7*sway-.43*cast-.94*bend,0,.07*cast);
+  pose('lFore',-.17-.35*cast-.12*bend);
+  pose('rFore',-.17-.35*cast-.60*bend);
+  pose('lHand',.12*cast);pose('rHand',-.12*cast);
+  pose('lThigh',sway);pose('rThigh',-sway);
+  pose('lShin',-Math.max(0,-stride)*(walk*.23+run*.43));
+  pose('rShin',-Math.max(0,stride)*(walk*.23+run*.43));
+  pose('lFoot',Math.max(0,-stride)*.13*walk);
+  pose('rFoot',Math.max(0,stride)*.13*walk);
+}
+const UD_VERTEX_FUNCTIONS=`
+uniform mat4 udaToModel;
+uniform mat4 udaFromModel;
+uniform vec4 udaBounds; // centerX, minY, height, width
+uniform float udaDepthCenter;
+uniform vec4 udaMotion; // clock, walk strength, run strength, strike strength
+uniform float udaCastStrength;
+float udaSmooth(float low,float high,float x){float t=clamp((x-low)/max(.000001,high-low),0.,1.);return t*t*(3.-2.*t);}
+vec3 udaRotateX(vec3 v,vec3 c,float a){float co=cos(a),si=sin(a);vec3 q=v-c;return c+vec3(q.x,co*q.y-si*q.z,si*q.y+co*q.z);}
+vec3 udaRotateY(vec3 v,vec3 c,float a){float co=cos(a),si=sin(a);vec3 q=v-c;return c+vec3(co*q.x+si*q.z,q.y,-si*q.x+co*q.z);}
+vec3 udaBend(vec3 v){
+ float h=max(.000001,udaBounds.z),w=max(.000001,udaBounds.w);
+ float yy=(v.y-udaBounds.y)/h;
+ float xx=(v.x-udaBounds.x)/w;
+ float ax=abs(xx),side=xx<0.0?-1.0:1.0;
+ float run=udaMotion.z,walk=udaMotion.y,atk=udaMotion.w,cast=udaCastStrength;
+ float wave=sin(udaMotion.x*(run>walk?10.7:6.3));
+ float move=(walk*.34+run*.58)*wave;
+ // Arms: shoulder rotation + forearm flex, softly connected to the torso.
+ float am=udaSmooth(.17,.29,ax)*udaSmooth(.51,.65,yy)*(1.-udaSmooth(.89,.98,yy));
+ float elbow=am*udaSmooth(.31,.46,ax)*(1.-udaSmooth(.69,.79,yy));
+ vec3 shoulder=vec3(udaBounds.x+side*w*.28,udaBounds.y+h*.765,udaDepthCenter);
+ float armAngle= -side*move*.77-cast*.46+(side>0.0?-.93:.22)*atk;
+ vec3 arm=udaRotateX(v,shoulder,armAngle);
+ v=mix(v,arm,am*.86);
+ vec3 elbowP=vec3(udaBounds.x+side*w*.39,udaBounds.y+h*.615,udaDepthCenter);
+ v=mix(v,udaRotateX(v,elbowP,-.24*elbow-.40*cast*elbow-.44*atk*elbow),min(.78,elbow));
+ // Legs and knees: separate opposite stride and bending for walk versus run.
+ float lm=(1.-udaSmooth(.47,.56,yy))*udaSmooth(.025,.115,ax)*(1.-udaSmooth(.44,.55,ax));
+ float lower=lm*(1.-udaSmooth(.20,.35,yy));
+ vec3 hip=vec3(udaBounds.x+side*w*.13,udaBounds.y+h*.49,udaDepthCenter);
+ v=mix(v,udaRotateX(v,hip,side*move*.84),lm*.83);
+ vec3 knee=vec3(udaBounds.x+side*w*.14,udaBounds.y+h*.25,udaDepthCenter);
+ float flex=-max(0.,side*wave)*(.23*walk+.44*run);
+ v=mix(v,udaRotateX(v,knee,flex),lower*.74);
+ // Upper body turn on striking; soft idle breathing.
+ float torso=udaSmooth(.48,.68,yy)*(1.-udaSmooth(.85,.97,yy))*(1.-udaSmooth(.24,.46,ax));
+ v=mix(v,udaRotateY(v,vec3(udaBounds.x,udaBounds.y+h*.70,udaDepthCenter),-.11*atk),torso*.70);
+ v.y+=h*.0028*sin(udaMotion.x*2.2)*torso;
+ return v;
+}
+`;
+const UD_VERTEX_BEGIN=`#include <begin_vertex>
+vec3 udaModelPoint=(udaToModel*vec4(transformed,1.0)).xyz;
+udaModelPoint=udaBend(udaModelPoint);
+transformed=(udaFromModel*vec4(udaModelPoint,1.0)).xyz;`;
+function udGpuController(model){
+  model.updateMatrixWorld(true);
+  const inv=model.matrixWorld.clone().invert();
+  const entries=[],bounds=new THREE.Box3();
+  const samples=[];
+  model.traverse(mesh=>{
+    if(!mesh.isMesh || mesh.isSkinnedMesh || !mesh.geometry?.getAttribute?.('position'))return;
+    if(!mesh.geometry.boundingBox)mesh.geometry.computeBoundingBox();
+    if(!mesh.geometry.boundingBox)return;
+    const toModel=inv.clone().multiply(mesh.matrixWorld);
+    const bb=mesh.geometry.boundingBox.clone().applyMatrix4(toModel);
+    if(!Number.isFinite(bb.min.y))return;
+    bounds.union(bb);
+    const p=mesh.geometry.getAttribute('position'),stride=Math.max(1,Math.ceil(p.count/350));
+    const temp=new THREE.Vector3();
+    for(let i=0;i<p.count;i+=stride){temp.fromBufferAttribute(p,i).applyMatrix4(toModel);if(Number.isFinite(temp.x)&&Number.isFinite(temp.y))samples.push([temp.x,temp.y]);}
+    entries.push({mesh,toModel,fromModel:toModel.clone().invert()});
+  });
+  if(!entries.length||samples.length<8)return null;
+  const xs=samples.map(p=>p[0]).sort((a,b)=>a-b);
+  const ys=samples.map(p=>p[1]).sort((a,b)=>a-b);
+  const q=(arr,v)=>arr[Math.min(arr.length-1,Math.max(0,Math.floor((arr.length-1)*v)))];
+  const minY=q(ys,.01),maxY=q(ys,.99),height=maxY-minY;
+  const width=Math.max(1e-6,q(xs,.95)-q(xs,.05));
+  const midX=(q(xs,.05)+q(xs,.95))*.5;
+  if(!(height>0 && width>0) || height<width*.55 || height < (bounds.max.z-bounds.min.z)*.50){
+    console.info('[右大臣 Motion] 3D座標軸が標準と異なるため、形状優先の全体Motionに切替');return null;
+  }
+  const pose=new THREE.Vector4(),cast={value:0};
+  const dim=new THREE.Vector4(midX,minY,height,width);
+  const saved=[];
+  for(const {mesh,toModel,fromModel} of entries){
+    const originals=mesh.material;
+    const materials=Array.isArray(originals)?originals:[originals];
+    let installed=false;
+    const clones=materials.map(mat=>{
+      if(!mat?.clone || mat.isShaderMaterial || mat.isRawShaderMaterial)return mat;
+      const clone=mat.clone(),prior=mat.onBeforeCompile;
+      const oldKey=typeof mat.customProgramCacheKey==='function'?mat.customProgramCacheKey.bind(mat):()=>'plain';
+      clone.onBeforeCompile=function(shader,renderer){
+        if(typeof prior==='function')prior.call(this,shader,renderer);
+        if(!shader.vertexShader.includes('#include <begin_vertex>')||!shader.vertexShader.includes('#include <common>'))return;
+        shader.uniforms.udaToModel={value:toModel};
+        shader.uniforms.udaFromModel={value:fromModel};
+        shader.uniforms.udaBounds={value:dim};
+        shader.uniforms.udaDepthCenter={value:(bounds.min.z+bounds.max.z)*.5};
+        shader.uniforms.udaMotion={value:pose};
+        shader.uniforms.udaCastStrength=cast;
+        shader.vertexShader=shader.vertexShader.replace('#include <common>','#include <common>\n'+UD_VERTEX_FUNCTIONS);
+        shader.vertexShader=shader.vertexShader.replace('#include <begin_vertex>',UD_VERTEX_BEGIN);
+      };
+      clone.customProgramCacheKey=()=>String(oldKey())+'-rf-uda-v22';
+      clone.needsUpdate=true;
+      installed=true;
+      return clone;
+    });
+    if(installed){mesh.material=Array.isArray(originals)?clones:clones[0];saved.push({mesh,originals,clones});}
+  }
+  if(!saved.length)return null;
+  return {
+    mode:'shader',time:0,model,baseY:model.position.y,
+    update(dt,p){
+      this.time+=dt;
+      pose.set(this.time,p.walk,p.run,p.attack);
+      cast.value=p.cast;
+      model.position.y=this.baseY+(p.walk*.008+p.run*.022)*Math.abs(Math.sin(this.time*8));
+    },
+    dispose(){
+      model.position.y=this.baseY;
+      for(const rec of saved){
+        if(rec.mesh.isMesh)rec.mesh.material=rec.originals;
+        for(const m of rec.clones)if(m && !(Array.isArray(rec.originals)?rec.originals.includes(m):rec.originals===m))m.dispose();
+      }
+    }
+  };
+}
+function udMotionController(model,clips=[]){
+  if(!model)return null;
+  const names=udClipMap(clips);
+  const bones=udNamedBones(model),usableBones=Number(!!bones.lArm)+Number(!!bones.rArm)+Number(!!bones.lThigh)+Number(!!bones.rThigh);
+    let underlying=null,mode='whole';
+  if(usableBones>=3){
+    const bases=Object.fromEntries(Object.entries(bones).map(([k,v])=>[k,v.quaternion.clone()]));
+    underlying={mode:'bones',bones,bases,model,baseY:model.position.y,
+      update(dt,p){udPoseNamedBones(this,p.walk,p.run,p.attack,p.cast,p.time);},
+      dispose(){for(const [k,b] of Object.entries(bones))b.quaternion.copy(bases[k]);}
+    };mode='bones';
+  }else if(!names.walk&&!names.run&&!names.attack&&!names.cast){
+    underlying=udGpuController(model);if(underlying)mode='shader';
+  }
+  if(!underlying){
+    const base=model.position.clone(),baseRY=model.rotation.y;
+    underlying={mode:'whole',update(dt,p){
+      model.position.y=base.y+(p.walk*.009+p.run*.023)*Math.abs(Math.sin(p.time*9));
+      model.rotation.y=baseRY-.12*p.attack*Math.sin(Math.min(1,p.attack)*Math.PI*.5);
+    },dispose(){model.position.copy(base);model.rotation.y=baseRY;}};
+  }
+  const state={model,mode,clips:names,time:0,walk:0,run:0,attack:0,cast:0};
+  const blend=(old,value,dt,rate)=>old+(value-old)*(1-Math.exp(-rate*dt));
+  return {
+    ...state,
+    update(dt,{moving=false,running=false,attack=0,cast=0}={}){
+      dt=clamp(+dt||0,0,.05);this.time+=dt;
+      this.walk=blend(this.walk,moving&&!running?1:0,dt,9);
+      this.run=blend(this.run,moving&&running?1:0,dt,10);
+      this.attack=blend(this.attack,attack,dt,16);
+      this.cast=blend(this.cast,cast,dt,8);
+      const playingAuthored=(this.walk>0.5&&!!names.walk)||(this.run>0.5&&!!names.run)||(this.attack>0.5&&!!names.attack)||(this.cast>0.5&&!!names.cast)||((this.walk+this.run+this.attack+this.cast)<.1&&!!names.idle);
+      // Authored animation is never warped by a second procedural animation.
+      if(playingAuthored && mode==='bones')return;
+      underlying.update(dt,{time:this.time,walk:this.walk,run:this.run,attack:this.attack,cast:this.cast});
+    },
+    dispose(){underlying.dispose();}
+  };
+}
 function attachRig(f,glb){
   const model=f.modelInstance?.model;
   if(!model)return;
   const clips=glb?.animations||[];
-  const bones=[];
-  model.traverse(o=>{if(o.isBone)bones.push(o);});
-  if(clips.length){
-    // Original authored animation and skeleton remain in complete control.
-    f._udaRig={model,authored:true,clips,t:0,baseY:model.position.y};
-    return;
+  const controller=udMotionController(model,clips);
+  f._udaRig=controller;
+  if(controller){
+    if(controller.clips.attack)f.clips.udaAttack=controller.clips.attack;
+    if(controller.clips.cast)f.clips.udaCast=controller.clips.cast;
+    if(controller.clips.walk)f.clips.walk||=controller.clips.walk;
+    if(controller.clips.run)f.clips.run||=controller.clips.run;
+    if(controller.clips.idle)f.clips.idle||=controller.clips.idle;
   }
-  if(bones.length){
-    const named={}, find=(side,part)=>{
-      const rex=side==='l'?/(left|_l(?:_|$)|\.l$)/i:/(right|_r(?:_|$)|\.r$)/i;
-      return bones.find(b=>rex.test(b.name)&&part.test(b.name));
-    };
-    Object.assign(named,{
-      lArm:find('l',/upperarm|arm|shoulder/i),rArm:find('r',/upperarm|arm|shoulder/i),
-      lFore:find('l',/forearm|lowerarm|elbow/i),rFore:find('r',/forearm|lowerarm|elbow/i),
-      lThigh:find('l',/thigh|upleg|upperleg/i),rThigh:find('r',/thigh|upleg|upperleg/i),
-      lShin:find('l',/shin|calf|lowerleg/i),rShin:find('r',/shin|calf|lowerleg/i),
-      chest:bones.find(b=>/chest|spine2/i.test(b.name)),head:bones.find(b=>/head/i.test(b.name))
-    });
-    const mapped=Object.fromEntries(Object.entries(named).filter(([,b])=>!!b));
-    if(Object.keys(mapped).length){
-      const bases=Object.fromEntries(Object.entries(mapped).map(([k,b])=>[k,b.quaternion.clone()]));
-      f._udaRig={model,bones:mapped,bases,baseY:model.position.y,t:0,authored:false};
-      return;
-    }
-  }
-  // Static, unrigged GLBs cannot articulate limbs without deforming their mesh.
-  // Preserve every original vertex and use whole-model motion instead.
-  f._udaRig={fallback:true,model,baseY:model.position.y,baseRotY:model.rotation.y,baseRotZ:model.rotation.z,t:0};
-  console.info('[右大臣] 元GLBの形状と材質を維持（自動スキニング無し）');
+  console.info('[右大臣 Motion V22]',controller?.mode||'none', 'original model preserved');
 }
 function animateRig(f,dt){
-  const r=f._udaRig;if(!r || r.authored||f.dead)return;
-  r.t+=dt;const moving=f.moving||f.netMoving,fast=Math.hypot(f.vel?.x||0,f.vel?.z||0)>3.6,rate=fast?9.5:5.8,step=Math.sin(r.t*rate);
-  const striking=(f._udaStrike||0)>0;
-  f._udaStrike=Math.max(0,(f._udaStrike||0)-dt);
-  const chant=f.action?.type==='chant'||f.action?.type==='cast';
-  if(r.fallback){
-    // No bone motion is invented for a source GLB without a skeleton.
-    // Translate/turn only the whole model; body, clothing and UVs stay untouched.
-    r.model.position.y=r.baseY+(moving?.024*Math.abs(step):.008*Math.sin(r.t*2.1));
-    r.model.rotation.y=r.baseRotY+(striking?.075*Math.sin(r.t*18):0);
-    r.model.rotation.z=r.baseRotZ+(chant?.025*Math.sin(r.t*3.2):0);
-    return;
-  }
-  const rot=(name,x=0,z=0)=>{
-    const bone=r.bones[name];if(!bone)return;
-    bone.quaternion.copy(r.bases[name]);if(x)bone.rotateX(x);if(z)bone.rotateZ(z);
-  };
-  const amp=moving?(fast?.54:.32)*step:0;
-  rot('hips',.02*step);rot('spine',chant?-.09:.02*step);rot('upperSpine',striking?-.14:.025*step);
-  rot('chest',striking?-.24:chant?-.13:0);rot('neck',.012*step);rot('head',chant?-.10:.015*step);
-  rot('lClav',chant?-.10:0,-.02);rot('rClav',chant?-.10:0,.02);
-  rot('lArm',amp*.65-(chant?.45:0)+(striking?.18:0),chant?.09:0);
-  rot('rArm',-amp*.65-(chant?.45:0)-(striking?.92:0),chant?-.09:0);
-  rot('lFore',chant?-.48:striking?-.22:-.13);rot('rFore',chant?-.48:striking?-.74:-.13);
-  rot('lHand',chant?.28:0);rot('rHand',chant?-.28:0);
-  rot('lThigh',amp);rot('rThigh',-amp);
-  rot('lShin',-Math.max(0,-step)*(fast?.43:.24));rot('rShin',-Math.max(0,step)*(fast?.43:.24));
-  rot('lFoot',.13*Math.max(0,-step));rot('rFoot',.13*Math.max(0,step));
-  r.model.position.y=r.baseY+(moving?.018*Math.abs(step):0);
+  const controller=f._udaRig;
+  if(!controller || f.dead)return;
+  const moving=!!(f.moving||f.netMoving);
+  const speed=Math.hypot(f.vel?.x||0,f.vel?.z||0);
+  const running=moving && (speed>6.2 || f.action?.type==='dash' || !!f._udaSprint);
+  const pulse=Number(f._udaStrike)||0;
+  const attack=pulse>0?Math.sin(Math.PI*clamp(1-pulse/.46,0,1)):0;
+  f._udaStrike=Math.max(0,pulse-dt);
+  const casting=!!(f.action?.type==='chant'||f.action?.type==='cast'||f._udaCastPulse>0);
+  f._udaCastPulse=Math.max(0,(f._udaCastPulse||0)-dt);
+  controller.update(dt,{moving,running,attack,cast:casting?1:0});
+}
+// Adventure rest area uses a separate instance, not a Fighter. Reuse the same material-safe Motion.
+export function attachUdaijinRestMotion(model,clips=[]){
+  const controller=udMotionController(model,clips);
+  return controller?{
+    update(dt,moving,running){controller.update(dt,{moving:!!moving,running:!!running,attack:0,cast:0});},
+    dispose(){controller.dispose();}
+  }:null;
 }
 function cleanup(f){
   if(f._udaSeal){f._udaSeal.quad.removeFromParent();f._udaSeal.quad.geometry.dispose();f._udaSeal.mat.dispose();f._udaSeal=null;}
   if(f._udaCross){f._udaCross.spr.removeFromParent();f._udaCross.mat.dispose();f._udaCross=null;}
-  const rig=f._udaRig;if(rig?.geos){for(const g of rig.geos)g.dispose();rig.skeleton?.dispose?.();}
+  const rig=f._udaRig;try{rig?.dispose?.();}catch(e){console.warn("[右大臣 Motion cleanup]",e);} 
   f._udaRig=null;f._udaMark=null;f._udaBurn=null;f._udaStasis=null;
 }
 function updateTouchUI(f){
@@ -300,13 +496,22 @@ function updateTouchUI(f){
   for(const [act,text] of Object.entries(labels)){const el=b.querySelector(`[data-act="${act}"]`);if(el)el.textContent=active?text[0]:text[1];}
 }
 export function installUdaijinCombat({Fighter,Battle,state}){
-  if(!Fighter?.prototype||Fighter.prototype.__udaijinCurseV21)return;
-  Fighter.prototype.__udaijinCurseV21=true;
+  if(!Fighter?.prototype||Fighter.prototype.__udaijinCurseV22)return;
+  Fighter.prototype.__udaijinCurseV22=true;
   const baseBuild=Fighter.prototype.buildModel;
   Fighter.prototype.buildModel=function(glb,...args){
     const out=baseBuild.call(this,glb,...args);
     if(this.key===KEY)try{attachRig(this,glb)}catch(e){console.warn('[右大臣 RIG]',e);}
     return out;
+  };
+  const baseAnim=Fighter.prototype.anim;
+  Fighter.prototype.anim=function(mode){
+    if(this.key===KEY && this._udaRig){
+      if(this._udaStrike>0 && this.clips?.udaAttack)mode='udaAttack';
+      else if((this.action?.type==='chant'||this.action?.type==='cast'||this._udaCastPulse>0) && this.clips?.udaCast)mode='udaCast';
+      else if(mode==='run' && this.clips?.walk && Math.hypot(this.vel?.x||0,this.vel?.z||0)<6.2)mode='walk';
+    }
+    return baseAnim.call(this,mode);
   };
   const baseUpdate=Fighter.prototype.update;
   Fighter.prototype.update=function(dt,input){
@@ -340,7 +545,8 @@ export function installUdaijinCombat({Fighter,Battle,state}){
   Fighter.prototype.startLight=function(...args){
     if(this.key!==KEY)return baseLight.apply(this,args);
     const target=this.battle?.nearestEnemy?.(this);
-    this._udaStrike=.36;
+    this._udaStrike=.46;
+    this.anim?.('udaAttack');
     if(target){this.faceNearest?.(40);applyMark(this,target,!!this.remoteAuth);}
     return undefined; // no ordinary combo/swing, mark is the basic attack
   };
@@ -353,8 +559,8 @@ export function installUdaijinCombat({Fighter,Battle,state}){
     const proto=Battle.prototype;
     const baseCast=proto.cast;
     proto.cast=function(f,slot,net){
-      if(f?.key===KEY && slot==='seal'){sealOn(f);return;}
-      if(f?.key===KEY && slot==='mark'){
+      if(f?.key===KEY && slot==='seal'){f._udaCastPulse=0.5;sealOn(f);return;}
+      if(f?.key===KEY && slot==='mark'){f._udaStrike=.46;
         const target=this.enemiesOf(f).find(x=>!x.dead&&Math.hypot(x.pos.x-(net?.tx??0),x.pos.z-(net?.tz??0))<3)||this.nearestEnemy(f);
         if(target)applyMark(f,target,true);
         return;
@@ -365,6 +571,7 @@ export function installUdaijinCombat({Fighter,Battle,state}){
     proto.executeCast=function(f,slot,net){
       const result=baseExecute.call(this,f,slot,net);
       if(f?.key===KEY){
+        f._udaCastPulse=0.75;
         const index=Number(slot?.slice(1));
         if(index===0)startOrbs(this,f);
         else if(index===1 || slot==='over' || slot==='hi')eyeLaser(this,f);
@@ -375,6 +582,7 @@ export function installUdaijinCombat({Fighter,Battle,state}){
     proto.dispose=function(...args){for(const f of this.fighters||[])cleanup(f);return baseDispose.apply(this,args);};
   }
   if(typeof window!=='undefined'){
+    window.__rfAttachUdaijinRestMotion=attachUdaijinRestMotion;
     window.__rfUdaijinCurrent=()=>{const s=typeof state==='function'?state():state;return s?.battle?.fighters?.find(x=>x.key===KEY&&x.isPlayer&&!x.remoteAuth)||null;};
     // On mobile, preserve the existing buttons and touch handlers; only change labels for this fighter.
     setInterval(()=>{
