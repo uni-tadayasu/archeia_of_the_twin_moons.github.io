@@ -531,6 +531,7 @@ function startConnect() {
     S.net = n;
     S.connecting = false;
     publish();
+    rfRecordActivity();
     broadcastChief();
     pullChiefEvent();
     refreshGuild(true);
@@ -554,6 +555,56 @@ function publish() {
   const g = save.guild;
   S.net?.publish({ pid: save.pid, name: myName(), gid: g?.id || '', gname: g?.name || '', grole: g?.role || 'member', gm: g?.master || '', st: isStaff() ? 1 : 0 });
 }
+
+
+// RF_ACTIVITY_24H_V18: history is server-authoritative, viewable only by staff.
+const RF_24H = 86400000;
+let rfActivityFetchAt = 0;
+let rfActivityLoading = false;
+let rfActivityPingAt = 0;
+let rfActivityPingBusy = false;
+function rfCountryName(code) {
+  if (!/^[A-Z]{2}$/.test(String(code || '')) || code === 'ZZ' || code === 'XX') return '不明';
+  try { return new Intl.DisplayNames(['ja'], {type: 'region'}).of(code) || code; } catch { return code; }
+}
+async function rfRecordActivity() {
+  if (!S || !S.net || !serverMode() || document.hidden || rfActivityPingBusy) return;
+  const code = String(S.opts.syncCode?.() || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+  if (code.length !== 12 || Date.now() - rfActivityPingAt < 170000) return;
+  rfActivityPingBusy = true;
+  try {
+    const r = await api('/activity/ping', {code, name: S.opts.myName()});
+    if (r.ok) rfActivityPingAt = Date.now();
+  } catch (err) { console.warn('[24h activity] ping unavailable:', err?.message || err); }
+  finally { rfActivityPingBusy = false; }
+}
+async function rfLoadActivity(force = false) {
+  if (!S || !serverMode() || !isStaff() || !S.opts.roleToken?.() || rfActivityLoading) return;
+  if (!force && Date.now() - rfActivityFetchAt < 60000) return;
+  rfActivityLoading = true;
+  S.rfActivityError = '';
+  try {
+    const r = await api('/activity/list', {token:S.opts.roleToken()});
+    if (!r.ok) throw new Error(r.error || 'HTTP ' + r.status);
+    const cut = Date.now() - RF_24H;
+    S.rfActivity = (Array.isArray(r.users) ? r.users : [])
+      .filter(p => p && typeof p.pid === 'string' && Number(p.lastAt) > cut)
+      .slice(0, 500);
+    rfActivityFetchAt = Date.now();
+  } catch (err) {
+    S.rfActivityError = '過去24時間の履歴を取得できませんでした（サーバーと運営権限を確認してください）。';
+    console.warn('[24h activity] history unavailable:', err?.message || err);
+  } finally {
+    rfActivityLoading = false;
+    if (S.tab === 'online' && S.panel && !S.panel.hidden) renderGuild();
+  }
+}
+setInterval(() => { if (S?.net) rfRecordActivity(); }, 180000);
+setInterval(() => { if (S?.tab === 'online' && S?.panel && !S.panel.hidden) rfLoadActivity(); }, 60000);
+function rfActivityResume() {
+  if (!document.hidden) { rfRecordActivity(); if (S?.tab === 'online') rfLoadActivity(true); }
+}
+document.addEventListener('visibilitychange', rfActivityResume);
 
 // ---------- 運営長のお知らせ ----------
 async function broadcastChief() {
@@ -974,6 +1025,7 @@ function buildChat() {
       S.unread = 0;
       badge.textContent = '';
       renderAll();
+      if (S.tab === 'online') rfLoadActivity(true);
     }
   });
   const tabs = el('div', 'cp-tabs');
@@ -990,6 +1042,7 @@ function buildChat() {
       S.tab = k;
       syncRooms();
       renderAll();
+      if (k === 'online') rfLoadActivity(true);
     });
     tabs.append(t);
   }
@@ -1194,14 +1247,53 @@ function renderOnline() {
   g.style.maxHeight = '';
   g.style.overflowY = 'auto';
   const { save, myName } = S.opts;
-  const list = [{ name: myName(), pid: save.pid, gname: save.guild?.name || '', st: isStaff(), me: true }, ...Object.values(S.peers).filter((p) => p.id !== S.net?.myId)];
-  const seen = new Set();
-  const rows = list.filter((p) => { const k = p.pid || p.id; if (seen.has(k)) return false; seen.add(k); return true; });
-  rows.sort((a, b) => (b.me - a.me) || (b.st - a.st) || String(a.name).localeCompare(String(b.name), 'ja'));
-  g.append(el('div', 'cp-mem', `接続中 ${rows.length} 人（運営長・運営のみ閲覧可）`));
-  for (const p of rows) {
-    g.append(el('div', 'cp-mem', `● ${p.name}${p.me ? '（あなた）' : ''}${p.st ? '【運営】' : ''}${p.gname ? `　[${p.gname}]` : ''}${p.pid ? `　#${String(p.pid).slice(0, 6)}` : ''}`));
+  const online = [
+    ...(S.net ? [{pid:save.pid, name:myName(), gname:save.guild?.name || '', st:isStaff(), me:true}] : []),
+    ...Object.values(S.peers).filter(p => p.id !== S.net?.myId)
+  ];
+  const current = new Map();
+  for (const p of online) {
+    const id = String(p.pid || p.id || ''); if (!id) continue;
+    if (!current.has(id)) current.set(id,p);
   }
+  const head = el('div','row');
+  const header = el('b',null,'接続履歴（過去24時間）');
+  const refresh = el('button','cp-b','更新'); refresh.type = 'button';
+  refresh.addEventListener('click',() => rfLoadActivity(true));
+  head.append(header, refresh); g.append(head);
+  const note = el('div','cp-mem','● オンライン / ○ 24時間以内に接続。時刻は表示端末の時間です。国は接続元の推定国で、国籍や居住国を意味しません。接続履歴にはIPアドレスを保存しません。');
+  g.append(note);
+  const box = el('div'); box.id = 'rf-online-history-list'; g.append(box);
+  const merged = new Map();
+  for (const p of S.rfActivity || []) {
+    if (!p.pid || Number(p.lastAt) <= Date.now() - RF_24H) continue;
+    merged.set(String(p.pid), {...p,online:false});
+  }
+  for (const [pid,p] of current) {
+    const prev = merged.get(pid) || {};
+    merged.set(pid,{...prev, ...p, pid, online:true, lastAt:prev.lastAt || Date.now()});
+  }
+  const rows = [...merged.values()].sort((a,b) => Number(b.online)-Number(a.online) || Number(b.lastAt)-Number(a.lastAt));
+  const liveN = rows.filter(p => p.online).length;
+  box.append(el('div','cp-mem','現在オンライン '+liveN+' 人 ／ 履歴 '+rows.length+' 人'));
+  if (!serverMode()) box.append(el('div','cp-note','サーバー未設定のため、現在の接続者のみ表示しています。'));
+  else if (S.rfActivityError) box.append(el('div','cp-note',S.rfActivityError));
+  else if (!S.rfActivity && rfActivityLoading) box.append(el('div','cp-mem','過去24時間の履歴を読み込み中…'));
+  else if (!S.rfActivity) box.append(el('div','cp-mem','履歴を取得するには「更新」を押してください。'));
+  if (!rows.length) box.append(el('div','cp-mem','現在表示できる接続記録はありません。'));
+  for (const p of rows) {
+    const row = el('div','rf-history-row');
+    const mark = p.online ? '●' : '○';
+    const name = String(p.name || '旅人').slice(0, 30);
+    row.append(el('div','rf-history-heading',mark+' '+name+(p.me?'（あなた）':'')+(p.st?'【運営】':'')));
+    const at = Number(p.lastAt);
+    const atText = Number.isFinite(at) && at > 0 ? new Date(at).toLocaleString('ja-JP') : '不明';
+    const country = rfCountryName(p.country);
+    row.append(el('div','rf-history-meta','接続国：'+country+' ｜ 最終確認：'+(p.online ? '現在オンライン' : atText)+(p.pid ? ' ｜ ID #'+String(p.pid).slice(0,6) : '')));
+    if(p.gname) row.append(el('div','rf-history-meta','ギルド：'+String(p.gname).slice(0,32)));
+    box.append(row);
+  }
+  if (serverMode()) box.append(el('div','cp-mem','※過去の履歴は本機能を導入してから記録され、端末間同期済みのプレイヤーのみ履歴保存の対象です。表示は最大500人です。'));
 }
 function onlineCount(filter) {
   return Object.values(S.peers).filter(filter).length;
@@ -1214,7 +1306,7 @@ function renderHead() {
   if (S.tab === 'chief') {
     h.append(el('span', null, 'お知らせ管理（運営長専用）'));
   } else if (S.tab === 'online') {
-    h.append(el('span', null, '接続中のプレイヤー（運営長・運営専用）'));
+    h.append(el('span', null, '接続一覧・過去24時間（運営長・運営専用）'));
   } else if (S.tab === 'staff') {
     h.append(el('span', null, `運営会議（運営長・運営専用） — 参加中 ${onlineCount((p) => p.st)} 人`));
   } else if (S.tab === 'world') {

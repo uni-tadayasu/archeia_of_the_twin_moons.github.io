@@ -1,10 +1,10 @@
-// RF_NEPT_V16_GUARD_FREEZE_30S: Riftfall Arena - chief-only supreme water character combat.
+// RF_NEPT_V18_GUARD_ILLUSTRATED_30S: Riftfall Arena - chief-only supreme water character combat.
 // Uses existing Battle/Fighter APIs; no modification to the provided GLB bytes.
 import * as THREE from 'three';
 
 const KEY = 'nepterion';
 const WATER = 0x35d7ff;
-const RING_GEOMETRY = new THREE.RingGeometry(0.89, 1.0, 56);
+
 
 export function installNepterionCombat({ Battle, Fighter }) {
   if (!Battle?.prototype || !Fighter?.prototype || Battle.prototype.__nepterionInstalled) return;
@@ -25,9 +25,19 @@ export function installNepterionCombat({ Battle, Fighter }) {
   const ICE_TINT = new THREE.Color(0x82eaff);
   const ICE_GLOW = new THREE.Color(0x46bde9);
   const GUARD_SLOT = 'nep_guard';
-  const FIELD_GEO = new THREE.RingGeometry(0.89, 1, 64);
-  const MID_GEO = new THREE.RingGeometry(0.56, 0.59, 48);
-  const CORE_GEO = new THREE.CircleGeometry(1, 48);
+  // One textured ground quad; all painted detail is in the transparent CG illustration.
+  // No 3D torus/ring shapes or new geometry every time Guard is pressed.
+  const SEAL_GEO = new THREE.PlaneGeometry(2, 2);
+  const SEAL_URL = new URL('./assets/fx/nepterion-ocean-seal.webp', import.meta.url).href;
+  let sealTexture;
+  function oceanSealMap() {
+    if (!sealTexture) {
+      sealTexture = new THREE.TextureLoader().load(SEAL_URL);
+      sealTexture.colorSpace = THREE.SRGBColorSpace;
+      sealTexture.anisotropy = 2;
+    }
+    return sealTexture;
+  }
 
   function newGuard(owner) {
     const battle = owner.battle;
@@ -37,22 +47,18 @@ export function installNepterionCombat({ Battle, Fighter }) {
       return owner._nepGuardField;
     }
     const group = new THREE.Group();
-    const add = (geo, color, opacity, scale=1) => {
-      const material = new THREE.MeshBasicMaterial({ color, transparent:true, opacity,
-        depthWrite:false, side:THREE.DoubleSide, blending:THREE.AdditiveBlending });
-      const mesh = new THREE.Mesh(geo, material);
-      mesh.rotation.x = -Math.PI/2;
-      mesh.scale.setScalar(FIELD_RADIUS*scale);
-      mesh.renderOrder = 10;
-      group.add(mesh);
-      return mesh;
-    };
-    const surface = add(CORE_GEO,0x1275d4,0.095);
-    const outer = add(FIELD_GEO,0x8ef8ff,0.64);
-    const inner = add(MID_GEO,0x4bbfff,0.55);
+    const art = new THREE.Mesh(SEAL_GEO, new THREE.MeshBasicMaterial({
+      map: oceanSealMap(), color: 0xffffff, transparent:true, opacity:0.84,
+      depthTest:true, depthWrite:false, side:THREE.DoubleSide,
+      blending: THREE.AdditiveBlending, toneMapped:false
+    }));
+    art.rotation.x=-Math.PI/2;
+    art.scale.setScalar(FIELD_RADIUS);
+    art.renderOrder=12;
+    group.add(art);
     group.position.set(owner.pos.x,0.09,owner.pos.z);
     battle.fx.add(group);
-    const field = { owner, group, meshes:[surface,outer,inner], remaining:FIELD_SECONDS, clock:0 };
+    const field = { owner, group, meshes:[art], remaining:FIELD_SECONDS, clock:0 };
     owner._nepGuardField = field;
     (battle._nepGuardFields ||= new Set()).add(field);
     battle.ui?.popup?.(owner.pos,'神海護陣《蒼氷封界》30秒・再使用制限なし','#7fedff');
@@ -114,8 +120,7 @@ export function installNepterionCombat({ Battle, Fighter }) {
     field.clock += dt;
     field.group.position.set(owner.pos.x,0.09,owner.pos.z);
     field.group.rotation.y += dt*.35;
-    field.meshes[1].material.opacity = .5 + .12*Math.sin(field.clock*2.4);
-    field.meshes[2].material.opacity = .43 + .10*Math.sin(field.clock*1.5);
+    field.meshes[0].material.opacity = .78 + .14*Math.sin(field.clock*2.0);
     const r2=FIELD_RADIUS*FIELD_RADIUS;
     for (const enemy of owner.battle.fighters) {
       if(enemy===owner || enemy.dead || enemy.team===owner.team)continue;

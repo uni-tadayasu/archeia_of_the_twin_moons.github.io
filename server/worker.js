@@ -1471,6 +1471,8 @@ export default {
         case '/guild/donate': return await guildDonate(req, env, H, body);
         case '/guild/board': return await guildBoardRoute(req, env, H);
         case '/chat/room': return await chatRoom(req, env, H, body);
+        case '/activity/ping': return await rfActivityPing(req, env, H, body);
+        case '/activity/list': return await rfActivityList(req, env, H, body);
         case '/chief/sign': return await chiefSign(req, env, H, body);
         case '/chief/event': return await chiefEvent(req, env, H, body);
         case '/chief/current': return await chiefCurrent(req, env, H);
@@ -1735,6 +1737,26 @@ async function guildBoardRoute(req, env, H) {
   if (await limited(env, req, 'board', 60, 600000)) return json(H, { error: 'limit' }, 429);
   const r = await doCall(boardStub(env), { op: 'top' });
   return json(H, r.data, r.status);
+}
+
+
+// RF_ACTIVITY_24H_V18 — Country from trusted Cloudflare CF metadata; never record IP.
+async function rfActivityPing(req, env, H, {code, name}) {
+  if (await limited(env, req, 'activity-ping', 60, 600000)) return json(H,{error:'limit'},429);
+  const me = await whoAmI(env, code, name);
+  if (!me) return json(H,{error:'nosync'},403);
+  const candidate = String(req.cf?.country || '').toUpperCase();
+  const country = /^[A-Z]{2}$/.test(candidate) ? candidate : 'ZZ';
+  const r = await storeCall(env, 'chat-activity-v18', {op:'activity-ping', pid:me.pid, name:me.name, country});
+  return json(H, r.data, r.status);
+}
+async function rfActivityList(req, env, H, {token}) {
+  const role = await verify(env, token, 'role');
+  if (role?.r !== 'chief' && role?.r !== 'op') return json(H,{error:'denied'},403);
+  if (await limited(env, req, 'activity-list', 60, 600000)) return json(H,{error:'limit'},429);
+  const r = await storeCall(env, 'chat-activity-v18', {op:'activity-list'});
+  if (r.status !== 200) return json(H,{error:'server'},500);
+  return json(H,{ok:true,users:r.data?.users || [],serverTime:Date.now()});
 }
 
 // チャンネル別ルーム：参加資格を確認した人にだけ、推測できないルーム名を渡す
@@ -2148,6 +2170,28 @@ export class Store {
       switch (b.op) {
         case 'get':
           return out({ v: cur ?? null });
+        case 'activity-ping': {
+          const now=Date.now(),cut=now-86400000;
+          const rows=(Array.isArray(cur)?cur:[]).filter(p=>p && /^[A-Za-z0-9]{1,24}$/.test(String(p.pid||'')) && Number(p.lastAt)>cut);
+          const pid=String(b.pid||'');
+          if (!/^[A-Za-z0-9]{1,24}$/.test(pid)) return out({error:'bad'},400);
+          const name=String(b.name||'旅人').slice(0,12).replace(/[\u0000-\u001f<>]/g,'');
+          const country=/^[A-Z]{2}$/.test(b.country)?b.country:'ZZ';
+          const prior=rows.find(x=>x.pid===pid);
+          if (prior) {prior.name=name;prior.country=country;prior.lastAt=now;}
+          else rows.push({pid,name,country,firstAt:now,lastAt:now});
+          rows.sort((a,b)=>b.lastAt-a.lastAt);
+          if(rows.length>500)rows.length=500;
+          await s.put('v',rows);
+          await s.setAlarm(now+3600000);
+          return out({ok:true});
+        }
+        case 'activity-list': {
+          const now=Date.now(),cut=now-86400000;
+          const rows=(Array.isArray(cur)?cur:[]).filter(p=>p && Number(p.lastAt)>cut).slice(0,500);
+          if(rows.length !== (Array.isArray(cur)?cur.length:0))await s.put('v',rows);
+          return out({ok:true,users:rows});
+        }
         case 'once': // 初回だけ成功（Stripe の同じ決済を二重に処理しない）
           if (cur) return out({ ok: false }, 409);
           await s.put('v', true);
@@ -2167,6 +2211,15 @@ export class Store {
       }
     });
   }
+  async alarm() {
+    const store=this.state.storage;
+    const rows=await store.get('v');
+    if(!Array.isArray(rows)||!rows.every(x=>x&&typeof x.pid==='string'&&typeof x.lastAt==='number'))return;
+    const recent=rows.filter(x=>x.lastAt>Date.now()-86400000);
+    if(recent.length){await store.put('v',recent);await store.setAlarm(Date.now()+3600000);}
+    else await store.delete('v');
+  }
+
 }
 // 同期セーブ（同期コードのハッシュごとに1インスタンス）：保存・版番号の比較・資産の増え方の検証
 export class SyncLock {

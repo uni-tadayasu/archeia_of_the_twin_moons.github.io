@@ -1,0 +1,138 @@
+/* Riftfall Arena V18 | PC / tablet / phone safe-area responsive UI
+   Loaded after the game's existing styles. Geometry, hit detection and save data unchanged. */
+:root { --rf-edge: max(10px, env(safe-area-inset-left, 0px)); }
+html, body { max-width: 100%; overflow-x: hidden; }
+#ui, .screen, .screen.on, .portal-screen, .portal-wrap, .inner { max-width: 100%; min-width: 0; }
+.screen.on { box-sizing: border-box; max-height: 100dvh; overflow-x: clip; overflow-y: auto; overscroll-behavior-y: contain; -webkit-overflow-scrolling: touch; }
+.screen .inner, .screen .inner > *, #scr-select .inner > *, #scr-forge .inner > * { min-width: 0; max-width: 100%; }
+#scr-title.portal-screen, #scr-title .portal-wrap, #scr-title .portal-play, #scr-title .portal-world,
+#scr-title .portal-services, #scr-title .portal-overview, #scr-title .portal-modes {
+  box-sizing: border-box; min-width: 0; max-width: 100%;
+}
+#scr-title .mode-tile, #scr-title .portal-services > *, #scr-title .portal-modes > * {
+  min-width: 0; overflow-wrap: anywhere;
+}
+#select-grid { min-width:0; max-width:100%; grid-template-columns:repeat(auto-fit,minmax(min(168px,100%),1fr)); }
+#select-grid > .card { min-width:0; max-width:100%; overflow:hidden; }
+#select-grid .card b, #select-grid .card em, #select-grid .card small { overflow-wrap:anywhere; }
+#party-bar, #party-slots, #party-quick-picker, #party-picker-results, #forge-list,
+#forge-rows, #shop-list, #invade-list { min-width:0; max-width:100%; overflow-wrap:anywhere; }
+#party-slots, #forge-list, #party-picker-results { flex-wrap:wrap; }
+#scr-options input, #scr-options select, #scr-options button, #scr-lobby input { max-width:100%; }
+#scr-options .inner, #scr-forge .inner, #scr-shop .inner { margin-block:auto; }
+#chat-btn { max-width: min(45vw, 190px); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+body #chat-panel { box-sizing:border-box; min-width:0; width:min(420px, calc(100vw - 24px));
+  max-width:calc(100vw - 24px); height:min(520px, calc(100dvh - 52px)); max-height:calc(100dvh - 52px);
+  right:max(10px, env(safe-area-inset-right, 0px));
+  top:max(31px, env(safe-area-inset-top, 0px) + 28px); overflow:hidden; }
+body #chat-panel > *, body #chat-panel .cp-guild, body #chat-panel .cp-log, body #chat-panel .cp-head {
+  min-width:0; max-width:100%; box-sizing:border-box;
+}
+body #chat-panel .cp-tabs { flex:0 0 auto; display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); align-items:stretch; gap:4px; }
+body #chat-panel .cp-tabs > button { min-width:0; max-width:100%; white-space:normal; overflow-wrap:anywhere; line-height:1.2; min-height:32px; }
+body #chat-panel .cp-head { flex-shrink:0; flex-wrap:wrap; gap:6px; }
+body #chat-panel .cp-guild { overflow-x:hidden; overflow-y:auto; overscroll-behavior:contain; }
+body #chat-panel .cp-mem { min-width:0; white-space:normal; overflow-wrap:anywhere; }
+body #chat-panel form { flex-shrink:0; min-width:0; }
+body #chat-panel form input { min-width:0; flex:1 1 auto; }
+body #chat-panel form button { flex:0 0 auto; }
+#rf-online-history-list { width:100%; min-width:0; }
+#rf-online-history-list .rf-history-row { padding:10px 8px; border-bottom:1px solid #414966; min-width:0; overflow-wrap:anywhere; }
+#rf-online-history-list .rf-history-meta { margin-top:3px; font-size:11px; color:#b9d5e8; line-height:1.5; }
+#rf-online-history-list .rf-history-heading { font-weight:700; }
+#rf-online-history-list .rf-history-row:last-child { border-bottom:0; }
+#gaizorg-adventure-ui { box-sizing:border-box; max-width:calc(100vw - 16px); }
+#gaizorg-adventure-ui .ga-actions { flex-wrap:wrap; }
+#gaizorg-adventure-ui .ga-actions > button { flex:1 1 150px; min-width:0; white-space:normal; }
+#rf-nep-seven { box-sizing:border-box; max-width:calc(100vw - 20px); }
+#hud .hud-side { max-width:calc(50vw - 20px); min-width:0; }
+#hud .hud-side .plate { min-width:0; max-width:100%; }
+#hud .hud-side .plate b { text-overflow:ellipsis; white-space:nowrap; overflow:hidden; }
+#world-panel, #pause, #field-info { box-sizing:border-box; max-width:calc(100vw - 18px); }
+#world-panel { max-height:calc(100dvh - 80px); overflow:auto; }
+#tbtns, #touch, #touch .tbtns { box-sizing:border-box; }
+@media (min-width: 1200px) {
+  #scr-title .portal-wrap { margin-inline:auto; }
+  #select-grid { grid-template-columns:repeat(auto-fit,minmax(170px,1fr)); }
+  body #chat-panel { width:min(430px, 32vw); }
+}
+@media (max-width: 820px) {
+  .screen.on { padding-top:max(12px, env(safe-area-inset-top, 0px)); padding-bottom:max(18px,env(safe-area-inset-bottom,0px)); }
+  #scr-title .portal-wrap { width:100%; margin-inline:0; }
+  #scr-title .portal-modes, #scr-title .portal-services { grid-template-columns:repeat(2,minmax(0,1fr)); }
+  #select-grid { grid-template-columns:repeat(auto-fit,minmax(min(140px,100%),1fr)); gap:9px; }
+  #hud .hud-side { top:max(34px, calc(env(safe-area-inset-top, 0px) + 28px)); width:min(180px,44vw); }
+  #hud .plate { padding:4px 5px; }
+  #hud .plate b { font-size:10px; }
+  #hud .plate i { height:6px; }
+  #gaizorg-adventure-ui { left:max(8px,env(safe-area-inset-left,0px)); top:max(34px,env(safe-area-inset-top,0px) + 30px); width:min(330px,calc(100vw - 16px)); max-height:min(48dvh,410px); overflow-y:auto; padding:10px; }
+  #rf-nep-seven { top:auto!important; right:max(8px,env(safe-area-inset-right,0px))!important;
+    bottom:max(120px,calc(env(safe-area-inset-bottom,0px) + 112px))!important;
+    width:min(260px,calc(100vw - 20px))!important; max-height:40dvh; overflow-y:auto; }
+  #rf-nep-seven .rf-grid { grid-template-columns:repeat(3,minmax(0,1fr)); }
+  #field-info { max-width:calc(100vw - 145px); top:max(34px,env(safe-area-inset-top,0px) + 28px); }
+  #field-map { top:max(34px,env(safe-area-inset-top,0px) + 28px); max-width:100px; }
+}
+@media (max-width: 540px) {
+  body #chat-panel { width:calc(100vw - 12px)!important; max-width:calc(100vw - 12px)!important;
+    left:6px!important; right:6px!important; top:max(29px,calc(env(safe-area-inset-top,0px) + 25px))!important;
+    height:min(75dvh,calc(100dvh - 72px))!important; max-height:calc(100dvh - 72px)!important; }
+  body #chat-panel .cp-tabs { gap:2px; padding:6px 5px 0; }
+  body #chat-panel .cp-tabs button { padding:7px 2px; font-size:11px; }
+  #scr-title .portal-modes, #scr-title .portal-services { grid-template-columns:1fr; }
+  #scr-title .portal-hero, #scr-title .portal-overview, #scr-title .portal-world { min-width:0; max-width:100%; }
+  #scr-title .portal-header, #scr-title .portal-topnav { max-width:100%; flex-wrap:wrap; }
+  #scr-select .topbar, #scr-forge .topbar, #scr-shop .topbar { flex-wrap:wrap; }
+  #scr-select .crumb, #scr-forge .crumb, #scr-shop .crumb { overflow-wrap:anywhere; }
+  #select-grid { grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; }
+  #select-grid .card { padding:7px; }
+  #select-grid .card b { font-size:clamp(13px,3.9vw,17px); }
+  #select-grid .card small { font-size:10px; }
+  .hud-side { z-index:4; }
+  #hud .hud-side { width:calc(50vw - 17px); max-width:calc(50vw - 17px); }
+  #hud-left { left: max(5px,env(safe-area-inset-left,0px))!important; }
+  #hud-right { right: max(5px,env(safe-area-inset-right,0px))!important; }
+  #countdown { font-size:clamp(30px,13vw,70px); }
+  #touch { max-width:100vw; overflow:visible; }
+  #touch .tbtns, #tbtns { max-width:calc(100vw - 20px); }
+  #gaizorg-adventure-ui { top:max(33px,calc(env(safe-area-inset-top,0px) + 28px));
+    max-height:43dvh; font-size:12px; }
+  #gaizorg-adventure-ui .ga-help { font-size:11px; }
+  #rf-nep-seven { position:fixed; left:auto!important; right:7px!important;
+    bottom:max(124px,calc(env(safe-area-inset-bottom,0px) + 110px))!important;
+    width:min(220px,58vw)!important; max-height:32dvh; overflow-y:auto; }
+  #rf-nep-seven .rf-grid > button { min-width:0; padding:6px 3px; font-size:10px; }
+  #field-info { max-width:calc(100vw - 120px); font-size:11px; }
+  #field-map { max-width:90px; }
+}
+@media (max-width: 359px) {
+  #select-grid { grid-template-columns:1fr; }
+  #scr-title .portal-services, #scr-title .portal-modes { grid-template-columns:1fr; }
+  #chat-btn { max-width:38vw; font-size:10px; }
+  #rf-nep-seven { width:min(186px,57vw)!important; max-height:29dvh; }
+  #gaizorg-adventure-ui { max-height:39dvh; }
+}
+@media (max-height: 560px) and (orientation: landscape) {
+  body #chat-panel { height:calc(100dvh - 46px)!important; max-height:calc(100dvh - 46px)!important; }
+  #hud .hud-side { top:max(32px,calc(env(safe-area-inset-top,0px) + 26px)); }
+  #rf-nep-seven { right:8px!important; bottom:12px!important; width:min(250px,32vw)!important; max-height:58dvh; }
+  #gaizorg-adventure-ui { max-height:calc(100dvh - 50px); }
+}
+/* Keep action panel away from both HUD at the top and the 3-row touch pad at the bottom. */
+@media (max-width: 540px) and (orientation: portrait) {
+  #rf-nep-seven {
+    top:max(194px,calc(env(safe-area-inset-top,0px) + 174px))!important;
+    bottom:auto!important;
+    max-height:min(31dvh,calc(100dvh - 410px))!important;
+  }
+}
+@media (max-height: 560px) and (orientation: landscape) {
+  #rf-nep-seven {
+    left:50%!important; right:auto!important; transform:translateX(-50%);
+    top:max(104px,calc(env(safe-area-inset-top,0px) + 96px))!important;
+    bottom:auto!important;
+    width:min(225px,32vw)!important;
+    max-height:max(70px,calc(100dvh - 230px))!important;
+  }
+}
+body:has(#chat-panel:not([hidden])) #touch button { pointer-events:none!important; }

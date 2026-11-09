@@ -1,17 +1,17 @@
-Riftfall Arena V17 骨格生成/固定7技/氷結ガード/クレイド軽量GLB
+Riftfall Arena V18 全画面レスポンシブ/24時間履歴/冒険最初から/CG氷結陣/骨格/固定7技
 このZIPは変更されたファイルのみです。既存のゲームルートへ上書きしてください。
 GLBの元データは変換・再圧縮していません。
 
-更新：data.js
 更新：main.js
 更新：index.html
-更新：net.js
 更新：server/worker.js
+更新：gaizorg-adventure.js
+更新：social.js
+更新：assets/rf-responsive-v18.css
+更新：assets/fx/nepterion-ocean-seal.webp
 更新：nepterion-fixed-seven.js
 更新：character-motion.js
 更新：nepterion-water.js
-更新：assets/models/nepterion-chief.glb
-更新：assets/models/kraid-lightweight.glb
 
 【権限】一般プレイヤー・運営では使用不可。運営長(role=chief)のみ選択可。
 Cloudflare Workersをご利用の場合、server/worker.jsをWorkerにも別途デプロイしてください。
@@ -23,5 +23,10 @@ Cloudflare Workersをご利用の場合、server/worker.jsをWorkerにも別途�
 クレイドのモデル参照先は assets/models/kraid-lightweight.glb です（選択した場合）。
 モデル表示方向・アニメーションは元GLBに依存します。ソースモデルは加工していません。
 戦闘軽量化：影・スプライト・AI・NPC骨格アニメの更新頻度と描画解像度を最適化（選択時のみ）。
+接続履歴はCloudflare Workersのサーバー側に24時間のみ保存（端末間同期済みのプレイヤーが対象）。
+IPアドレス・正確な位置情報を保存せず、Cloudflareの国コードだけを保存します。
+最初から始めるはアドベンチャーの進行のみリセット。灯晶・装備・キャラ強化は保持します。
+追加CG魔法陣は1枚の透明テクスチャ（プレーン）で表示。元GLBは変更しません。
+PC・スマホの画面幅およびセーフエリアでUIを調整します。
 実環境のFPS改善やオンライン対戦での見え方は未測定です。
 公開したらブラウザでCtrl+Shift+Rを押して更新してください。

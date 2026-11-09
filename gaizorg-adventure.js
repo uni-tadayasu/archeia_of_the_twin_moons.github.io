@@ -44,6 +44,7 @@ export function setupGaizorgAdventure(ctx){
   panel.innerHTML=`<div class="ga-title">ADVENTURE <small>十重の試練</small></div>
     <p class="ga-status"></p><div class="ga-actions">
       <button type="button" class="ga-warp">次のステージへワープ</button>
+      <button type="button" class="ga-reset">最初から始める</button>
       <button type="button" class="ga-exit">タイトルへ戻る</button>
     </div><div class="ga-help">移動：WASD / 矢印 / 画面ボタン<br>Shift：走る（スマホは「走る」を長押し）<br>光る門の中へ進むと次のステージへ</div>
     <div class="ga-touch" aria-label="冒険の移動操作">
@@ -68,6 +69,15 @@ export function setupGaizorgAdventure(ctx){
     for(const ev of ['pointerup','pointercancel','lostpointercapture'])button.addEventListener(ev,()=>{touch[key]=false;});
   });
   panel.querySelector('.ga-exit').addEventListener('click',()=>goTitle());
+  panel.querySelector('.ga-reset').addEventListener('click',async()=>{
+    if (busy||!rest)return;
+    const yes=await rfAdventureDialog('最初から始めますか？','進行状況をステージ1に戻します。\n灯晶・所持品・強化は変更されません。',
+      [['ステージ1に戻す',true,true],['キャンセル',false]]);
+    if(yes!==true)return;
+    rfFreshAdventure();
+    await enterRest();
+    ui.banner?.({name:'— 冒険を最初から —'},'ステージ1から再開できます');
+  });
   warpButton.addEventListener('click',()=>enterPortal());
   // Current portal: display Adventure in the visible mode tiles, not the retired .menu.
   const titleMenu=$('#scr-title .portal-modes') || $('#scr-title .menu');
@@ -82,11 +92,51 @@ export function setupGaizorgAdventure(ctx){
     }
     (titleMenu || $('#scr-title') || document.body).append(titleButton);
   }
-  titleButton.addEventListener('click',()=>{
-    if(busy)return;
+  // RF_ADVENTURE_RESTART_V18: Fresh start resets ONLY Adventure progress, never inventory/currency/upgrades.
+  function rfAdventureDialog(title, message, choices) {
+    return new Promise(resolve=>{
+      const prev=document.activeElement;
+      const overlay=document.createElement('div');
+      overlay.style.cssText='position:fixed;inset:0;z-index:200100;display:grid;place-items:center;padding:16px;background:rgba(3,9,20,.78);pointer-events:auto';
+      const card=document.createElement('div');card.setAttribute('role','dialog');card.setAttribute('aria-modal','true');
+      card.style.cssText='box-sizing:border-box;width:min(440px,calc(100vw - 24px));max-height:85dvh;overflow-y:auto;color:#eaf9ff;background:linear-gradient(130deg,#102e45,#0b1525);border:1px solid #8deaff;border-radius:12px;padding:20px;box-shadow:0 20px 60px #0009;font:14px/1.7 system-ui,sans-serif';
+      const h=document.createElement('h2');h.style.cssText='margin:0 0 8px;font-size:20px';h.textContent=title;
+      const p=document.createElement('p');p.style.cssText='white-space:pre-wrap;margin:0 0 14px';p.textContent=message;
+      const actions=document.createElement('div');actions.style.cssText='display:flex;flex-wrap:wrap;gap:8px';
+      let done=false;
+      const close=value=>{if(done)return;done=true;overlay.remove();window.removeEventListener('keydown',onKey,true);prev?.focus?.();resolve(value);};
+      const onKey=e=>{if(e.key==='Escape'){e.preventDefault();e.stopPropagation();close(null);}else if(e.key==='Tab'){const list=[...card.querySelectorAll('button')];if(!list.length)return;const i=list.indexOf(document.activeElement);const k=(i+(e.shiftKey?-1:1)+list.length)%list.length;e.preventDefault();list[k].focus();}};
+      for(const [label,value,danger] of choices){const b=document.createElement('button');b.type='button';b.textContent=label;b.style.cssText='flex:1 1 110px;border:1px solid #94dcec;background:'+(danger?'#713342':'#1a5265')+';color:#fff;padding:10px 9px;border-radius:8px;cursor:pointer;font-weight:bold';b.addEventListener('click',()=>close(value));actions.append(b);}
+      card.append(h,p,actions);overlay.append(card);document.body.append(overlay);
+      overlay.addEventListener('click',e=>{if(e.target===overlay)close(null);});
+      window.addEventListener('keydown',onKey,true);actions.querySelector('button')?.focus();
+    });
+  }
+  function rfFreshAdventure() {
+    progress.unlocked=1;
+    progress.cleared=false;
+    activeStage=0;
+    saveData();
+  }
+  function rfChooseHero() {
     state.mode='adventure';
     openSelect('冒険に出る戦士を選ぶ','アドベンチャー › 使用キャラクター',k=>start(k),{onBack:goTitle});
+  }
+  titleButton.addEventListener('click',async()=>{
+    if(busy)return;
+    const mode=await rfAdventureDialog('アドベンチャーモード',
+      '進行状況：'+(progress.cleared?'全10ステージ踏破':'ステージ'+Math.min(10,progress.unlocked)+'まで解放')+'\n続きから遊ぶか、ステージ1からやり直すかを選択してください。',
+      [['続きから','resume'],['最初から始める','fresh'],['キャンセル',null]]);
+    if(mode==='fresh') {
+      const accepted=await rfAdventureDialog('最初から始めますか？',
+        'アドベンチャーのステージ進行のみステージ1に戻します。\n灯晶・キャラクター・強化・装備は消えません。',
+        [['最初から始める',true,true],['戻る',false]]);
+      if(accepted!==true)return;
+      rfFreshAdventure();
+    } else if(mode!=='resume') return;
+    rfChooseHero();
   });
+
 
   // Register a safe runtime hook for original boss techniques. The base engine
   // handles damage and collision, while this draws layered illustration FX only.
