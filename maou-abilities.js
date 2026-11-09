@@ -353,20 +353,178 @@ function hatching(battle, f, spec, remote) {
   battle.ui?.popup?.(f.pos,'口卵術《翠影孵化》：卵1個・'+BEAST_NAME+'1体（耐久3撃）','#b4ffd1');
 }
 function fullHeal(battle,f,remote){
-  actionVisual(battle,f,{color:0xd8ffff,name:'無尽光輪《全生命復元》'},'s4');
+  actionVisual(battle,f,{color:0xd8ffff,name:'無尽光輪《全生命復元》'},'s2');
   if(!remote&&!f.remoteAuth){
     f.hp=f.maxHp;f.stun=0;f.status={};
     battle.ui?.popup?.(f.pos,'HP完全回復','#baffdb');
   }
 }
+// RF_MAOU_V8: keep ONLY previous #3, #4, #5, plus guard/rainbow/revival.
+// The server-side chief role and model URL remain unchanged.
+function configureMaouV8() {
+  const def = FIGHTERS[KEY];
+  if (!def?.skills) return;
+  const laser = def.skills.find(s => s.kind === 'maou_eye_laser');
+  const egg = def.skills.find(s => s.kind === 'maou_egg');
+  const heal = def.skills.find(s => s.kind === 'maou_fullheal');
+  if (!laser || !egg || !heal) {
+    console.warn('[Maou V8] Previous three skills not found; preserving character data.');
+    return;
+  }
+  def.skills = [laser, egg, heal];
+  def.pool = [0, 1]; // A/B buttons: laser and egg only. H: complete heal.
+  def.light = {...def.light, dmg:0, rainbowGuard:true};
+  def.over = {
+    name:'終極螺旋穿光《アストラル・ピアサー》',
+    kind:'maou_spiral_beam', elem:5, color:0xc7afff,
+    cost:0, castTime:2.15, dmg:690, range:23,
+    description:'光を一点へ収束し、白金と紫の二重螺旋光線で敵を貫くオリジナル奥義', vivid:true
+  };
+  def.hi = {
+    name:'命脈簒奪《エクリプス・ドレイン》',
+    kind:'maou_life_absorb', elem:5, color:0xf3b5ff,
+    cost:0, castTime:2.65, dmg:210, radius:11.5,
+    description:'前方・周囲の敵から生命力を吸収し、与えたダメージに応じてHPを回復する秘奥義',
+    hi:true, vivid:true
+  };
+  def.revival = {...def.revival, chance:.5, repeatable:true};
+  delete def.revival.maxActivations;
+  def.__maouV8 = true;
+}
+
+// Track custom effect lifetimes so battle transitions cannot leave GPU objects behind.
+function ownSpecialFx(battle, group, resources) {
+  (battle.__maouV8Cleanups ||= new Set());
+  let done = false;
+  const cleanup = () => {
+    if (done) return;
+    done = true;
+    group.removeFromParent();
+    for (const item of resources) item.dispose?.();
+    battle.__maouV8Cleanups?.delete(cleanup);
+  };
+  battle.__maouV8Cleanups.add(cleanup);
+  return cleanup;
+}
+
+// Concentrated dual-helix ray (original spell, not a reproduction of a show asset).
+// Two narrow lightweight cylinders + two polylines: no expensive particles.
+function spiralPiercingBeam(battle, caster, spec, remote = false) {
+  const len = Math.max(8, Math.min(28, Number(spec.range) || 23));
+  const group = new THREE.Group();
+  group.name = 'maou-astral-spiral-ray';
+  const owned = [];
+  for (const [rad, color, opacity] of [[.31,0x6d42ff,.43],[.115,0xfffcdf,.95]]) {
+    const geo = new THREE.CylinderGeometry(rad,rad,len,8,1,true);
+    const mat = new THREE.MeshBasicMaterial({color,transparent:true,opacity,
+      blending:THREE.AdditiveBlending,depthWrite:false,side:THREE.DoubleSide});
+    const mesh = new THREE.Mesh(geo,mat);
+    mesh.position.y=len/2;
+    group.add(mesh);owned.push(geo,mat);
+  }
+  for (const phase of [0,Math.PI]) {
+    const points=[];
+    for(let i=0;i<=52;i++) {
+      const k=i/52, angle=k*TAU*7+phase;
+      const radius=.34 + .06*Math.sin(k*Math.PI);
+      points.push(new THREE.Vector3(Math.cos(angle)*radius,k*len,Math.sin(angle)*radius));
+    }
+    const geo = new THREE.BufferGeometry().setFromPoints(points);
+    const mat = new THREE.LineBasicMaterial({color:phase?0xffffff:0xc37bff,
+      transparent:true,opacity:.88,blending:THREE.AdditiveBlending,depthWrite:false});
+    group.add(new THREE.Line(geo,mat));owned.push(geo,mat);
+  }
+  battle.fx.add(group);
+  const cleanup=ownSpecialFx(battle,group,owned);
+  const up=new THREE.Vector3(0,1,0), dir=new THREE.Vector3();
+  let age=0, pulse=0;
+  battle.ui?.popup?.(caster.pos,spec.name,'#eac9ff');
+  battle.addEffect(dt=>{
+    if (battle.ended || battle.__zelgrimDisposed || caster.dead) {cleanup();return false;}
+    const step=Math.min(.08,Math.max(0,Number(dt)||0));
+    age+=step; pulse-=step;
+    const face=Number(caster.facing)||0;
+    const fx=Math.sin(face),fz=Math.cos(face);
+    group.position.set(caster.pos.x+fx*.7, caster.y+(caster.def.height||3.7)*.67, caster.pos.z+fz*.7);
+    dir.set(fx,.012,fz).normalize();group.quaternion.setFromUnitVectors(up,dir);
+    group.rotateY(step*3.4); // moving visible spiral, beam direction unchanged
+    const fade=age<.2?age/.2:Math.max(0,(1.9-age)/.4);
+    for(const obj of group.children) obj.material.opacity=(obj.isLine?.88:obj.material.color.getHex()===0xfffcdf?.95:.43)*Math.max(0,Math.min(1,fade));
+    if(!remote && !caster.remoteAuth && age>.12 && age<1.55 && pulse<=0){
+      pulse=.16;
+      for(const enemy of battle.enemiesOf(caster)) {
+        if(enemy.dead)continue;
+        const dx=enemy.pos.x-caster.pos.x,dz=enemy.pos.z-caster.pos.z;
+        const along=dx*fx+dz*fz;
+        const across=Math.abs(dx*fz-dz*fx);
+        if(along<0 || along>len+enemy.radius || across>1.05+enemy.radius)continue;
+        battle.applyHit(caster,enemy,Number(spec.dmg)||690,.12,2.5,caster.pos,spec);
+      }
+    }
+    if(age<1.9) return true;
+    cleanup();return false;
+  });
+}
+
+// Life-steal is based on HP actually lost after armor and guard, rather than
+// restoring an invented fixed amount. A remote-target hit is sent through the
+// normal networking path; remote damage confirmation is not available here.
+function lifeAbsorption(battle, caster, spec, remote = false) {
+  const group = new THREE.Group();group.name='maou-eclipse-drain';
+  const geo = new THREE.TorusGeometry(1,.035,5,32);
+  const mat = new THREE.MeshBasicMaterial({color:0xe8adff,transparent:true,opacity:.7,
+    blending:THREE.AdditiveBlending,depthWrite:false});
+  const ring = new THREE.Mesh(geo,mat);
+  ring.rotation.x=Math.PI/2;group.add(ring);
+  battle.fx.add(group);
+  const cleanup=ownSpecialFx(battle,group,[geo,mat]);
+  const radius=Number(spec.radius)||11.5;
+  let age=0,pulse=0,healed=0;
+  battle.ui?.popup?.(caster.pos,spec.name,'#edbaff');
+  battle.addEffect(dt=>{
+    if(battle.ended || battle.__zelgrimDisposed || caster.dead){cleanup();return false;}
+    const step=Math.min(.08,Math.max(0,Number(dt)||0));
+    age+=step;pulse-=step;
+    group.position.set(caster.pos.x,.12,caster.pos.z);
+    const grow=Math.min(1,age/.45);ring.scale.setScalar(radius*grow);
+    mat.opacity=Math.max(0,.66*(1-age/1.85));ring.rotation.z+=step*1.4;
+    if(!remote && !caster.remoteAuth && age>.17 && age<1.48 && pulse<=0){
+      pulse=.24;
+      let gained=0;
+      for(const foe of battle.enemiesOf(caster)) {
+        if(foe.dead || foe.pos.distanceTo(caster.pos)>radius+foe.radius)continue;
+        const before=Math.max(0,Number(foe.hp)||0);
+        // Six measured pulses; each respects the existing hit/defense system.
+        const power=Math.min(1200,(Number(spec.dmg)||210)+foe.maxHp*.013);
+        battle.applyHit(caster,foe,power,.10,1.4,caster.pos,spec);
+        const after=Math.max(0,Number(foe.hp)||0);
+        if(!foe.remoteAuth) gained+=Math.max(0,before-after);
+        else gained+=Math.max(0,Math.min(before,400,Math.round(power*(caster.atkMul||1)*(foe.defMul||1)))); // estimated online drain
+      }
+      if(gained>0) {
+        const amount=Math.max(0,Math.min(caster.maxHp-caster.hp,Math.round(gained*1.25)));
+        caster.hp+=amount;healed+=amount;
+        if(amount)battle.ui?.popup?.(caster.pos,'+'+amount+' HP吸収','#c7ffdc');
+      }
+    }
+    if(age<1.85)return true;
+    cleanup();return false;
+  });
+}
+
 function reviveIfEligible(f){
-  if(f.key!==KEY||f.maouReviveTried||f.hp>0)return false;
-  f.maouReviveTried=true;
+  if(f.key!==KEY)return false;
+  // One 50% roll PER knockout. Never reroll every rendered frame after failure.
+  // Once HP has returned above zero, a later knockout is eligible again.
+  if(f.hp>0){f.__maouKOAttempted=false;return false;}
+  if(f.__maouKOAttempted || f.battle?.ended)return false;
+  f.__maouKOAttempted=true;
   if(Math.random()>=.5)return false;
   f.hp=f.maxHp;f.dead=false;f.stun=0;f.status={};f.action=null;f.chantToken=null;
+  f.__maouKOAttempted=false; // success: can roll on a later genuine knockout
   f.inv=2.5;f.maouGuardTime=30;f.maouRainbowTime=30;
   f.visual.rotation.set(0,0,0);f.root.rotation.x=0;
-  f.battle?.ui?.popup?.(f.pos,'魔王再誕！ 50%復活成功','#ffe9a4');
+  f.battle?.ui?.popup?.(f.pos,'魔王再誕！ 50%復活成功（回数制限なし）','#ffe9a4');
   f.battle?.ui?.flash?.();f.battle?.ui?.sfx?.('burst');
   return true;
 }
@@ -374,6 +532,7 @@ function reviveIfEligible(f){
 export function installMaouCombat({Battle,Fighter}) {
   if(!Battle?.prototype||!Fighter?.prototype||Battle.prototype.__maouInstalled)return;
   Battle.prototype.__maouInstalled=true;
+  configureMaouV8(); // use the live imported FIGHTERS object in every mode
   void readyBeast(); // tiny GLB loads once; no decoding at the moment of hatching
   if (FIGHTERS[SHADE]) {
     FIGHTERS[SHADE].name = BEAST_NAME;
@@ -387,10 +546,20 @@ export function installMaouCombat({Battle,Fighter}) {
   }
   const FU=Fighter.prototype.update, FL=Fighter.prototype.startLight, FR=Fighter.prototype.receive;
   const FS=Fighter.prototype.applyStatus, FT=Fighter.prototype.tickStatus;
-  const FB=Fighter.prototype.buildModel;
+  const FB=Fighter.prototype.buildModel, FSK=Fighter.prototype.startSkill;
+  Fighter.prototype.startSkill=function(i,hold,follow){
+    if(this.key===KEY && i===4 && !follow) i=2; // healing button stays functional
+    return FSK.call(this,i,hold,follow);
+  };
   const BA=Battle.prototype.add;
   const BE=Battle.prototype.executeCast, BC=Battle.prototype.cast;
   const BH=Battle.prototype.applyHit, BD=Battle.prototype.dispose;
+  const BAI=Battle.prototype.aiInput;
+  if(typeof BAI==='function') Battle.prototype.aiInput=function(f,dt){
+    const input=BAI.call(this,f,dt);
+    if(f?.key===KEY && input?.skillIdx===2 && f.hp>=f.maxHp*.7)delete input.skillIdx;
+    return input;
+  };
   // Intercept only this summon. The real player models are completely unchanged.
   Fighter.prototype.buildModel=function(gltf){
     if(this.key===SHADE){createBeastVisual(this);return;}
@@ -482,6 +651,8 @@ export function installMaouCombat({Battle,Fighter}) {
     if(spec.kind==='maou_eye_laser')eyeLaser(this,f,spec,!!f.remoteAuth);
     else if(spec.kind==='maou_egg')hatching(this,f,spec,!!f.remoteAuth);
     else if(spec.kind==='maou_fullheal')fullHeal(this,f,!!f.remoteAuth);
+    else if(spec.kind==='maou_spiral_beam')spiralPiercingBeam(this,f,spec,!!f.remoteAuth);
+    else if(spec.kind==='maou_life_absorb')lifeAbsorption(this,f,spec,!!f.remoteAuth);
     else actionVisual(this,f,spec,slot);
     return out;
   };
@@ -490,6 +661,8 @@ export function installMaouCombat({Battle,Fighter}) {
     return BH.call(this,att,tgt,...rest);
   };
   Battle.prototype.dispose=function(){
+    for(const cleanup of this.__maouV8Cleanups||[])cleanup();
+    this.__maouV8Cleanups?.clear();
     this.__zelgrimDisposed=true;
     for(const f of this.fighters||[]){
       stopAura(f,'rainbow');stopAura(f,'regen');
