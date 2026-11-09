@@ -1,20 +1,25 @@
-/* Riftfall Arena Mobile V7 — model transport. Direct lightweight GLB first.
- * Public API preserved: modelURLCandidates, getModelBytes.
- * Legacy .parts.json format remains an optional fallback when full GLB is absent.
+/* Riftfall Arena V11: model transport, Kraid/Crimson model redirect.
+ * Keep all existing model formats (direct GLB, optional legacy split files).
+ * Upload your own GLB to assets/models/kraid-lightweight.glb (binary not included).
  */
 const DEFAULT_TIMEOUT_MS = 90000;
+const KRAID_ORIGINAL = /(^|\/)crimson-swordsman\.glb(?=([?#]|$))/i;
+function kraidPath(path) {
+  return typeof path === 'string' ? path.replace(KRAID_ORIGINAL, '$1kraid-lightweight.glb') : path;
+}
 function asURL(value, base) { try { return new URL(value, base); } catch { return null; } }
 export function modelURLCandidates(path, moduleURL = null) {
   if (typeof path !== 'string' || !path.trim()) throw new Error('モデルのパスがありません');
+  const selected = kraidPath(path);
   const results = [];
   const add = url => {
     if (!url || !['https:', 'http:', 'file:'].includes(url.protocol)) return;
     if (!results.some(u => u.href === url.href)) results.push(url);
   };
-  const base = (typeof document !== 'undefined' && document.baseURI)
-    || (typeof location !== 'undefined' && location.href) || null;
-  if (base) add(asURL(path, base));
-  if (moduleURL) add(asURL(path, moduleURL));
+  const base = (typeof document !== 'undefined' && document.baseURI) ||
+    (typeof location !== 'undefined' && location.href) || null;
+  if (base) add(asURL(selected, base));
+  if (moduleURL) add(asURL(selected, moduleURL));
   if (!results.length) throw new Error('モデルの公開先URLを組み立てられません');
   return results;
 }
@@ -71,7 +76,6 @@ async function legacyParts(path, moduleURL = null) {
   }
   const combined = new Uint8Array(manifest.byteLength);
   let offset = 0;
-  // One chunk at a time: do not keep multiple old 20MB ArrayBuffers in memory.
   for (const name of manifest.parts) {
     if (typeof name !== 'string' || !/^[a-z0-9._-]+\.bin$/i.test(name)) throw new Error('分割パスが不正です');
     const partUrl = new URL(name, url);
@@ -87,8 +91,6 @@ export async function getModelBytes(path, moduleURL = null) {
   const candidates = modelURLCandidates(path, moduleURL);
   const glb = /\.glb(?:[?#]|$)/i.test(String(path));
   const errors = [];
-  // IMPORTANT: this must run before reading *.parts.json. The latter refers
-  // to the old 55–60MB versions even when current 20–23MB files are available.
   for (const url of candidates) {
     if (url.protocol === 'file:') {
       errors.push('file:// ではモデルを取得できません。HTTPSで開いてください');
@@ -100,7 +102,6 @@ export async function getModelBytes(path, moduleURL = null) {
       return bytes;
     } catch (error) {
       errors.push(`${url.pathname} : ${textOf(error)}`);
-      // Historical preview hosts may wrap window.fetch; XHR is a fallback.
       if (error?.httpStatus !== 404 && error?.httpStatus !== 403) {
         try {
           const bytes = await attemptXHR(url, 30000);
