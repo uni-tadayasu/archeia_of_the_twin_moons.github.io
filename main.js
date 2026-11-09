@@ -1,4 +1,5 @@
-import { installMaouCombat } from './maou-abilities.js?v=rf-mobile-v7-20261109';
+// RF_BATTLE_FIX_V9_1_20261109
+import { installMaouCombat } from './maou-abilities.js?v=rf-battle-v9-1-20261109';
 import { Fighter as MaouFighter } from './game.js?v=rf-mobile-v7-20261109';
 import './boss-abilities.js?v=rf-mobile-v7-20261109';
 import './exact-model-portraits.js?v=rf-mobile-v7-20261109';
@@ -27,9 +28,9 @@ const isTouch = matchMedia('(pointer: coarse)').matches || 'ontouchstart' in win
 // ---------- Renderer / scene ----------
 const container = $('#game-container');
 const renderer = new THREE.WebGLRenderer({ antialias: !isTouch, powerPreference: 'high-performance' });
-renderer.setPixelRatio(Math.min(window.devicePixelRatio, isTouch ? 1.5 : 2));
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, isTouch ? 1 : 2));
 renderer.setSize(window.innerWidth, window.innerHeight);
-renderer.shadowMap.enabled = true;
+renderer.shadowMap.enabled = !isTouch;
 renderer.shadowMap.type = THREE.PCFShadowMap;
 container.appendChild(renderer.domElement);
 
@@ -231,6 +232,8 @@ function modelErrorDialog(failedUrls = [...modelErrors.keys()]) {
   panel.replaceChildren(caption, detail, note, source, retry);
 }
 async function ensureAllModelsReady(requiredKeys = null) {
+  state.battleLoading = true;
+  window.__rfMarkBattlePhase?.('loading', '戦闘に必要なモデルを準備中');
   // 1 vs 1 doesn't depend on all 20 fighters. Never block it on unused GLBs.
   // 変身先も同時に準備し、通常攻撃で形態が変わった瞬間にGLBがなくなる問題を防止。
   const requiredExpanded = requiredKeys?.flatMap((key) => {
@@ -244,14 +247,18 @@ async function ensureAllModelsReady(requiredKeys = null) {
   // RF_LOADING_MODEL_COUNTER_V6
   const loadToken=window.RiftfallLoading?.begin('冒険と3Dモデルを準備しています',{total:requested.length,note:'必要なモデルを確認しています'});
   let completedModels=0;
-  await Promise.all(requested.map(async url=>{
-    try{return byUrl[url] ? true : await retrieveModel(url);}
-    finally{completedModels++;window.RiftfallLoading?.progress(loadToken,completedModels,requested.length,url.split('/').pop());}
-  }));
+  for (const url of requested) {
+    try { if (!byUrl[url]) await retrieveModel(url); }
+    finally { completedModels++; window.RiftfallLoading?.progress(loadToken,completedModels,requested.length,url.split('/').pop()); }
+    // Yield a frame between heavy GLB decodes on mobile devices.
+    if (completedModels < requested.length) await new Promise(resolve=>setTimeout(resolve,0));
+  }
   const failed = requested.filter((url) => !byUrl[url]);
   if (failed.length) {
     window.RiftfallLoading?.error(loadToken,'モデルを読み込めませんでした: '+failed.map(x=>x.split('/').pop()).join(', '));
     modelErrorDialog(failed);
+    state.battleLoading = false;
+    window.__rfMarkBattlePhase?.('error', 'モデル取得失敗: ' + failed.map(x=>x.split('/').pop()).join(', '));
     return false;
   }
   window.RiftfallLoading?.end(loadToken);
@@ -504,7 +511,7 @@ async function autoPush({ forSpend = false, reload = true } = {}) {
       clearTimeout(autoPushTimer);
       autoPushTimer = setTimeout(autoPush, 3000);
     }
-    if (reload && merged && !state.battle) location.reload();
+    if (reload && merged && !state.battle && !state.battleLoading) location.reload();
   };
   try {
     const pending = getPends().findLast((p) => p.code === code && typeof p.payload === 'string' && p.snapshot?.pid === save.pid);
@@ -592,7 +599,7 @@ async function autoPull() {
     let { data: json, ver } = await fetchVersioned(code);
     if (!json || syncCodeNow() !== code) return;
     // 戦闘中は反映せず、次回の確認（戦闘外）で取り込む
-    if (ver > syncVer() && !state.battle && !localStorage.getItem('arkeia-sync-dirty')) {
+    if (ver > syncVer() && !state.battle && !state.battleLoading && !localStorage.getItem('arkeia-sync-dirty')) {
       const remote = JSON.parse(json);
       // サーバーは購入キャラ(chars)を保存しないため、端末側の分を残す
       const uni = (a, b) => [...new Set([...(Array.isArray(a) ? a : []), ...(Array.isArray(b) ? b : [])])];
@@ -1607,6 +1614,8 @@ function refreshTitle() {
   $('#story-sub').textContent = save.chapter >= STORY.length ? '旅は終わった。もう一度、最初の灯から' : `続きから：${STORY[ch].title}`;
 }
 function enterTitle() {
+  state.battleLoading = false;
+  window.__rfMarkBattlePhase?.('title', 'メニューへ移動');
   unlockAudio();
   playTrack('title');
   refreshTitle();
@@ -1994,6 +2003,8 @@ function openStageSelect(crumb, onBack) {
 }
 
 function goTitle() {
+  state.battleLoading = false;
+  window.__rfMarkBattlePhase?.('title','タイトルへ戻る');
   gaizorgAdventure?.close();
   endBattle();
   leaveField();
@@ -2197,11 +2208,43 @@ function openEventLevel(cb) {
   document.body.append(ov);
 }
 
+// RF_BATTLE_FIX_V9_1_20261109: battle transitions display the actual JS error instead of silently reloading.
+function rfBattleStartError(error) {
+  console.error('[Riftfall Battle V9] 戦闘開始失敗', error);
+  state.battleLoading = false;
+  window.__rfMarkBattlePhase?.('error', error?.stack || error?.message || String(error));
+  try { endBattle(); } catch (cleanupError) { console.warn('[Battle cleanup]', cleanupError); }
+  let panel = document.getElementById('rf-battle-v9-error');
+  if (!panel) {
+    panel = document.createElement('section'); panel.id='rf-battle-v9-error';
+    panel.style.cssText = 'position:fixed;inset:auto 9px 12px;z-index:200090;background:#1b1015;color:#fff3df;border:2px solid #d99e50;padding:17px;max-width:690px;margin:auto;max-height:65vh;overflow:auto;font:14px/1.65 system-ui,sans-serif;box-shadow:0 15px 45px #000a';
+    const close = document.createElement('button'); close.type='button'; close.textContent='閉じてメニューへ';
+    close.style.cssText='display:block;margin-top:10px;padding:9px 15px;color:#fff;border:1px solid #e7bb72;background:#613e28';
+    close.addEventListener('click',()=>{panel.remove();enterTitle();});
+    const content=document.createElement('pre'); content.style.cssText='white-space:pre-wrap;overflow-wrap:anywhere;max-height:40vh;overflow:auto';
+    panel.append(document.createTextNode('戦闘を開始できませんでした。元のデータは変更していません。'),content,close);
+    document.body.append(panel);
+  }
+  panel.querySelector('pre').textContent=String(error?.stack||error?.message||error).slice(0,1700);
+}
+
 async function startOffline() {
-  const required = state.mode === 'cpu' ? [state.myKey, state.oppKey] : null;
-  if (!(await ensureAllModelsReady(required))) return;
+  if (state.battleLoading) return;
   const evRun = state.mode === 'event' ? (state.eventRun ||= activeEvent()) : null;
+  const choose = a => a[Math.floor(Math.random() * a.length)];
+  const ev = evRun?.ev;
+  const preparedEventAllies = ev ? Array.from({length:ev.ally||0},()=>choose(ROSTER)) : [];
+  const preparedEventFoes = [];
+  if (ev) for (const [kind,n] of ev.foes) for (let i=0;i<n;i++) {
+    preparedEventFoes.push(kind==='mob'?choose(ENEMY_ROSTER):kind==='boss'?choose(BOSS_ROSTER):kind==='roster'?choose(ROSTER):kind==='mirror'?state.myKey:kind);
+  }
+  const preparedDuoAlly = state.mode==='duo' ? choose(ROSTER) : null;
+  const preparedDuoFoes = state.mode==='duo' ? Array.from({length:2},()=>Math.random()<.5?choose(ENEMY_ROSTER):choose(ROSTER)) : [];
+  const required = [state.myKey, ...(state.mode==='cpu'?[state.oppKey]:[]), ...preparedEventAllies, ...preparedEventFoes,
+    preparedDuoAlly, ...preparedDuoFoes].filter(k=>FIGHTERS[k]);
+  if (!(await ensureAllModelsReady(required))) return;
   setStage(evRun ? STAGES[evRun.ev.stage % STAGES.length] : state.stage || STAGES[0]);
+  try {
   const b = makeBattle(null);
   b.add(state.myKey, { team: 0, player: true, awk: save.awk, pos: [-4, 3], name: FIGHTERS[state.myKey].name + '（あなた）', upg: upgFor(state.myKey), gear: gearFor(state.myKey) });
   if (evRun) {
@@ -2210,13 +2253,13 @@ async function startOffline() {
     const L = EV_LV(evRun.lv || 1);
     const rnd = (a) => a[Math.floor(Math.random() * a.length)];
     for (let i = 0; i < ev.ally; i++) {
-      const ak = rnd(ROSTER);
+      const ak = preparedEventAllies[i];
       b.add(ak, { team: 0, cpu: 0.75, pos: [-6, -1 - i * 3], name: FIGHTERS[ak].name + '（相棒）' });
     }
     const list = [];
     for (const [kind, n] of ev.foes) {
       for (let i = 0; i < n; i++) {
-        list.push(kind === 'mob' ? rnd(ENEMY_ROSTER) : kind === 'boss' ? rnd(BOSS_ROSTER) : kind === 'roster' ? rnd(ROSTER) : kind === 'mirror' ? state.myKey : kind);
+        list.push(preparedEventFoes[list.length]);
       }
     }
     list.forEach((k, i) => {
@@ -2235,18 +2278,21 @@ async function startOffline() {
     b.add(state.oppKey, { team: 1, cpu: foeCpu(0.8), hpMul: foeHp(1), pos: [4, -3], facing: Math.PI });
   } else {
     const pick = () => ROSTER[Math.floor(Math.random() * ROSTER.length)];
-    const ally = pick();
+    const ally = preparedDuoAlly;
     b.add(ally, { team: 0, cpu: 0.75, pos: [-6, -1], name: FIGHTERS[ally].name + '（相棒）' });
     const foe = () => (Math.random() < 0.5 ? ENEMY_ROSTER[Math.floor(Math.random() * ENEMY_ROSTER.length)] : pick());
-    b.add(foe(), { team: 1, cpu: foeCpu(0.7), hpMul: foeHp(1), pos: [5, -4], facing: Math.PI });
-    b.add(foe(), { team: 1, cpu: foeCpu(0.7), hpMul: foeHp(1), pos: [6, 1], facing: Math.PI });
+    b.add(preparedDuoFoes[0], { team: 1, cpu: foeCpu(0.7), hpMul: foeHp(1), pos: [5, -4], facing: Math.PI });
+    b.add(preparedDuoFoes[1], { team: 1, cpu: foeCpu(0.7), hpMul: foeHp(1), pos: [6, 1], facing: Math.PI });
   }
   beginBattle(b.fighters.some((f) => f.key === 'seraphel'));
+  } catch (error) { rfBattleStartError(error); }
 }
 
 function beginBattle(boss) {
   buildHud();
   show(null);
+  state.battleLoading = false;
+  window.__rfMarkBattlePhase?.('battle', '戦闘開始');
   // 添付の実音源を再生。ザルグレイヴが戦闘に参加したときは敵味方を問わず最優先。
   const participants = state.battle.fighters.map((f) => f.key);
   const ks = state.battle.fighters.filter((f) => f.team === 1 || state.mode === 'invade').map((f) => f.key);
@@ -2323,6 +2369,7 @@ function updateHud() {
     return;
   }
   for (const f of b.fighters) {
+    if (!f.hudFill || !f.hudPlate || !f.hudPlate.classList?.toggle) continue;
     f.hudFill.style.width = (f.hp / f.maxHp) * 100 + '%';
     f.hudPlate.classList.toggle('down', f.dead);
     const realName=f.hudPlate?.querySelector('b');if(realName&&realName.textContent!==f.name)realName.textContent=f.name;
@@ -2586,7 +2633,7 @@ function buildStoryBattle(foes, boss) {
 }
 // 目的地の決戦：ボス章は決められた敵、通常の章は1〜6体
 async function startChapterBattle() {
-  if (!(await ensureAllModelsReady())) return;
+  if (state.battleLoading) return;
   const ch = STORY[state.chapter];
   state.encounter = null;
   let foes = ch.enemies;
@@ -2597,16 +2644,19 @@ async function startChapterBattle() {
     const lvl = ch.enemies[0]?.hpMul || 1;
     foes = Array.from({ length: rollFoeCount() }, (_, i) => ({ k: i === 0 && ch.enemies[0] && !ch.boss ? ch.enemies[0].k : ENEMY_ROSTER[Math.floor(Math.random() * ENEMY_ROSTER.length)], hpMul: ch.boss ? Math.min(lvl, 1.2) : lvl }));
   }
-  buildStoryBattle(foes, bossNow);
+  if (!(await ensureAllModelsReady([...storyParty().party, ...foes.map(e=>e.k)]))) return;
+  try { buildStoryBattle(foes, bossNow); } catch (error) { rfBattleStartError(error); }
 }
 // 魔物シンボルとの戦闘
-function startEncounter(sym) {
+async function startEncounter(sym) {
+  if (state.battleLoading) return;
   const ch = STORY[state.chapter];
   const lvl = Math.min(ch.enemies.find((e) => !e.scale)?.hpMul || 1, 1 + state.chapter * 0.02);
   const n = rollFoeCount();
   const foes = Array.from({ length: n }, (_, i) => ({ k: i === 0 ? sym.key : ENEMY_ROSTER[Math.floor(Math.random() * ENEMY_ROSTER.length)], hpMul: lvl }));
   state.encounter = sym;
-  buildStoryBattle(foes, false);
+  if (!(await ensureAllModelsReady([...storyParty().party, ...foes.map(e=>e.k)]))) return;
+  try { buildStoryBattle(foes, false); } catch (error) { rfBattleStartError(error); }
 }
 
 // ---------- Field（ワールド探索） ----------
@@ -2617,18 +2667,23 @@ function resetFieldLight() {
   scene.fog.far = 80;
 }
 async function enterField() {
-  // フィールドは物語でしか使わないので必要になった時だけ読み込む（初回表示を軽く）
-  if (!(await ensureAllModelsReady())) return;
+  if (state.battleLoading) return;
+  const {party, mainKey}=storyParty();
+  const rotate=(arr,n,offset)=>Array.from({length:Math.min(n,arr.length)},(_,i)=>arr[(i+offset)%arr.length]);
+  const fieldNpcKeys=ROSTER.slice(0,Math.min(16,ROSTER.length));
+  const fieldEnemyPool=rotate(ENEMY_ROSTER,8,state.chapter*5);
+  const storyBoss=STORY[state.chapter]?.enemies?.[0]?.k;
+  if (!(await ensureAllModelsReady([...party,...fieldNpcKeys,...fieldEnemyPool,storyBoss].filter(k=>FIGHTERS[k])))) return;
+  try {
   const { Field } = await import('./field.js?v=20261108-boss-final-v5');
   leaveField();
   const ch = STORY[state.chapter];
   const st = stageById(ch.stage);
   setStage(st);
-  const { party, mainKey } = storyParty();
   state.myKey = mainKey;
   state.field = new Field(scene, {
     chapter: state.chapter, ch, stage: st, assets, floorTex,
-    mainKey, gear: gearFor(mainKey), partyKeys: party, npcKeys: ROSTER, enemyPool: ENEMY_ROSTER,
+    mainKey, gear: gearFor(mainKey), partyKeys: party, npcKeys: fieldNpcKeys, enemyPool: fieldEnemyPool,
     onTalk: (lines) => {
       sfx('ui');
       playDialogue(lines, () => show(null));
@@ -2669,7 +2724,10 @@ async function enterField() {
   playTrack('field:' + state.chapter);
   state.field.setOwnName(myName());
   // 世界中の旅人とつながる
+  state.battleLoading=false;
+  window.__rfMarkBattlePhase?.('field','探索開始');
   ensureWorld().then(() => refreshFieldRemotes());
+  } catch (error) { rfBattleStartError(error); }
 }
 function returnToField(sym, won) {
   const f = state.field;
@@ -3000,8 +3058,10 @@ async function startOnline(peer) {
   const required = [state.myKey, peer?.fk, state.mode === 'online-coop' ? 'seraphel' : null].filter(Boolean);
   if (!(await ensureAllModelsReady(required))) return;
   if (!state.online) {
+    state.battleLoading = false;
     return;
   }
+  try {
   state.online.started = true;
   state.online.peerId = peer.id;
   const myId = state.net.myId;
@@ -3021,6 +3081,7 @@ async function startOnline(peer) {
     b.add('seraphel', { team: 1, cpu: 0.9, remote: !host, netId: 'boss', pos: [5, -5], facing: Math.PI, hpMul: 2.2, name: '裁定者セラフェル' });
   }
   beginBattle(!vs || b.fighters.some((f) => f.key === 'seraphel'));
+  } catch (error) { rfBattleStartError(error); }
 }
 
 let netTimer = 0;
@@ -3198,13 +3259,17 @@ async function startInvade(p) {
   if (!w || !operatorUnlocked()) {
     return;
   }
-  if (!(await ensureAllModelsReady())) return;
+  const invadeHero = ((['chief','sovereign','bloodfiend'].includes(state.invadeKey) && operatorUnlocked()) ||
+    (['valgard','gaizorg','valdarion','maou'].includes(state.invadeKey) && chiefUnlocked()) ||
+    (state.invadeKey==='operator_gigantes' && operatorOnlyUnlocked())) ? state.invadeKey : 'seraphel';
+  if (!(await ensureAllModelsReady([invadeHero,peerKeyOf(p.id,p.fk)]))) return;
   // サーバー設定時：乱入の許可をサーバーで判定し、署名付き許可証を相手に渡す
   let tk = '';
   if (apiEnabled()) {
     const r = await api('/invade/ticket', { token: roleState.tok, from: w.myId, to: p.id }).catch(() => ({}));
     if (!r.ok || !r.ticket) {
       ui.banner({ name: '— 乱入できません —' }, r.status === 429 ? '少し時間をおいてください' : 'サーバーが許可しませんでした');
+      state.battleLoading = false;
       return;
     }
     tk = r.ticket;
@@ -3417,7 +3482,8 @@ function answerReq(yes) {
   }
 }
 // 決闘：世界ルームの回線で 1対1（申し込んだ側が左手前）
-function startDuel(peer, challenger) {
+async function startDuel(peer, challenger) {
+  if(state.battleLoading)return;
   const w = state.world;
   if (!w || !canDuelNow()) return;
   $('#world-panel').hidden = true;
@@ -3430,6 +3496,9 @@ function startDuel(peer, challenger) {
   resetFieldLight();
   state.duel = { id: peer.id, name: peer.name };
   state.encounter = null;
+  const duelKey=peerKeyOf(peer.id,peer.fk);
+  if(!(await ensureAllModelsReady([state.myKey,duelKey])))return;
+  try {
   const b = makeBattle(w);
   const myPos = challenger ? [-4, 3] : [4, -3];
   const peerPos = challenger ? [4, -3] : [-4, 3];
@@ -3441,6 +3510,7 @@ function startDuel(peer, challenger) {
   ui.flash();
   sfx('burst');
   ui.banner({ name: '— 決闘 —' }, `${myName()} vs ${peer.name}`);
+  } catch(error) { rfBattleStartError(error); }
 }
 $('#btn-world').addEventListener('click', async () => {
   sfx('ui');
@@ -4229,9 +4299,14 @@ renderer.setAnimationLoop((time) => {
   });
   worldTick(dt);
   if (state.battle && (!state.paused || isLive())) {
-    state.battle.update(dt, state.paused ? { mx: 0, mz: 0 } : readInput());
-    netTick(dt);
-    updateHud();
+    try {
+      state.battle.update(dt, state.paused ? { mx: 0, mz: 0 } : readInput());
+      netTick(dt);
+      updateHud();
+    } catch (error) {
+      rfBattleStartError(error);
+      return;
+    }
   } else if (state.adventureRest && !state.battle) {
     gaizorgAdventure.update(dt, state.paused ? { mx:0,mz:0 } : readInput());
   } else if (state.field && !state.battle) {

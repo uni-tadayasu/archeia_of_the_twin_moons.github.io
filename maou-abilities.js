@@ -1,3 +1,4 @@
+// RF_BATTLE_FIX_V9_1_20261109
 /** Riftfall Arena / 魔王 -- original light skills, no GLB mesh edits.
  * Installs gameplay logic onto the existing Battle / Fighter prototypes.
  * All cloned material changes affect only clones, never the user's source GLB.
@@ -208,7 +209,9 @@ function prepareZelgrim(battle, owner) {
   const pending = (battle.__zelgrimPreparing ||= new Set());
   if (pool.has(owner) || pending.has(owner)) return;
   pending.add(owner);
-  void readyBeast().then(asset => {
+  const prepareOnIdle = () => {
+    if (battle.__zelgrimDisposed || battle.ended || owner.dead) { pending.delete(owner); return; }
+    void readyBeast().then(asset => {
     if (!asset?.scene || battle.__zelgrimDisposed || battle.ended || owner.dead) return;
     if (pool.has(owner) || !ZelgrimFighterConstructor) return;
     // This executes as part of pre-battle setup, NOT when the egg hatches.
@@ -233,7 +236,10 @@ function prepareZelgrim(battle, owner) {
     pool.set(owner, beast);
   }).catch(error => {
     console.warn('[Zelgrim] 戦闘前の待機モデル作成に失敗', error);
-  }).finally(() => { pending.delete(owner); });
+    }).finally(() => { pending.delete(owner); });
+  };
+  if (typeof requestIdleCallback === 'function') requestIdleCallback(prepareOnIdle,{timeout:1800});
+  else setTimeout(prepareOnIdle,350);
 }
 function activateZelgrim(battle, owner, at) {
   const beast = battle.__zelgrimPool?.get(owner);
@@ -533,7 +539,8 @@ export function installMaouCombat({Battle,Fighter}) {
   if(!Battle?.prototype||!Fighter?.prototype||Battle.prototype.__maouInstalled)return;
   Battle.prototype.__maouInstalled=true;
   configureMaouV8(); // use the live imported FIGHTERS object in every mode
-  void readyBeast(); // tiny GLB loads once; no decoding at the moment of hatching
+  // Zelgrim is loaded only when Maou actually joins a battle.
+  // No GLB decoded on the title menu.
   if (FIGHTERS[SHADE]) {
     FIGHTERS[SHADE].name = BEAST_NAME;
     FIGHTERS[SHADE].title = '魔王の魔卵から生まれる召喚獣';

@@ -1,3 +1,4 @@
+// RF_BATTLE_FIX_V9_1_20261109
 // RF_GRAND_FOUR_20261108 gaizorg-adventure.js
 /**
  * Riftfall Arena – Gaizorg Adventure (original extension, 2026-11-08).
@@ -229,6 +230,8 @@ export function setupGaizorgAdventure(ctx){
     rest={...env,p,instance,mixer,motion,walk,run,idle,action:null,owned:env.owned,pos:new THREE.Vector3(0,0,8),facing:0,portalHold:0};
     if(idle)rest.action=mixer.clipAction(idle).play();
     state.adventureRest=true;state.battle=null;state.field=null;state.mode='adventure';
+    state.battleLoading=false;
+    window.__rfMarkBattlePhase?.('field','アドベンチャー休憩所');
     show(null);panel.hidden=false;
     document.body.classList.add('gaizorg-adventure');
     const next=Math.min(10,progress.unlocked);
@@ -305,6 +308,7 @@ export function setupGaizorgAdventure(ctx){
     }catch(err){
       console.warn('[ADVENTURE] Portal entry failed:',err);
       ui.banner({name:'ワープに失敗しました'},err.message||'再試行してください');
+      state.battleLoading=false;
       if(rest)drawStatus('読み込みエラー。ワープを再試行してください。');
     }finally{busy=false;warpButton.disabled=false;}
   }
