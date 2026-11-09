@@ -1320,3 +1320,7 @@ FIGHTERS.nepterion = {
 };
 
 if (!SPECIAL_KEYS.includes('nepterion')) SPECIAL_KEYS.push('nepterion');
+
+// RF_NEPT_SEVEN_FIXED_DATA_V17
+FIGHTERS.nepterion.skills = FIGHTERS.nepterion.skills.slice(0,5);
+delete FIGHTERS.nepterion.pool;

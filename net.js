@@ -1,3 +1,4 @@
+// RF_MOTION_GUARD_V16_NET
 // InstantDB はオンラインモード選択時にのみ動的読み込み（初期ロード軽量化）
 let dbPromise = null;
 let netFailCount = 0;
@@ -250,7 +251,7 @@ export async function connect(mode, roomCode, handlers) {
   });
   room.subscribeTopic('cast', (e) => {
     if (e && typeof e === 'object') {
-      handlers.onCast({ id: str(e.id, 40), slot: typeof e.slot === 'string' && (/^[sf]\d{1,2}$/.test(e.slot) || e.slot === 'over' || e.slot === 'hi') ? e.slot : 's0', tx: num(e.tx, 50), tz: num(e.tz, 50), ry: num(e.ry, 10) });
+      handlers.onCast({ id: str(e.id, 40), slot: typeof e.slot === 'string' && (/^[sf]\d{1,2}$/.test(e.slot) || e.slot === 'over' || e.slot === 'hi' || e.slot === 'nep_guard') ? e.slot : 's0', tx: num(e.tx, 50), tz: num(e.tz, 50), ry: num(e.ry, 10) });
     }
   });
   room.subscribeTopic('hit', (e) => {

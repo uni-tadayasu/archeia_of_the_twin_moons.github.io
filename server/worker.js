@@ -2361,3 +2361,7 @@ FIGHTERS.nepterion = {
 };
 
 CHIEF_ONLY.add('nepterion');
+
+// RF_NEPT_SEVEN_FIXED_DATA_V17
+FIGHTERS.nepterion.skills = FIGHTERS.nepterion.skills.slice(0,5);
+delete FIGHTERS.nepterion.pool;

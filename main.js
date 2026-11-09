@@ -1,3 +1,5 @@
+// RF_AUTO_RIG_V17_MAIN
+// RF_MOTION_GUARD_V16_MAIN
 // RF_ULTRA_V12_MAIN
 // RF_NEPT_V14_MAIN
 // RF_BGM_EXCLUSIVE_V10
@@ -15,13 +17,15 @@ import { renderExactPortrait } from './glb-portrait.js?v=rf-mobile-v7-20261109';
 // RF_OPERATOR_GIGANTES_MAIN_20261108
 import { loadModel } from './model-runtime.js?v=rf-combo-v15-20261109';
 import { Battle, ARENA_R } from './game.js?v=rf-combo-v15-20261109';
-import { installNepterionCombat } from './nepterion-water.js?v=rf-combo-v15-20261109';
+import { installNepterionCombat } from './nepterion-water.js?v=rf-auto-rig-seven-v17-20261109';
+import { installActorMotion } from './character-motion.js?v=rf-auto-rig-seven-v17-20261109';
+import { installNepterionFixedSeven } from './nepterion-fixed-seven.js?v=rf-auto-rig-seven-v17-20261109';
 import { FIGHTERS, spellCastTime, STORY, ROSTER, UPGRADES, MAX_LV, STAGES, BGM, APEX_BGM, ENEMY_ROSTER, UPG_CAP, LB_MAX, lbMaxLv, lbMul, lbCost, WEAPONS, ARMORS, SUMMONS, STAT_LABEL, SPECIAL_KEYS, BOSS_ROSTER, currentEvent, sanitizeEvent, EV_FOE_KINDS } from './data.js?v=rf-v9-2-20261109';
 import { sayBattle, setVoiceMuted, setVoiceVolume, stopVoices } from './voice.js?v=audio-cast-20261107d';
 import { initSocial, uiConfirm } from './social.js?v=valgard-exact-20261107';
 import { initMailbox } from './mailbox.js?v=audio-cast-20261107d';
 import { OPERATOR_KEY_SHA256, CHIEF_KEY_SHA256, MAX_KEY_ATTEMPTS, LOCKOUT_MS, SHOP_ITEMS } from './config.js';
-import { connect, issueInvite, redeemInvite, syncPush, syncPullV } from './net.js?v=valgard-exact-20261107';
+import { connect, issueInvite, redeemInvite, syncPush, syncPullV } from './net.js?v=rf-auto-rig-seven-v17-20261109';
 import { apiEnabled, api, verifyToken } from './api.js';
 
 const $ = (s) => document.querySelector(s);
@@ -29,6 +33,8 @@ const $ = (s) => document.querySelector(s);
 installMaouCombat({ Battle, Fighter: MaouFighter });
 installOperatorCombatFx(Battle);
 installNepterionCombat({ Battle, Fighter: MaouFighter });
+installActorMotion({ Fighter: MaouFighter, Battle });
+installNepterionFixedSeven({ Fighter: MaouFighter, FIGHTERS, state:()=>state });
 const isTouch = matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window;
 
 // ---------- Renderer / scene ----------

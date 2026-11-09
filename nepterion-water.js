@@ -1,4 +1,4 @@
-// RF_NEPT_V1: Riftfall Arena - chief-only supreme water character combat.
+// RF_NEPT_V16_GUARD_FREEZE_30S: Riftfall Arena - chief-only supreme water character combat.
 // Uses existing Battle/Fighter APIs; no modification to the provided GLB bytes.
 import * as THREE from 'three';
 
@@ -17,15 +17,146 @@ export function installNepterionCombat({ Battle, Fighter }) {
     return oldAwakenPaint.call(this);
   };
 
+  // Guard art: one persistent 30-second magic circle, without any cooldown.
+  // Refreshing guard reuses the same meshes so repeated inputs do not pile up draw calls.
+  const FIELD_SECONDS = 30;
+  const FIELD_RADIUS = 6.7;
+  const ICE_SECONDS = 2.6;
+  const ICE_TINT = new THREE.Color(0x82eaff);
+  const ICE_GLOW = new THREE.Color(0x46bde9);
+  const GUARD_SLOT = 'nep_guard';
+  const FIELD_GEO = new THREE.RingGeometry(0.89, 1, 64);
+  const MID_GEO = new THREE.RingGeometry(0.56, 0.59, 48);
+  const CORE_GEO = new THREE.CircleGeometry(1, 48);
+
+  function newGuard(owner) {
+    const battle = owner.battle;
+    if (!battle?.fx) return null;
+    if (owner._nepGuardField) {
+      owner._nepGuardField.remaining = FIELD_SECONDS;
+      return owner._nepGuardField;
+    }
+    const group = new THREE.Group();
+    const add = (geo, color, opacity, scale=1) => {
+      const material = new THREE.MeshBasicMaterial({ color, transparent:true, opacity,
+        depthWrite:false, side:THREE.DoubleSide, blending:THREE.AdditiveBlending });
+      const mesh = new THREE.Mesh(geo, material);
+      mesh.rotation.x = -Math.PI/2;
+      mesh.scale.setScalar(FIELD_RADIUS*scale);
+      mesh.renderOrder = 10;
+      group.add(mesh);
+      return mesh;
+    };
+    const surface = add(CORE_GEO,0x1275d4,0.095);
+    const outer = add(FIELD_GEO,0x8ef8ff,0.64);
+    const inner = add(MID_GEO,0x4bbfff,0.55);
+    group.position.set(owner.pos.x,0.09,owner.pos.z);
+    battle.fx.add(group);
+    const field = { owner, group, meshes:[surface,outer,inner], remaining:FIELD_SECONDS, clock:0 };
+    owner._nepGuardField = field;
+    (battle._nepGuardFields ||= new Set()).add(field);
+    battle.ui?.popup?.(owner.pos,'神海護陣《蒼氷封界》30秒・再使用制限なし','#7fedff');
+    return field;
+  }
+  function endGuard(field) {
+    if (!field || field.closed) return;
+    field.closed = true;
+    field.group.removeFromParent();
+    for (const mesh of field.meshes) mesh.material.dispose();
+    field.owner.battle?._nepGuardFields?.delete(field);
+    if(field.owner._nepGuardField === field) field.owner._nepGuardField = null;
+  }
+  function icePaint(enemy) {
+    if (enemy._nepIcePaint || !enemy.visual) return;
+    const saved=[];
+    const known=new Set();
+    enemy.visual.traverse(node=>{
+      if (!node.isMesh || !node.material) return;
+      for (const mat of Array.isArray(node.material)?node.material:[node.material]) {
+        if (!mat || known.has(mat)) continue;
+        known.add(mat);
+        const prev={mat,color:mat.color?.clone?.(),emissive:mat.emissive?.clone?.(),intensity:mat.emissiveIntensity};
+        if(mat.color) mat.color.copy(ICE_TINT);
+        if(mat.emissive){mat.emissive.copy(ICE_GLOW);mat.emissiveIntensity=Math.max(.16,mat.emissiveIntensity||0);}
+        saved.push(prev);
+      }
+    });
+    enemy._nepIcePaint = saved;
+  }
+  function restoreIce(enemy) {
+    const saved = enemy._nepIcePaint;
+    if (!saved) return;
+    for(const e of saved) {
+      if(e.color&&e.mat.color)e.mat.color.copy(e.color);
+      if(e.emissive&&e.mat.emissive)e.mat.emissive.copy(e.emissive);
+      if(e.intensity!=null)e.mat.emissiveIntensity=e.intensity;
+    }
+    enemy._nepIcePaint=null;
+    enemy._nepIceTimer=0;
+  }
+  function freezeTouch(enemy, field) {
+    enemy.status ||= {};
+    // Native combat movement/ability locks; never delete health or replace the model.
+    enemy.status.freeze = Math.max(enemy.status.freeze||0,ICE_SECONDS);
+    enemy.stun = Math.max(enemy.stun||0,ICE_SECONDS);
+    enemy._nepIceTimer = ICE_SECONDS;
+    if (!enemy.remoteAuth) {
+      enemy.vel?.set?.(0,0,0);
+      if (enemy.action && !enemy.action.type?.startsWith?.('death')) enemy.action=null;
+    }
+    icePaint(enemy);
+  }
+  function tickGuard(field, dt) {
+    const owner=field.owner;
+    if(owner.dead || owner.battle?.ended || !field.group.parent) {endGuard(field);return;}
+    field.remaining -= dt;
+    if(field.remaining <= 0){endGuard(field);return;}
+    field.clock += dt;
+    field.group.position.set(owner.pos.x,0.09,owner.pos.z);
+    field.group.rotation.y += dt*.35;
+    field.meshes[1].material.opacity = .5 + .12*Math.sin(field.clock*2.4);
+    field.meshes[2].material.opacity = .43 + .10*Math.sin(field.clock*1.5);
+    const r2=FIELD_RADIUS*FIELD_RADIUS;
+    for (const enemy of owner.battle.fighters) {
+      if(enemy===owner || enemy.dead || enemy.team===owner.team)continue;
+      const dx=enemy.pos.x-owner.pos.x,dz=enemy.pos.z-owner.pos.z;
+      if(dx*dx+dz*dz<=r2) freezeTouch(enemy,field);
+    }
+  }
+  // The battle already relays 'cast' events. We reserve one named slot for the
+  // guard, so remote players see the same circle and are frozen on contact.
+  const oldBattleCast=Battle.prototype.cast;
+  Battle.prototype.cast=function(fighter,slot,net){
+    if(slot===GUARD_SLOT && fighter?.key===KEY && !this.ended && !fighter.dead){
+      newGuard(fighter);
+      if(!net && !fighter.remoteAuth && this.net && fighter.netId){
+        this.net.cast({id:fighter.netId,slot:GUARD_SLOT,tx:fighter.pos.x,tz:fighter.pos.z,ry:fighter.facing});
+      }
+      return;
+    }
+    return oldBattleCast.call(this,fighter,slot,net);
+  };
+
   const oldUpdate = Fighter.prototype.update;
   Fighter.prototype.update = function (dt, input) {
     const result = oldUpdate.call(this, dt, input);
-    if (this.key === KEY && !this.dead && !this.remoteAuth && !this.battle?.ended) {
-      const seconds = Math.max(0, Math.min(0.06, Number(dt) || 0));
-      // Ocean deity: constant tide regeneration. Frame-rate independent.
-      this.hp = Math.min(this.maxHp, this.hp + this.maxHp * 0.016 * seconds);
-      this.flux = Math.min(100, this.flux + 15 * seconds);
-      if (this.guard) this.stun = 0;
+    const seconds = Math.max(0, Math.min(0.06, Number(dt) || 0));
+    if (this.key === KEY && !this.dead && !this.battle?.ended) {
+      if (!this.remoteAuth) {
+        // Ocean deity: constant tide regeneration. Frame-rate independent.
+        this.hp = Math.min(this.maxHp, this.hp + this.maxHp * 0.016 * seconds);
+        this.flux = Math.min(100, this.flux + 15 * seconds);
+        // Rising edge of the existing Guard button. No cooldown; re-press refreshes 30s.
+        const held=!!input?.guard;
+        if (held && !this._nepGuardHeld) this.battle?.cast(this,GUARD_SLOT);
+        this._nepGuardHeld=held;
+        if (this.guard) this.stun = 0;
+      }
+      if (this._nepGuardField) tickGuard(this._nepGuardField,seconds);
+    }
+    if (this._nepIcePaint) {
+      this._nepIceTimer=Math.max(0,(this._nepIceTimer||0)-seconds);
+      if(this.dead || (this._nepIceTimer<=0 && !(this.status?.freeze>0)))restoreIce(this);
     }
     return result;
   };
@@ -134,6 +265,9 @@ export function installNepterionCombat({ Battle, Fighter }) {
       item.done = true;
     }
     this._nepterionVisuals?.clear();
+    for(const field of [...(this._nepGuardFields||[])]) endGuard(field);
+    this._nepGuardFields?.clear();
+    for(const fighter of this.fighters || []) if(fighter._nepIcePaint)restoreIce(fighter);
     return oldDispose.apply(this, args);
   };
 }
