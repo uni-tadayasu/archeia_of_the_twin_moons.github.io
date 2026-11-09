@@ -135,7 +135,7 @@ async function restoreInMemoryTextures(gltf, detached, sourceUrl = '') {
   if (!detached?.images.length || !detached.materials.length) return;
   // The ice warlord model must keep the unmodified texture atlas orientation.
   // Preserve this GLB without changing how the other fighters are decoded.
-  const preserveOrientation = /(?:^|\/)(?:iron-warlord(?:-f2)?|gaizorg-boss|valdarion|operator-gigantes|chief-empress|maou-lord|nepterion-chief|crimson-swordsman|kraid-lightweight)\.glb(?:[?#]|$)/i.test(sourceUrl);
+  const preserveOrientation = /(?:^|\/)(?:iron-warlord(?:-f2)?|gaizorg-boss|valdarion|operator-gigantes|chief-empress|maou-lord|nepterion-chief|crimson-swordsman|kraid-lightweight|udaijin-original|udaijin-exact-v21)\.glb(?:[?#]|$)/i.test(sourceUrl);
   const decoded = await Promise.all(detached.images.map((image, i) =>
     decodeInMemoryImage(image, i, preserveOrientation)
   ));
@@ -263,7 +263,7 @@ export function instantiateModel(gltf, height, tint = null) {
   const materials = new Set();
   const rfLocalMaterialCache = new Map();
   const tintColor = tint == null ? null : new THREE.Color(tint);
-  const preserveSourceMaterial = /(?:^|\/)(?:iron-warlord(?:-f2)?|operator-gigantes|gaizorg-boss|valdarion|chief-empress|maou-lord|nepterion-chief|crimson-swordsman|kraid-lightweight)\.glb(?:[?#]|$)/i.test(gltf.userData?.arkeiaSource || '');
+  const preserveSourceMaterial = /(?:^|\/)(?:iron-warlord(?:-f2)?|operator-gigantes|gaizorg-boss|valdarion|chief-empress|maou-lord|nepterion-chief|crimson-swordsman|kraid-lightweight|udaijin-original|udaijin-exact-v21)\.glb(?:[?#]|$)/i.test(gltf.userData?.arkeiaSource || '');
   model.traverse((o) => {
     if (!o.isMesh) return;
     // Shadows are disabled by the render policy. Preserve skinning and animations.

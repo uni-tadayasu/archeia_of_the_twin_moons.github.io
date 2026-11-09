@@ -1,4 +1,4 @@
-Riftfall Arena 右大臣パッチ V20.1
+Riftfall Arena 右大臣パッチ V21 完全元GLB優先
 
 このZIPに入っている更新ファイルだけを、GitHub Pagesゲームのルートに同じパスで上書きしてください。
 Cloudflare Worker は server/worker.js を別途デプロイしてください。
@@ -17,10 +17,9 @@ H=おにび、L/C=呪いの光（別の新技は発生しません）
 変更ファイル（READMEを除く）:
 data.js
 main.js
-net.js
-gaizorg-adventure.js
+model-runtime.js
 server/worker.js
 index.html
 udaijin-curse.js
-assets/models/udaijin-original.glb
+assets/models/udaijin-exact-v21.glb
 assets/portraits/udaijin.png

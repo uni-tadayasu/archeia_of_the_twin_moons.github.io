@@ -1,4 +1,4 @@
-import {installUdaijinCombat} from './udaijin-curse.js?v=rf-udaijin-v20-20261109';
+import {installUdaijinCombat} from './udaijin-curse.js?v=rf-udaijin-exact-v21-20261109';
 // RF_AUTO_RIG_V17_MAIN
 // RF_MOTION_GUARD_V16_MAIN
 // RF_ULTRA_V12_MAIN

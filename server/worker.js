@@ -2423,7 +2423,7 @@ delete FIGHTERS.nepterion.pool;
 // 運営長専用・呪属性：既存キャラクターの仕様や数値を変更しない。
 FIGHTERS.udaijin = {
   name:'右大臣',title:'禍呪の右大臣（運営長専用）',
-  model:'assets/models/udaijin-original.glb',face:"assets/portraits/udaijin.png",
+  model:'assets/models/udaijin-exact-v21.glb',face:"assets/portraits/udaijin.png",
   attribute:'呪',color:0xb76aff,tint:null,height:2.25,hp:2650,speed:5.45,
   overGain:1.1,power:1.18,armor:.90,fluxMul:1.2,
   locked:true,special:'chief',fixedSlots:true,curseExclusive:true,

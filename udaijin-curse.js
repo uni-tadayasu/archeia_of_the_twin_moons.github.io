@@ -1,5 +1,5 @@
-// RF_UDAIJIN_V20 右大臣 – chief-exclusive curse fighter.
-// The source GLB remains byte-for-byte untouched. Runtime skinning only if unrigged.
+// RF_UDAIJIN_EXACT_V21 右大臣 – chief-exclusive curse fighter.
+// Exact source geometry, materials and textures; procedural remeshing disabled.
 import * as THREE from 'three';
 const KEY='udaijin', CURSE_TIME=30, CURSE_RADIUS=5.65;
 const PURPLE=0xaf5dff, C=0xbc72ff;
@@ -217,96 +217,42 @@ function eyeLaser(b,f){
   });
 }
 // 20-bone automatic runtime rig. Does not alter or re-export the user's GLB.
+// V21 EXACT GLB: never remesh, recalculate weights, or alter the original GLB scene.
+// This fixes the distorted appearance caused by the old procedural 20-bone conversion.
 function attachRig(f,glb){
-  const model=f.modelInstance?.model;if(!model)return;
+  const model=f.modelInstance?.model;
+  if(!model)return;
   const clips=glb?.animations||[];
-  let preRigged=false,vertices=0;
-  model.traverse(o=>{if(o.isSkinnedMesh||o.isBone)preRigged=true;if(o.isMesh&&!o.isSkinnedMesh)vertices+=o.geometry?.attributes?.position?.count||0;});
-  if(clips.length){f._udaRig={authored:true,model,clips};return;}
-  if(preRigged){
-    const bones=[],find=(side,part)=>{
-      const re=new RegExp(side==='l'?'left|(^|[_\\.])l':'right|(^|[_\\.])r','i');
-      return bones.find(b=>re.test(b.name)&&part.test(b.name));
+  const bones=[];
+  model.traverse(o=>{if(o.isBone)bones.push(o);});
+  if(clips.length){
+    // Original authored animation and skeleton remain in complete control.
+    f._udaRig={model,authored:true,clips,t:0,baseY:model.position.y};
+    return;
+  }
+  if(bones.length){
+    const named={}, find=(side,part)=>{
+      const rex=side==='l'?/(left|_l(?:_|$)|\.l$)/i:/(right|_r(?:_|$)|\.r$)/i;
+      return bones.find(b=>rex.test(b.name)&&part.test(b.name));
     };
-    model.traverse(o=>{if(o.isBone)bones.push(o)});
-    const named={
+    Object.assign(named,{
       lArm:find('l',/upperarm|arm|shoulder/i),rArm:find('r',/upperarm|arm|shoulder/i),
-      lFore:find('l',/forearm|elbow|lowerarm/i),rFore:find('r',/forearm|elbow|lowerarm/i),
+      lFore:find('l',/forearm|lowerarm|elbow/i),rFore:find('r',/forearm|lowerarm|elbow/i),
       lThigh:find('l',/thigh|upleg|upperleg/i),rThigh:find('r',/thigh|upleg|upperleg/i),
       lShin:find('l',/shin|calf|lowerleg/i),rShin:find('r',/shin|calf|lowerleg/i),
-      chest:bones.find(x=>/chest|spine2/i.test(x.name)),head:bones.find(x=>/head/i.test(x.name))
-    };
-    const bases=Object.fromEntries(Object.entries(named).filter(([,v])=>v).map(([k,v])=>[k,v.quaternion.clone()]));
-    f._udaRig={model,bones:named,bases,baseY:model.position.y,t:0,authored:false};return;
-  }
-  if(vertices<40||vertices>420000){
-    console.warn('[右大臣] 複雑なモデルの自動スキニングを省略しました:',vertices);
-    f._udaRig={fallback:true,model,baseY:model.position.y,t:0};return;
-  }
-  const mesh=[],box=new THREE.Box3();const pts=[];
-  model.updateMatrixWorld(true);const inv=model.matrixWorld.clone().invert();
-  model.traverse(o=>{
-    if(!o.isMesh||o.isSkinnedMesh||!o.geometry?.attributes?.position)return;
-    const x=new THREE.Matrix4().multiplyMatrices(inv,o.matrixWorld);
-    const bb=o.geometry.boundingBox||(o.geometry.computeBoundingBox(),o.geometry.boundingBox);
-    if(bb)box.union(bb.clone().applyMatrix4(x));
-    const attr=o.geometry.attributes.position,step=Math.max(1,Math.ceil(attr.count/850));
-    const p=new THREE.Vector3();for(let i=0;i<attr.count;i+=step){p.fromBufferAttribute(attr,i).applyMatrix4(x);pts.push([p.x,p.y,p.z]);}
-    mesh.push({o,m:x});
-  });
-  if(!mesh.length||box.isEmpty()){f._udaRig={fallback:true,model,baseY:model.position.y,t:0};return;}
-  const ys=pts.map(v=>v[1]).sort((a,b)=>a-b), xs=pts.map(v=>v[0]).sort((a,b)=>a-b);
-  const q=(a,p)=>a[Math.max(0,Math.min(a.length-1,Math.floor((a.length-1)*p)))];
-  const low=q(ys,.012),high=q(ys,.986),h=high-low,w=Math.max(.001,q(xs,.90)-q(xs,.10)),cx=(q(xs,.08)+q(xs,.92))*.5,cz=(box.min.z+box.max.z)*.5;
-  if(h<=.01||!Number.isFinite(h)){f._udaRig={fallback:true,model,baseY:model.position.y,t:0};return;}
-  const joint={
-    hips:[cx,.51,0],spine:[cx,.65,0],upperSpine:[cx,.75,0],chest:[cx,.81,0],neck:[cx,.88,0],head:[cx,.94,0],
-    lClav:[cx-w*.17,.79,0],lArm:[cx-w*.31,.77,0],lFore:[cx-w*.43,.65,0],lHand:[cx-w*.52,.56,0],
-    rClav:[cx+w*.17,.79,0],rArm:[cx+w*.31,.77,0],rFore:[cx+w*.43,.65,0],rHand:[cx+w*.52,.56,0],
-    lThigh:[cx-w*.12,.46,0],lShin:[cx-w*.12,.23,0],lFoot:[cx-w*.12,.085,.075],
-    rThigh:[cx+w*.12,.46,0],rShin:[cx+w*.12,.23,0],rFoot:[cx+w*.12,.085,.075]
-  };
-  const parents={spine:'hips',upperSpine:'spine',chest:'upperSpine',neck:'chest',head:'neck',lClav:'chest',lArm:'lClav',lFore:'lArm',lHand:'lFore',rClav:'chest',rArm:'rClav',rFore:'rArm',rHand:'rFore',lThigh:'hips',lShin:'lThigh',lFoot:'lShin',rThigh:'hips',rShin:'rThigh',rFoot:'rShin'};
-  const bones=[],named={};
-  for(const [name,v] of Object.entries(joint)){
-    const b=new THREE.Bone();b.name='UDAIJIN_'+name;
-    const par=parents[name],pp=par?joint[par]:null;
-    b.position.set(v[0]-(pp?.[0]||0),low+h*v[1]-(pp?low+h*pp[1]:0),cz+v[2]-(pp?cz+pp[2]:0));
-    (par?named[par]:model).add(b);named[name]=b;bones.push(b);
-  }
-  model.updateMatrixWorld(true);
-  const skeleton=new THREE.Skeleton(bones),indices=Object.fromEntries(bones.map((b,i)=>[b.name.slice(8),i]));
-  const smooth=(x,a,b)=>{const t=clamp((x-a)/(b-a),0,1);return t*t*(3-2*t)};
-  function weights(x,y,z){
-    const yy=(y-low)/h,ax=Math.abs((x-cx)/w),side=x<cx?'l':'r';let pairs;
-    if(yy<.52){
-      if(yy<.12)pairs=[[side+'Foot',.85],[side+'Shin',.15]];
-      else if(yy<.29){let f=smooth(yy,.10,.24);pairs=[[side+'Foot',.18*(1-f)],[side+'Shin',.80],[side+'Thigh',.02+.18*f]];}
-      else pairs=[[side+'Shin',.25*(1-smooth(yy,.29,.44))],[side+'Thigh',.72],['hips',.28*smooth(yy,.44,.56)]];
-    }else if(yy>.55&&yy<.88&&ax>.25){
-      if(ax>.46&&yy<.68)pairs=[[side+'Hand',.80],[side+'Fore',.2]];
-      else {const t=smooth(ax,.31,.48);pairs=[[side+'Fore',.7*t],[side+'Arm',.85*(1-t)],['chest',.15]];}
-    }else if(yy>.89)pairs=[['head',smooth(yy,.87,.96)],['neck',1-smooth(yy,.87,.96)]];
-    else if(yy>.77)pairs=[['chest',.75],['upperSpine',.25]];
-    else if(yy>.65)pairs=[['upperSpine',.8],['spine',.2]];
-    else pairs=[['spine',smooth(yy,.53,.66)],['hips',1-smooth(yy,.53,.66)]];
-    pairs=pairs.filter(([n,v])=>indices[n]!=null&&v>0);const sum=pairs.reduce((s,v)=>s+v[1],0)||1;
-    return pairs.map(([name,v])=>[indices[name],v/sum]);
-  }
-  const geos=[];
-  for(const {o,m} of mesh){
-    const geo=o.geometry.clone();geo.applyMatrix4(m);const p=geo.getAttribute('position');
-    const a=new Uint16Array(p.count*4),wgt=new Float32Array(p.count*4);
-    for(let i=0;i<p.count;i++){
-      const w=weights(p.getX(i),p.getY(i),p.getZ(i));for(let k=0;k<Math.min(w.length,4);k++){a[i*4+k]=w[k][0];wgt[i*4+k]=w[k][1];}
+      chest:bones.find(b=>/chest|spine2/i.test(b.name)),head:bones.find(b=>/head/i.test(b.name))
+    });
+    const mapped=Object.fromEntries(Object.entries(named).filter(([,b])=>!!b));
+    if(Object.keys(mapped).length){
+      const bases=Object.fromEntries(Object.entries(mapped).map(([k,b])=>[k,b.quaternion.clone()]));
+      f._udaRig={model,bones:mapped,bases,baseY:model.position.y,t:0,authored:false};
+      return;
     }
-    geo.setAttribute('skinIndex',new THREE.Uint16BufferAttribute(a,4));geo.setAttribute('skinWeight',new THREE.Float32BufferAttribute(wgt,4));
-    const sk=new THREE.SkinnedMesh(geo,o.material);sk.name=o.name;sk.renderOrder=o.renderOrder;sk.castShadow=o.castShadow;sk.receiveShadow=o.receiveShadow;sk.frustumCulled=false;
-    model.add(sk);sk.bind(skeleton);o.parent?.remove(o);geos.push(geo);
   }
-  const bases=Object.fromEntries(Object.entries(named).map(([k,v])=>[k,v.quaternion.clone()]));
-  f._udaRig={model,bones:named,bases,geos,skeleton,baseY:model.position.y,t:0,authored:false};
-  console.info('[右大臣] 20ボーン・自動ウェイト適用:',vertices,'頂点');
+  // Static, unrigged GLBs cannot articulate limbs without deforming their mesh.
+  // Preserve every original vertex and use whole-model motion instead.
+  f._udaRig={fallback:true,model,baseY:model.position.y,baseRotY:model.rotation.y,baseRotZ:model.rotation.z,t:0};
+  console.info('[右大臣] 元GLBの形状と材質を維持（自動スキニング無し）');
 }
 function animateRig(f,dt){
   const r=f._udaRig;if(!r || r.authored||f.dead)return;
@@ -314,7 +260,14 @@ function animateRig(f,dt){
   const striking=(f._udaStrike||0)>0;
   f._udaStrike=Math.max(0,(f._udaStrike||0)-dt);
   const chant=f.action?.type==='chant'||f.action?.type==='cast';
-  if(r.fallback){r.model.position.y=r.baseY+(moving?.04*Math.abs(step):.012*Math.sin(r.t*2.1));return;}
+  if(r.fallback){
+    // No bone motion is invented for a source GLB without a skeleton.
+    // Translate/turn only the whole model; body, clothing and UVs stay untouched.
+    r.model.position.y=r.baseY+(moving?.024*Math.abs(step):.008*Math.sin(r.t*2.1));
+    r.model.rotation.y=r.baseRotY+(striking?.075*Math.sin(r.t*18):0);
+    r.model.rotation.z=r.baseRotZ+(chant?.025*Math.sin(r.t*3.2):0);
+    return;
+  }
   const rot=(name,x=0,z=0)=>{
     const bone=r.bones[name];if(!bone)return;
     bone.quaternion.copy(r.bases[name]);if(x)bone.rotateX(x);if(z)bone.rotateZ(z);
@@ -347,8 +300,8 @@ function updateTouchUI(f){
   for(const [act,text] of Object.entries(labels)){const el=b.querySelector(`[data-act="${act}"]`);if(el)el.textContent=active?text[0]:text[1];}
 }
 export function installUdaijinCombat({Fighter,Battle,state}){
-  if(!Fighter?.prototype||Fighter.prototype.__udaijinCurseV20)return;
-  Fighter.prototype.__udaijinCurseV20=true;
+  if(!Fighter?.prototype||Fighter.prototype.__udaijinCurseV21)return;
+  Fighter.prototype.__udaijinCurseV21=true;
   const baseBuild=Fighter.prototype.buildModel;
   Fighter.prototype.buildModel=function(glb,...args){
     const out=baseBuild.call(this,glb,...args);
