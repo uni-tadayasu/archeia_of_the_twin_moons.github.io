@@ -1285,5 +1285,7 @@ for (const key of rfPublicPlayableKeys) {
   const d = FIGHTERS[key];
   if (!d || d.special || d.hidden || (d.locked && !d.shop)) continue;
   if (!Number.isFinite(d.height) || d.height <= 0) continue;
-  d.height = Math.round(d.height * 1.3 * 1000) / 1000;
+  d.height = Math.round(d.height * 2 * 1000) / 1000; // RF_PUBLIC_PLAYABLE_2X_V101
 }
+
+// RF_PUBLIC_PLAYABLE_2X_V101: 一般プレイヤー用キャラは元の2.0倍（V9.2の1.3倍を置換）

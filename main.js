@@ -1,3 +1,4 @@
+// RF_BGM_EXCLUSIVE_V10
 // RF_BATCH_SCALE_STARTUP_V92
 // RF_BATTLE_FIX_V9_1_20261109
 import { installMaouCombat } from './maou-abilities.js?v=rf-v9-2-20261109';
@@ -787,6 +788,9 @@ const MUSIC_FILES = {
   adventure: 'adventure-theme.mp3'
 };
 for (const [name, file] of Object.entries(MUSIC_FILES)) {
+  // RF_BGM_EXCLUSIVE_V10: avoid two Audio players for the same physical MP3.
+  const originalKey = Object.keys(audio.tracks).find(k => MUSIC_FILES[k] === file);
+  if (originalKey) { audio.tracks[name] = audio.tracks[originalKey]; continue; }
   const a = new Audio('assets/audio/' + file + '?v=20261107-valgard1');
   a.loop = true;
   a.preload = name === 'title' ? 'metadata' : 'none';
@@ -858,54 +862,46 @@ function playTrack(name) {
   audio.wanted = name;
   syncMusicTrack();
 }
+// RF_BGM_EXCLUSIVE_V10 — Atomic single-track BGM switch; no crossfade races.
 function syncMusicTrack() {
   const key = state.mode === 'adventure' ? 'adventure' : shouldForceValgard() ? 'valgard' : musicKey(audio.wanted);
   if (!key || !audio.tracks[key]) return;
   const next = audio.tracks[key];
-  const oldKey = audio.currentKey;
+  const previous = audio.tracks[audio.currentKey];
+  const shouldRestart = next !== previous;
   audio.current = key === 'valgard' ? 'valgard' : audio.wanted;
-  const targetVolume = audio.muted ? 0 : audio.volume * 0.6;
-  // 旧版は「同じ曲名」で早期returnしたため、最初の再生失敗から回復できなかった。
-  if (oldKey === key) {
-    if (audio.muted) { next.pause(); return; }
-    next.volume = targetVolume;
-    if (audio.unlocked && next.paused && next.readyState !== 0) {
-      next.play().catch((e) => console.warn('[BGM] 再生再試行:', key, e));
-    } else if (audio.unlocked && next.paused) {
-      next.load();
-      next.play().catch((e) => console.warn('[BGM] 再生再試行:', key, e));
-    }
+  audio.currentKey = key;
+  // Invalidate any earlier fade callback left over from older runtime versions.
+  ++audio.fadeId;
+  const targetVolume = audio.muted ? 0 : audio.volume * .6;
+  // CRITICAL: pause EVERY other BGM, including tracks from an interrupted fade.
+  // Object identity is used because title/story and event/boss share MP3s.
+  for (const track of new Set(Object.values(audio.tracks))) {
+    if (track === next) continue;
+    if (!track.paused) track.pause();
+    try { if (track.currentTime) track.currentTime = 0; } catch (_) {}
+  }
+  if (!audio.unlocked || audio.muted) {
+    if (!next.paused) next.pause();
     return;
   }
-  audio.currentKey = key;
-  const previous = audio.tracks[oldKey];
-  const token = ++audio.fadeId;
-  for (const [id, track] of Object.entries(audio.tracks)) {
-    if (id !== oldKey && id !== key) track.pause();
+  next.volume = targetVolume;
+  if (shouldRestart) {
+    try { next.currentTime = 0; } catch (_) {}
   }
-  if (!audio.unlocked || audio.muted) { previous?.pause(); return; }
-  next.volume = 0;
-  try { next.currentTime = 0; } catch {}
-  next.play().catch((err) => {
-    console.warn('[BGM] 再生できませんでした:', key, err);
-    const status = document.getElementById('opt-audio-status');
-    if (status) status.textContent = `BGMを再生できません: ${MUSIC_FILES[key]}（音量設定と公開ファイルを確認）`;
-  });
-  const from = previous && !previous.paused ? previous.volume : 0;
-  const started = performance.now();
-  const fade = (time) => {
-    if (token !== audio.fadeId) return;
-    const progress = Math.min(1, (time - started) / 480);
-    next.volume = targetVolume * progress;
-    if (previous && previous !== next) previous.volume = from * (1 - progress);
-    if (progress < 1) requestAnimationFrame(fade);
-    else if (previous && previous !== next) {
-      previous.pause();
-      try { previous.currentTime = 0; } catch {}
-    }
-  };
-  requestAnimationFrame(fade);
+  // A repeated call (650ms watcher, focus, BGM slider) must not restart the song.
+  if (!next.paused) return;
+  try {
+    const playResult = next.play();
+    if (playResult && typeof playResult.catch === 'function') playResult.catch(err => {
+      if (audio.currentKey !== key || audio.muted) return;
+      console.warn('[BGM V10] 再生できませんでした:', key, err);
+      const status = document.getElementById('opt-audio-status');
+      if (status) status.textContent = 'BGMを再生できません: ' + MUSIC_FILES[key];
+    });
+  } catch (err) { console.warn('[BGM V10] 再生失敗:', key, err); }
 }
+
 function blip(freq) {
   if (!audio.ctx) {
     return;
