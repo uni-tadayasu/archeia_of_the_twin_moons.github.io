@@ -1,3 +1,4 @@
+// RF_BATCH_SCALE_STARTUP_V92
 /** Riftfall Arena / 2026-11-08 – Chief-only boss combat expansion.
  * Operates on the original Fighter/Battle prototypes; no GLB mesh or materials
  * are modified.  The game owns skill damage and PvP validation as before.
@@ -5,8 +6,8 @@
  */
 import * as THREE from 'three';
 import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js';
-import { FIGHTERS } from './data.js?v=rf-mobile-v7-20261109';
-import { Fighter, Battle } from './game.js?v=rf-mobile-v7-20261109';
+import { FIGHTERS } from './data.js?v=rf-v9-2-20261109';
+import { Fighter, Battle } from './game.js?v=rf-v9-2-20261109';
 
 const STAMP='boss-expansion-20261108-v5';
 const clamp=(v,min,max)=>Math.max(min,Math.min(max,Number(v)||0));

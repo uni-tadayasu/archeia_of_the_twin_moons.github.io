@@ -1273,3 +1273,17 @@ FIGHTERS.maou_shade = {
   over:{name:'影光閃',kind:'shockwave',elem:5,color:0x7bff9f,dmg:130,radius:3,cost:0}
 };
 
+
+
+// RF_BATCH_SCALE_STARTUP_V92 — ordinary player-usable fighters only.
+// All modes share FIGHTERS.height; meshes/skins/animation files are untouched.
+const rfPublicPlayableKeys = new Set([
+  ...ROSTER,
+  ...Object.keys(FIGHTERS).filter(k => FIGHTERS[k]?.shop && !FIGHTERS[k]?.special)
+]);
+for (const key of rfPublicPlayableKeys) {
+  const d = FIGHTERS[key];
+  if (!d || d.special || d.hidden || (d.locked && !d.shop)) continue;
+  if (!Number.isFinite(d.height) || d.height <= 0) continue;
+  d.height = Math.round(d.height * 1.3 * 1000) / 1000;
+}

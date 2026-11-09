@@ -1,10 +1,11 @@
+// RF_BATCH_SCALE_STARTUP_V92
 // RF_BATTLE_FIX_V9_1_20261109
 /** Riftfall Arena / 魔王 -- original light skills, no GLB mesh edits.
  * Installs gameplay logic onto the existing Battle / Fighter prototypes.
  * All cloned material changes affect only clones, never the user's source GLB.
  */
 import * as THREE from 'three';
-import { FIGHTERS } from './data.js?v=rf-mobile-v7-20261109';
+import { FIGHTERS } from './data.js?v=rf-v9-2-20261109';
 import { instantiateModel, disposeModel, loadModel } from './model-runtime.js?v=rf-mobile-v7-20261109';
 const KEY = 'maou';
 const SHADE = 'maou_shade';

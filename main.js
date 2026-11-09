@@ -1,8 +1,9 @@
+// RF_BATCH_SCALE_STARTUP_V92
 // RF_BATTLE_FIX_V9_1_20261109
-import { installMaouCombat } from './maou-abilities.js?v=rf-battle-v9-1-20261109';
-import { Fighter as MaouFighter } from './game.js?v=rf-mobile-v7-20261109';
-import './boss-abilities.js?v=rf-mobile-v7-20261109';
-import './exact-model-portraits.js?v=rf-mobile-v7-20261109';
+import { installMaouCombat } from './maou-abilities.js?v=rf-v9-2-20261109';
+import { Fighter as MaouFighter } from './game.js?v=rf-v9-2-20261109';
+import './boss-abilities.js?v=rf-v9-2-20261109';
+import './exact-model-portraits.js?v=rf-v9-2-20261109';
 // RF_GRAND_FOUR_20261108 main.js
 import * as THREE from 'three';
 import { setupGaizorgAdventure } from './gaizorg-adventure.js?v=rf-mobile-v7-20261109';
@@ -10,8 +11,8 @@ import { installOperatorCombatFx } from './operator-combat-fx.js?v=20261108-gran
 import { renderExactPortrait } from './glb-portrait.js?v=rf-mobile-v7-20261109';
 // RF_OPERATOR_GIGANTES_MAIN_20261108
 import { loadModel } from './model-runtime.js?v=rf-mobile-v7-20261109';
-import { Battle, ARENA_R } from './game.js?v=rf-mobile-v7-20261109';
-import { FIGHTERS, spellCastTime, STORY, ROSTER, UPGRADES, MAX_LV, STAGES, BGM, APEX_BGM, ENEMY_ROSTER, UPG_CAP, LB_MAX, lbMaxLv, lbMul, lbCost, WEAPONS, ARMORS, SUMMONS, STAT_LABEL, SPECIAL_KEYS, BOSS_ROSTER, currentEvent, sanitizeEvent, EV_FOE_KINDS } from './data.js?v=rf-mobile-v7-20261109';
+import { Battle, ARENA_R } from './game.js?v=rf-v9-2-20261109';
+import { FIGHTERS, spellCastTime, STORY, ROSTER, UPGRADES, MAX_LV, STAGES, BGM, APEX_BGM, ENEMY_ROSTER, UPG_CAP, LB_MAX, lbMaxLv, lbMul, lbCost, WEAPONS, ARMORS, SUMMONS, STAT_LABEL, SPECIAL_KEYS, BOSS_ROSTER, currentEvent, sanitizeEvent, EV_FOE_KINDS } from './data.js?v=rf-v9-2-20261109';
 import { sayBattle, setVoiceMuted, setVoiceVolume, stopVoices } from './voice.js?v=audio-cast-20261107d';
 import { initSocial, uiConfirm } from './social.js?v=valgard-exact-20261107';
 import { initMailbox } from './mailbox.js?v=audio-cast-20261107d';
@@ -2675,7 +2676,7 @@ async function enterField() {
   const storyBoss=STORY[state.chapter]?.enemies?.[0]?.k;
   if (!(await ensureAllModelsReady([...party,...fieldNpcKeys,...fieldEnemyPool,storyBoss].filter(k=>FIGHTERS[k])))) return;
   try {
-  const { Field } = await import('./field.js?v=20261108-boss-final-v5');
+  const { Field } = await import('./field.js?v=rf-v9-2-20261109');
   leaveField();
   const ch = STORY[state.chapter];
   const st = stageById(ch.stage);
@@ -2776,6 +2777,70 @@ function updateFieldHud() {
   if (mapCtx) f.drawMap(mapCtx);
 }
 
+// RF_BATCH_SCALE_STARTUP_V92: preview first, then one atomic write for one character.
+function planAllUpgrades(key, funds) {
+  const limit = maxLvOf(key);
+  const budget = Math.max(0, Math.floor(Number(funds) || 0));
+  const levels = Object.fromEntries(UPGRADES.map(u => [u.id, lvOf(key, u.id)]));
+  let spent = 0, steps = 0;
+  // Lowest-level first: avoids spending the whole budget on the first stat.
+  for (let target = 1; target <= limit; target++) {
+    const price = target * 40;  // same formula as a single upgrade
+    for (const u of UPGRADES) {
+      if (levels[u.id] >= target) continue;
+      if (spent + price > budget) return { levels, spent, steps, limit };
+      levels[u.id] = target;
+      spent += price;
+      steps++;
+    }
+  }
+  return { levels, spent, steps, limit };
+}
+function addBatchUpgradeControl(rows) {
+  if (forgeTab !== 'upg') return;
+  const selected = forgeSel;
+  const estimate = planAllUpgrades(selected, save.shards);
+  const panel = document.createElement('div');
+  panel.className = 'frow';
+  panel.style.cssText = 'padding:12px 14px;border:1px solid #9fd8a5;border-radius:9px;background:linear-gradient(95deg,rgba(34,87,57,.32),rgba(19,39,40,.2))';
+  const label = document.createElement('span');
+  label.textContent = '一括強化（選択したキャラのみ）';
+  label.style.fontWeight = '700';
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.className = 'btn mini';
+  button.textContent = estimate.steps ? '一括強化する' : '一括強化できません';
+  button.disabled = estimate.steps === 0;
+  const info = document.createElement('small');
+  info.textContent = estimate.steps
+    ? `追加${estimate.steps}段 ／ 消費${estimate.spent.toLocaleString('ja-JP')}灯晶 ／ 残り${(save.shards - estimate.spent).toLocaleString('ja-JP')}灯晶`
+    : '灯晶不足、または強化上限です';
+  const note = document.createElement('small');
+  note.textContent = '101種類（詠唱短縮を含む）を低レベル順に強化。限界突破は自動実行しません。';
+  button.addEventListener('click', () => {
+    if (forgeSel !== selected || forgeTab !== 'upg') return;
+    const draft = planAllUpgrades(selected, save.shards);
+    if (!draft.steps) return;
+    const yes = window.confirm(`${FIGHTERS[selected].name} の強化を ${draft.steps}段まとめて実行します。\n消費：${draft.spent.toLocaleString('ja-JP')}灯晶\n残高：${(save.shards - draft.spent).toLocaleString('ja-JP')}灯晶\n\n実行しますか？`);
+    if (!yes) return;
+    // Confirm dialog can last arbitrarily long; recalculate to honor budget.
+    const plan = planAllUpgrades(selected, save.shards);
+    if (!plan.steps || plan.spent > save.shards) return;
+    const next = { ...(save.upg[selected] || {}) };
+    for (const u of UPGRADES) {
+      const n = plan.levels[u.id];
+      if (n > lvOf(selected, u.id)) next[u.id] = n;
+    }
+    save.upg[selected] = next;
+    save.shards -= plan.spent;
+    persist();
+    sfx('skill');
+    renderForge();
+    ui.banner?.({name:'一括強化完了'}, `${plan.steps}段上昇・灯晶${plan.spent}消費`);
+  });
+  panel.append(label, button, info, note);
+  rows.append(panel);
+}
 // ---------- Forge ----------
 let forgeSel = 'rowen';
 let forgeTab = 'upg';
@@ -2900,6 +2965,7 @@ function renderForge() {
     $('#forge-shards').textContent = `手持ちの灯晶　${save.shards}`;
     return;
   }
+  addBatchUpgradeControl(rows);
   // 限界突破
   const lb = lbOf(forgeSel), MAXL = maxLvOf(forgeSel), mulNow = lbMul(lb);
   {

@@ -1,9 +1,10 @@
+// RF_BATCH_SCALE_STARTUP_V92
 // RF_GRAND_FOUR_20261108 game.js
 import { createNullGuardAura, tickNullGuardAura, disposeNullGuardAura } from './null-guard.js?v=20261108-grand-four-v3';
 import * as THREE from 'three';
 import { attachValgardMotion } from './valgard-motion.js?v=20261108-grand-four-v3';
 import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js';
-import { FIGHTERS, ELEMS, spellCastTime } from './data.js?v=rf-mobile-v7-20261109';
+import { FIGHTERS, ELEMS, spellCastTime } from './data.js?v=rf-v9-2-20261109';
 import { makeGear, animGear } from './gear.js';
 import { instantiateModel, disposeModel, loadModel } from './model-runtime.js?v=rf-mobile-v7-20261109';
 

@@ -1,3 +1,4 @@
+/* RF_BATCH_SCALE_STARTUP_V92 */
 /* 双月のアルケイア — UI / ILLUSTRATED CG PATCH 2026-11-07
  * Replacement for existing arkeia-ui.js. Gameplay, saving, online rules unchanged.
  * Every painted texture is generated locally with Canvas 2D (no external asset URLs).
@@ -289,8 +290,8 @@
   const VISUAL_VERSION = 'painted-cg-20261107a';
   Promise.all([
     import('three'),
-    import('./game.js?v=rf-mobile-v7-20261109'),
-    import('./field.js?v=20261108-boss-final-v5')
+    import('./game.js?v=rf-v9-2-20261109'),
+    import('./field.js?v=rf-v9-2-20261109')
   ]).then(([THREE, battleModule, worldModule]) => {
     installPaintedEffects(THREE, battleModule.Battle);
     installPaintedWorld(THREE, worldModule.Field);
@@ -642,8 +643,8 @@
    */
   Promise.all([
     import('three'),
-    import('./game.js?v=rf-mobile-v7-20261109'),
-    import('./data.js?v=rf-mobile-v7-20261109')
+    import('./game.js?v=rf-v9-2-20261109'),
+    import('./data.js?v=rf-v9-2-20261109')
   ]).then(([THREE,combat,data]) => {
     installAstralJudgment(THREE,combat.Battle,data.FIGHTERS);
   }).catch(error=>console.warn('[Arkeia] Original celestial judgment unavailable.',error));
@@ -1994,8 +1995,8 @@
    * It never changes the game's existing save format or battle network packets.
    */
   Promise.all([
-    import('./game.js?v=rf-mobile-v7-20261109'),
-    import('./data.js?v=rf-mobile-v7-20261109')
+    import('./game.js?v=rf-v9-2-20261109'),
+    import('./data.js?v=rf-v9-2-20261109')
   ]).then(([combat, data]) => {
     installCharacterProgression(combat.Battle, data.FIGHTERS);
   }).catch((error) => {
@@ -2326,7 +2327,7 @@
    * Echo is still an independent proxy, NEVER an extra core Fighter.
    * Ice seal / frozen enemies / 30s duration are unchanged.
    */
-  import('./game.js?v=rf-mobile-v7-20261109').then(combat => {
+  import('./game.js?v=rf-v9-2-20261109').then(combat => {
     installValgardIceEcho(combat.Battle, combat.Fighter);
   }).catch(error => console.warn('[Arkeia] Valgard ice echo unavailable:', error));
 
@@ -3344,7 +3345,7 @@
       if (event.key === FAV_KEY) { const list = fromJson(event.newValue, []); favorites.clear(); list.forEach(x => favorites.add(x)); refreshFilters(); }
     });
     document.addEventListener('keydown', event => {
-      const k = event.key.toLowerCase();
+      const k = String(event?.key ?? '').toLowerCase();
       if (event.key === 'Escape') {
         if (!dialog.hidden) { event.preventDefault(); closeGift(); return; }
         if (event.target?.matches?.('input, textarea, select')) { event.target.blur(); return; }

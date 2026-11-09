@@ -1,7 +1,8 @@
+// RF_BATCH_SCALE_STARTUP_V92
 /** Automatically creates character-select WebP thumbnails from the *real* GLB.
  * No AI repainting, mesh substitutions or tinting. The original models are
  * loaded through the game's own verified WebP/glTF pipeline. */
-import { FIGHTERS } from './data.js?v=rf-mobile-v7-20261109';
+import { FIGHTERS } from './data.js?v=rf-v9-2-20261109';
 import { loadModel } from './model-runtime.js?v=rf-mobile-v7-20261109';
 import { renderExactPortrait } from './glb-portrait.js?v=rf-mobile-v7-20261109';
 
