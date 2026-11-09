@@ -256,6 +256,7 @@ export function setupGaizorgAdventure(ctx){
       if(key==='gaizorg' && !chiefUnlocked()){ui.banner({name:'使用権限がありません'},'ガイゾルグは運営長専用です');goTitle();return;}
       if(key==='valdarion' && !chiefUnlocked()){ui.banner({name:'使用権限がありません'},'ヴァルダリオンは運営長専用です');goTitle();return;}
       if(key==='nepterion' && !chiefUnlocked()){ui.banner({name:'使用権限がありません'},'ネプテリオンは運営長専用です');goTitle();return;}
+      if(key==='udaijin' && !chiefUnlocked()){ui.banner({name:'使用権限がありません'},'右大臣は運営長専用です');goTitle();return;}
       if(key==='operator_gigantes' && !operatorOnlyUnlocked()){ui.banner({name:'使用権限がありません'},'機神ギガンテスは運営専用です');goTitle();return;}
       if(!FIGHTERS[key])key='rowen';
       progress.lastPlayer=key;saveData(); state.myKey=key;

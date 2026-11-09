@@ -1324,3 +1324,25 @@ if (!SPECIAL_KEYS.includes('nepterion')) SPECIAL_KEYS.push('nepterion');
 // RF_NEPT_SEVEN_FIXED_DATA_V17
 FIGHTERS.nepterion.skills = FIGHTERS.nepterion.skills.slice(0,5);
 delete FIGHTERS.nepterion.pool;
+
+// RF_UDAIJIN_V20_BEGIN
+// 運営長専用・呪属性：既存キャラクターの仕様や数値を変更しない。
+FIGHTERS.udaijin = {
+  name:'右大臣',title:'禍呪の右大臣（運営長専用）',
+  model:'assets/models/udaijin-original.glb',face:"assets/portraits/udaijin.png",
+  attribute:'呪',color:0xb76aff,tint:null,height:2.25,hp:2650,speed:5.45,
+  overGain:1.1,power:1.18,armor:.90,fluxMul:1.2,
+  locked:true,special:'chief',fixedSlots:true,curseExclusive:true,
+  light:{name:'呪印',dmg:0,range:16,color:0xc175ff},
+  // I/Shift=呪い、J/Z=呪印、K/X=おにび、U/V=呪いの光。位置・順番による変化なし。
+  skills:[
+    {name:'おにび',kind:'udaijin_onibi',elem:0,color:0xff824f,cost:17,castTime:.52,dmg:78,count:2,vivid:true},
+    {name:'呪いの光',kind:'udaijin_eyes',elem:6,color:0xb65aff,cost:33,castTime:1.10,dmg:510,vivid:true}
+  ],
+  // 奥義キーは同じ光線。別の固有魔法を増やさない。
+  over:{name:'呪いの光',kind:'udaijin_eyes',elem:6,color:0xb65aff,cost:0,castTime:1.10,dmg:510,vivid:true},
+  hi:{name:'呪いの光',kind:'udaijin_eyes',elem:6,color:0xb65aff,cost:0,castTime:1.10,dmg:510,vivid:true}
+};
+// RF_UDAIJIN_V20_END
+
+if(!SPECIAL_KEYS.includes('udaijin')) SPECIAL_KEYS.push('udaijin');
