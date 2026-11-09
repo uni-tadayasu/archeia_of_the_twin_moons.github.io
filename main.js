@@ -1,8 +1,10 @@
+// RF_ULTRA_V12_MAIN
+// RF_NEPT_V14_MAIN
 // RF_BGM_EXCLUSIVE_V10
 // RF_BATCH_SCALE_STARTUP_V92
 // RF_BATTLE_FIX_V9_1_20261109
 import { installMaouCombat } from './maou-abilities.js?v=rf-v9-2-20261109';
-import { Fighter as MaouFighter } from './game.js?v=rf-v9-2-20261109';
+import { Fighter as MaouFighter } from './game.js?v=rf-combo-v15-20261109';
 import './boss-abilities.js?v=rf-v9-2-20261109';
 import './exact-model-portraits.js?v=rf-v9-2-20261109';
 // RF_GRAND_FOUR_20261108 main.js
@@ -11,8 +13,9 @@ import { setupGaizorgAdventure } from './gaizorg-adventure.js?v=rf-mobile-v7-202
 import { installOperatorCombatFx } from './operator-combat-fx.js?v=20261108-grand-four-v3';
 import { renderExactPortrait } from './glb-portrait.js?v=rf-mobile-v7-20261109';
 // RF_OPERATOR_GIGANTES_MAIN_20261108
-import { loadModel } from './model-runtime.js?v=rf-mobile-v7-20261109';
-import { Battle, ARENA_R } from './game.js?v=rf-v9-2-20261109';
+import { loadModel } from './model-runtime.js?v=rf-combo-v15-20261109';
+import { Battle, ARENA_R } from './game.js?v=rf-combo-v15-20261109';
+import { installNepterionCombat } from './nepterion-water.js?v=rf-combo-v15-20261109';
 import { FIGHTERS, spellCastTime, STORY, ROSTER, UPGRADES, MAX_LV, STAGES, BGM, APEX_BGM, ENEMY_ROSTER, UPG_CAP, LB_MAX, lbMaxLv, lbMul, lbCost, WEAPONS, ARMORS, SUMMONS, STAT_LABEL, SPECIAL_KEYS, BOSS_ROSTER, currentEvent, sanitizeEvent, EV_FOE_KINDS } from './data.js?v=rf-v9-2-20261109';
 import { sayBattle, setVoiceMuted, setVoiceVolume, stopVoices } from './voice.js?v=audio-cast-20261107d';
 import { initSocial, uiConfirm } from './social.js?v=valgard-exact-20261107';
@@ -25,14 +28,15 @@ const $ = (s) => document.querySelector(s);
 // RF_MAOU_INSTALL_V6
 installMaouCombat({ Battle, Fighter: MaouFighter });
 installOperatorCombatFx(Battle);
+installNepterionCombat({ Battle, Fighter: MaouFighter });
 const isTouch = matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window;
 
 // ---------- Renderer / scene ----------
 const container = $('#game-container');
-const renderer = new THREE.WebGLRenderer({ antialias: !isTouch, powerPreference: 'high-performance' });
-renderer.setPixelRatio(Math.min(window.devicePixelRatio, isTouch ? 1 : 2));
+const renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: 'high-performance' });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, isTouch ? 0.8 : 1.15));
 renderer.setSize(window.innerWidth, window.innerHeight);
-renderer.shadowMap.enabled = !isTouch;
+renderer.shadowMap.enabled = false;
 renderer.shadowMap.type = THREE.PCFShadowMap;
 container.appendChild(renderer.domElement);
 
@@ -54,7 +58,7 @@ const hemi = new THREE.HemisphereLight(0xcfd8ff, 0x3a2a40, 0.9);
 scene.add(hemi);
 const moon = new THREE.DirectionalLight(0xfff0d8, 2.2);
 moon.position.set(8, 16, 6);
-moon.castShadow = true;
+moon.castShadow = false;
 moon.shadow.mapSize.set(1024, 1024);
 Object.assign(moon.shadow.camera, { left: -16, right: 16, top: 16, bottom: -16 });
 scene.add(moon);
@@ -1583,6 +1587,7 @@ const foeCpu = (base) => Math.max(0.15, Math.min(1, base * DIFFS[save.diff].c));
 const foeHp = (m) => (m || 1) * DIFFS[save.diff].h;
 // その戦士を使えるか（運営専用・ショップ解放）
 function canUse(k) {
+  if (k === 'nepterion') return chiefUnlocked();
   if (k === 'maou') return chiefUnlocked();
   if (k === 'maou_shade') return false;
   const d = FIGHTERS[k];
@@ -1596,7 +1601,7 @@ function canUse(k) {
   if (d.locked) return operatorUnlocked();
   return true;
 }
-const SELECT_KEYS = () => [...ROSTER, 'seraphel', 'chief', 'sovereign', 'bloodfiend', 'valgard', 'gaizorg', 'operator_gigantes', 'valdarion', 'crimson', 'maou'];
+const SELECT_KEYS = () => [...ROSTER, 'seraphel', 'chief', 'sovereign', 'bloodfiend', 'valgard', 'gaizorg', 'operator_gigantes', 'valdarion', 'crimson', 'maou', 'nepterion'];
 function refreshTitle() {
   $('#btn-invade').hidden = !operatorUnlocked();
   if ($('#btn-evmaker')) $('#btn-evmaker').hidden = !chiefUnlocked();
@@ -2579,7 +2584,8 @@ function rollFoeCount() {
   return n;
 }
 function storyParty() {
-  const party = save.party.length ? save.party : ['rowen'];
+  const party = (save.party.length ? save.party : ['rowen']).filter(k => k !== 'nepterion' || chiefUnlocked());
+  if (!party.length) party.push('rowen');
   const mainKey = party.includes(save.main) ? save.main : party[0];
   return { party, mainKey };
 }
@@ -2813,11 +2819,11 @@ function addBatchUpgradeControl(rows) {
     : '灯晶不足、または強化上限です';
   const note = document.createElement('small');
   note.textContent = '101種類（詠唱短縮を含む）を低レベル順に強化。限界突破は自動実行しません。';
-  button.addEventListener('click', () => {
+  button.addEventListener('click', async () => {
     if (forgeSel !== selected || forgeTab !== 'upg') return;
     const draft = planAllUpgrades(selected, save.shards);
     if (!draft.steps) return;
-    const yes = window.confirm(`${FIGHTERS[selected].name} の強化を ${draft.steps}段まとめて実行します。\n消費：${draft.spent.toLocaleString('ja-JP')}灯晶\n残高：${(save.shards - draft.spent).toLocaleString('ja-JP')}灯晶\n\n実行しますか？`);
+    const yes = await uiConfirm(`${FIGHTERS[selected].name} の強化を ${draft.steps}段まとめて実行します。\n消費：${draft.spent.toLocaleString('ja-JP')}灯晶\n残高：${(save.shards - draft.spent).toLocaleString('ja-JP')}灯晶\n\n実行しますか？`);
     if (!yes) return;
     // Confirm dialog can last arbitrarily long; recalculate to honor budget.
     const plan = planAllUpgrades(selected, save.shards);
@@ -4335,6 +4341,8 @@ const gaizorgAdventure = setupGaizorgAdventure({
 setupTouch();
 const timer = new THREE.Timer();
 var adaptQ = null;
+let rfV12RenderClock = 0;
+let rfV12HudClock = 0;
 renderer.setAnimationLoop((time) => {
   timer.update(time);
   const rawDt = timer.getDelta();
@@ -4364,7 +4372,8 @@ renderer.setAnimationLoop((time) => {
     try {
       state.battle.update(dt, state.paused ? { mx: 0, mz: 0 } : readInput());
       netTick(dt);
-      updateHud();
+      rfV12HudClock += rawDt;
+      if (rfV12HudClock >= 0.09) { rfV12HudClock = 0; updateHud(); }
     } catch (error) {
       rfBattleStartError(error);
       return;
@@ -4379,7 +4388,10 @@ renderer.setAnimationLoop((time) => {
     camera.position.set(Math.sin(t * 0.1) * 16, 7, Math.cos(t * 0.1) * 16);
     camera.lookAt(0, 2, 0);
   }
-  renderer.render(scene, camera);
+  if (!isTouch || (rfV12RenderClock += rawDt) >= 1/30) {
+    if (isTouch) rfV12RenderClock = 0;
+    renderer.render(scene, camera);
+  }
 });
 
 show('scr-press');

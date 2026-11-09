@@ -1,3 +1,4 @@
+// RF_NEPT_V14_ADVENTURE
 // RF_BATTLE_FIX_V9_1_20261109
 // RF_GRAND_FOUR_20261108 gaizorg-adventure.js
 /**
@@ -204,6 +205,7 @@ export function setupGaizorgAdventure(ctx){
     try{
       if(key==='gaizorg' && !chiefUnlocked()){ui.banner({name:'使用権限がありません'},'ガイゾルグは運営長専用です');goTitle();return;}
       if(key==='valdarion' && !chiefUnlocked()){ui.banner({name:'使用権限がありません'},'ヴァルダリオンは運営長専用です');goTitle();return;}
+      if(key==='nepterion' && !chiefUnlocked()){ui.banner({name:'使用権限がありません'},'ネプテリオンは運営長専用です');goTitle();return;}
       if(key==='operator_gigantes' && !operatorOnlyUnlocked()){ui.banner({name:'使用権限がありません'},'機神ギガンテスは運営専用です');goTitle();return;}
       if(!FIGHTERS[key])key='rowen';
       progress.lastPlayer=key;saveData(); state.myKey=key;

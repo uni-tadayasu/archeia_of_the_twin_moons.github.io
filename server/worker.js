@@ -2330,3 +2330,34 @@ export class Limiter {
 
 // RF_VALGARD2_SERVER_20261108
 if(FIGHTERS.valgard){const base=FIGHTERS.valgard;base.form2='valgard2';FIGHTERS.valgard2={...base,name:'ヴァルガルド・第二形態',model:'assets/models/iron-warlord-f2.glb',form2:null,hidden:true,locked:true,special:'chief',skills:base.skills,over:base.over}}
+
+// RF_NEPT_V1_DEFINITION - new original chief-only water sovereign.
+FIGHTERS.nepterion = {
+  name: '蒼海神皇ネプテリオン', title: '全海域を統べる原初水神（運営長専用）',
+  model: 'assets/models/nepterion-chief.glb',
+  face: 'assets/portraits/nepterion.svg',
+  color: 0x35cfff, tint: null, attribute: '水', element: 7,
+  height: 4.65, hp: 52000, speed: 9.3, overGain: 3.4,
+  power: 3.65, armor: 0.22, fluxMul: 3.9, supreme: true,
+  locked: true, special: 'chief',
+  light: { dmg: 185, range: 4.4, shots: 5, color: 0x6bf0ff },
+  skills: [
+    {name:'蒼帝海刃《アクア・レギオン》',kind:'projectile',visual:'spear',cost:12,castTime:0.35,count:8,spreadAng:0.12,chain:0.035,dmg:320,speed:34,radius:1.22,elem:7,color:0x55e9ff,vivid:true},
+    {name:'蒼潮瞬穿《タイダル・ブレイカー》',kind:'dash',cost:13,castTime:0.26,dmg:1320,speed:32,dur:0.48,elem:7,color:0x27baff,vivid:true},
+    {name:'海神圧界《アビス・インパクト》',kind:'shockwave',cost:18,castTime:0.80,dmg:1680,radius:10.6,elem:7,color:0x4be8ff,vivid:true},
+    {name:'零式禁水呪《深淵千海葬》',kind:'judgment',visual:'pillar',finalVisual:'nova',cost:28,castTime:1.85,count:10,spread:6.3,radius:2.65,dmg:960,delay:0.38,interval:0.075,finalDmg:3300,finalRadius:11.8,elem:7,color:0x75f9ff,vivid:true},
+    {name:'聖潮再生《エターナル・オーシャン》',kind:'heal',cost:10,castTime:0.60,heal:999999,radius:13.0,elem:7,color:0xa6fcff,vivid:true},
+    {name:'蒼龍水星《レヴィアサン・レイン》',kind:'rain',visual:'meteor',cost:20,castTime:1.25,count:9,spread:5.5,radius:2.6,dmg:870,delay:0.35,interval:0.07,elem:7,color:0x2acbff,vivid:true},
+    {name:'原海収束《タイダル・シンギュラリティ》',kind:'implode',cost:18,castTime:1.05,dmg:1950,radius:11.2,elem:7,color:0x365dff,vivid:true},
+    {name:'滄天砲《ネプトゥーン・カノン》',kind:'projectile',visual:'orb',cost:16,castTime:0.55,count:10,spreadAng:0.11,chain:0.035,dmg:500,speed:37,radius:1.6,elem:7,color:0x86efff,vivid:true},
+    {name:'双極海神輪《二重大潮》',kind:'shockwave',cost:22,castTime:1.20,dmg:1850,radius:11.4,double:true,elem:7,color:0x58dfff,vivid:true},
+    {name:'大禁呪《青き終海の審判》',kind:'judgment',visual:'nova',finalVisual:'pillar',cost:32,castTime:2.15,count:10,spread:6.7,radius:2.65,dmg:1250,delay:0.42,interval:0.072,finalDmg:3950,finalRadius:12.2,elem:7,color:0x87feff,vivid:true},
+    {name:'万潮滅界《オメガ・ディルーヴィオ》',kind:'rain',visual:'pillar',cost:27,castTime:1.9,count:10,spread:6.9,radius:2.7,dmg:1060,delay:0.34,interval:0.07,elem:7,color:0x55baff,vivid:true}
+  ],
+  // K/U buttons cycle spells; H uses the dedicated complete recovery at skill[4].
+  pool: [0,1,2,3,5,6,7,8,9,10],
+  over: {name:'神海終極魔法《ワールド・オーシャン》',kind:'judgment',visual:'nova',finalVisual:'pillar',cost:0,castTime:2.45,count:11,spread:7.1,radius:2.85,dmg:1420,delay:0.4,interval:0.065,finalDmg:4900,finalRadius:12.6,elem:7,color:0x9bfaff,vivid:true},
+  hi: {name:'超越創世水魔法《エターナル・アビス・ゼロ》',kind:'judgment',visual:'pillar',finalVisual:'nova',cost:0,castTime:3.15,count:12,spread:7.5,radius:3.0,dmg:1790,delay:0.35,interval:0.058,finalDmg:6900,finalRadius:13.0,elem:7,color:0xc1fdff,vivid:true,hi:true}
+};
+
+CHIEF_ONLY.add('nepterion');

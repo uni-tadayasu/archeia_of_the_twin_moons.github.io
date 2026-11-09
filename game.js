@@ -1,3 +1,4 @@
+// RF_ULTRA_V12_GAME
 // RF_BATCH_SCALE_STARTUP_V92
 // RF_GRAND_FOUR_20261108 game.js
 import { createNullGuardAura, tickNullGuardAura, disposeNullGuardAura } from './null-guard.js?v=20261108-grand-four-v3';
@@ -6,7 +7,7 @@ import { attachValgardMotion } from './valgard-motion.js?v=20261108-grand-four-v
 import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js';
 import { FIGHTERS, ELEMS, spellCastTime } from './data.js?v=rf-v9-2-20261109';
 import { makeGear, animGear } from './gear.js';
-import { instantiateModel, disposeModel, loadModel } from './model-runtime.js?v=rf-mobile-v7-20261109';
+import { instantiateModel, disposeModel, loadModel } from './model-runtime.js?v=rf-combo-v15-20261109';
 
 // 召喚獣の見た目と性能（HPは使い手の最大HPに比例）
 const SUMMON_DEFS = {
@@ -816,7 +817,15 @@ export class Fighter {
   update(dt, inp) {
     this.motionDt = dt;
     if (this.mixer) {
-      this.mixer.update(dt);
+      if (this.isPlayer || this.remoteAuth) {
+        this.mixer.update(dt);
+      } else {
+        this._rfAnimDt = (this._rfAnimDt || 0) + dt;
+        if (this._rfAnimDt >= 0.04) {
+          this.mixer.update(this._rfAnimDt);
+          this._rfAnimDt = 0;
+        }
+      }
     }
     if (this.gear) animGear(this.gear, dt, !!this.action, this.vel.lengthSq() > 0.5);
     if (this.summonCd > 0) this.summonCd -= dt;
@@ -1294,7 +1303,7 @@ export class Battle {
     this.camCenter = new THREE.Vector3();
     // 技の閃光用ライト（数を固定してシェーダー再コンパイルを防ぐ）
     this.fxLights = [];
-    for (let i = 0; i < 4; i++) {
+    for (let i = 0; i < 1; i++) {
       const L = new THREE.PointLight(0xffffff, 0, 14, 2);
       L.userData.t = 0;
       this.fx.add(L);
@@ -1316,7 +1325,7 @@ export class Battle {
 
   // 追加技：パチパチと弾け飛ぶ火花＋はじける衝撃環＋連続ポップ
   burstFx(pos, color, el) {
-    const N = 70;
+    const N = 26;
     const geo = new THREE.BufferGeometry();
     const p = new Float32Array(N * 3), v = [];
     for (let i = 0; i < N; i++) {
@@ -1372,7 +1381,7 @@ export class Battle {
 
   // 豪華化レイヤー：多重魔法陣・螺旋に昇る光粒・光柱・衝撃環・飛散する光条・閃光
   grandFx(pos, elem, color, power = 1) {
-    if (grandLive > 14) return;
+    if (grandLive >= 4) return;
     grandLive++;
     const P = power;
     const g = new THREE.Group();
@@ -1990,7 +1999,7 @@ export class Battle {
 
   // 属性ごとの立体エフェクト（炎の柱・氷晶・雷撃・旋風・岩塊・光柱・闇の結び目・波紋・毒泡・血の刃）
   fx3d(pos, elem, power = 1, color = 0xffffff) {
-    if (fx3dLive > 40) return; // 同時発生数を制限して重くならないように
+    if (fx3dLive >= 10) return; // 同時発生数を制限して重くならないように
     fx3dLive++;
     const e = ((elem ?? 5) % 10 + 10) % 10;
     const g = new THREE.Group();
@@ -2092,6 +2101,7 @@ export class Battle {
 
   // 素材エフェクトを1枚出して、拡大・回転・上昇・フェードさせる
   fxPop(pos, elem, slot, size, life, o = {}) {
+    if (this.fx.children.length > 65) return null;
     const obj = o.flat ? fxFlat(elem, slot, size, o.op ?? 1) : fxSprite(elem, slot, size, o.op ?? 1);
     obj.position.copy(pos);
     if (o.flat) obj.rotation.y = o.rot ?? Math.random() * Math.PI * 2;
@@ -2274,8 +2284,8 @@ export class Battle {
       return true;
     });
   }
-
   puff(pos, color, size) {
+    if (this.fx.children.length > 75) return;
     const m = new THREE.Mesh(GEO.sphere, glow(color, 0.5));
     m.position.copy(pos);
     m.scale.setScalar(size);
@@ -2573,8 +2583,8 @@ export class Battle {
       return true;
     });
   }
-
   spark(pos, color, size) {
+    if (this.fx.children.length > 82) return;
     const m = new THREE.Mesh(GEO.oct, glow(color, 0.95));
     m.position.copy(pos);
     this.fx.add(m);
@@ -3008,7 +3018,14 @@ export class Battle {
         if (f.isPlayer) {
           inp = playerInput;
         } else if (f.cpu && !f.remoteAuth) {
-          inp = this.aiInput(f, dt);
+          f._rfAIClock = (f._rfAIClock ?? 0.05) + dt;
+          if (!f._rfAIMovement || f._rfAIClock >= 0.05) {
+            inp = this.aiInput(f, f._rfAIClock);
+            f._rfAIClock = 0;
+            f._rfAIMovement = { mx: inp.mx || 0, mz: inp.mz || 0, guard: !!inp.guard };
+          } else {
+            inp = f._rfAIMovement;
+          }
         }
       }
       f.update(dt, inp);
@@ -3075,7 +3092,7 @@ export class Battle {
   }
 
   updateCamera(dt) {
-    const c = new THREE.Vector3();
+    const c = (this._rfCamVector ||= new THREE.Vector3()).set(0, 0, 0);
     let w = 0;
     for (const f of this.fighters) {
       if (f.dead) {
@@ -3097,7 +3114,9 @@ export class Battle {
     this.camCenter.lerp(c, 1 - Math.exp(-5 * dt));
     const portrait = this.camera.aspect < 1 ? 1.7 : 1;
     const dist = (8 + spread * 0.9) * portrait;
-    const target = this.camCenter.clone().add(new THREE.Vector3(0, dist * 0.62 + 1, dist));
+    const target = (this._rfCameraTarget ||= new THREE.Vector3()).copy(this.camCenter);
+    target.y += dist * 0.62 + 1;
+    target.z += dist;
     this.camera.position.lerp(target, 1 - Math.exp(-4 * dt));
     this.shake = Math.max(0, this.shake - dt * 1.8);
     const s = this.shake * 0.35;

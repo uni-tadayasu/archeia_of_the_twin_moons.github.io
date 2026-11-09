@@ -1,3 +1,5 @@
+// RF_NEPT_V14_MODEL
+// RF_ULTRA_V12_MODEL
 // RF_GRAND_FOUR_20261108 model-runtime.js
 // Arkeia: one glTF pipeline for fighters, field actors and summons.
 // No replacement geometry is created when a file fails to load.
@@ -8,6 +10,8 @@ import { separateEmbeddedTextures } from './model-image-fix.js?v=model-fetch-v20
 import { getModelBytes, modelURLCandidates } from './model-transport.js?v=rf-mobile-v7-20261109';
 
 const cache = new Map();
+// Imported GLB geometry bounds are invariant between clones. Compute precisely once per scene.
+const rfV12Bounds = new WeakMap();
 const pending = new Map();
 const errors = new Map();
 const queue = [];
@@ -131,7 +135,7 @@ async function restoreInMemoryTextures(gltf, detached, sourceUrl = '') {
   if (!detached?.images.length || !detached.materials.length) return;
   // The ice warlord model must keep the unmodified texture atlas orientation.
   // Preserve this GLB without changing how the other fighters are decoded.
-  const preserveOrientation = /(?:^|\/)(?:iron-warlord(?:-f2)?|gaizorg-boss|valdarion|operator-gigantes|chief-empress|maou-lord)\.glb(?:[?#]|$)/i.test(sourceUrl);
+  const preserveOrientation = /(?:^|\/)(?:iron-warlord(?:-f2)?|gaizorg-boss|valdarion|operator-gigantes|chief-empress|maou-lord|nepterion-chief|crimson-swordsman|kraid-lightweight)\.glb(?:[?#]|$)/i.test(sourceUrl);
   const decoded = await Promise.all(detached.images.map((image, i) =>
     decodeInMemoryImage(image, i, preserveOrientation)
   ));
@@ -244,38 +248,52 @@ export function loadModel(url) {
 // Height normalization is applied to a new wrapper, never to the imported root.
 export function instantiateModel(gltf, height, tint = null) {
   if (!gltf?.scene) throw new ModelLoadError('model.glb', '読込完了前にはキャラクターを生成できません');
+  let box = rfV12Bounds.get(gltf.scene);
+  if (!box) {
+    gltf.scene.updateMatrixWorld(true);
+    box = new THREE.Box3().setFromObject(gltf.scene, true);
+    rfV12Bounds.set(gltf.scene, box);
+  }
   const model = SkeletonUtils.clone(gltf.scene);
   model.updateMatrixWorld(true);
   model.traverse((o) => { if (o.isSkinnedMesh) o.skeleton?.update(); });
-  const box = new THREE.Box3().setFromObject(model, true);
   const size = box.getSize(new THREE.Vector3());
   if (!Number.isFinite(size.y) || size.y <= 0.000001) throw new ModelLoadError(gltf.userData?.arkeiaSource || 'model.glb', 'モデルの高さが不正です');
   const wrapper = new THREE.Group();
   const materials = new Set();
+  const rfLocalMaterialCache = new Map();
   const tintColor = tint == null ? null : new THREE.Color(tint);
-  const preserveSourceMaterial = /(?:^|\/)(?:iron-warlord(?:-f2)?|operator-gigantes|gaizorg-boss|valdarion|chief-empress|maou-lord)\.glb(?:[?#]|$)/i.test(gltf.userData?.arkeiaSource || '');
+  const preserveSourceMaterial = /(?:^|\/)(?:iron-warlord(?:-f2)?|operator-gigantes|gaizorg-boss|valdarion|chief-empress|maou-lord|nepterion-chief|crimson-swordsman|kraid-lightweight)\.glb(?:[?#]|$)/i.test(gltf.userData?.arkeiaSource || '');
   model.traverse((o) => {
     if (!o.isMesh) return;
-    o.castShadow = true;
-    // Skinned parts must not disappear when the bind-pose box leaves the view.
+    // Shadows are disabled by the render policy. Preserve skinning and animations.
+    o.castShadow = false;
     if (o.isSkinnedMesh) o.frustumCulled = false;
-    const cloneMaterial = (source) => {
-      const material = source.clone();
-      // The source avatars embed painted color textures, not polished metal skins.
-      // Avoid the exported material's metallicFactor=1 turning faces into shiny polygons.
-      if (!preserveSourceMaterial && (material.isMeshStandardMaterial || material.isMeshPhysicalMaterial)) {
+    const materialFor = (source) => {
+      if (!source) return source;
+      const standard = source.isMeshStandardMaterial || source.isMeshPhysicalMaterial;
+      const tintNeeded = !preserveSourceMaterial && !!tintColor && !!source.color;
+      if (!tintNeeded) {
+        // Shared immutable geometry and normal texture references, no per-fighter clone.
+        if (!preserveSourceMaterial && standard) {
+          source.metalness = Math.min(0.18, source.metalness ?? 0);
+          source.roughness = Math.max(0.7, source.roughness ?? 0.8);
+        }
+        return source;
+      }
+      let material = rfLocalMaterialCache.get(source);
+      if (material) return material;
+      material = source.clone();
+      if (standard) {
         material.metalness = Math.min(0.18, material.metalness ?? 0);
         material.roughness = Math.max(0.7, material.roughness ?? 0.8);
       }
-      if (!preserveSourceMaterial && tintColor && material.color) material.color.lerp(tintColor, 0.22);
-      // Use the GLB's original base-color, metal/rough and normal textures.
-      // Anisotropic filtering changes sampling quality, not the painted pattern.
-      if (material.map) material.map.anisotropy = Math.max(preserveSourceMaterial ? 8 : 2, material.map.anisotropy || 1);
-      if (preserveSourceMaterial && material.metalnessMap) material.metalnessMap.anisotropy = Math.max(8, material.metalnessMap.anisotropy || 1);
-      if (preserveSourceMaterial && material.roughnessMap) material.roughnessMap.anisotropy = Math.max(8, material.roughnessMap.anisotropy || 1);
-      materials.add(material); return material;
+      material.color.lerp(tintColor, 0.22);
+      rfLocalMaterialCache.set(source, material);
+      materials.add(material);
+      return material;
     };
-    o.material = Array.isArray(o.material) ? o.material.map(cloneMaterial) : cloneMaterial(o.material);
+    o.material = Array.isArray(o.material) ? o.material.map(materialFor) : materialFor(o.material);
   });
   wrapper.add(model);
   const scale = Math.max(0.05, Number(height) || 1.8) / size.y;
