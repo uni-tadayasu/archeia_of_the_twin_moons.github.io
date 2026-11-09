@@ -1,4 +1,4 @@
-// RF_UDAIJIN_VISIBLE_V23 右大臣 – chief-exclusive curse fighter.
+// RF_UDAIJIN_CG_AND_SAFE_MOTION_V26 右大臣 – chief-exclusive curse fighter.
 // Exact source geometry, materials and textures; procedural remeshing disabled.
 import * as THREE from 'three';
 const KEY='udaijin', CURSE_TIME=30, CURSE_RADIUS=5.65;
@@ -8,7 +8,7 @@ const v3=(x=0,y=0,z=0)=>new THREE.Vector3(x,y,z);
 const specFor=(name)=>({name,kind:'curse',elem:6,color:C,vivid:true});
 const statusMark=specFor('呪印');
 const statusBurn=specFor('おにび');
-const animationNames={walk:/walk|歩行/i,run:/run|sprint|走行/i,attack:/attack|hit|punch|swing|攻撃/i,cast:/cast|spell|magic|詠唱/i};
+const animationNames={walk:/walk|walking|move|locomotion|歩行/i,run:/run|running|sprint|dash|jog|走行/i,attack:/attack|atk|hit|punch|swing|slash|strike|combat|攻撃/i,cast:/cast|spell|magic|chant|skill|詠唱/i};
 
 function magicTexture(){
   const canvas=document.createElement('canvas');canvas.width=canvas.height=768;
@@ -63,10 +63,31 @@ function chainTexture(){
   const tex=new THREE.CanvasTexture(can);tex.colorSpace=THREE.SRGBColorSpace;return tex;
 }
 let common=null;
+const UD_CG={seal:'uda-seal-v26.webp',chains:'uda-chains-v26.webp',orbs:'uda-onibi-v26.webp',beam:'uda-eyebeam-v26.webp'};
+const udTextures=new Map();
+function udTex(k){if(udTextures.has(k))return udTextures.get(k);
+  const tex=new THREE.TextureLoader().load(new URL('./assets/fx/'+UD_CG[k],import.meta.url).href,undefined,undefined,
+    e=>console.warn('[右大臣 CG]',k,'素材が読めません',e));
+  tex.colorSpace=THREE.SRGBColorSpace;tex.anisotropy=2;udTextures.set(k,tex);return tex;
+}
 function commonAssets(){
-  if(!common)common={seal:magicTexture(),chains:chainTexture(),pSphere:new THREE.SphereGeometry(.2,9,7),pBeam:new THREE.CylinderGeometry(.08,.16,1,7)};
+  if(!common)common={seal:udTex('seal'),chains:udTex('chains'),orbs:udTex('orbs'),beam:udTex('beam')};
   return common;
 }
+function udSprite(map,size=1,alpha=.9){
+  const mat=new THREE.SpriteMaterial({map,transparent:true,opacity:alpha,depthWrite:false,depthTest:true,
+    blending:THREE.AdditiveBlending,toneMapped:false});
+  const spr=new THREE.Sprite(mat);spr.scale.setScalar(size);spr.renderOrder=16;return spr;
+}
+function markCG(target){if(target._udaMarkCG||!target.root)return;
+  const s=udSprite(commonAssets().seal,2.4,.78);s.position.set(0,(target.def?.height||1.8)*.62,0);
+  target.root.add(s);target._udaMarkCG=s;
+}
+function burnCG(target){if(target._udaBurnCG||!target.root)return;
+  const s=udSprite(commonAssets().orbs,2.2,.68);s.position.set(0,(target.def?.height||1.8)*.80,0);
+  target.root.add(s);target._udaBurnCG=s;
+}
+function removeCharacterCG(target,field){const s=target[field];if(!s)return;s.material.dispose();s.removeFromParent();target[field]=null;}
 function sealOn(caster){
   if(!caster?.battle || caster.dead)return;
   const b=caster.battle;
@@ -127,12 +148,13 @@ function applyMark(f,target,visualOnly=false){
   const now=performance.now()/1000;
   if(!target._udaMark || target._udaMark.until<=now){target._udaMark={caster:f,until:now+5,next:now+1,ticks:0};}
   if(!visualOnly){f.battle?.ui?.popup?.(target.pos,'呪印　HP10%×5秒','#cc85ff');}
+  markCG(target);
   if(target._udaStasis)releaseStasis(target,true);
   if(!visualOnly && !f.remoteAuth && f.netId && f.battle.net)f.battle.net.cast?.({id:f.netId,slot:'mark',tx:target.pos.x,tz:target.pos.z,ry:f.facing});
 }
 function tickMark(t){
   const now=performance.now()/1000,mark=t._udaMark;if(!mark)return;
-  if(t.dead||now>mark.until+.25||mark.ticks>=5){t._udaMark=null;return;}
+  if(t.dead||now>mark.until+.25||mark.ticks>=5){t._udaMark=null;removeCharacterCG(t,"_udaMarkCG");return;}
   if(now<mark.next)return;
   mark.next+=1;mark.ticks++;
   if(mark.caster?.dead || mark.caster?.battle!==t.battle || mark.caster.remoteAuth)return;
@@ -143,77 +165,87 @@ function addBurn(f,t){
   if(!t||t.dead)return;
   const now=performance.now()/1000;
   if(!t._udaBurn || t._udaBurn.until<=now)t._udaBurn={caster:f,until:now+10,next:now+1,ticks:0};
+  burnCG(t);
   t.battle?.ui?.popup?.(t.pos,'鬼火・灼熱10秒','#ff9e60');
 }
 function tickBurn(t){
   const x=t._udaBurn,now=performance.now()/1000;if(!x)return;
-  if(t.dead||now>x.until+.25||x.ticks>=10){t._udaBurn=null;return;}
+  if(t.dead||now>x.until+.25||x.ticks>=10){t._udaBurn=null;removeCharacterCG(t,"_udaBurnCG");return;}
   if(now<x.next)return;
   x.next+=1;x.ticks++;
   if(x.caster?.dead || x.caster?.battle!==t.battle || x.caster.remoteAuth)return;
   // Ten seconds of burning, total about 1/15 max HP; no stacking.
   t.battle.applyHit(x.caster,t,Math.max(1,Math.round(t.maxHp/150)),0,0,t.pos,statusBurn);
 }
+// Two illustrated ghost-flames orbit in three dimensions before converging on the target.
+// Only textured sprites are created; no remeshing/shader injection or GLB material changes.
 function startOrbs(b,f){
-  const target=b.nearestEnemy?.(f);
-  if(!target)return;
-  const geo=commonAssets().pSphere,orbs=[];
+  const target=b.nearestEnemy?.(f);if(!target)return;
+  const orbs=[];
   for(let i=0;i<2;i++){
-    const mat=new THREE.MeshBasicMaterial({color:i?0xef5aff:0xff742a,transparent:true,opacity:.95,depthWrite:false,blending:THREE.AdditiveBlending});
-    const m=new THREE.Mesh(geo,mat);b.fx.add(m);orbs.push({m,mat,a:i*Math.PI});
+    const m=udSprite(commonAssets().orbs,1.75,.9);b.fx.add(m);
+    const trails=[];
+    for(let j=0;j<3;j++){const sp=udSprite(commonAssets().orbs,.75-j*.14,.25-j*.05);b.fx.add(sp);trails.push(sp);}
+    orbs.push({m,trails,a:i*Math.PI,hist:[]});
   }
-  let timer=0;
+  let t=0,done=false;
+  const clean=()=>{for(const o of orbs){o.m.removeFromParent();o.m.material.dispose();
+    for(const trail of o.trails){trail.removeFromParent();trail.material.dispose();}}};
   b.addEffect(dt=>{
-    timer+=dt;
+    t+=Math.min(.06,Math.max(0,dt));
     for(const o of orbs){
-      const dest=target.dead ? f.pos : target.pos;
-      const phase=o.a+timer*12;
-      const p=o.m.position;
-      const radius=Math.max(.15,1.4*(1-timer/2.45));
-      const lift=1.6+.22*Math.sin(phase*1.5);
-      const spiral=v3(f.pos.x+Math.cos(phase)*radius,lift,f.pos.z+Math.sin(phase)*radius);
-      const seek=clamp((timer-.3)/1.25,0,1);
-      p.copy(spiral.lerp(v3(dest.x,lift,dest.z),seek));
-      o.m.scale.setScalar(.9+.15*Math.sin(timer*14));
+      const dest=target.dead?f.pos:target.pos;
+      const a=o.a+t*11.4,rad=Math.max(.08,1.6*(1-t/1.9));
+      const from=v3(f.pos.x+Math.cos(a)*rad,(f.def.height||2)*.6+.3*Math.cos(a*1.8),f.pos.z+Math.sin(a)*rad);
+      const k=clamp((t-.22)/1.22,0,1);
+      o.m.position.copy(from.lerp(v3(dest.x,(target.def?.height||2)*.64,dest.z),k));
+      o.m.material.rotation+=dt*(o.a?-.8:.8);
+      o.hist.unshift(o.m.position.clone());if(o.hist.length>7)o.hist.length=7;
+      for(let j=0;j<o.trails.length;j++){
+        const past=o.hist[Math.min(o.hist.length-1,(j+1)*2)];if(past)o.trails[j].position.copy(past);
+        o.trails[j].material.opacity=.22-j*.045;
+      }
     }
-    if(timer>=1.58 || target.dead){
-      if(!target.dead&&!f.remoteAuth){
-        b.applyHit(f,target,78,.16,1,f.pos,statusBurn);
-        addBurn(f,target);
-      } else if(!target.dead) addBurn(f,target);
-      for(const o of orbs){o.m.removeFromParent();o.mat.dispose();}
-      return false;
+    if(t>=1.48||target.dead){
+      if(!done&&!target.dead){done=true;
+        if(!f.remoteAuth){b.applyHit(f,target,78,.16,1,f.pos,statusBurn);addBurn(f,target);}
+        else addBurn(f,target);
+      }
+      clean();return false;
     }
     return true;
   });
 }
+// CGI illustrated twin-eye purple laser: two crossed textured light planes per ray.
 function eyeLaser(b,f){
   const root=new THREE.Group();b.fx.add(root);
-  const beams=[];
+  const beamMat=commonAssets().beam,beams=[];
   for(let i=0;i<2;i++){
-    const mat=new THREE.MeshBasicMaterial({color:i?0xe9aaff:0x9b3aff,transparent:true,opacity:.7,depthWrite:false,blending:THREE.AdditiveBlending});
-    const geo=new THREE.CylinderGeometry(.16,.24,17,9,1,true);
-    const beam=new THREE.Mesh(geo,mat);beam.rotation.x=Math.PI/2;beam.position.set((i?1:-1)*.35,0,8.4);root.add(beam);beams.push({mat,geo});
+    const mat=new THREE.MeshBasicMaterial({map:beamMat,transparent:true,opacity:.93,depthWrite:false,
+      side:THREE.DoubleSide,blending:THREE.AdditiveBlending,toneMapped:false});
+    const m=new THREE.Mesh(new THREE.PlaneGeometry(2.7,17),mat);
+    m.rotation.x=-Math.PI/2;m.position.set((i?1:-1)*.34,-.10,8.3);root.add(m);beams.push(m);
+    const glowMat=mat.clone();glowMat.opacity=.52;
+    const v=new THREE.Mesh(new THREE.PlaneGeometry(17,2.5),glowMat);
+    v.rotation.y=Math.PI/2;v.position.set((i?1:-1)*.34,0,8.3);root.add(v);beams.push(v);
   }
-  let elapsed=0;const hit=new Set();
+  let t=0;const visited=new Set();
   b.addEffect(dt=>{
-    elapsed+=dt;
-    const phase=clamp(elapsed/1.15,0,1),sweep=-.88+phase*1.76;
+    t+=Math.min(.07,Math.max(0,dt));const k=clamp(t/1.1,0,1),sweep=-.9+k*1.8;
     root.position.copy(f.pos).add(v3(0,Math.max(1.3,(f.def.height||2)*.74),0));
     root.rotation.set(0,f.facing+sweep,0);
     for(const e of b.enemiesOf(f)){
-      if(e.dead||hit.has(e))continue;
-      const dx=e.pos.x-f.pos.x,dz=e.pos.z-f.pos.z,r=Math.hypot(dx,dz);
-      const a=Math.atan2(dx,dz);const diff=Math.atan2(Math.sin(a-(f.facing+sweep)),Math.cos(a-(f.facing+sweep)));
-      if(r<16 && r>0.1 && Math.abs(diff)<.115+(e.radius||.8)/Math.max(3,r)){
-        hit.add(e);
-        if(!f.remoteAuth)b.applyHit(f,e,510,.48,4,f.pos,specFor('呪いの光'));
+      if(e.dead||visited.has(e))continue;
+      const dx=e.pos.x-f.pos.x,dz=e.pos.z-f.pos.z,r=Math.hypot(dx,dz),a=Math.atan2(dx,dz);
+      const diff=Math.atan2(Math.sin(a-(f.facing+sweep)),Math.cos(a-(f.facing+sweep)));
+      if(r<17&&r>.1&&Math.abs(diff)<.16+(e.radius||.8)/Math.max(4,r)){
+        visited.add(e);if(!f.remoteAuth)b.applyHit(f,e,250,.26,3,f.pos,specFor('呪いの光'));
         b.ui?.popup?.(e.pos,'呪光命中','#c276ff');
       }
     }
-    for(const x of beams)x.mat.opacity=Math.max(0,.72*(1-phase));
-    if(phase<1)return true;
-    for(const x of beams){x.geo.dispose();x.mat.dispose();}root.removeFromParent();return false;
+    for(const m of beams)m.material.opacity=Math.max(0,.86*(1-k));
+    if(k<1)return true;
+    for(const m of beams){m.geometry.dispose();m.material.dispose();}root.removeFromParent();return false;
   });
 }
 // 20-bone automatic runtime rig. Does not alter or re-export the user's GLB.
@@ -224,11 +256,11 @@ function eyeLaser(b,f){
 // Authored clips take precedence; named bones are posed when suitable. Otherwise lightweight
 // GPU vertex motions imitate articulated joints, leaving the source geometry intact.
 const UD_MOTION_KEYWORDS={
- idle:/idle|wait|stand|待機/i,
- walk:/walk|walking|歩行/i,
- run:/run|running|sprint|走行/i,
- attack:/attack|punch|swing|slash|strike|hit|攻撃/i,
- cast:/cast|spell|magic|chant|詠唱|魔法/i
+ idle:/idle|wait|stand|breath|ready|待機/i,
+ walk:/walk|walking|move|locomotion|歩行/i,
+ run:/run|running|sprint|dash|jog|走行/i,
+ attack:/attack|atk|punch|swing|slash|strike|hit|combo|combat|攻撃/i,
+ cast:/cast|spell|magic|chant|skill|詠唱|魔法/i
 };
 const udAxisX=new THREE.Vector3(1,0,0),udAxisY=new THREE.Vector3(0,1,0),udAxisZ=new THREE.Vector3(0,0,1);
 const udTempQ=new THREE.Quaternion(),udTempQ2=new THREE.Quaternion();
@@ -284,16 +316,35 @@ function udPoseNamedBones(controller,walk,run,attack,cast,time){
   pose('lFoot',Math.max(0,-stride)*.13*walk);
   pose('rFoot',Math.max(0,stride)*.13*walk);
 }
-// RF_UDAIJIN_VISIBLE_V23: Never replace original GLB shader/material/vertex buffers.
+// RF_UDAIJIN_VISIBLE_V24_MOTION: Never replace original GLB shader/material/vertex buffers.
 // Some WebGL implementations can fail V22 shader compilation without a clear
 // game exception. Geometry, PBR materials, UV textures and mesh hierarchy
 // now remain untouched. Existing skeleton and authored clips are preferred.
 
+// If the GLB is split into separately named limbs (but not skinned), animate those transforms.
+// A single welded unrigged mesh cannot bend at knees/elbows without modifying its geometry.
+function udNamedLooseParts(model){
+  const mapped={};const patterns={
+    lArm:/^(?:left|l)(?:upper)?(?:arm|shoulder)/i,rArm:/^(?:right|r)(?:upper)?(?:arm|shoulder)/i,
+    lFore:/^(?:left|l)(?:forearm|lowerarm|elbow)/i,rFore:/^(?:right|r)(?:forearm|lowerarm|elbow)/i,
+    lLeg:/^(?:left|l)(?:leg|thigh|upperleg)/i,rLeg:/^(?:right|r)(?:leg|thigh|upperleg)/i,
+    lCalf:/^(?:left|l)(?:calf|shin|lowerleg)/i,rCalf:/^(?:right|r)(?:calf|shin|lowerleg)/i,
+    head:/^(?:head|neck)/i,torso:/^(?:torso|chest|body|spine)/i
+  };
+  model.traverse(o=>{if(o===model||o.isSkinnedMesh||o.isBone||!o.name)return;
+    const name=o.name.toLowerCase().replace(/[_\s.:-]/g,'').replace(/mixamorig/g,'');
+    for(const [k,re] of Object.entries(patterns)){if(!mapped[k]&&re.test(name)){mapped[k]=o;break;}}
+  });
+  return mapped;
+}
 function udMotionController(model,clips=[]){
   if(!model)return null;
   const names=udClipMap(clips);
+  if(!names.run && names.walk) names.run = names.walk;
+  if(!names.walk && names.run) names.walk = names.run;
+  if(!names.attack && names.cast) names.attack = names.cast;
   const bones=udNamedBones(model),usableBones=Number(!!bones.lArm)+Number(!!bones.rArm)+Number(!!bones.lThigh)+Number(!!bones.rThigh);
-    let underlying=null,mode='whole';
+  let underlying=null,mode='whole';
   if(usableBones>=3){
     const bases=Object.fromEntries(Object.entries(bones).map(([k,v])=>[k,v.quaternion.clone()]));
     underlying={mode:'bones',bones,bases,model,baseY:model.position.y,
@@ -301,38 +352,64 @@ function udMotionController(model,clips=[]){
       dispose(){for(const [k,b] of Object.entries(bones))b.quaternion.copy(bases[k]);}
     };mode='bones';
   }
-  // No GPU deformation for a GLB without authored bones. A small safe root
-  // motion is used below; this guarantees original materials keep rendering.
   if(!underlying){
-    // Original GLB remains visible, with conservative movement of its root.
-    // A static single-piece mesh cannot move individual limbs without a true rig;
-    // avoid fake joint bending that hides or destroys the source appearance.
+    const parts=udNamedLooseParts(model);
+    const suitable=['lArm','rArm','lLeg','rLeg'].filter(k=>parts[k]).length;
+    if(suitable>=3){
+      const initial=Object.fromEntries(Object.entries(parts).map(([k,o])=>[k,o.rotation.clone()]));
+      underlying={mode:'loose-limbs',parts,initial,
+        update(dt,p){
+          const a=Math.sin(p.time*(p.run>p.walk?12:7));
+          const stride=(p.walk*.35+p.run*.65)*a;
+          const pose=(k,x=0,y=0,z=0)=>{const o=parts[k],old=initial[k];if(!o||!old)return;
+            o.rotation.set(old.x+x,old.y+y,old.z+z);};
+          pose('lArm',-stride-.25*p.cast+.16*p.attack);
+          pose('rArm',stride-.25*p.cast-.65*p.attack);
+          pose('lFore',-.12-.12*p.attack-.2*p.cast);
+          pose('rFore',-.12-.45*p.attack-.2*p.cast);
+          pose('lLeg',stride);pose('rLeg',-stride);
+          pose('lCalf',-Math.max(0,-a)*p.run*.3);
+          pose('rCalf',-Math.max(0,a)*p.run*.3);
+          pose('head',-.03*a*(p.walk+p.run));pose('torso',-.09*p.attack-.04*p.cast);
+        },
+        dispose(){for(const [k,o] of Object.entries(parts))o.rotation.copy(initial[k]);}
+      };mode='loose-limbs';
+    }
+  }
+  if(!underlying){
     const basePosition=model.position.clone(),baseRotation=model.rotation.clone();
     underlying={mode:'whole',update(dt,p){
-      const walk=Math.max(0,p.walk||0),run=Math.max(0,p.run||0);
-      const moving=walk+run,rate=run>walk?11:7;
-      const phase=Math.sin(p.time*rate),step=Math.abs(phase);
+      const walk=Math.max(0,p.walk||0),run=Math.max(0,p.run||0),attack=Math.max(0,p.attack||0),cast=Math.max(0,p.cast||0);
+      const moving=walk+run,rate=run>walk?12.5:7.8;
+      const phase=Math.sin(p.time*rate),phase2=Math.cos(p.time*rate*2.0),step=Math.abs(phase);
       model.position.copy(basePosition);
-      model.position.y+=(walk*.010+run*.029)*step;
+      model.position.y += (walk*.018+run*.05)*step + attack*0.012*Math.sin(p.time*18);
+      model.position.z += attack*0.08;
       model.rotation.copy(baseRotation);
-      model.rotation.x+=.017*walk+.065*run+.055*p.attack-.027*p.cast;
-      model.rotation.y+=.020*moving*phase-.14*p.attack;
-      model.rotation.z+=.013*moving*Math.cos(p.time*rate)+.018*p.cast;
+      model.rotation.x += .03*walk+.095*run+.14*attack-.04*cast;
+      model.rotation.y += .032*moving*phase-.22*attack+.03*cast*phase2;
+      model.rotation.z += .024*moving*Math.cos(p.time*rate)+.028*cast+.018*attack*Math.sin(p.time*14);
     },dispose(){model.position.copy(basePosition);model.rotation.copy(baseRotation);}};
   }
-  const state={model,mode,clips:names,time:0,walk:0,run:0,attack:0,cast:0};
+  const state={model,mode,clips:names,time:0,walk:0,run:0,attack:0,cast:0,lastAuthored:''};
   const blend=(old,value,dt,rate)=>old+(value-old)*(1-Math.exp(-rate*dt));
   return {
     ...state,
     update(dt,{moving=false,running=false,attack=0,cast=0}={}){
       dt=clamp(+dt||0,0,.05);this.time+=dt;
-      this.walk=blend(this.walk,moving&&!running?1:0,dt,9);
-      this.run=blend(this.run,moving&&running?1:0,dt,10);
-      this.attack=blend(this.attack,attack,dt,16);
-      this.cast=blend(this.cast,cast,dt,8);
-      const playingAuthored=(this.walk>0.5&&!!names.walk)||(this.run>0.5&&!!names.run)||(this.attack>0.5&&!!names.attack)||(this.cast>0.5&&!!names.cast)||((this.walk+this.run+this.attack+this.cast)<.1&&!!names.idle);
-      // Authored animation is never warped by a second procedural animation.
-      if(playingAuthored)return;
+      this.walk=blend(this.walk,moving&&!running?1:0,dt,10);
+      this.run=blend(this.run,moving&&running?1:0,dt,11.5);
+      this.attack=blend(this.attack,attack,dt,18);
+      this.cast=blend(this.cast,cast,dt,9);
+      const idleWeight=(this.walk+this.run+this.attack+this.cast)<.18;
+      const authoredKey = this.attack>0.28 && names.attack ? 'attack'
+        : this.cast>0.35 && names.cast ? 'cast'
+        : this.run>0.42 && names.run ? 'run'
+        : this.walk>0.28 && names.walk ? 'walk'
+        : idleWeight && names.idle ? 'idle'
+        : '';
+      this.lastAuthored = authoredKey;
+      if(authoredKey) return;
       underlying.update(dt,{time:this.time,walk:this.walk,run:this.run,attack:this.attack,cast:this.cast});
     },
     dispose(){underlying.dispose();}
@@ -346,25 +423,29 @@ function attachRig(f,glb){
   f._udaRig=controller;
   if(controller){
     if(controller.clips.attack)f.clips.udaAttack=controller.clips.attack;
+    else if(controller.clips.cast)f.clips.udaAttack=controller.clips.cast;
     if(controller.clips.cast)f.clips.udaCast=controller.clips.cast;
     if(controller.clips.walk)f.clips.walk||=controller.clips.walk;
     if(controller.clips.run)f.clips.run||=controller.clips.run;
+    else if(controller.clips.walk)f.clips.run||=controller.clips.walk;
+    if(controller.clips.walk==null && controller.clips.run)f.clips.walk||=controller.clips.run;
     if(controller.clips.idle)f.clips.idle||=controller.clips.idle;
   }
-  console.info('[右大臣 Motion V23 / Visible Fix]',controller?.mode||'none', 'original model preserved');
+  console.info('[右大臣 Motion V24 / Enhanced WalkRunAttack]',controller?.mode||'none', 'original model preserved');
 }
 function animateRig(f,dt){
   const controller=f._udaRig;
   if(!controller || f.dead)return;
-  const moving=!!(f.moving||f.netMoving);
   const speed=Math.hypot(f.vel?.x||0,f.vel?.z||0);
-  const running=moving && (speed>6.2 || f.action?.type==='dash' || !!f._udaSprint);
+  const moving=!!(f.moving||f.netMoving||speed>0.18);
+  const running=moving && (speed>5.25 || f.action?.type==='dash' || !!f._udaSprint);
   const pulse=Number(f._udaStrike)||0;
+  const attackAction = f.action?.type==='light' || f.action?.type==='cast' && pulse>0.1;
   const attack=pulse>0?Math.sin(Math.PI*clamp(1-pulse/.46,0,1)):0;
   f._udaStrike=Math.max(0,pulse-dt);
   const casting=!!(f.action?.type==='chant'||f.action?.type==='cast'||f._udaCastPulse>0);
   f._udaCastPulse=Math.max(0,(f._udaCastPulse||0)-dt);
-  controller.update(dt,{moving,running,attack,cast:casting?1:0});
+  controller.update(dt,{moving,running,attack:Math.max(attack, attackAction?0.65:0),cast:casting?1:0});
 }
 // Adventure rest area uses a separate instance, not a Fighter. Reuse the same material-safe Motion.
 export function attachUdaijinRestMotion(model,clips=[]){
@@ -377,6 +458,7 @@ export function attachUdaijinRestMotion(model,clips=[]){
 function cleanup(f){
   if(f._udaSeal){f._udaSeal.quad.removeFromParent();f._udaSeal.quad.geometry.dispose();f._udaSeal.mat.dispose();f._udaSeal=null;}
   if(f._udaCross){f._udaCross.spr.removeFromParent();f._udaCross.mat.dispose();f._udaCross=null;}
+  removeCharacterCG(f,'_udaMarkCG');removeCharacterCG(f,'_udaBurnCG');
   const rig=f._udaRig;try{rig?.dispose?.();}catch(e){console.warn("[右大臣 Motion cleanup]",e);} 
   f._udaRig=null;f._udaMark=null;f._udaBurn=null;f._udaStasis=null;
 }
@@ -389,8 +471,8 @@ function updateTouchUI(f){
   for(const [act,text] of Object.entries(labels)){const el=b.querySelector(`[data-act="${act}"]`);if(el)el.textContent=active?text[0]:text[1];}
 }
 export function installUdaijinCombat({Fighter,Battle,state}){
-  if(!Fighter?.prototype||Fighter.prototype.__udaijinCurseV23)return;
-  Fighter.prototype.__udaijinCurseV23=true;
+  if(!Fighter?.prototype||Fighter.prototype.__udaijinCurseV24Motion)return;
+  Fighter.prototype.__udaijinCurseV24Motion=true;
   const baseBuild=Fighter.prototype.buildModel;
   Fighter.prototype.buildModel=function(glb,...args){
     const out=baseBuild.call(this,glb,...args);
@@ -400,9 +482,17 @@ export function installUdaijinCombat({Fighter,Battle,state}){
   const baseAnim=Fighter.prototype.anim;
   Fighter.prototype.anim=function(mode){
     if(this.key===KEY && this._udaRig){
-      if(this._udaStrike>0 && this.clips?.udaAttack)mode='udaAttack';
-      else if((this.action?.type==='chant'||this.action?.type==='cast'||this._udaCastPulse>0) && this.clips?.udaCast)mode='udaCast';
-      else if(mode==='run' && this.clips?.walk && Math.hypot(this.vel?.x||0,this.vel?.z||0)<6.2)mode='walk';
+      const speed=Math.hypot(this.vel?.x||0,this.vel?.z||0);
+      const rig=this._udaRig;
+      if((this._udaStrike>0 || this.action?.type==='light') && (this.clips?.udaAttack || rig?.clips?.attack)) mode=this.clips?.udaAttack?'udaAttack':'attack';
+      else if((this.action?.type==='chant'||this.action?.type==='cast'||this._udaCastPulse>0) && (this.clips?.udaCast || rig?.clips?.cast)) mode=this.clips?.udaCast?'udaCast':'cast';
+      else if(mode==='run'){
+        if(speed>=5.25 && (this.clips?.run || rig?.clips?.run)) mode='run';
+        else if(this.clips?.walk || rig?.clips?.walk) mode='walk';
+      } else if(mode==='idle' && speed>0.16){
+        if(speed>=5.25 && (this.clips?.run || rig?.clips?.run)) mode='run';
+        else if(this.clips?.walk || rig?.clips?.walk) mode='walk';
+      }
     }
     return baseAnim.call(this,mode);
   };
@@ -432,13 +522,17 @@ export function installUdaijinCombat({Fighter,Battle,state}){
     if(frozen&&wasPos){this.pos.copy(wasPos);this.vel.set(0,0,0);this.sync?.();}
     if(this.key===KEY){updateSeal(this,clamp(dt,0,.05));animateRig(this,clamp(dt,0,.05));}
     tickMark(this);tickBurn(this);
+    if(this._udaMarkCG){this._udaMarkCG.material.rotation+=dt*.7;
+      this._udaMarkCG.material.opacity=.72+.15*Math.sin(performance.now()*.005);}
+    if(this._udaBurnCG){this._udaBurnCG.material.rotation-=dt*.9;
+      this._udaBurnCG.material.opacity=.55+.22*Math.sin(performance.now()*.008);}
     return out;
   };
   const baseLight=Fighter.prototype.startLight;
   Fighter.prototype.startLight=function(...args){
     if(this.key!==KEY)return baseLight.apply(this,args);
     const target=this.battle?.nearestEnemy?.(this);
-    this._udaStrike=.46;
+    this._udaStrike=.62;
     this.anim?.('udaAttack');
     if(target){this.faceNearest?.(40);applyMark(this,target,!!this.remoteAuth);}
     return undefined; // no ordinary combo/swing, mark is the basic attack

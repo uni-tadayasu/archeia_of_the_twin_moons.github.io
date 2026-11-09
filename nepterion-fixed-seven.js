@@ -1,84 +1,85 @@
+// RF_NEPTERION_FIXED_BOOK_V26 — replaces the old seven-command rotation.
+// Preserve the exported function name for compatibility with existing main.js.
 const KEY='nepterion';
-const LABELS=[
- ['氷結護陣','CG魔方陣で凍結'],
- ['蒼海防環','防御2倍リング'],
- ['蒼眼凍条','両目青色レーザー'],
- ['乱潮蒼弾','青い光線弾乱射'],
- ['蒼海自癒','青い玉の自動回復'],
- ['剛海巨拳','巨大パンチ'],
- ['海皇穿滅','巨大ドリル']
+const ITEMS=[
+ ['氷界魔法陣','Shift / I','guard'],
+ ['潮刃・零斬','J / Z','attack'],
+ ['蒼眼双流','K / 1','s0'],
+ ['氷河星群','U / 2','s1'],
+ ['命潮再生','H / 3','s2'],
+ ['大海嘯','4','s3'],
+ ['万象水護','5','s4'],
+ ['深淵渦葬','6','s5'],
+ ['蒼龍水槍','7','s6'],
+ ['絶対氷縛','8','s7'],
+ ['氷晶星雨','9','s8'],
+ ['海皇天瀑','F','s9'],
+ ['水神裂界','G','s10'],
+ ['万海終式','T','s11'],
+ ['覇海終極・奥義','L / 0','over'],
+ ['創世絶海・秘奥義','B','hi']
 ];
-let queue=-1, hud=null, getState=null;
-function playable(){
-  const s=getState?.();
-  if(!s?.battle||s.paused||document.querySelector('.screen.on')) return null;
-  return s.battle.fighters?.find(f=>f.key===KEY && f.isPlayer && !f.remoteAuth && !f.dead)||null;
+let getState=null,queued=null,holder=null,panel=null,button=null;
+function playable(){const s=getState?.();if(!s?.battle||s.paused||document.querySelector('.screen.on'))return null;
+  return s.battle.fighters?.find(f=>f.key===KEY&&f.isPlayer&&!f.remoteAuth&&!f.dead)||null;}
+function choose(id){const f=playable();if(!f)return;
+  if(id==='hi' && (f.awakened<=0 || f.over<100)){f.battle.ui?.popup?.(f.pos,'秘奥義は覚醒中・奥義100で使用','#91eaff');return;}
+  queued=id;
 }
-function choose(i){
-  const f=playable(); if(!f) return;
-  if(i<0||i>6) return;
-  if(i===6 && (f.awakened<=0 || f.over<100)){ f.battle?.ui?.popup?.(f.pos,'秘奥義は覚醒中・奥義100で使用','#9aefff'); return; }
-  queue=i;
-}
-function makeHud(){
-  if(hud||typeof document==='undefined') return;
-  const style=document.createElement('style');
-  style.id='rf-nep-seven-style-v24';
-  style.textContent=`#rf-nep-seven{position:fixed;right:10px;top:88px;width:min(300px,40vw);z-index:9000;pointer-events:auto;background:rgba(5,24,44,.52);backdrop-filter:blur(3px);border:1px solid rgba(112,218,255,.52);border-radius:9px;box-shadow:0 12px 38px #001b32a0;padding:8px;color:#c9f4ff;font-family:system-ui,sans-serif;display:none}#rf-nep-seven header{font-size:11px;letter-spacing:.04em;margin:0 0 6px;color:#8fe3ff}#rf-nep-seven .rf-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:5px}#rf-nep-seven button{white-space:normal;min-height:39px;padding:5px 4px;background:linear-gradient(135deg,rgba(18,60,102,.72),rgba(18,72,110,.68));border:1px solid rgba(77,150,200,.64);border-radius:6px;color:white;font:600 11px/1.3 system-ui;cursor:pointer}#rf-nep-seven button:active{background:#328fd1}#rf-nep-seven button small{display:block;color:#a6dffe;font-size:10px;font-weight:400}#rf-nep-seven button[data-index="6"]{background:linear-gradient(125deg,rgba(23,80,173,.72),rgba(109,71,170,.70))}#rf-nep-seven button:disabled{opacity:.45;cursor:not-allowed}@media(max-width:700px){#rf-nep-seven{top:auto;bottom:103px;right:5px;width:min(210px,48vw);padding:5px}#rf-nep-seven header{font-size:10px}#rf-nep-seven button{font-size:10px;min-height:31px;padding:2px}#rf-nep-seven button small{font-size:9px}}`;
+function buildHUD(){if(typeof document==='undefined'||holder)return;
+  const style=document.createElement('style');style.id='rf-nep-v26-ui';
+  style.textContent=`#rf-nep-v26-launch{position:fixed;right:max(6px,env(safe-area-inset-right));bottom:max(8px,env(safe-area-inset-bottom));z-index:8950;border:1px solid #8deaff;color:#f0faff;border-radius:22px;background:rgba(11,49,76,.52);backdrop-filter:blur(5px);padding:7px 13px;font:700 12px system-ui;pointer-events:auto;cursor:pointer}#rf-nep-v26{position:fixed;right:max(8px,env(safe-area-inset-right));top:max(72px,calc(env(safe-area-inset-top) + 64px));z-index:8949;width:min(360px,calc(100vw - 16px));max-height:min(64dvh,580px);overflow:auto;box-sizing:border-box;background:rgba(8,35,57,.58);backdrop-filter:blur(6px);border:1px solid rgba(109,225,255,.65);color:#e5f9ff;border-radius:10px;box-shadow:0 12px 28px #06162399;padding:8px;font:11px/1.45 system-ui;pointer-events:auto}#rf-nep-v26[hidden],#rf-nep-v26-launch[hidden]{display:none!important}#rf-nep-v26 .rfn-heading{margin:2px 0 8px;font-weight:800;font-size:13px;letter-spacing:.03em}#rf-nep-v26 .rfn-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:5px}#rf-nep-v26 button{min-width:0;min-height:43px;padding:4px 5px;border:1px solid #85bedc90;border-radius:6px;background:#143e6680;color:#f4faff;font:700 11px/1.3 system-ui;cursor:pointer;overflow-wrap:anywhere}#rf-nep-v26 button small{display:block;font:400 10px system-ui;color:#a7e5ff;margin-top:2px}#rf-nep-v26 button:disabled{opacity:.38}@media(max-width:650px){#rf-nep-v26{top:max(55px,calc(env(safe-area-inset-top) + 40px));right:5px;width:min(280px,72vw);max-height:46dvh}#rf-nep-v26 button{min-height:36px;font-size:10px}#rf-nep-v26 button small{font-size:9px}#rf-nep-v26-launch{top:max(35px,calc(env(safe-area-inset-top) + 24px));bottom:auto;right:5px}}body:has(#chat-panel:not([hidden])) #rf-nep-v26,body:has(#chat-panel:not([hidden])) #rf-nep-v26-launch{display:none!important}`;
   document.head.append(style);
-  hud=document.createElement('section'); hud.id='rf-nep-seven'; hud.setAttribute('aria-label','ネプテリオン固定七技');
-  const title=document.createElement('header'); title.textContent='ネプテリオン｜7固定コマンド'; hud.append(title);
-  const grid=document.createElement('div'); grid.className='rf-grid';
-  LABELS.forEach(([name,short],i)=>{
-    const button=document.createElement('button'); button.type='button'; button.dataset.index=String(i);
-    button.textContent=(i+1)+' · '+name;
-    const sub=document.createElement('small');
-    sub.textContent = (i===0?'Shift/I・1 · ':i===1?'J/Space・2 · ':i===2?'K/X・3 · ':i===3?'U/V・4 · ':i===4?'H・5 · ':i===5?'L/C・6 · ':'7 · ') + short;
-    button.append(sub); button.addEventListener('click',ev=>{ev.preventDefault();choose(i)}); grid.append(button);
-  });
-  hud.append(grid); document.body.append(hud);
-  setInterval(()=>{
-    const f=playable(); hud.style.display=f?'block':'none';
-    if(f){ const hi=hud.querySelector('[data-index="6"]'); if(hi) hi.disabled=f.awakened<=0||f.over<100; }
-  },180);
+  holder=document.createElement('div');
+  button=document.createElement('button');button.type='button';button.id='rf-nep-v26-launch';button.textContent='水術・16';button.hidden=true;
+  panel=document.createElement('section');panel.id='rf-nep-v26';panel.hidden=true;panel.setAttribute('aria-label','ネプテリオン固定水術');
+  const h=document.createElement('div');h.className='rfn-heading';h.textContent='蒼海神皇｜最高位水術・固定16コマンド';panel.append(h);
+  const grid=document.createElement('div');grid.className='rfn-grid';
+  for(const [label,key,id] of ITEMS){const b=document.createElement('button');b.type='button';b.textContent=label;
+    const s=document.createElement('small');s.textContent=key;b.append(s);b.dataset.spell=id;
+    b.addEventListener('click',()=>{choose(id);panel.hidden=true;});grid.append(b);}
+  panel.append(grid);holder.append(button,panel);document.body.append(holder);
+  button.addEventListener('click',()=>{panel.hidden=!panel.hidden;button.setAttribute('aria-expanded',String(!panel.hidden));});
+  setInterval(()=>{const f=playable();button.hidden=!f;if(!f)panel.hidden=true;
+    if(f)panel.querySelector('[data-spell="hi"]').disabled=f.awakened<=0||f.over<100;
+  },220);
 }
-export function installNepterionFixedSeven({ Fighter, FIGHTERS, state }){
-  if(!Fighter?.prototype || Fighter.prototype.__rfNepSevenV24) return;
-  Fighter.prototype.__rfNepSevenV24=true;
-  const spec=FIGHTERS?.[KEY];
-  if(spec){
-    spec.skills = spec.skills?.slice?.(0,5) || spec.skills;
-    delete spec.pool;
-    spec.fixedSlots = true;
-  }
-  getState = typeof state==='function' ? state : ()=>state;
+export function installNepterionFixedSeven({Fighter,FIGHTERS,state}){
+  if(!Fighter?.prototype||Fighter.prototype.__rfNepFixedV26)return;
+  Fighter.prototype.__rfNepFixedV26=true;
+  getState=typeof state==='function'?state:()=>state;
+  if(FIGHTERS?.[KEY]){delete FIGHTERS[KEY].pool;FIGHTERS[KEY].fixedSlots=true;}
   if(typeof window!=='undefined'){
-    window.addEventListener('keydown', e=>{
-      if(e.repeat || e.altKey || e.ctrlKey || e.metaKey || !playable()) return;
-      if(/^(Digit|Numpad)[1-7]$/.test(e.code)){ choose(Number(e.code.slice(-1))-1); e.preventDefault(); }
-    }, true);
-    if(document.readyState==='loading') document.addEventListener('DOMContentLoaded', makeHud, {once:true});
-    else makeHud();
+    const keys={Digit0:'over',Numpad0:'over',KeyF:'s9',KeyG:'s10',KeyT:'s11',KeyB:'hi'};
+    for(let i=1;i<=9;i++){keys['Digit'+i]='s'+(i-1);keys['Numpad'+i]='s'+(i-1);}
+    window.addEventListener('keydown',e=>{if(e.repeat||e.altKey||e.ctrlKey||e.metaKey||!playable())return;
+      if(document.activeElement?.matches?.('input,textarea,select,[contenteditable]'))return;
+      const id=keys[e.code];if(id){e.preventDefault();choose(id);}
+    },true);
+    if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',buildHUD,{once:true});else buildHUD();
   }
+  const baseSkill=Fighter.prototype.startSkill;
+  Fighter.prototype.startSkill=function(i,hold,follow){
+    if(this.key===KEY)return baseSkill.call(this,i,null,false); // no changing spells on long hold
+    return baseSkill.call(this,i,hold,follow);
+  };
   const baseUpdate=Fighter.prototype.update;
   Fighter.prototype.update=function(dt,input){
-    if(this.key!==KEY || this.remoteAuth) return baseUpdate.call(this,dt,input);
-    const next={...(input||{})};
-    if(this.isPlayer && queue>=0){
+    if(this.key!==KEY||this.remoteAuth)return baseUpdate.call(this,dt,input);
+    const next={...(input||{})};let chosen=null;
+    if(this.isPlayer&&queued!==null){chosen=queued;queued=null;}
+    else if(next.skill)chosen='s0';
+    else if(next.skill2)chosen='s1';
+    else if(next.heal)chosen='s2';
+    else if(next.over)chosen='over';
+    if(chosen!==null){
       next.guard=next.attack=next.skill=next.skill2=next.heal=next.over=false;
       next.skillIdx=null;
-      if(queue===0) next.guard=true;
-      else if(queue===1) next.attack=true;
-      else if(queue===2) next.skill=true;
-      else if(queue===3) next.skill2=true;
-      else if(queue===4) next.heal=true;
-      else { next.over=true; this._rfNepFinisher=queue; }
-      queue=-1;
-    } else {
-      // Preserve standard fixed commands.
-      if(next.over) this._rfNepFinisher = 5;
+      if(chosen==='guard')next.guard=true;
+      else if(chosen==='attack')next.attack=true;
+      else if(chosen==='over'||chosen==='hi'){this._rfNepFinisher=chosen;next.over=true;}
+      else if(/^s(?:[0-9]|1[01])$/.test(chosen))next.skillIdx=Number(chosen.slice(1));
     }
-    try { return baseUpdate.call(this,dt,next); }
-    finally { if(this.key===KEY && this._rfNepFinisher==null) this._rfNepFinisher=5; }
+    try{return baseUpdate.call(this,dt,next);}finally{this._rfNepFinisher=null;}
   };
 }
