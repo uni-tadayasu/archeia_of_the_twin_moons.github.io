@@ -208,3 +208,153 @@
 }
 @media(max-width:380px){ #select-grid{grid-template-columns:1fr 1fr} #select-grid .card img.face{height:110px} }
 @media(prefers-reduced-motion:reduce){.intro-portrait,.action-primary,.mode-tile,.portal-services button{animation:none;transition:none}}
+
+
+/* RF_BATTLE_UI_ULTRA_CLEAR_V19_START */
+/* Battle overlay: keep 3D characters/stage visible. Only surface colors fade;
+   labels, key targets, progress values and hit-box sizes remain functional. */
+:root { --rf-combat-glass: rgba(5, 14, 31, .045); --rf-combat-stroke: rgba(195, 232, 255, .25); }
+
+/* HP panels: nearly invisible backing, but do not fade player names or health. */
+body #hud .hud-side, body #hud .hud-side .plate,
+body #hud .hud-side .plate::before, body #hud .hud-side .plate::after {
+  background:transparent!important; background-image:none!important;
+  box-shadow:none!important; backdrop-filter:none!important;
+  -webkit-backdrop-filter:none!important;
+}
+body #hud .hud-side .plate {
+  border-color:rgba(200,225,245,.16)!important;
+  filter:none!important;
+  padding:3px 5px!important;
+}
+body #hud .hud-side .plate b, body #hud .hud-side .plate span {
+  text-shadow:0 1px 3px rgba(0,0,0,.93), 0 0 5px rgba(0,0,0,.72)!important;
+}
+body #hud .hud-side .plate i, body #gauges i,
+body #hud #flux i, body #hud #over i, body #hud #awk i {
+  background:rgba(4,11,24,.08)!important;
+  border-color:rgba(200,225,245,.3)!important;
+  box-shadow:none!important;
+}
+body #hud .plate u, body #gauges u {
+  opacity:.82!important;
+  box-shadow:none!important;
+}
+body #gauges, body #gauges > div,
+body #hud #flux, body #hud #over, body #hud #awk {
+  background:transparent!important; background-image:none!important;
+  box-shadow:none!important; backdrop-filter:none!important;
+}
+body #gauges b, body #gauges > div {
+  text-shadow:0 1px 3px #000,0 0 5px #000!important;
+}
+
+/* Pause icon should never become an opaque square during gameplay. */
+body #hud #btn-pause {
+  background:rgba(5,14,31,.055)!important; background-image:none!important;
+  box-shadow:none!important; backdrop-filter:none!important;
+  border-color:rgba(210,236,252,.32)!important;
+  color:#fff5df!important; text-shadow:0 1px 3px #000!important;
+}
+body #hud #btn-pause:is(:hover,:focus-visible) {
+  background:rgba(10,26,49,.23)!important;
+  border-color:rgba(220,242,255,.72)!important;
+}
+
+/* Attack/guard/heal/ultimate touch controls: 94-97% background transparency,
+   preserving minimum tap areas and clear feedback. */
+body #touch #tbtns, body #touch #tbtns::before, body #touch #tbtns::after {
+  background:transparent!important; background-image:none!important;
+  box-shadow:none!important; backdrop-filter:none!important;
+}
+body #touch #tbtns button,body #touch button[data-act],
+body #touch .rf-touch-button {
+  background:rgba(3,15,32,.055)!important; background-image:none!important;
+  box-shadow:none!important; backdrop-filter:none!important;
+  -webkit-backdrop-filter:none!important;
+  border-color:rgba(220,232,244,.34)!important;
+  color:#f8fcff!important;
+  text-shadow:0 1px 3px #000,0 0 5px #000!important;
+}
+body #touch #tbtns button[data-act="attack"] {
+  border-color:rgba(255,245,226,.54)!important;
+}
+body #touch #tbtns button[data-act="heal"] {
+  border-color:rgba(122,245,175,.48)!important;
+}
+body #touch #tbtns button[data-act="over"] {
+  border-color:rgba(255,201,111,.5)!important;
+}
+body #touch #tbtns button:is(:active,:focus-visible),
+body #touch button[data-act]:active {
+  background:rgba(50,132,180,.24)!important;
+  border-color:rgba(255,255,255,.85)!important;
+}
+body #touch #joy, body #touch #joy::before, body #touch #joy::after {
+  background:rgba(2,11,28,.025)!important; background-image:none!important;
+  box-shadow:none!important; backdrop-filter:none!important;
+  border-color:rgba(231,240,252,.27)!important;
+}
+body #touch #knob {
+  background:rgba(205,240,255,.19)!important; background-image:none!important;
+  border:1px solid rgba(244,248,255,.38)!important;
+  box-shadow:none!important;
+}
+
+/* Nepterion's 7-button palette was previously a dark blocking rectangle. */
+body #rf-nep-seven {
+  background:rgba(3,15,32,.045)!important; background-image:none!important;
+  box-shadow:none!important;
+  border:1px solid rgba(128,224,255,.35)!important;
+  backdrop-filter:none!important; -webkit-backdrop-filter:none!important;
+}
+body #rf-nep-seven header { text-shadow:0 1px 4px #000!important; }
+body #rf-nep-seven button,
+body #rf-nep-seven button[data-index="6"] {
+  background:rgba(8,29,57,.07)!important; background-image:none!important;
+  box-shadow:none!important;
+  border-color:rgba(128,209,255,.35)!important;
+  text-shadow:0 1px 4px #000!important;
+}
+body #rf-nep-seven button:is(:hover,:active,:focus-visible) {
+  background:rgba(14,87,140,.22)!important;
+  border-color:rgba(144,236,255,.78)!important;
+}
+body #rf-nep-seven button small { text-shadow:0 1px 3px #000!important; }
+
+/* Spell banners and cut-ins: readable lettering, not an opaque wall. */
+body #skillname,body #skillname::before,body #skillname::after {
+  background:transparent!important; background-image:none!important;
+  backdrop-filter:none!important; -webkit-backdrop-filter:none!important;
+  box-shadow:none!important;
+}
+body #skillname { border-color:rgba(208,233,255,.27)!important; }
+body #skillname :is(.sn-who,.sn-name,.sn-kind) {
+  text-shadow:0 2px 4px #000,0 0 7px rgba(0,0,0,.9)!important;
+}
+body #cutin .ci-band,body #cutin.foe .ci-band {
+  background:rgba(12,18,43,.075)!important; background-image:none!important;
+  box-shadow:none!important;
+  border-color:rgba(255,226,156,.37)!important;
+  backdrop-filter:none!important;
+}
+body #cutin .ci-text { text-shadow:0 2px 5px #000,0 0 10px #000!important; }
+body #banner,body #banner::before,body #banner::after,
+body #countdown, body #pops {
+  background:transparent!important; background-image:none!important;
+  box-shadow:none!important;
+}
+body #banner b,body #countdown { text-shadow:0 2px 5px #000,0 0 10px #000!important; }
+
+/* Intentionally NOT changing .screen, #pause, #world-panel, and alert dialogs:
+   a user must still be able to read/operate these menus on top of 3D play. */
+@media (max-width: 700px) {
+  body #hud .hud-side .plate { padding:2px 3px!important; }
+  body #rf-nep-seven { box-shadow:none!important; }
+  body #touch #tbtns button { touch-action:manipulation; }
+}
+@media (prefers-reduced-transparency: reduce) {
+  body #touch #tbtns button,body #rf-nep-seven button { background:rgba(3,15,32,.20)!important; }
+  body #rf-nep-seven {background:rgba(3,15,32,.24)!important;}
+}
+/* RF_BATTLE_UI_ULTRA_CLEAR_V19_END */
