@@ -1,0 +1,36 @@
+/* RF_CHIEF_CHAR_EDITOR_V28 — isolated admin dialog, no changes to battle HUD. */
+#rf-chief-character-editor[hidden],#btn-chief-character-editor[hidden]{display:none!important}
+#rf-chief-character-editor *{box-sizing:border-box}
+#rf-chief-character-editor{position:fixed;inset:0;z-index:40000;background:rgba(5,12,24,.94);overflow:auto;overscroll-behavior:contain;color:#f5f0dd;font-family:system-ui,"Yu Gothic",sans-serif;pointer-events:auto;touch-action:pan-y}
+#rf-chief-character-editor .rf-ce-shell{width:min(1120px,calc(100vw - 24px));max-width:100%;min-height:min(720px,calc(100dvh - 24px));margin:12px auto;padding:clamp(12px,2vw,24px);background:linear-gradient(145deg,#192839,#101827);border:1px solid #bda46b;border-radius:12px;box-shadow:0 22px 70px #0009}
+#rf-chief-character-editor .rf-ce-header{display:flex;align-items:center;justify-content:space-between;gap:10px;border-bottom:1px solid #817252;padding-bottom:12px}
+#rf-chief-character-editor .rf-ce-header small{color:#bba979;font-size:11px;letter-spacing:.12em}
+#rf-chief-character-editor .rf-ce-note{color:#c7cfdf;font-size:12px;line-height:1.6}
+#rf-chief-character-editor .rf-ce-content{display:grid;grid-template-columns:minmax(180px,260px) minmax(0,1fr);gap:18px;margin-top:12px}
+#rf-chief-character-editor .rf-ce-list,#rf-chief-character-editor .rf-ce-form{min-width:0;max-width:100%}
+#rf-chief-character-editor .rf-ce-list-items{max-height:60dvh;overflow-y:auto;display:flex;flex-direction:column;gap:4px;margin-top:10px}
+#rf-chief-character-editor button{font:inherit;color:#fff;cursor:pointer}
+#rf-chief-character-editor button:disabled{opacity:.5;cursor:not-allowed}
+#rf-chief-character-editor .rf-ce-character,#rf-chief-character-editor .rf-ce-outline{border:1px solid #6e7896;border-radius:7px;padding:9px 12px;background:#27344b;text-align:left}
+#rf-chief-character-editor .rf-ce-character.active{background:#52452e;border-color:#d1bb81}
+#rf-chief-character-editor .rf-ce-primary{border:1px solid #d6b46a;border-radius:7px;padding:12px 16px;color:#20202b;background:linear-gradient(130deg,#ffdf98,#d0b072);font-weight:800}
+#rf-chief-character-editor input{width:100%;min-width:0;max-width:100%;padding:9px;border:1px solid #74839d;background:#0c1729;color:#fff;border-radius:6px;font:inherit;font-size:14px}
+#rf-chief-character-editor .rf-ce-form h3{font-size:15px;margin:16px 0 8px;color:#f6dfa2}
+#rf-chief-character-editor .rf-ce-char-title{display:flex;gap:5px;flex-direction:column;border-bottom:1px solid #35445e;padding-bottom:8px}
+#rf-chief-character-editor .rf-ce-char-title strong{font-size:22px}
+#rf-chief-character-editor .rf-ce-char-title small{color:#c9d6e6}
+#rf-chief-character-editor .rf-ce-fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:11px}
+#rf-chief-character-editor .rf-ce-field{font-size:12px;color:#e3e6f2;display:flex;flex-direction:column;gap:3px;min-width:0}
+#rf-chief-character-editor .rf-ce-skills{display:flex;flex-direction:column;gap:8px}
+#rf-chief-character-editor .rf-ce-skill{border:1px solid #4b5d77;border-radius:8px;background:#111f32;padding:8px}
+#rf-chief-character-editor .rf-ce-skill summary{cursor:pointer;color:#d7eaf9;font-size:13px}
+#rf-chief-character-editor .rf-ce-skill .rf-ce-fields{margin-top:10px}
+#rf-chief-character-editor .rf-ce-actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:18px}
+#rf-chief-character-editor .rf-ce-status{padding:10px 0;min-height:40px;color:#d3dfed;font-size:13px;overflow-wrap:anywhere}
+#rf-chief-character-editor .rf-ce-status[data-type=error]{color:#ffaaa8}
+#rf-chief-character-editor .rf-ce-status[data-type=success]{color:#8fe5be}
+body.rf-character-editor-open #chat-panel{display:none!important}
+@media(max-width:720px){#rf-chief-character-editor .rf-ce-shell{width:calc(100vw - 12px);margin:6px auto;padding:12px}#rf-chief-character-editor .rf-ce-content{grid-template-columns:minmax(0,1fr);gap:10px}#rf-chief-character-editor .rf-ce-list-items{max-height:120px;display:grid;grid-template-columns:repeat(2,minmax(0,1fr))}#rf-chief-character-editor .rf-ce-actions>*{flex:1 1 160px}#rf-chief-character-editor .rf-ce-form{max-height:none}#rf-chief-character-editor .rf-ce-fields{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:390px){#rf-chief-character-editor .rf-ce-fields{grid-template-columns:minmax(0,1fr)}#rf-chief-character-editor .rf-ce-list-items{grid-template-columns:minmax(0,1fr)}}
+
+#rf-chief-character-editor .rf-ce-portrait{display:block;width:92px;height:92px;object-fit:contain;max-width:100%;border:1px solid #5f738d;background:#0d1829;border-radius:6px;margin:9px 0}

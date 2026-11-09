@@ -1473,6 +1473,8 @@ export default {
         case '/chat/room': return await chatRoom(req, env, H, body);
         case '/activity/ping': return await rfActivityPing(req, env, H, body);
         case '/activity/list': return await rfActivityList(req, env, H, body);
+        case '/characters/overrides': return await rfChiefCharacterEditor(req, env, H, body, 'get');
+        case '/chief/characters/save': return await rfChiefCharacterEditor(req, env, H, body, 'save');
         case '/chief/sign': return await chiefSign(req, env, H, body);
         case '/chief/event': return await chiefEvent(req, env, H, body);
         case '/chief/current': return await chiefCurrent(req, env, H);
@@ -1492,6 +1494,87 @@ export default {
 };
 
 // 運営/運営長キー → 役割トークン（キーのハッシュはサーバーの秘密変数にだけ置く）
+// RF_CHIEF_CHAR_EDITOR_V28 — secure server-side persistence of character overrides.
+// Role authentication is enforced here, not by visibility of the client UI.
+const RF_CHARACTER_EDITOR_STORE = 'chief-character-overrides-v28';
+const RF_CHARACTER_STATS = Object.freeze({
+  hp: [1,200000], speed:[0.1,30],power:[0.1,20],armor:[0.01,5],
+  height:[0.1,12],overGain:[0.1,12],fluxMul:[0.1,12]
+});
+const RF_CHARACTER_TEXT = Object.freeze({name:40,title:90,attribute:16});
+const RF_CHARACTER_SKILL_NUM = Object.freeze({dmg:[0,100000],cost:[0,100],radius:[0,100],castTime:[0,30]});
+function rfCharPlain(v){return v && typeof v==='object' && !Array.isArray(v);}
+function rfCharParseSkill(v,actual){
+  if(!rfCharPlain(v)||!rfCharPlain(actual))return null;
+  const cleaned=Object.create(null);
+  for(const [k,x] of Object.entries(v)){
+    if(k==='name' && typeof x==='string'&&x.trim().length>0&&[...x.trim()].length<=42)cleaned.name=x.trim();
+    else if(Object.prototype.hasOwnProperty.call(RF_CHARACTER_SKILL_NUM,k)){
+      const [min,max]=RF_CHARACTER_SKILL_NUM[k];
+      if(typeof x!=='number'||!Number.isFinite(x)||x<min||x>max)return null;
+      cleaned[k]=x;
+    }else return null;
+  }
+  return cleaned;
+}
+function rfCharParseOverrides(input){
+  if(!rfCharPlain(input))return null;
+  const list=Object.entries(input);
+  if(list.length>300)return null;
+  const clean=Object.create(null);
+  for(const [key,obj] of list){
+    if(!/^[a-zA-Z0-9_]{1,40}$/.test(key)||!Object.prototype.hasOwnProperty.call(FIGHTERS,key)||!rfCharPlain(obj))return null;
+    const entry=Object.create(null),def=FIGHTERS[key];
+    for(const [k,v] of Object.entries(obj)){
+      if(Object.prototype.hasOwnProperty.call(RF_CHARACTER_STATS,k)){
+        const [min,max]=RF_CHARACTER_STATS[k];
+        if(typeof v!=='number'||!Number.isFinite(v)||v<min||v>max)return null;
+        entry[k]=v;
+      } else if(Object.prototype.hasOwnProperty.call(RF_CHARACTER_TEXT,k)){
+        if(typeof v!=='string'||![...v.trim()].length||[...v.trim()].length>RF_CHARACTER_TEXT[k])return null;
+        entry[k]=v.trim();
+      } else if(k==='skills'){
+        if(!Array.isArray(v)||v.length>(def.skills?.length||0)||v.length>32)return null;
+        const slots=[];
+        for(let i=0;i<v.length;i++){
+          if(v[i]===null){slots.push(null);continue;}
+          const s=rfCharParseSkill(v[i],def.skills?.[i]);if(!s)return null;slots.push(s);
+        }
+        entry.skills=slots;
+      } else if(k==='over'||k==='hi'){
+        const s=rfCharParseSkill(v,def[k]);if(!s)return null;entry[k]=s;
+      } else return null;
+    }
+    clean[key]=entry;
+  }
+  return clean;
+}
+async function rfChiefCharacterEditor(req,env,H,body,mode){
+  if(!env.STORE)return json(H,{error:'storage_unavailable'},503);
+  if(mode==='save'){
+    const role=await verify(env,body.token,'role');
+    if(role?.r!=='chief')return json(H,{error:'denied'},403);
+    if(await limited(env,req,'chief-editor-save',35,600000))return json(H,{error:'limit'},429);
+    const data=rfCharParseOverrides(body.overrides);
+    if(!data)return json(H,{error:'invalid_character_values'},400);
+    if(JSON.stringify(data).length>150000)return json(H,{error:'too_large'},413);
+    const current=await storeCall(env,RF_CHARACTER_EDITOR_STORE,{op:'get'});
+    if(current.status!==200)return json(H,{error:'storage_failed'},503);
+    const prior=current.data?.v;
+    const rev=Number(prior?.rev)||0;
+    if(!Number.isSafeInteger(body.revision)||body.revision!==rev)return json(H,{error:'stale',revision:rev},409);
+    const next={at:Math.max(Date.now(),(Number(prior?.at)||0)+1),rev:rev+1,overrides:data};
+    const stored=await storeCall(env,RF_CHARACTER_EDITOR_STORE,{op:'newer',v:next});
+    if(stored.status!==200||!stored.data?.ok)return json(H,{error:'stale'},409);
+    return json(H,{ok:true,revision:next.rev,updatedAt:next.at});
+  }
+  if(await limited(env,req,'chief-editor-read',90,60000))return json(H,{error:'limit'},429);
+  const latest=await storeCall(env,RF_CHARACTER_EDITOR_STORE,{op:'get'});
+  if(latest.status!==200)return json(H,{error:'storage_failed'},503);
+  const v=latest.data?.v;
+  return json(H,{ok:true,revision:Number(v?.rev)||0,updatedAt:Number(v?.at)||0,overrides:v?.overrides||{}});
+}
+
 async function authKey(req, env, H, { key }) {
   if (await limited(env, req, 'auth', 5, 60000)) return json(H, { error: 'locked' }, 429);
   if (typeof key !== 'string' || key.length > 128) return json(H, { error: 'bad' }, 400);
