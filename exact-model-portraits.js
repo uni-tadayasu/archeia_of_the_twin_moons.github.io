@@ -6,7 +6,7 @@ import { FIGHTERS } from './data.js?v=rf-v9-2-20261109';
 import { loadModel } from './model-runtime.js?v=rf-mobile-v7-20261109';
 import { renderExactPortrait } from './glb-portrait.js?v=rf-mobile-v7-20261109';
 
-const EXACT_KEYS=['gaizorg','valdarion','valgard','operator_gigantes','chief','nepterion'];
+const EXACT_KEYS=['kinosaki_sanmi','gaizorg','valdarion','valgard','operator_gigantes','chief','nepterion'];
 const result=new Map(),pending=new Map();
 // Cache one thumbnail job at a time: avoid decoding six 20MB GLBs together.
 let queue=Promise.resolve();

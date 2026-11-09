@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+<defs><radialGradient id="g"><stop stop-color="#2c806b"/><stop offset="1" stop-color="#071b25"/></radialGradient></defs>
+<rect width="512" height="512" fill="url(#g)"/>
+<circle cx="256" cy="252" r="192" fill="none" stroke="#a7edc5" stroke-width="5" opacity=".65"/>
+<circle cx="256" cy="252" r="161" fill="none" stroke="#69caaa" stroke-width="2" opacity=".6"/>
+<g fill="none" stroke="#b4eaca" opacity=".9" stroke-linecap="round"><path d="M116 260 Q180 154 268 244 T409 197" stroke-width="14"/><path d="M113 316 Q210 388 341 280 T423 305" stroke-width="8"/><path d="M182 115 Q280 94 351 155" stroke-width="5"/></g>
+<text x="256" y="295" fill="#fff9dc" font-size="78" font-family="serif" font-weight="bold" text-anchor="middle">風</text>
+<text x="256" y="452" fill="#c5e6ce" font-size="34" font-family="serif" text-anchor="middle">城崎三位</text>
+</svg>

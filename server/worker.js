@@ -2440,3 +2440,23 @@ FIGHTERS.udaijin = {
 // RF_UDAIJIN_V20_END
 
 CHIEF_ONLY.add('udaijin');
+
+// RF_KINOSAKI_V27_CHARACTER
+FIGHTERS.kinosaki_sanmi = {
+  name:'城崎三位', title:'翠嵐を司る公卿（運営長専用）',
+  model:'assets/models/kinosaki-sanmi-original.glb', face:'assets/portraits/kinosaki-sanmi.svg',
+  attribute:'風', color:0x78d4aa, tint:null, height:3.55, hp:1300, speed:5.85,
+  power:1.04, armor:0.94, fluxMul:1.08, overGain:1.16,
+  locked:true, special:'chief',
+  light:{dmg:41,range:2.8,color:0xb8fadd},
+  skills:[
+    {name:'翠嵐刃《ふうじん》',kind:'projectile',visual:'crescent',cost:19,castTime:.38,count:3,spreadAng:.12,dmg:64,speed:23,radius:.75,elem:3,color:0x84efd2,vivid:true},
+    {name:'疾風翔破《はやて》',kind:'dash',cost:22,castTime:.24,dmg:115,speed:21,dur:.38,elem:3,color:0xa6ffd5,vivid:true},
+    {name:'旋風大陣《碧の結界》',kind:'shockwave',cost:26,castTime:.70,dmg:115,radius:5.2,elem:3,color:0x68d9b7,vivid:true},
+    {name:'鎌鼬嵐舞《千風花》',kind:'rain',visual:'blade',count:9,spread:4,radius:1.55,dmg:54,delay:.35,interval:.08,cost:29,castTime:.90,elem:3,color:0x5be6c9,vivid:true},
+    {name:'風神の息吹《清風癒》',kind:'heal',heal:310,radius:5.6,cost:28,castTime:.75,elem:3,color:0xb7ffeb,vivid:true}
+  ],
+  over:{name:'奥義《天嵐滅刃》',kind:'judgment',visual:'blade',finalVisual:'nova',count:10,spread:4.8,radius:1.8,dmg:75,delay:.48,interval:.095,finalDmg:370,finalRadius:7.5,castTime:1.75,elem:3,color:0x9ef7d1,vivid:true},
+  hi:{name:'秘奥義《九霄神風》',kind:'judgment',visual:'sword',finalVisual:'nova',count:12,spread:5.2,radius:2,dmg:88,delay:.48,interval:.085,finalDmg:530,finalRadius:8.1,castTime:2.45,elem:3,color:0xe1fff0,vivid:true,hi:true}
+};
+CHIEF_ONLY.add('kinosaki_sanmi');

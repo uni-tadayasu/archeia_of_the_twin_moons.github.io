@@ -1,3 +1,6 @@
+// RF_KINOSAKI_V27_INSTALL
+import {installStaffAvatarScale} from './staff-character-scale.js?v=rf-kinosaki-v27-20261110';
+import {installKinosakiMotion} from './kinosaki-motion.js?v=rf-kinosaki-v27-20261110';
 import {installUdaijinCombat} from './udaijin-curse.js?v=rf-udaijin-exact-v21-20261109';
 // RF_AUTO_RIG_V17_MAIN
 // RF_MOTION_GUARD_V16_MAIN
@@ -37,6 +40,8 @@ installNepterionCombat({ Battle, Fighter: MaouFighter });
 installActorMotion({ Fighter: MaouFighter, Battle });
 installUdaijinCombat({Fighter:MaouFighter,Battle,state:()=>state});
 installNepterionFixedSeven({ Fighter: MaouFighter, FIGHTERS, state:()=>state });
+installStaffAvatarScale({Fighter:MaouFighter,FIGHTERS,ROSTER});
+installKinosakiMotion({Fighter:MaouFighter,Battle});
 const isTouch = matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window;
 
 // ---------- Renderer / scene ----------
@@ -1595,6 +1600,7 @@ const foeCpu = (base) => Math.max(0.15, Math.min(1, base * DIFFS[save.diff].c));
 const foeHp = (m) => (m || 1) * DIFFS[save.diff].h;
 // その戦士を使えるか（運営専用・ショップ解放）
 function canUse(k) {
+  if (k === "kinosaki_sanmi") return chiefUnlocked();
   if (k === 'udaijin') return chiefUnlocked();
   if (k === 'nepterion') return chiefUnlocked();
   if (k === 'maou') return chiefUnlocked();
@@ -1610,7 +1616,7 @@ function canUse(k) {
   if (d.locked) return operatorUnlocked();
   return true;
 }
-const SELECT_KEYS = () => [...ROSTER, 'seraphel', 'chief', 'sovereign', 'bloodfiend', 'valgard', 'gaizorg', 'operator_gigantes', 'valdarion', 'crimson', 'maou', 'nepterion', 'udaijin'];
+const SELECT_KEYS = () => [...ROSTER, 'seraphel', 'chief', 'sovereign', 'bloodfiend', 'valgard', 'gaizorg', 'operator_gigantes', 'valdarion', 'crimson', 'maou', 'nepterion', 'udaijin', 'kinosaki_sanmi'];
 function refreshTitle() {
   $('#btn-invade').hidden = !operatorUnlocked();
   if ($('#btn-evmaker')) $('#btn-evmaker').hidden = !chiefUnlocked();

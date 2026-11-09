@@ -1,3 +1,5 @@
+// RF_KINOSAKI_V27_ADVENTURE
+import {attachKinosakiRestMotion} from './kinosaki-motion.js?v=rf-kinosaki-v27-20261110';
 // RF_UDAIJIN_REST_MOTION_V22
 // RF_BATTLE_FIX_V9_1_20261109
 // RF_GRAND_FOUR_20261108 gaizorg-adventure.js
@@ -229,6 +231,7 @@ export function setupGaizorgAdventure(ctx){
     scene.remove(rest.group);
     if(rest.mixer)rest.mixer.stopAllAction();
     rest.motion?.stop();
+    rest.kinMotion?.dispose();
     rest.udaMotion?.dispose();
     if(rest.instance)disposeModel(rest.instance,rest.mixer);
     for(const asset of rest.owned)asset?.dispose?.();
@@ -239,6 +242,7 @@ export function setupGaizorgAdventure(ctx){
   function drawStatus(text){status.textContent=text;}
   function stageTitle(index){return STAGE_PLAN[clamp(index,0,9)]?.name||'十重の試練';}
   async function start(key){
+      if(key==='kinosaki_sanmi'&&!chiefUnlocked()){ui.banner({name:'使用権限がありません'},'城崎三位は運営長専用です');goTitle();return;}
     if(busy)return;
     busy=true;
     try{
@@ -260,16 +264,18 @@ export function setupGaizorgAdventure(ctx){
     const env=camp();
     const p=new THREE.Group();p.position.set(0,0,8);env.group.add(p);
     const def=FIGHTERS[k];const original=assets[k];
-    const instance=instantiateModel(original,(def.height||1.8)*(k==='gaizorg'?1.1:1),k==='gaizorg'?null:def.tint);
+    const staffHeight=(def.special==='chief'||def.special==='operator')?(window.__rfStaffTargetHeight||3.55):(def.height||1.8)*(k==='gaizorg'?1.1:1);
+    const instance=instantiateModel(original,staffHeight,k==='gaizorg'?null:def.tint);
     p.add(instance.wrapper);
     const mixer=new THREE.AnimationMixer(instance.model);
     const motion=attachValgardMotion(instance.model,k);
+    const kinMotion=k==='kinosaki_sanmi' ? attachKinosakiRestMotion(instance.model,original?.animations||[]) : null;
     const udaMotion=k==='udaijin' ? window.__rfAttachUdaijinRestMotion?.(instance.model,original?.animations||[]) : null;
     const clips=original?.animations||[];
     const walk=clips.find(c=>/walk/i.test(c.name));
     const run=clips.find(c=>/run/i.test(c.name));
     const idle=clips.find(c=>/idle/i.test(c.name));
-    rest={...env,p,instance,mixer,motion,udaMotion,walk,run,idle,action:null,owned:env.owned,pos:new THREE.Vector3(0,0,8),facing:0,portalHold:0};
+    rest={...env,p,instance,mixer,motion,kinMotion,udaMotion,walk,run,idle,action:null,owned:env.owned,pos:new THREE.Vector3(0,0,8),facing:0,portalHold:0};
     if(idle)rest.action=mixer.clipAction(idle).play();
     state.adventureRest=true;state.battle=null;state.field=null;state.mode='adventure';
     state.battleLoading=false;
@@ -308,6 +314,7 @@ export function setupGaizorgAdventure(ctx){
     }
     rest.p.position.copy(rest.pos);rest.p.rotation.y=rest.facing;
     animation(moving,running);rest.mixer.update(dt);
+    rest.kinMotion?.update(dt,moving,running);
     rest.motion?.update(dt,moving?(running?'run':'walk'):false);
     rest.udaMotion?.update(dt,moving,running);
     // A little idle motion for models with no authored animation.
