@@ -1,8 +1,8 @@
-// RF_CHIEF_CHAR_EDITOR_V32_BULK_TEMPLATES — reliable save, accessible in-game confirmation.
+// RF_CHIEF_CHAR_EDITOR_V33_CHUNKED_SAVES — reliable save, accessible in-game confirmation.
 // All mutations are authorized again on the server. No local-only admin fallback.
 import { api, apiEnabled, verifyToken } from './api.js';
 
-const VERSION='rf-chief-editor-v32-20261110';
+const VERSION='rf-chief-editor-v33-20261110';
 const SKILL_FIELDS=[
  ['name','技・魔法名','text',0,42],['kind','技の種類','select',0,0],
  ['visual','CG・立体演出の種類','select',0,0],['elem','技の属性','select',0,9],['color','魔法色','color',0,0xffffff],
@@ -169,12 +169,72 @@ function applyPublic(map){
   }
   activeOverlays=clone(map);
 }
+// V33: Each response is one bounded page. No app-level limit on total saved entries.
+// A version mismatch during paging fails closed; we never publish mixed revisions.
+async function fetchAllOverlays(){
+  let page=0,rev=null,updatedAt=0;
+  const combined=Object.create(null);
+  for(;;){
+    const params=rev===null?{page:0}:{page,revision:rev};
+    const r=await api('/characters/overrides',params);
+    if(!r.ok||!r.overrides||!Number.isSafeInteger(r.revision)){
+      if(r.error==='stale')throw Error('読み込み中に編集内容が変わりました。再読み込みしてください。');
+      throw Error('編集データを取得できません（Worker V33の更新を確認してください）');
+    }
+    if(rev!==null&&rev!==r.revision)throw Error('読み込み中に更新があったため中断しました。');
+    rev=r.revision;updatedAt=r.updatedAt||0;
+    Object.assign(combined,r.overrides);
+    if(r.nextPage===undefined||r.nextPage===null)return {ok:true,revision:rev,updatedAt,overrides:combined};
+    if(!Number.isSafeInteger(r.nextPage)||r.nextPage<=page)throw Error('保存データのページ番号が不正です。');
+    page=r.nextPage;
+  }
+}
 async function syncPublic(force=false){
   if(!apiEnabled()||inBattle()||(!force&&Date.now()-lastFetch<30000))return;
-  const r=await api('/characters/overrides',{});
-  if(!r.ok||!r.overrides||!Number.isSafeInteger(r.revision))throw Error('編集データを取得できません（Workerの更新を確認してください）');
+  const r=await fetchAllOverlays();
   if(revision!==r.revision||!lastFetch)applyPublic(r.overrides);
   revision=r.revision;lastFetch=Date.now();
+}
+// Snapshot upload: chunks are staged privately, validated on the Worker, then
+// ONE manifest CAS publishes the complete snapshot. A failed upload never
+// changes the visible live character settings.
+const RF_CHUNK_TARGET_BYTES=48*1024;
+const rfBytes=new TextEncoder();
+function splitCharacterOverrides(all){
+  const chunks=[];let current=Object.create(null),size=2;
+  for(const [key,item] of Object.entries(all)){
+    const n=rfBytes.encode(JSON.stringify(key)+':'+JSON.stringify(item)).byteLength+1;
+    if(n>RF_CHUNK_TARGET_BYTES)throw Error('「'+key+'」1件の設定が大きすぎます。技の内容を減らしてください。');
+    if(size+n>RF_CHUNK_TARGET_BYTES&&Object.keys(current).length){chunks.push(current);current=Object.create(null);size=2;}
+    current[key]=item;size+=n;
+  }
+  if(Object.keys(current).length||!chunks.length)chunks.push(current);
+  return chunks;
+}
+async function saveCharacterSnapshot(all,baseRevision,notify=()=>{}){
+  if(!Number.isSafeInteger(baseRevision)||baseRevision<0)throw Error('保存版番号が不正です。最新状態を読み込み直してください。');
+  const token=tokenOf();
+  if(!token)throw Error('運営長認証が必要です。');
+  const chunks=splitCharacterOverrides(all);
+  const batchId=Array.from(crypto.getRandomValues(new Uint8Array(16)),x=>x.toString(16).padStart(2,'0')).join('');
+  for(let i=0;i<chunks.length;i++){
+    notify('データ送信中 '+(i+1)+' / '+chunks.length+'（未公開）');
+    const r=await api('/chief/characters/chunk',{token,batchId,revision:baseRevision,index:i,total:chunks.length,overrides:chunks[i]});
+    if(!r.ok){
+      if(r.status===404)throw Error('Cloudflare WorkerをV33へデプロイしてください。');
+      if(r.error==='stale')throw Error('別の更新が保存されました。再プレビューしてください。');
+      if(r.error==='invalid_character_values')throw Error('技・能力値の検証に失敗しました。');
+      throw Error('分割データ'+(i+1)+'件目の保存に失敗：'+(r.error||r.status));
+    }
+  }
+  notify('全'+chunks.length+'分割データの検証・一括公開中…');
+  const r=await api('/chief/characters/commit',{token,batchId,revision:baseRevision,total:chunks.length});
+  if(!r.ok){
+    if(r.status===404)throw Error('Cloudflare WorkerをV33へデプロイしてください。');
+    if(r.error==='stale')throw Error('別の編集が先に公開されました。再読み込みしてください。');
+    throw Error('一括公開できませんでした（'+(r.error||r.status)+'）。既存の公開データは変更されていません。');
+  }
+  return r;
 }
 async function authorized(){
   if(!apiEnabled()||!chiefCheck())return false;
@@ -431,7 +491,6 @@ function planBulkChange(options){
     all.gaizorg.hp=top;const row=rows.find(r=>r.key==='gaizorg');row.hp=top;
   }
   const serialized=JSON.stringify(all);
-  if(serialized.length>142000)throw Error('全件の保存サイズが大きすぎます（'+Math.round(serialized.length/1024)+'KB）。技スロット数を減らすか、「能力値のみ」を選んでください。');
   return {all,rows,baseRevision:revision,serializedSize:serialized.length,scope:options.scope,editMode:options.editMode,tier:options.tier};
 }
 
@@ -458,7 +517,7 @@ function createPanel(){
   let bulkDraft=null;
   const bulk=make('section','rf-ce-bulk');bulk.setAttribute('aria-label','全キャラクター一括編集');
   bulk.append(make('h3','','全キャラクター一括バランス編集'));
-  bulk.append(make('p','rf-ce-note','強さのテンプレートを選択し、対象キャラの能力値を一括で調整します。名前・元モデル・使用権限は初期設定では変更されません。必ず変更一覧を確認してから公開してください。'));
+  bulk.append(make('p','rf-ce-note','強さのテンプレートを選択し、対象キャラの能力値を一括で調整します。名前・元モデル・使用権限は初期設定では変更されません。データは分割保存されるためアプリ独自の一括保存容量上限はありません（Cloudflareの契約容量上限は適用されます）。必ず確認して公開してください。'));
   const bulkTools=make('div','rf-ce-bulk-grid');
   const bulkTierChoice=makeSelect([['auto','役割別に自動割当（おすすめ）'],...Object.entries(TIERS).map(([k,v])=>[k,v.label])],'auto');
   bulkTierChoice.setAttribute('aria-label','全キャラの強さテンプレート');
@@ -516,8 +575,8 @@ function createPanel(){
         draft.rows.length+'キャラクターの能力値'+(draft.editMode==='stats'?'':'・技構成')+'を一括更新します。モデル・運営権限は維持されます。公開後は全プレイヤーの次回戦闘へ反映されます。','全'+draft.rows.length+'件を一括保存');
       if(!confirmed){bulkNotice.textContent='一括保存をキャンセルしました。プレビューは保持されています。';return;}
       if(!(await authorized()))throw Error('運営長の認証が無効です。');
-      bulkNotice.textContent='Cloudflare Workerへ一括保存しています…';
-      const r=await api('/chief/characters/save',{token:tokenOf(),revision:draft.baseRevision,overrides:draft.all});
+      bulkNotice.textContent='Cloudflare Workerへ分割アップロードしています…';
+      const r=await saveCharacterSnapshot(draft.all,draft.baseRevision,msg=>{bulkNotice.textContent=msg;});
       if(!r.ok){if(r.error==='stale')throw Error('編集データが更新されています。再プレビューしてください。');
         if(r.error==='invalid_character_values')throw Error('サーバーが技スロット／値を拒否しました。V31のWorkerが公開済みか確認してください。');
         throw Error('一括保存に失敗しました：'+(r.error||('HTTP '+r.status)));}
@@ -667,7 +726,7 @@ function createPanel(){
   function renderList(){
     const q=search.value.toLocaleLowerCase('ja');list.replaceChildren();
     const all=Object.entries(FIGHTERS).filter(([k,d])=>d&&!d.hidden&&((d.name||'').toLocaleLowerCase('ja').includes(q)||k.includes(q))).sort((a,b)=>String(a[1].name).localeCompare(String(b[1].name),'ja'));
-    for(const [key,d]of all.slice(0,300)){
+    for(const [key,d]of all){
       const b=make('button','rf-ce-character',d.name||key);b.type='button';b.dataset.key=key;b.title=key;
       b.classList.toggle('active',key===selected);b.addEventListener('click',()=>select(key));list.append(b);
     }
@@ -688,7 +747,7 @@ function createPanel(){
         '対象：'+(n||key)+' ／ 通常技'+slotCount+'枠 ／ '+(skillMode==='fixed'?'固定':'順番')+'方式。基本情報・能力値・技構成が次の戦闘から反映されます。','保存・公開する');
       if(!confirm){tell('保存をキャンセルしました。');return;}
       tell('運営長の権限を照合しています…');if(!(await authorized()))throw Error('運営長の認証が必要です。設定から再認証してください');
-      tell('サーバーに保存しています…');const r=await api('/chief/characters/save',{token:tokenOf(),revision,overrides:all});
+      tell('サーバーに保存しています…');const r=await saveCharacterSnapshot(all,revision,msg=>tell(msg));
       if(!r.ok){if(r.error==='stale')throw Error('他の編集が先に保存されました。再読込してください');
         if(r.error==='denied')throw Error('運営長の認証が無効です');
         if(r.error==='invalid_character_values')throw Error('技の設定値が不正です。新規スロットの種類・名前・数値を確認してください');
@@ -712,7 +771,7 @@ function createPanel(){
       if(inBattle())throw Error('戦闘中は変更できません');
       if(!(await authorized()))throw Error('運営長の再認証が必要です');
       const all=clone(activeOverlays);delete all[key];tell('初期化をサーバーに保存中…');
-      const r=await api('/chief/characters/save',{token:tokenOf(),revision,overrides:all});
+      const r=await saveCharacterSnapshot(all,revision,msg=>tell(msg));
       if(!r.ok)throw Error('初期化できませんでした（'+(r.error||r.status)+'）');
       bulkDraft=null;bulkSaveButton.disabled=true;bulkNotice.textContent='個別の初期化が行われました。一括編集は再プレビューしてください。';
       applyPublic(all);revision=r.revision;lastFetch=0;try{await syncPublic(true);}catch{}

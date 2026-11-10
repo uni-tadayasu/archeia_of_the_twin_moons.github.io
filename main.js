@@ -1,5 +1,5 @@
 // RF_CHIEF_CHAR_EDITOR_V28
-import { initChiefCharacterEditor } from './character-editor.js?v=rf-chief-editor-v31-20261110';
+import { initChiefCharacterEditor } from './character-editor.js?v=rf-chief-editor-v33-20261110';
 // RF_KINOSAKI_V27_INSTALL
 import {installStaffAvatarScale} from './staff-character-scale.js?v=rf-kinosaki-v27-20261110';
 import {installKinosakiMotion} from './kinosaki-motion.js?v=rf-kinosaki-v27-20261110';

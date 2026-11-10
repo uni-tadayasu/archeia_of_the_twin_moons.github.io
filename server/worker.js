@@ -1474,6 +1474,8 @@ export default {
         case '/activity/ping': return await rfActivityPing(req, env, H, body);
         case '/activity/list': return await rfActivityList(req, env, H, body);
         case '/characters/overrides': return await rfChiefCharacterEditor(req, env, H, body, 'get');
+        case '/chief/characters/chunk': return await rfChiefCharacterEditorWriteV33(req, env, H, body, 'chunk');
+        case '/chief/characters/commit': return await rfChiefCharacterEditorWriteV33(req, env, H, body, 'commit');
         case '/chief/characters/save': return await rfChiefCharacterEditor(req, env, H, body, 'save');
         case '/chief/sign': return await chiefSign(req, env, H, body);
         case '/chief/event': return await chiefEvent(req, env, H, body);
@@ -1578,6 +1580,7 @@ function rfCharParseOverrides(input){
   return clean;
 }
 async function rfChiefCharacterEditor(req,env,H,body,mode){
+  if(mode==='get')return rfChiefCharacterEditorReadV33(req,env,H,body);
   if(!env.STORE)return json(H,{error:'storage_unavailable'},503);
   if(mode==='save'){
     const role=await verify(env,body.token,'role');
@@ -1601,6 +1604,83 @@ async function rfChiefCharacterEditor(req,env,H,body,mode){
   if(latest.status!==200)return json(H,{error:'storage_failed'},503);
   const v=latest.data?.v;
   return json(H,{ok:true,revision:Number(v?.rev)||0,updatedAt:Number(v?.at)||0,overrides:v?.overrides||{}});
+}
+
+// RF_CHIEF_CHAR_EDITOR_V33_CHUNKED_SAVES
+// Immutable snapshot chunks plus one atomic Durable Object metadata commit.
+// The old single-document edits are still readable. Chunk size is intentionally bounded
+// per REQUEST; there is no application-level cap on the TOTAL number of chunks.
+const RF_CHAR_BATCH_PREFIX='chief-character-overrides-batch-v33:';
+const RF_CHAR_BATCH_RE=/^[0-9a-f]{32}$/;
+function rfCharV33BatchName(batchId){return RF_CHAR_BATCH_PREFIX+batchId;}
+function rfCharV33BatchParams(body){
+  return body&&RF_CHAR_BATCH_RE.test(String(body.batchId||'')) &&
+    Number.isSafeInteger(body.revision)&&body.revision>=0 &&
+    Number.isSafeInteger(body.total)&&body.total>=1 &&
+    Number.isSafeInteger(body.index??0)&&(body.index??0)>=0&&(body.index??0)<body.total;
+}
+async function rfChiefCharacterEditorReadV33(req,env,H,body){
+  if(!env.STORE)return json(H,{error:'storage_unavailable'},503);
+  if(await limited(env,req,'chief-editor-read-v33',2000,60000))return json(H,{error:'limit'},429);
+  const current=await storeCall(env,RF_CHARACTER_EDITOR_STORE,{op:'get'});
+  if(current.status!==200)return json(H,{error:'storage_failed'},503);
+  const v=current.data?.v||{},rev=Number(v.rev)||0;
+  if(body.revision!==undefined&&body.revision!==null&&body.revision!==rev)return json(H,{error:'stale',revision:rev},409);
+  if(!v.ref||!Number.isSafeInteger(v.chunks))return json(H,{ok:true,revision:rev,updatedAt:Number(v.at)||0,overrides:v.overrides||{},nextPage:null});
+  // V33 clients ALWAYS send page. For older browser tabs, allow whole-map reads
+  // only when small enough so they do not silently display a partial snapshot.
+  if(body.page===undefined||body.page===null){
+    if(v.chunks>8)return json(H,{error:'upgrade_required'},426);
+    const all=Object.create(null);
+    for(let i=0;i<v.chunks;i++){
+      const p=await storeCall(env,rfCharV33BatchName(v.ref),{op:'rf-chunk-get',index:i});
+      if(p.status!==200||!p.data?.ok)return json(H,{error:'storage_failed'},503);
+      Object.assign(all,p.data.overrides);
+    }
+    return json(H,{ok:true,revision:rev,updatedAt:Number(v.at)||0,overrides:all,nextPage:null});
+  }
+  const page=body.page;
+  if(!Number.isSafeInteger(page)||page<0||page>=v.chunks)return json(H,{error:'bad_page'},400);
+  const result=await storeCall(env,rfCharV33BatchName(v.ref),{op:'rf-chunk-get',index:page});
+  if(result.status!==200||!result.data?.ok)return json(H,{error:'storage_failed'},503);
+  return json(H,{ok:true,revision:rev,updatedAt:Number(v.at)||0,
+    overrides:result.data.overrides||{},nextPage:page+1<v.chunks?page+1:null,totalPages:v.chunks});
+}
+async function rfChiefCharacterEditorWriteV33(req,env,H,body,mode){
+  if(!env.STORE)return json(H,{error:'storage_unavailable'},503);
+  if((await verify(env,body.token,'role'))?.r!=='chief')return json(H,{error:'denied'},403);
+  if(!rfCharV33BatchParams(body))return json(H,{error:'bad_batch'},400);
+  if(mode==='chunk'){
+    if(await limited(env,req,'chief-editor-chunk',2400,600000))return json(H,{error:'limit'},429);
+    const clean=rfCharParseOverrides(body.overrides);
+    if(!clean)return json(H,{error:'invalid_character_values'},400);
+    // Each chunk fits comfortably below the 220 KB outer JSON request ceiling.
+    if(new TextEncoder().encode(JSON.stringify(clean)).byteLength>62000)return json(H,{error:'chunk_too_large'},413);
+    const r=await storeCall(env,rfCharV33BatchName(body.batchId),{
+      op:'rf-chunk-put',index:body.index,total:body.total,revision:body.revision,overrides:clean
+    });
+    if(r.status!==200||!r.data?.ok)return json(H,{error:r.data?.error||'storage_failed'},r.status===409?409:503);
+    return json(H,{ok:true,index:body.index,total:body.total});
+  }
+  if(mode==='commit'){
+    if(await limited(env,req,'chief-editor-commit',60,600000))return json(H,{error:'limit'},429);
+    const batch=rfCharV33BatchName(body.batchId);
+    const ready=await storeCall(env,batch,{op:'rf-ready',revision:body.revision,total:body.total});
+    if(ready.status!==200||!ready.data?.ok)return json(H,{error:ready.data?.error||'incomplete'},409);
+    // Revision CAS is performed inside the central Durable Object; all readers
+    // see either the complete old snapshot OR the complete new snapshot.
+    const published=await storeCall(env,RF_CHARACTER_EDITOR_STORE,{
+      op:'rf-revision-cas',revision:body.revision,ref:body.batchId,total:body.total
+    });
+    if(published.status!==200||!published.data?.ok)return json(H,{error:published.data?.error||'stale'},409);
+    const oldRef=published.data.previousRef;
+    if(typeof oldRef==='string'&&RF_CHAR_BATCH_RE.test(oldRef)&&oldRef!==body.batchId){
+      // Give readers already loading the old version time to finish.
+      try{await storeCall(env,rfCharV33BatchName(oldRef),{op:'rf-schedule-expiry',ms:30*60*1000});}catch{}
+    }
+    return json(H,{ok:true,revision:published.data.revision,updatedAt:published.data.updatedAt,parts:body.total});
+  }
+  return json(H,{error:'bad'},400);
 }
 
 async function authKey(req, env, H, { key }) {
@@ -2279,6 +2359,53 @@ export class Store {
       const cur = await s.get('v');
       const out = (x, status = 200) => new Response(JSON.stringify(x), { status });
       switch (b.op) {
+        case 'rf-chunk-put': {
+          if(!Number.isSafeInteger(b.index)||b.index<0||!Number.isSafeInteger(b.total)||b.total<1||b.index>=b.total||
+             !Number.isSafeInteger(b.revision)||b.revision<0||!b.overrides||typeof b.overrides!=='object')return out({error:'bad'},400);
+          const meta=await s.get('rf:meta');
+          if(meta&&(meta.sealed||meta.total!==b.total||meta.revision!==b.revision))return out({error:'batch_conflict'},409);
+          const current=meta||{total:b.total,revision:b.revision,sealed:false,nextIndex:0};
+          const nextIndex=current.nextIndex||0;
+          // Sequential writes make commit verification O(1), regardless of snapshot size.
+          if(b.index>nextIndex)return out({error:'out_of_order'},409);
+          const path='rf:part:'+b.index;
+          if(b.index<nextIndex){
+            const prev=await s.get(path);
+            return prev&&JSON.stringify(prev)===JSON.stringify(b.overrides)?out({ok:true,duplicate:true}):out({error:'chunk_conflict'},409);
+          }
+          const prev=await s.get(path);
+          if(prev&&JSON.stringify(prev)!==JSON.stringify(b.overrides))return out({error:'chunk_conflict'},409);
+          if(!prev)await s.put(path,b.overrides);
+          await s.put('rf:meta',{...current,nextIndex:b.index+1});
+          return out({ok:true});
+        }
+        case 'rf-ready': {
+          const meta=await s.get('rf:meta');
+          if(!meta||meta.total!==b.total||meta.revision!==b.revision)return out({error:'batch_conflict'},409);
+          if(meta.nextIndex!==meta.total)return out({error:'incomplete'},409);
+          if(!meta.sealed)await s.put('rf:meta',{...meta,sealed:true});
+          return out({ok:true,total:meta.total});
+        }
+        case 'rf-chunk-get': {
+          const meta=await s.get('rf:meta');
+          if(!meta?.sealed||!Number.isSafeInteger(b.index)||b.index<0||b.index>=meta.total)return out({error:'missing'},404);
+          const data=await s.get('rf:part:'+b.index);
+          return data?out({ok:true,overrides:data}):out({error:'missing'},404);
+        }
+        case 'rf-revision-cas': {
+          const last=Number(cur?.rev)||0;
+          if(last!==b.revision)return out({error:'stale',revision:last},409);
+          if(!/^[0-9a-f]{32}$/.test(String(b.ref||''))||!Number.isSafeInteger(b.total)||b.total<1)return out({error:'bad'},400);
+          const timestamp=Math.max(Date.now(),(Number(cur?.at)||0)+1);
+          await s.put('v',{rev:last+1,at:timestamp,ref:b.ref,chunks:b.total});
+          return out({ok:true,revision:last+1,updatedAt:timestamp,previousRef:cur?.ref||null});
+        }
+        case 'rf-schedule-expiry': {
+          const meta=await s.get('rf:meta');if(!meta?.sealed)return out({error:'bad'},409);
+          const when=Date.now()+Math.max(60000,Math.min(86400000,Number(b.ms)||1800000));
+          await s.put('rf:expires',when);await s.setAlarm(when);
+          return out({ok:true});
+        }
         case 'get':
           return out({ v: cur ?? null });
         case 'activity-ping': {
@@ -2324,6 +2451,12 @@ export class Store {
   }
   async alarm() {
     const store=this.state.storage;
+    const expiry=await store.get('rf:expires');
+    if(Number(expiry)>0){
+      if(Date.now()>=Number(expiry))await store.deleteAll();
+      else await store.setAlarm(Number(expiry));
+      return;
+    }
     const rows=await store.get('v');
     if(!Array.isArray(rows)||!rows.every(x=>x&&typeof x.pid==='string'&&typeof x.lastAt==='number'))return;
     const recent=rows.filter(x=>x.lastAt>Date.now()-86400000);
