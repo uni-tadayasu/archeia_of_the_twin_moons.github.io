@@ -1,4 +1,4 @@
-/* RF_CHIEF_CHAR_EDITOR_V28 — isolated admin dialog, no changes to battle HUD. */
+/* RF_CHIEF_CHAR_EDITOR_V29 — reliable save and dedicated confirmation UI. */
 #rf-chief-character-editor[hidden],#btn-chief-character-editor[hidden]{display:none!important}
 #rf-chief-character-editor *{box-sizing:border-box}
 #rf-chief-character-editor{position:fixed;inset:0;z-index:40000;background:rgba(5,12,24,.94);overflow:auto;overscroll-behavior:contain;color:#f5f0dd;font-family:system-ui,"Yu Gothic",sans-serif;pointer-events:auto;touch-action:pan-y}
@@ -34,3 +34,20 @@ body.rf-character-editor-open #chat-panel{display:none!important}
 @media(max-width:390px){#rf-chief-character-editor .rf-ce-fields{grid-template-columns:minmax(0,1fr)}#rf-chief-character-editor .rf-ce-list-items{grid-template-columns:minmax(0,1fr)}}
 
 #rf-chief-character-editor .rf-ce-portrait{display:block;width:92px;height:92px;object-fit:contain;max-width:100%;border:1px solid #5f738d;background:#0d1829;border-radius:6px;margin:9px 0}
+
+/* V29: custom in-game confirmation, always above the editor, responsive on PC / phone. */
+.rf-ce-confirm-overlay{position:fixed;inset:0;z-index:50000;display:flex;align-items:center;justify-content:center;
+  padding:max(16px,env(safe-area-inset-top,0px)) max(12px,env(safe-area-inset-right,0px)) max(16px,env(safe-area-inset-bottom,0px)) max(12px,env(safe-area-inset-left,0px));
+  background:rgba(5,10,22,.82);backdrop-filter:blur(5px);pointer-events:auto;touch-action:pan-y}
+.rf-ce-confirm-card{box-sizing:border-box;width:min(440px,100%);max-height:90dvh;overflow-y:auto;padding:clamp(18px,4vw,27px);
+  border:1px solid #d4b872;border-radius:13px;color:#f6f1e6;background:linear-gradient(145deg,#1e3044,#111727);
+  box-shadow:0 18px 60px #000b;font-family:system-ui,'Yu Gothic',sans-serif}
+.rf-ce-confirm-card h3{margin:0 0 12px;font-size:clamp(17px,4vw,22px);line-height:1.35;color:#fce6ad}
+.rf-ce-confirm-card p{margin:0 0 20px;font-size:14px;line-height:1.7;overflow-wrap:anywhere}
+.rf-ce-confirm-actions{display:flex;flex-wrap:wrap;gap:10px}
+.rf-ce-confirm-actions button{flex:1 1 135px;min-height:44px;padding:10px 14px;border-radius:8px;cursor:pointer;
+  font:700 14px/1.4 system-ui,'Yu Gothic',sans-serif;color:#fff}
+.rf-ce-confirm-cancel{border:1px solid #8892aa;background:#31405a}
+.rf-ce-confirm-accept{border:1px solid #e3c884;background:#78602d}
+.rf-ce-confirm-danger{border:1px solid #f5aeae;background:#853a42}
+.rf-ce-confirm-actions button:focus-visible{outline:3px solid #b9edff;outline-offset:3px}

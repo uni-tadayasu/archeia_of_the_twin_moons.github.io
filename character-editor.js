@@ -1,8 +1,8 @@
-// RF_CHIEF_CHAR_EDITOR_V28 — character editor and public override sync.
+// RF_CHIEF_CHAR_EDITOR_V29_SAVE_CONFIRM — reliable save, accessible in-game confirmation.
 // All mutations are authorized again on the server. No local-only admin fallback.
 import { api, apiEnabled, verifyToken } from './api.js';
 
-const VERSION='rf-chief-editor-v28-20261110';
+const VERSION='rf-chief-editor-v29-20261110';
 const STAT_FIELDS=[
   ['hp','最大HP',1,200000,1],['speed','移動速度',.1,30,.05],
   ['power','攻撃倍率',.1,20,.01],['armor','被ダメージ倍率',.01,5,.01],
@@ -16,6 +16,7 @@ const SKILL_FIELDS=[
 ];
 const TEXT_FIELDS=[['name','キャラクター名',40],['title','肩書き',90],['attribute','属性',16]];
 const FIELDS=new Set([...STAT_FIELDS.map(v=>v[0]),...TEXT_FIELDS.map(v=>v[0])]);
+const DEFAULT_STAT_VALUES=Object.freeze({hp:1000,speed:5,power:1,armor:1,height:1.8,overGain:1,fluxMul:1});
 const SKILL_KEYS=new Set(SKILL_FIELDS.map(v=>v[0]));
 const baseSnapshot=new Map();
 let activeOverlays=Object.create(null), revision=0, lastFetch=0, panel=null, busy=false;
@@ -70,13 +71,84 @@ async function authorized(){
 }
 function formGroup(label,control){const l=make('label','rf-ce-field');l.append(make('span','',label),control);return l;}
 function textInput(value,max=50){const e=make('input');e.type='text';e.maxLength=max;e.value=String(value??'');return e;}
-function numberInput(value,min,max,step=1){const e=make('input');e.type='number';e.min=min;e.max=max;e.step=step;e.value=Number.isFinite(+value)?String(value):String(min);return e;}
+function numberInput(value,min,max,step=1){const e=make('input');e.type='number';e.min=min;e.max=max;
+  // Existing skills use values such as 0.26, 1.08. A fixed 0.05 step silently blocks submit.
+  e.step='any';e.value=Number.isFinite(+value)?String(value):String(min);return e;}
 function collectNumbers(inputs){
   const r={};for(const [k,info] of inputs){if(info.type==='text'){r[k]=info.el.value.trim();continue;}
+    if(!String(info.el.value).trim())throw Error(info.label+'を入力してください');
     const v=Number(info.el.value);if(!Number.isFinite(v)||v<info.min||v>info.max)throw Error(info.label+'は'+info.min+'～'+info.max+'で入力してください');
     r[k]=v;
   }return r;
 }
+
+// Save and reset confirmations are real game UI, not window.confirm().
+// Buttons stay keyboard-accessible, escape cancels, and no native form validation suppresses events.
+let rfEditorConfirmId=0;
+function editorConfirm(title,description,actionText='確定する',danger=false){
+  return new Promise(resolve=>{
+    const id='rf-ce-confirm-title-'+(++rfEditorConfirmId);
+    const lastFocus=document.activeElement;
+    const overlay=make('div','rf-ce-confirm-overlay');
+    const dialog=make('section','rf-ce-confirm-card');
+    dialog.setAttribute('role','alertdialog');dialog.setAttribute('aria-modal','true');
+    dialog.setAttribute('aria-labelledby',id);
+    const header=make('h3','',title);header.id=id;
+    const detail=make('p','',description);
+    const actions=make('div','rf-ce-confirm-actions');
+    const no=make('button','rf-ce-confirm-cancel','キャンセル');no.type='button';
+    const yes=make('button',danger?'rf-ce-confirm-danger':'rf-ce-confirm-accept',actionText);yes.type='button';
+    actions.append(no,yes);dialog.append(header,detail,actions);overlay.append(dialog);document.body.append(overlay);
+    let finished=false;
+    const finish=(answer)=>{
+      if(finished)return;finished=true;overlay.remove();
+      document.removeEventListener('keydown',keyHandler,true);
+      try{lastFocus?.focus?.();}catch{}
+      resolve(answer);
+    };
+    const keyHandler=(e)=>{
+      if(e.key==='Escape'){e.preventDefault();e.stopPropagation();finish(false);}
+      if(e.key==='Tab'){
+        const items=[no,yes];const i=items.indexOf(document.activeElement);
+        const next=(i+(e.shiftKey?-1:1)+items.length)%items.length;
+        e.preventDefault();items[next].focus();
+      }
+    };
+    no.addEventListener('click',()=>finish(false));yes.addEventListener('click',()=>finish(true));
+    overlay.addEventListener('click',e=>{if(e.target===overlay)finish(false);});
+    document.addEventListener('keydown',keyHandler,true);
+    no.focus();
+  });
+}
+// Only send differences relative to the game's original definitions. This avoids
+// accidentally submitting empty attributes or changing unspecified default stats.
+function rfEditedPatch(key,inputs,skillInputs){
+  const base=original(key)||{};
+  const raw=collectNumbers(inputs),patch={};
+  for(const [k,v] of Object.entries(raw)){
+    if(k==='name'&&!v)throw Error('キャラクター名を入力してください');
+    if(typeof v==='string'&&!v)continue; // Empty optional title/attribute = original value
+    if(base[k]===undefined){
+      const defaultValue=DEFAULT_STAT_VALUES[k];
+      if(v!==defaultValue)patch[k]=v;
+    }else if(v!==base[k])patch[k]=v;
+  }
+  for(const {type,index,items} of skillInputs){
+    const origSpec=type==='skills'?base.skills?.[index]:base[type];
+    if(!origSpec)continue;
+    const rawSkill=collectNumbers(items),changed={};
+    for(const [k,v] of Object.entries(rawSkill)){
+      if(k==='name'&&!v)throw Error('技名を入力してください');
+      if(v!==origSpec[k])changed[k]=v;
+    }
+    if(Object.keys(changed).length){
+      if(type==='skills'){patch.skills ||= [];patch.skills[index]=changed;}
+      else patch[type]=changed;
+    }
+  }
+  return patch;
+}
+
 function createPanel(){
   const root=make('div','rf-ce-root');root.id='rf-chief-character-editor';root.hidden=true;
   root.setAttribute('role','dialog');root.setAttribute('aria-modal','true');root.setAttribute('aria-label','運営長専用キャラクター編集');
@@ -85,12 +157,12 @@ function createPanel(){
   const heading=make('div');heading.append(make('small','','CHIEF COMMAND · PRIVATE EDITOR'),make('h2','','キャラクター編集'));heading.querySelector('h2').style.margin='3px 0 0';
   const close=make('button','rf-ce-outline','閉じる');close.type='button';close.addEventListener('click',()=>closePanel());head.append(heading,close);
   const info=make('p','rf-ce-note','変更内容はCloudflare Workerに保存され、全プレイヤーの次回戦闘に反映されます。モデル・画像・役職権限は編集できません。');
-  const content=make('div','rf-ce-content');const left=make('aside','rf-ce-list');const right=make('form','rf-ce-form');right.autocomplete='off';right.id='rf-ce-edit-form';
+  const content=make('div','rf-ce-content');const left=make('aside','rf-ce-list');const right=make('form','rf-ce-form');right.autocomplete='off';right.id='rf-ce-edit-form';right.noValidate=true;
   const search=textInput('',45);search.placeholder='キャラクター名・キーで検索';search.setAttribute('aria-label','キャラクター検索');
   const list=make('div','rf-ce-list-items');left.append(search,list);
   const status=make('div','rf-ce-status','');status.setAttribute('role','status');
   const actions=make('div','rf-ce-actions');
-  const save=make('button','rf-ce-primary','変更内容を全員へ保存');save.type='submit';save.setAttribute('form','rf-ce-edit-form');
+  const save=make('button','rf-ce-primary','変更内容を全員へ保存');save.type='button';
   const reset=make('button','rf-ce-outline','このキャラを初期設定に戻す');reset.type='button';
   const refresh=make('button','rf-ce-outline','サーバーから再読込');refresh.type='button';
   actions.append(save,reset,refresh);content.append(left,right);shell.append(head,info,content,actions,status);root.append(shell);document.body.append(root);
@@ -107,7 +179,7 @@ function createPanel(){
     for(const [k,label,max] of TEXT_FIELDS){const e=textInput(ov[k]??base[k]??d[k],max);inputs.set(k,{type:'text',label,el:e});listText.append(formGroup(label,e));}
     right.append(make('h3','','基本情報'),listText);
     const listNumber=make('div','rf-ce-fields');
-    for(const [k,label,min,max,step] of STAT_FIELDS){const v=ov[k]??base[k]??d[k]??min;const e=numberInput(v,min,max,step);inputs.set(k,{type:'number',min,max,label,el:e});listNumber.append(formGroup(label,e));}
+    for(const [k,label,min,max,step] of STAT_FIELDS){const v=ov[k]??base[k]??d[k]??DEFAULT_STAT_VALUES[k]??min;const e=numberInput(v,min,max,step);inputs.set(k,{type:'number',min,max,label,el:e});listNumber.append(formGroup(label,e));}
     right.append(make('h3','','能力値'),listNumber);
     right.append(make('h3','','技・魔法の設定'));
     const skillSection=make('div','rf-ce-skills');
@@ -137,34 +209,72 @@ function createPanel(){
     if(!all.length)list.append(make('p','rf-ce-note','一致するキャラクターがありません。'));
   }
   search.addEventListener('input',renderList);
-  right.addEventListener('submit',async e=>{
-    e.preventDefault();if(busy||!selected)return;
-    busy=true;save.disabled=reset.disabled=true;tell('サーバーへ保存中…');
-    try{
-      if(!(await authorized()))throw Error('運営長の認証が必要です。設定から再認証してください');
-      if(inBattle())throw Error('戦闘中は編集できません。戦闘終了後に保存してください');
-      const patch=collectNumbers(inputs);
-      patch.skills=[];
-      for(const {type,index,items} of skillInputs){const p=collectNumbers(items);if(type==='skills')patch.skills[index]=p;else patch[type]=p;}
-      const all=clone(activeOverlays);all[selected]=patch;
-      const r=await api('/chief/characters/save',{token:tokenOf(),revision,overrides:all});
-      if(!r.ok)throw Error(r.error==='stale'?'別の編集が保存されました。再読込してからやり直してください':('保存失敗: '+(r.error||r.status)));
-      await syncPublic(true);renderList();select(selected);tell('保存しました。新しい戦闘から反映されます。','success');
-    }catch(err){tell(err.message||String(err),'error');}
-    finally{busy=false;save.disabled=reset.disabled=false;}
-  });
-  reset.addEventListener('click',async()=>{
-    if(busy||!selected||!(await authorized()))return;
+  function controlsDisabled(disabled){save.disabled=reset.disabled=refresh.disabled=disabled;}
+  async function saveChanges(){
+    if(busy)return;
+    if(!selected){tell('先に編集するキャラクターを選んでください。','error');return;}
+    busy=true;controlsDisabled(true);tell('入力内容を確認しています…');
     const key=selected;
-    if(!window.confirm('「'+(FIGHTERS[key].name||key)+'」の編集内容を初期値へ戻しますか？'))return;
-    busy=true;save.disabled=reset.disabled=true;
     try{
-      const all=clone(activeOverlays);delete all[key];
+      if(inBattle())throw Error('戦闘中は編集できません。戦闘終了後に保存してください');
+      const patch=rfEditedPatch(key,inputs,skillInputs);
+      const all=clone(activeOverlays);
+      if(Object.keys(patch).length)all[key]=patch;else delete all[key];
+      if(JSON.stringify(all)===JSON.stringify(activeOverlays)){
+        tell('変更はありません。入力値はすでに保存済みです。');return;
+      }
+      const confirmed=await editorConfirm('キャラクター編集を保存しますか？',
+        '「'+(FIGHTERS[key]?.name||key)+'」の設定をサーバーに保存し、全プレイヤーの次の戦闘から反映します。',
+        '変更を保存する');
+      if(!confirmed){tell('保存をキャンセルしました。');return;}
+      tell('運営長の権限を確認しています…');
+      if(!(await authorized()))throw Error('運営長の認証が必要です。設定から再認証してください');
+      tell('サーバーへ保存中…');
       const r=await api('/chief/characters/save',{token:tokenOf(),revision,overrides:all});
-      if(!r.ok)throw Error('初期値への復元に失敗しました: '+(r.error||r.status));
-      await syncPublic(true);renderList();select(key);tell('初期値へ戻しました。','success');
-    }catch(err){tell(err.message||String(err),'error');}
-    finally{busy=false;save.disabled=reset.disabled=false;}
+      if(!r.ok){
+        if(r.error==='stale')throw Error('別の編集が先に保存されました。「サーバーから再読込」を押してからやり直してください');
+        if(r.error==='invalid_character_values')throw Error('サーバーが設定値を拒否しました。技の数と入力値、Workerの更新を確認してください');
+        if(r.error==='denied')throw Error('運営長の認証が無効です。再認証してください');
+        if(r.status===404)throw Error('保存APIが見つかりません。server/worker.jsのデプロイを確認してください');
+        throw Error('保存できませんでした（'+(r.error||('HTTP '+r.status))+'）');
+      }
+      // A successful save must be reported even if the follow-up GET temporarily fails.
+      applyPublic(all);revision=Number.isSafeInteger(r.revision)?r.revision:revision+1;lastFetch=0;
+      let reloaded=true;
+      try{await syncPublic(true);}catch(e){reloaded=false;console.warn('[Character editor] save succeeded, refresh failed:',e);}
+      renderList();select(key);
+      tell(reloaded?'保存しました。次の戦闘から全プレイヤーに反映されます。':'保存は成功しました。最新データの再読込だけ失敗したため、通信が回復したら再読込してください。','success');
+    }catch(err){console.warn('[Character editor] save:',err);tell(err.message||String(err),'error');}
+    finally{busy=false;controlsDisabled(false);}
+  }
+  // Direct click means the UI always responds—even if a browser considers a pre-existing value step-mismatched.
+  save.addEventListener('click',()=>{void saveChanges();});
+  right.addEventListener('submit',e=>{e.preventDefault();void saveChanges();});
+  reset.addEventListener('click',async()=>{
+    if(busy)return;
+    if(!selected){tell('先にキャラクターを選んでください。','error');return;}
+    busy=true;controlsDisabled(true);
+    const key=selected;
+    try{
+      const all=clone(activeOverlays);
+      if(!Object.hasOwn(all,key)){tell('このキャラクターには保存済みの変更がありません。');return;}
+      const confirmed=await editorConfirm('初期設定に戻しますか？',
+        '「'+(FIGHTERS[key]?.name||key)+'」に保存された編集内容を削除し、ゲーム本来の能力値と技へ戻します。',
+        '初期設定に戻す',true);
+      if(!confirmed){tell('初期化をキャンセルしました。');return;}
+      tell('運営長の権限を確認しています…');
+      if(!(await authorized()))throw Error('運営長の認証が必要です。設定から再認証してください');
+      if(inBattle())throw Error('戦闘中は編集できません。戦闘終了後に実行してください');
+      delete all[key];tell('サーバーへ初期化内容を保存中…');
+      const r=await api('/chief/characters/save',{token:tokenOf(),revision,overrides:all});
+      if(!r.ok)throw Error(r.error==='stale'?'別の編集が先に保存されました。再読込してからやり直してください':'初期化に失敗しました（'+(r.error||r.status)+'）');
+      applyPublic(all);revision=Number.isSafeInteger(r.revision)?r.revision:revision+1;lastFetch=0;
+      let reloaded=true;
+      try{await syncPublic(true);}catch(e){reloaded=false;console.warn('[Character editor] reset succeeded, refresh failed:',e);}
+      renderList();select(key);
+      tell(reloaded?'初期設定へ戻しました。':'初期設定の保存は成功しましたが、再読込に失敗しました。','success');
+    }catch(err){console.warn('[Character editor] reset:',err);tell(err.message||String(err),'error');}
+    finally{busy=false;controlsDisabled(false);}
   });
   refresh.addEventListener('click',async()=>{try{await syncPublic(true);renderList();select(selected);tell('最新データを取得しました。','success');}catch(e){tell(e.message,'error');}});
   root.addEventListener('keydown',e=>{if(e.key==='Escape'){e.stopPropagation();closePanel();}});
