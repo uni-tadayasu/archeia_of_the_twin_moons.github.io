@@ -1,4 +1,4 @@
-/* RF_CHIEF_CHAR_EDITOR_V29 — reliable save and dedicated confirmation UI. */
+/* RF_CHIEF_CHAR_EDITOR_V31 — reliable save and dedicated confirmation UI. */
 #rf-chief-character-editor[hidden],#btn-chief-character-editor[hidden]{display:none!important}
 #rf-chief-character-editor *{box-sizing:border-box}
 #rf-chief-character-editor{position:fixed;inset:0;z-index:40000;background:rgba(5,12,24,.94);overflow:auto;overscroll-behavior:contain;color:#f5f0dd;font-family:system-ui,"Yu Gothic",sans-serif;pointer-events:auto;touch-action:pan-y}
@@ -51,3 +51,32 @@ body.rf-character-editor-open #chat-panel{display:none!important}
 .rf-ce-confirm-accept{border:1px solid #e3c884;background:#78602d}
 .rf-ce-confirm-danger{border:1px solid #f5aeae;background:#853a42}
 .rf-ce-confirm-actions button:focus-visible{outline:3px solid #b9edff;outline-offset:3px}
+
+/* V30: editable skill kind with native accessible dropdown and explanations. */
+#rf-chief-character-editor select{width:100%;min-width:0;max-width:100%;padding:9px;border:1px solid #74839d;background:#0c1729;color:#fff;border-radius:6px;font:inherit;font-size:14px;cursor:pointer}
+#rf-chief-character-editor select option{background:#14253a;color:#fff}
+#rf-chief-character-editor .rf-ce-skill-kind-description{margin:8px 0 7px;color:#adc9dd;font-size:12px;line-height:1.55}
+#rf-chief-character-editor .rf-ce-skill> .rf-ce-fields{margin-top:8px}
+#rf-chief-character-editor select:focus-visible{outline:3px solid #a4e4ff;outline-offset:2px}
+
+/* V31 generator, slot editor, in-battle skill switcher */
+#rf-chief-character-editor .rf-ce-generator{background:linear-gradient(145deg,#293448,#1b2e35);border:1px solid #879b9c;border-radius:10px;padding:13px;margin:12px 0}
+#rf-chief-character-editor .rf-ce-generator h3{margin:0 0 9px}
+#rf-chief-character-editor .rf-ce-generator-tools{display:flex;flex-wrap:wrap;gap:9px;align-items:end}
+#rf-chief-character-editor .rf-ce-generator-tools .rf-ce-field{flex:1 1 200px}
+#rf-chief-character-editor .rf-ce-generator-tools button{padding:10px 12px;flex:1 1 205px;min-height:44px;text-align:center}
+#rf-chief-character-editor .rf-ce-preview{white-space:pre-wrap;overflow-wrap:anywhere;margin:10px 0 0;border-top:1px solid #71868b;padding-top:10px;font-size:12px;line-height:1.7;color:#c4f5ef}
+#rf-chief-character-editor .rf-ce-slot-controls{display:grid;grid-template-columns:1fr 2fr;gap:10px;align-items:end}
+#rf-chief-character-editor .rf-ce-slot-controls input{max-width:100%}
+#rf-chief-character-editor .rf-ce-skill:focus-within{border-color:#92bdc5}
+#rf-chief-character-editor input[type=color]{height:43px;cursor:pointer;padding:4px}
+#rf-chief-character-editor input[type=checkbox]{width:22px;height:22px;align-self:start;accent-color:#ead091}
+#rf-chief-character-editor select{color-scheme:dark}
+#rf-ce-battle-slots[hidden]{display:none!important}
+#rf-ce-battle-slots{position:fixed;right:12px;bottom:105px;z-index:8500;width:min(300px,43vw);max-height:48dvh;overflow:auto;color:#ecfaff;background:rgba(8,20,34,.8);border:1px solid rgba(146,205,255,.6);border-radius:10px;backdrop-filter:blur(7px);font:12px/1.5 system-ui,'Yu Gothic',sans-serif;pointer-events:auto}
+#rf-ce-battle-slots button{font:inherit;color:#e8f7ff;border:1px solid #447695;border-radius:6px;background:rgba(20,55,85,.78);cursor:pointer;padding:8px}
+#rf-ce-battle-slots .rf-ce-battle-slots-header{display:flex;gap:7px;align-items:center;padding:7px}
+#rf-ce-battle-slots .rf-ce-battle-slots-list{display:grid;grid-template-columns:1fr 1fr;gap:5px;padding:7px;max-height:35dvh;overflow-y:auto}
+#rf-ce-battle-slots .rf-ce-battle-slots-list[hidden]{display:none}
+#rf-ce-battle-slots .rf-ce-battle-slots-list button{text-align:left;overflow-wrap:anywhere}
+@media(max-width:680px){#rf-chief-character-editor .rf-ce-slot-controls{grid-template-columns:1fr}#rf-ce-battle-slots{right:6px;bottom:110px;width:min(230px,55vw);max-height:42dvh}}

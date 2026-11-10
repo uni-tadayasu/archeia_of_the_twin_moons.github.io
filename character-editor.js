@@ -1,23 +1,131 @@
-// RF_CHIEF_CHAR_EDITOR_V29_SAVE_CONFIRM — reliable save, accessible in-game confirmation.
+// RF_CHIEF_CHAR_EDITOR_V31_ALL_RANDOM_SLOTS — reliable save, accessible in-game confirmation.
 // All mutations are authorized again on the server. No local-only admin fallback.
 import { api, apiEnabled, verifyToken } from './api.js';
 
-const VERSION='rf-chief-editor-v29-20261110';
-const STAT_FIELDS=[
-  ['hp','最大HP',1,200000,1],['speed','移動速度',.1,30,.05],
-  ['power','攻撃倍率',.1,20,.01],['armor','被ダメージ倍率',.01,5,.01],
-  ['height','表示身長',.1,12,.05],['overGain','奥義蓄積倍率',.1,12,.05],
-  ['fluxMul','灯力回復倍率',.1,12,.05]
-];
+const VERSION='rf-chief-editor-v31-20261110';
 const SKILL_FIELDS=[
-  ['name','技名','text',0,42],['dmg','威力','number',0,100000],
-  ['cost','消費灯力','number',0,100],['radius','範囲','number',0,100],
-  ['castTime','詠唱秒数','number',0,30]
+ ['name','技・魔法名','text',0,42],['kind','技の種類','select',0,0],
+ ['visual','CG・立体演出の種類','select',0,0],['elem','技の属性','select',0,9],['color','魔法色','color',0,0xffffff],
+ ['dmg','威力','number',0,100000],['cost','消費灯力','number',0,100],
+ ['radius','攻撃・効果範囲','number',0.1,100],['castTime','詠唱秒数','number',0,30],
+ ['speed','弾速・突進速度','number',1,150],['dur','突進時間（秒）','number',0.05,10],
+ ['count','弾数・落下回数','number',1,24],['spread','散布半径','number',0,40],
+ ['spreadAng','弾の広がり（ラジアン）','number',0,3.14],
+ ['delay','落下開始まで（秒）','number',0,10],['interval','攻撃間隔（秒）','number',0.01,3],
+ ['chain','連続発射間隔（秒）','number',0,1],['trail','軌跡の間隔（秒）','number',0.01,1],
+ ['heal','回復量','number',0,100000],
+ ['stun','怯み時間（秒）','number',0,5],['kb','吹き飛ばし','number',0,30],
+ ['shape','エフェクト形状番号','number',0,99],
+ ['finalDmg','締めの一撃の威力','number',0,100000],['finalRadius','締めの一撃の範囲','number',0.1,100],
+ ['double','衝撃波を二重発動','checkbox',0,1]
+];
+const SKILL_TYPES=[
+ ['projectile','飛び道具・魔力弾'],['shockwave','衝撃波・周囲攻撃'],
+ ['dash','突進・斬り抜け'],['rain','範囲降下・魔法雨'],
+ ['judgment','多段魔法＋最終爆発'],['implode','吸引・爆発'],['heal','回復魔法']
+];
+const SKILL_KINDS=new Set(SKILL_TYPES.map(([id])=>id));
+const ELEMENTS=[
+ ['炎',0,0xff6535],['氷',1,0x51d6ff],['雷',2,0xffe55d],['風',3,0x58e8ab],
+ ['地',4,0xc8a16e],['光',5,0xffd877],['闇',6,0xb77aff],['水',7,0x458cff],
+ ['毒',8,0x9cdb56],['血',9,0xe65d78]
+];
+const VISUALS=[['orb','魔力球'],['spear','魔法槍'],['laser','光線'],['meteor','巨大隕石・水塊'],
+ ['blade','斬撃'],['sword','剣'],['nova','大爆発'],['pillar','魔法柱'],['bigsword','巨大剣'],['bolt','稲妻']];
+const KINDS_DESCRIPTION={
+ projectile:'前方へ飛ぶ弾。弾速・弾数・広がり角を設定します。',
+ shockwave:'自分を中心に広がる衝撃波。',
+ dash:'移動しながら攻撃する技。速度・突進時間を指定します。',
+ rain:'相手の周囲へ落下する魔法。発数・散布半径・間隔を設定します。',
+ judgment:'連続落下と大爆発の多段魔法。',
+ implode:'相手を中心へ吸引し、最後に爆発します。',
+ heal:'周囲の味方への回復魔法。ダメージ値は使用しません。'
+};
+const TYPE_FIELDS={
+ projectile:['dmg','cost','castTime','radius','count','speed','spreadAng','chain','trail','stun','kb','shape'],
+ shockwave:['dmg','cost','castTime','radius','stun','kb','shape','double'],
+ dash:['dmg','cost','castTime','speed','dur','stun','kb','shape'],
+ rain:['dmg','cost','castTime','radius','count','spread','delay','interval','stun','shape'],
+ judgment:['dmg','cost','castTime','radius','count','spread','delay','interval','finalDmg','finalRadius','stun','shape'],
+ implode:['dmg','cost','castTime','radius','stun','kb','shape'],
+ heal:['cost','castTime','radius','heal','shape']
+};
+const TYPE_DEFAULTS={
+ projectile:{dmg:94,cost:12,castTime:0.35,radius:1.1,count:1,speed:27,spreadAng:0.08,chain:0.05,trail:0.05,stun:0.3,kb:3,shape:1},
+ shockwave:{dmg:115,cost:18,castTime:0.55,radius:4,stun:0.4,kb:4,shape:2,double:false},
+ dash:{dmg:120,cost:15,castTime:0.28,speed:20,dur:0.45,stun:0.5,kb:5,shape:3},
+ rain:{dmg:60,cost:22,castTime:0.75,radius:2,count:7,spread:4,delay:0.2,interval:0.12,stun:0.15,shape:4},
+ judgment:{dmg:63,cost:28,castTime:1.2,radius:2,count:8,spread:5,delay:0.2,interval:0.1,finalDmg:310,finalRadius:6,stun:0.2,shape:5},
+ implode:{dmg:185,cost:25,castTime:0.95,radius:5,stun:0.6,kb:5,shape:6},
+ heal:{cost:18,castTime:0.62,radius:5,heal:185,shape:7}
+};
+const STAT_FIELDS=[
+ ['hp','最大HP',1,200000,1],['speed','移動速度',.1,30,.05],
+ ['power','攻撃倍率',.1,20,.01],['armor','被ダメージ倍率',.01,5,.01],
+ ['height','表示身長',.1,12,.05],['overGain','奥義蓄積倍率',.1,12,.05],
+ ['fluxMul','灯力回復倍率',.1,12,.05]
 ];
 const TEXT_FIELDS=[['name','キャラクター名',40],['title','肩書き',90],['attribute','属性',16]];
 const FIELDS=new Set([...STAT_FIELDS.map(v=>v[0]),...TEXT_FIELDS.map(v=>v[0])]);
 const DEFAULT_STAT_VALUES=Object.freeze({hp:1000,speed:5,power:1,armor:1,height:1.8,overGain:1,fluxMul:1});
 const SKILL_KEYS=new Set(SKILL_FIELDS.map(v=>v[0]));
+const SLOT_MAX=24;
+const TIERS={
+ normal:{label:'一般',hp:[800,1600],speed:[4.7,7.2],power:[.85,1.14],armor:[.86,1.18],height:[1.65,3.7],overGain:[.8,1.3],fluxMul:[.9,1.28],slots:[3,5],strength:1},
+ minion:{label:'雑魚敵',hp:[320,750],speed:[3.5,6.5],power:[.6,.9],armor:[1.08,1.55],height:[1.4,3],overGain:[.6,1.05],fluxMul:[.6,1],slots:[1,3],strength:.75},
+ small:{label:'小ボス',hp:[1400,2800],speed:[4.1,7.3],power:[.94,1.23],armor:[.75,1.02],height:[2,3.7],overGain:[.9,1.4],fluxMul:[.95,1.45],slots:[3,5],strength:1.18},
+ middle:{label:'中ボス',hp:[2900,5800],speed:[4.3,7.3],power:[1.03,1.36],armor:[.66,.92],height:[2,4],overGain:[1,1.6],fluxMul:[1.02,1.6],slots:[4,7],strength:1.46},
+ great:{label:'大ボス',hp:[6400,12600],speed:[4.4,7.6],power:[1.17,1.56],armor:[.54,.79],height:[2.3,4.7],overGain:[1.12,1.7],fluxMul:[1.12,1.7],slots:[6,10],strength:1.85},
+ final:{label:'ラスボス',hp:[13000,27000],speed:[4.8,8],power:[1.34,1.8],armor:[.4,.65],height:[2.8,5.4],overGain:[1.25,1.9],fluxMul:[1.2,1.9],slots:[8,12],strength:2.2}
+};
+const random=(a,b)=>a+Math.random()*(b-a);
+const pick=a=>a[Math.floor(Math.random()*a.length)];
+const round=(v,n=2)=>+v.toFixed(n);
+const ENGLISH_KIND={projectile:'魔弾',shockwave:'震界',dash:'閃駆',rain:'星雨',judgment:'審判',implode:'渦牢',heal:'聖癒'};
+const NAME_HEAD=['天領','黄昏','悠久','双月','幻界','神代','白夜','深淵','暁光','久遠','蒼天','幽玄','銀嶺','深緑'];
+const NAME_TAIL=['の守人','の王','の旅人','の戦士','の術師','の竜','の騎士','の巨人','の公卿','の精霊'];
+const MAGIC_HEAD=['蒼皇','神代','天刃','極光','終極','深淵','久遠','無双','双月','星界','覇王','翠光'];
+const MAGIC_TAIL=['轟裂','奏鳴','天穿','極葬','輪廻','凶刃','陣界','絶唱','瀑流','降臨'];
+const KEEP_KIND='__rf_keep_kind__';
+function chooseEffect(element,kind){
+ const v={projectile:'orb',shockwave:'nova',dash:'blade',rain:'meteor',judgment:'pillar',implode:'orb',heal:'orb'};
+ if(kind==='projectile'&&element?.[0]==='雷')return 'laser';
+ return v[kind]||'orb';
+}
+function generatedSkill(element,kind,tier,slot,type='skills'){
+ const d=TYPE_DEFAULTS[kind]||TYPE_DEFAULTS.projectile;
+ const base=round(tier.strength*random(.84,1.18),2);
+ const elem=element?.[1]??0;
+ const spec={...d,name:pick(MAGIC_HEAD)+(element?.[0]||'天')+ENGLISH_KIND[kind]+pick(MAGIC_TAIL),kind,
+   elem,color:element?.[2]||0x7ecfff,visual:chooseEffect(element,kind),shape:Math.floor(random(0,24))};
+ const scale=type==='hi'?base*3.0:type==='over'?base*2.1:base;
+ if(kind==='heal')spec.heal=Math.round(165*scale);
+ else spec.dmg=Math.round((d.dmg||92)*scale);
+ if(kind==='judgment')spec.finalDmg=Math.round(280*scale);
+ spec.cost=type==='skills'?Math.min(96,Math.round((d.cost||15)*random(.85,1.2))):0;
+ spec.castTime=round((d.castTime||.5)*random(.85,1.2)*(type==='hi'?1.65:type==='over'?1.28:1),2);
+ if('radius'in spec)spec.radius=round((d.radius||2)*(type==='hi'?1.5:type==='over'?1.3:1)*random(.9,1.12),2);
+ if('finalRadius'in spec)spec.finalRadius=round((d.finalRadius||5)*random(.9,1.17),2);
+ if('count'in spec)spec.count=Math.min(24,Math.max(1,Math.round((d.count||1)*random(.85,1.28))));
+ if('spread'in spec)spec.spread=round(d.spread*random(.85,1.22),2);
+ if('stun'in spec)spec.stun=round(d.stun*random(.75,1.25),2);
+ if('speed'in spec)spec.speed=round(d.speed*random(.9,1.1),2);
+ return spec;
+}
+function generatedCharacter(tierKey,slotPref=null,modePref=null){
+ const tier=TIERS[tierKey]||TIERS.normal,element=pick(ELEMENTS);
+ const slots=slotPref==null?Math.round(random(tier.slots[0],tier.slots[1])):Math.min(SLOT_MAX,Math.max(1,Math.round(slotPref)));
+ const mode=modePref||pick(['fixed','sequence']);
+ const result={name:pick(NAME_HEAD)+element[0]+pick(['守','帝','姫','王','公','士'])+String(Math.floor(random(1,999))),
+ title:tier.label+'・'+element[0]+'属性 '+pick(NAME_TAIL).replace('の',''),attribute:element[0]};
+ for(const [k,,min,max]of STAT_FIELDS){
+   const v=tier[k]||[DEFAULT_STAT_VALUES[k]||min,DEFAULT_STAT_VALUES[k]||min];
+   result[k]=k==='hp'?Math.round(random(v[0],v[1])/10)*10:round(random(v[0],v[1]),k==='height'?2:2);
+ }
+ const kinds=SKILL_TYPES.map(([id])=>id);
+ const skills=Array.from({length:slots},(_,i)=>generatedSkill(element,pick(kinds),tier,i));
+ return {tierKey,...result,slots,mode,skills,over:generatedSkill(element,pick(['judgment','rain','shockwave','implode']),tier,0,'over'),hi:generatedSkill(element,'judgment',tier,0,'hi')};
+}
 const baseSnapshot=new Map();
 let activeOverlays=Object.create(null), revision=0, lastFetch=0, panel=null, busy=false;
 let FIGHTERS=null, chiefCheck=()=>false, tokenOf=()=>'', inBattle=()=>false;
@@ -28,31 +136,36 @@ const original=(key)=>baseSnapshot.get(key);
 function recordOriginal(){
   for(const [key,d] of Object.entries(FIGHTERS)){
     if(!d||typeof d!=='object')continue;
-    const fields={};for(const k of FIELDS)if(d[k]!==undefined) fields[k]=d[k];
-    const slim=(v)=>{const out={};for(const k of SKILL_KEYS)if(v?.[k]!==undefined)out[k]=v[k];return out;};
-    baseSnapshot.set(key,{...fields,skills:(d.skills||[]).map(slim),over:slim(d.over),hi:slim(d.hi)});
+    const fields={};for(const k of FIELDS)if(d[k]!==undefined)fields[k]=d[k];
+    baseSnapshot.set(key,{...fields,skills:clone(d.skills||[]),over:clone(d.over||{}),hi:clone(d.hi||{}),
+      pool:Array.isArray(d.pool)?clone(d.pool):null,fixedSlots:!!d.fixedSlots});
   }
 }
 function applyPublic(map){
   if(!map||typeof map!=='object'||Array.isArray(map))return;
-  // Restore only controlled fields before applying latest overrides; model, textures, locks untouched.
-  for(const [key,original] of baseSnapshot){
+  // Restore the complete original spell list; changing slotCount must never mutate the original snapshot.
+  for(const [key,base] of baseSnapshot){
     const d=FIGHTERS[key];if(!d)continue;
-    for(const k of FIELDS){if(k in original)d[k]=original[k];}
-    for(let i=0;i<original.skills.length;i++){
-      if(!d.skills?.[i])continue;
-      for(const k of SKILL_KEYS)if(k in original.skills[i])d.skills[i][k]=original.skills[i][k];
-    }
-    for(const type of ['over','hi'])if(d[type])for(const k of SKILL_KEYS)if(k in original[type])d[type][k]=original[type][k];
+    for(const k of FIELDS){if(k in base)d[k]=base[k];}
+    d.skills=clone(base.skills);
+    d.over=clone(base.over);if(Object.keys(base.hi).length)d.hi=clone(base.hi);else delete d.hi;
+    if(base.pool)d.pool=clone(base.pool);else delete d.pool;
+    d.fixedSlots=base.fixedSlots;
   }
-  for(const [key,patch] of Object.entries(map)){
-    const d=FIGHTERS[key];if(!d||!patch||typeof patch!=='object')continue;
-    for(const k of FIELDS)if(Object.hasOwn(patch,k))d[k]=patch[k];
-    if(Array.isArray(patch.skills))patch.skills.forEach((p,i)=>{
-      if(!d.skills?.[i]||!p)return;
-      for(const k of SKILL_KEYS)if(Object.hasOwn(p,k))d.skills[i][k]=p[k];
-    });
-    for(const type of ['over','hi'])if(d[type]&&patch[type])for(const k of SKILL_KEYS)if(Object.hasOwn(patch[type],k))d[type][k]=patch[type][k];
+  for(const [key,p] of Object.entries(map)){
+    const d=FIGHTERS[key];if(!d||!p||typeof p!=='object')continue;
+    for(const k of FIELDS)if(Object.hasOwn(p,k))d[k]=p[k];
+    const cnt=Math.max(1,Math.min(SLOT_MAX,Number.isInteger(p.skillCount)?p.skillCount:d.skills.length||1));
+    // New slots are complete spells supplied by the chief-authenticated server.
+    d.skills.length=cnt;
+    for(let i=0;i<cnt;i++){
+      if(!d.skills[i])d.skills[i]=clone(TYPE_DEFAULTS.projectile);
+      if(p.skills?.[i])Object.assign(d.skills[i],p.skills[i]);
+    }
+    for(const t of ['over','hi'])if(p[t]){d[t]||={};Object.assign(d[t],p[t]);}
+    if(p.skillMode==='fixed'){delete d.pool;d.fixedSlots=true;}
+    else if(p.skillMode==='sequence'){d.pool=Array.from({length:cnt},(_,i)=>i);d.fixedSlots=false;}
+    else if(Array.isArray(d.pool))d.pool=d.pool.filter(i=>i>=0&&i<cnt);
   }
   activeOverlays=clone(map);
 }
@@ -75,13 +188,48 @@ function numberInput(value,min,max,step=1){const e=make('input');e.type='number'
   // Existing skills use values such as 0.26, 1.08. A fixed 0.05 step silently blocks submit.
   e.step='any';e.value=Number.isFinite(+value)?String(value):String(min);return e;}
 function collectNumbers(inputs){
-  const r={};for(const [k,info] of inputs){if(info.type==='text'){r[k]=info.el.value.trim();continue;}
+  const r={};
+  for(const [k,info]of inputs){
+    if(info.type==='text'||info.type==='select'){r[k]=info.el.value.trim();continue;}
+    if(info.type==='checkbox'){r[k]=!!info.el.checked;continue;}
+    if(info.type==='color'){r[k]=parseInt(info.el.value.slice(1),16);continue;}
     if(!String(info.el.value).trim())throw Error(info.label+'を入力してください');
-    const v=Number(info.el.value);if(!Number.isFinite(v)||v<info.min||v>info.max)throw Error(info.label+'は'+info.min+'～'+info.max+'で入力してください');
+    const v=Number(info.el.value);
+    if(!Number.isFinite(v)||v<info.min||v>info.max)throw Error(info.label+'は'+info.min+'～'+info.max+'で入力してください');
     r[k]=v;
-  }return r;
+  }
+  return r;
 }
-
+function makeSelect(options,value){
+  const s=make('select');for(const [id,label]of options){const o=make('option','',label);o.value=String(id);s.append(o);}
+  s.value=String(value);return s;
+}
+function skillEditable(orig){
+  const spec={...orig};
+  if(!SKILL_KINDS.has(spec.kind))spec.kind=spec.kind||KEEP_KIND;
+  spec.name=String(spec.name||'新しい技');
+  return spec;
+}
+function normalizeSkill(spec,orig={},newSlot=false){
+  const normalized={};
+  for(const k of SKILL_KEYS){
+    if(k in spec && spec[k]!==undefined&&spec[k]!==null &&!(k==='kind'&&spec[k]===KEEP_KIND)){
+      if(k==='kind'&&!SKILL_KINDS.has(spec[k])&&spec[k]!==orig.kind)throw Error('選択できない技の種類です');
+      normalized[k]=spec[k];
+    }
+  }
+  const kind=normalized.kind||orig.kind||'projectile';
+  const defs=TYPE_DEFAULTS[kind]||{};
+  const isChangedKind=kind!==orig.kind;
+  if(newSlot||isChangedKind){
+    for(const k of TYPE_FIELDS[kind]||[]){if(normalized[k]===undefined){normalized[k]=orig[k]??defs[k];}}
+    if(!normalized.name)normalized.name='新しい技';
+    normalized.kind=kind;
+    normalized.visual ||=chooseEffect(ELEMENTS[0],kind);
+    normalized.elem ??=0;normalized.color??=0x7ecfff;
+  }
+  return normalized;
+}
 // Save and reset confirmations are real game UI, not window.confirm().
 // Buttons stay keyboard-accessible, escape cancels, and no native form validation suppresses events.
 let rfEditorConfirmId=0;
@@ -122,168 +270,303 @@ function editorConfirm(title,description,actionText='確定する',danger=false)
 }
 // Only send differences relative to the game's original definitions. This avoids
 // accidentally submitting empty attributes or changing unspecified default stats.
-function rfEditedPatch(key,inputs,skillInputs){
-  const base=original(key)||{};
-  const raw=collectNumbers(inputs),patch={};
-  for(const [k,v] of Object.entries(raw)){
+function rfEditedPatch(key,inputs,draftSkills,skillCount,skillMode,over,hi){
+  const base=original(key)||{},raw=collectNumbers(inputs),patch={};
+  for(const [k,v]of Object.entries(raw)){
     if(k==='name'&&!v)throw Error('キャラクター名を入力してください');
-    if(typeof v==='string'&&!v)continue; // Empty optional title/attribute = original value
-    if(base[k]===undefined){
-      const defaultValue=DEFAULT_STAT_VALUES[k];
-      if(v!==defaultValue)patch[k]=v;
-    }else if(v!==base[k])patch[k]=v;
+    if(typeof v==='string'&&!v)continue;
+    if(base[k]===undefined){if(v!==DEFAULT_STAT_VALUES[k])patch[k]=v;}
+    else if(v!==base[k])patch[k]=v;
   }
-  for(const {type,index,items} of skillInputs){
-    const origSpec=type==='skills'?base.skills?.[index]:base[type];
-    if(!origSpec)continue;
-    const rawSkill=collectNumbers(items),changed={};
-    for(const [k,v] of Object.entries(rawSkill)){
-      if(k==='name'&&!v)throw Error('技名を入力してください');
-      if(v!==origSpec[k])changed[k]=v;
+  if(!Number.isInteger(skillCount)||skillCount<1||skillCount>SLOT_MAX)throw Error('技スロットは1～24枠です');
+  if(skillCount!==(base.skills?.length||0))patch.skillCount=skillCount;
+  const originalMode=base.pool?.length?'sequence':'fixed';
+  if(skillMode!==originalMode)patch.skillMode=skillMode;
+  const newSkills=[];
+  let any=false;
+  for(let i=0;i<skillCount;i++){
+    const orig=base.skills?.[i]||{};
+    const curr=normalizeSkill(draftSkills[i]||{},orig,i>=base.skills.length);
+    if(!curr.name?.trim())throw Error('通常技 '+(i+1)+' の名前が空です');
+    const modified={};
+    for(const [k,v]of Object.entries(curr))if(SKILL_KEYS.has(k)&&v!==orig[k])modified[k]=v;
+    if(i>=base.skills.length){
+      if(!SKILL_KINDS.has(modified.kind)||!modified.name)throw Error('追加した技の種類・名前を選択してください');
+      // New slots always need a complete and valid spell.
+      Object.assign(modified,normalizeSkill({...TYPE_DEFAULTS[modified.kind],...curr}, {},true));
     }
-    if(Object.keys(changed).length){
-      if(type==='skills'){patch.skills ||= [];patch.skills[index]=changed;}
-      else patch[type]=changed;
-    }
+    if(Object.keys(modified).length){newSkills[i]=modified;any=true;}else newSkills[i]=null;
+  }
+  if(any)patch.skills=newSkills;
+  for(const [keySpec,spec]of [['over',over],['hi',hi]]){
+    const orig=base[keySpec]||{};
+    const curr=normalizeSkill(spec||{},orig,!Object.keys(orig).length);
+    const modified={};for(const [k,v]of Object.entries(curr))if(SKILL_KEYS.has(k)&&v!==orig[k])modified[k]=v;
+    if(Object.keys(modified).length)patch[keySpec]=modified;
   }
   return patch;
 }
-
 function createPanel(){
   const root=make('div','rf-ce-root');root.id='rf-chief-character-editor';root.hidden=true;
   root.setAttribute('role','dialog');root.setAttribute('aria-modal','true');root.setAttribute('aria-label','運営長専用キャラクター編集');
-  const shell=make('div','rf-ce-shell');
-  const head=make('header','rf-ce-header');
-  const heading=make('div');heading.append(make('small','','CHIEF COMMAND · PRIVATE EDITOR'),make('h2','','キャラクター編集'));heading.querySelector('h2').style.margin='3px 0 0';
+  const shell=make('div','rf-ce-shell');const head=make('header','rf-ce-header');
+  const heading=make('div');heading.append(make('small','','CHIEF COMMAND · CHARACTER LAB'),make('h2','','キャラクター編集・自動生成'));heading.querySelector('h2').style.margin='3px 0 0';
   const close=make('button','rf-ce-outline','閉じる');close.type='button';close.addEventListener('click',()=>closePanel());head.append(heading,close);
-  const info=make('p','rf-ce-note','変更内容はCloudflare Workerに保存され、全プレイヤーの次回戦闘に反映されます。モデル・画像・役職権限は編集できません。');
-  const content=make('div','rf-ce-content');const left=make('aside','rf-ce-list');const right=make('form','rf-ce-form');right.autocomplete='off';right.id='rf-ce-edit-form';right.noValidate=true;
-  const search=textInput('',45);search.placeholder='キャラクター名・キーで検索';search.setAttribute('aria-label','キャラクター検索');
+  const info=make('p','rf-ce-note','テンプレート・ランダム生成は保存前の案です。運営長の確認・保存までは既存キャラや全プレイヤーを変更しません。');
+  const content=make('div','rf-ce-content');const left=make('aside','rf-ce-list');const right=make('form','rf-ce-form');right.autocomplete='off';right.noValidate=true;
+  const search=textInput('',45);search.placeholder='キャラクター検索';search.setAttribute('aria-label','キャラクター検索');
   const list=make('div','rf-ce-list-items');left.append(search,list);
   const status=make('div','rf-ce-status','');status.setAttribute('role','status');
   const actions=make('div','rf-ce-actions');
-  const save=make('button','rf-ce-primary','変更内容を全員へ保存');save.type='button';
-  const reset=make('button','rf-ce-outline','このキャラを初期設定に戻す');reset.type='button';
+  const save=make('button','rf-ce-primary','変更を保存・公開');save.type='button';
+  const reset=make('button','rf-ce-outline','このキャラを元に戻す');reset.type='button';
   const refresh=make('button','rf-ce-outline','サーバーから再読込');refresh.type='button';
   actions.append(save,reset,refresh);content.append(left,right);shell.append(head,info,content,actions,status);root.append(shell);document.body.append(root);
-  let selected='',inputs=new Map(),skillInputs=[];
+  let selected='',inputs=new Map(),draftSkills=[],draftOver=null,draftHi=null,slotCount=1,skillMode='fixed',tierChoice='normal';
+  let skillArea=null,slotEl=null,modeEl=null,preview=null;
   const tell=(msg,type='')=>{status.textContent=msg;status.dataset.type=type;};
   function select(key){
-    if(!FIGHTERS[key])return;selected=key;right.replaceChildren();inputs=new Map();skillInputs=[];
-    const d=FIGHTERS[key],base=original(key),ov=activeOverlays[key]||{};
-    const title=make('div','rf-ce-char-title');
-    const name=make('strong','',d.name||key);const sub=make('small','',key+' · '+(d.special==='chief'?'運営長専用':d.special==='operator'?'運営専用':'キャラクター'));
-    title.append(name,sub);right.append(title);
-    if(d.face){const img=make('img','rf-ce-portrait');img.alt=d.name||key;img.loading='lazy';img.src=d.face;right.append(img);}
-    const listText=make('div','rf-ce-fields');
-    for(const [k,label,max] of TEXT_FIELDS){const e=textInput(ov[k]??base[k]??d[k],max);inputs.set(k,{type:'text',label,el:e});listText.append(formGroup(label,e));}
-    right.append(make('h3','','基本情報'),listText);
-    const listNumber=make('div','rf-ce-fields');
-    for(const [k,label,min,max,step] of STAT_FIELDS){const v=ov[k]??base[k]??d[k]??DEFAULT_STAT_VALUES[k]??min;const e=numberInput(v,min,max,step);inputs.set(k,{type:'number',min,max,label,el:e});listNumber.append(formGroup(label,e));}
-    right.append(make('h3','','能力値'),listNumber);
-    right.append(make('h3','','技・魔法の設定'));
-    const skillSection=make('div','rf-ce-skills');
-    function addSkills(label,type,index=0){
-      const origSpec=type==='skills'?base.skills[index]:base[type];
-      const activeSpec=type==='skills'?(ov.skills?.[index]||{}):(ov[type]||{});
-      const actualSpec=type==='skills'?d.skills?.[index]:d[type];
-      if(!actualSpec||!origSpec)return;
-      const group=make('details','rf-ce-skill');const summary=make('summary','',label+' · '+(actualSpec.name||'技'));group.append(summary);
-      const fields=make('div','rf-ce-fields');const items=new Map();
-      for(const [k,n,kind,min,max] of SKILL_FIELDS){
-        if(!(k in origSpec)&&k!=='name')continue;
-        const e=kind==='text'?textInput(activeSpec[k]??origSpec[k]??'',max):numberInput(activeSpec[k]??origSpec[k]??min,min,max,.05);
-        items.set(k,{type:kind==='text'?'text':'number',min,max,label:n,el:e});fields.append(formGroup(n,e));
-      }
-      group.append(fields);skillSection.append(group);skillInputs.push({type,index,items});
+    if(!FIGHTERS[key])return;selected=key;right.replaceChildren();inputs=new Map();
+    const d=FIGHTERS[key],base=original(key)||{},ov=activeOverlays[key]||{};
+    slotCount=Math.max(1,Math.min(SLOT_MAX,ov.skillCount||d.skills?.length||1));
+    skillMode=ov.skillMode||(d.pool?.length?'sequence':'fixed');
+    draftSkills=Array.from({length:slotCount},(_,i)=>skillEditable(d.skills?.[i]||generatedSkill(ELEMENTS[7],'projectile',TIERS.normal,i)));
+    draftOver=skillEditable(d.over||generatedSkill(ELEMENTS[7],'judgment',TIERS.normal,0,'over'));
+    draftHi=skillEditable(d.hi||generatedSkill(ELEMENTS[7],'judgment',TIERS.normal,0,'hi'));
+    const title=make('div','rf-ce-char-title');title.append(make('strong','',d.name||key),make('small','',key+' · '+(d.special==='chief'?'運営長専用':d.special==='operator'?'運営専用':'キャラクター')));right.append(title);
+    if(d.face){const portrait=make('img','rf-ce-portrait');portrait.src=d.face;portrait.alt='';portrait.loading='lazy';right.append(portrait);}
+    // Templates are presets only; they do NOT modify character roles or models.
+    const tool=make('section','rf-ce-generator');
+    tool.append(make('h3','','ステータステンプレート・一括ランダム生成'));
+    const control=make('div','rf-ce-generator-tools');
+    const tier=makeSelect(Object.entries(TIERS).map(([k,v])=>[k,v.label]),tierChoice);tier.setAttribute('aria-label','ステータステンプレート');
+    tier.addEventListener('change',()=>{tierChoice=tier.value;drawPreview('「'+TIERS[tierChoice].label+'」テンプレートを選択中。まだキャラクターは変更されていません。');});
+    const applyPreset=make('button','rf-ce-outline','テンプレート値を適用');applyPreset.type='button';
+    const randomButton=make('button','rf-ce-primary','基本情報・能力・技魔法を全ランダム生成');randomButton.type='button';
+    control.append(formGroup('強さのテンプレート',tier),applyPreset,randomButton);
+    tool.append(control);tool.append(make('p','rf-ce-note','生成後は数値と技を自由に調整できます。「保存」を押すまでは公開されません。モデル・権限・テクスチャは変更しません。'));
+    preview=make('div','rf-ce-preview','テンプレート選択後、ランダム生成できます。');preview.setAttribute('aria-live','polite');tool.append(preview);right.append(tool);
+    const textArea=make('div','rf-ce-fields');
+    for(const [k,label,max] of TEXT_FIELDS){const v=ov[k]??base[k]??d[k]??'';const el=textInput(v,max);inputs.set(k,{type:'text',label,el});textArea.append(formGroup(label,el));}
+    right.append(make('h3','','基本情報'),textArea);
+    const statArea=make('div','rf-ce-fields');
+    for(const [k,label,min,max] of STAT_FIELDS){const v=ov[k]??base[k]??d[k]??DEFAULT_STAT_VALUES[k]??min;const el=numberInput(v,min,max);inputs.set(k,{type:'number',min,max,label,el});statArea.append(formGroup(label,el));}
+    right.append(make('h3','','能力値'),statArea);
+    const slotsHeader=make('h3','','技・魔法のスロット設定');right.append(slotsHeader);
+    const slotBar=make('div','rf-ce-slot-controls');
+    slotEl=numberInput(slotCount,1,SLOT_MAX,1);slotEl.step='1';slotEl.setAttribute('aria-label','通常技のスロット数');
+    modeEl=makeSelect([['fixed','固定：各ボタン・パネルで指定技'],['sequence','順番：技A／技Bで登録順に使用']],skillMode);
+    modeEl.setAttribute('aria-label','技の切り替え方式');
+    slotBar.append(formGroup('通常技スロット数（1～24）',slotEl),formGroup('技の使用方式',modeEl));right.append(slotBar);
+    const modeHelp=make('p','rf-ce-note','固定：技A／技Bと個別スロットを使用。順番：技A／技Bを押すたびに通常技を順番に使用。追加技は戦闘中の技パネルから個別発動できます。');right.append(modeHelp);
+    right.append(make('h3','','技・魔法・奥義・秘奥義の詳細設定'));
+    skillArea=make('div','rf-ce-skills');right.append(skillArea);
+    function drawPreview(message=''){
+      const n=inputs.get('name')?.el.value||d.name, attr=inputs.get('attribute')?.el.value||'';
+      preview.textContent=(message?message+'\n':'')+'名前: '+n+' ／ 属性: '+attr+' ／ 通常技: '+slotCount+'枠 ／ 方式: '+(skillMode==='fixed'?'固定':'順番')+' ／ 奥義・秘奥義各1枠';
     }
-    for(let i=0;i<(d.skills?.length||0);i++)addSkills('通常技 '+(i+1),'skills',i);
-    addSkills('奥義','over');addSkills('秘奥義','hi');right.append(skillSection);
+    function fieldsFor(kind,baseSpec){
+      const extras=TYPE_FIELDS[kind]||SKILL_FIELDS.map(x=>x[0]).filter(k=>k in baseSpec);
+      return ['name','kind','visual','elem','color',...extras];
+    }
+    function addSkillEditor(name,spec,orig,type,index=0){
+      const el=make('details','rf-ce-skill');const summary=make('summary','',name+' · '+(spec.name||'新しい技'));el.append(summary);
+      const content=make('div','rf-ce-fields');el.append(content);
+      const help=make('p','rf-ce-skill-kind-description','');el.append(help);
+      const cache=spec;
+      let currentKind=cache.kind;
+      const render=()=>{
+        content.replaceChildren();const kind=cache.kind;
+        help.textContent=KINDS_DESCRIPTION[kind]||'固有技です。種類を変更しなければ元の特殊な演出を保持します。';
+        for(const k of fieldsFor(kind,orig)){
+          const cfg=SKILL_FIELDS.find(x=>x[0]===k);if(!cfg)continue;
+          const [,label,tp,min,max]=cfg;
+          let inp;
+          if(k==='kind'){
+            const opts=SKILL_TYPES.slice();
+            if(!SKILL_KINDS.has(cache.kind))opts.unshift([cache.kind||KEEP_KIND,'固有技を維持（'+(cache.kind||'未指定')+'）']);
+            inp=makeSelect(opts,cache.kind||KEEP_KIND);
+            inp.addEventListener('change',()=>{
+              const next=inp.value;
+              if(next!==cache.kind){
+                cache.kind=next;
+                if(SKILL_KINDS.has(next)){
+                  for(const [kk,vv]of Object.entries(TYPE_DEFAULTS[next]))cache[kk]=vv;
+                  cache.visual=chooseEffect(ELEMENTS.find(e=>e[1]===cache.elem),next);
+                }
+                render();
+              }
+            });
+          }else if(k==='visual'){
+            const opts=VISUALS.slice();if(cache.visual&&!opts.some(([id])=>id===cache.visual))opts.unshift([cache.visual,'元の演出：'+cache.visual]);
+            inp=makeSelect(opts,cache.visual||'orb');inp.addEventListener('change',()=>{cache.visual=inp.value;});
+          }else if(k==='elem'){
+            inp=makeSelect(ELEMENTS.map(e=>[e[1],e[0]]),cache.elem??0);inp.addEventListener('change',()=>{
+              cache.elem=Number(inp.value);const def=ELEMENTS.find(e=>e[1]===cache.elem);cache.color=def?.[2]||0x6acaff;render();
+            });
+          }else if(k==='color'){
+            inp=make('input');inp.type='color';inp.value='#'+(Number(cache.color??0x7ecfff)&0xffffff).toString(16).padStart(6,'0');
+            inp.addEventListener('input',()=>{cache.color=parseInt(inp.value.slice(1),16);});
+          }else if(tp==='checkbox'){
+            inp=make('input');inp.type='checkbox';inp.checked=!!cache[k];inp.addEventListener('change',()=>{cache[k]=!!inp.checked;});
+          }else if(tp==='text'){
+            inp=textInput(cache[k]??'新技',max);inp.addEventListener('input',()=>{cache[k]=inp.value;summary.textContent=name+' · '+inp.value;});
+          }else{
+            const initial=cache[k]??orig?.[k]??TYPE_DEFAULTS[kind]?.[k]??min;
+            cache[k]=initial;
+            inp=numberInput(initial,min,max);inp.addEventListener('input',()=>{
+              const n=Number(inp.value);if(inp.value!==''&&Number.isFinite(n))cache[k]=n;
+            });
+          }
+          content.append(formGroup(label,inp));
+        }
+      };
+      render();skillArea.append(el);return el;
+    }
+    function drawSkillEditors(){
+      skillArea.replaceChildren();
+      for(let i=0;i<slotCount;i++)addSkillEditor('通常技 '+(i+1),draftSkills[i],base.skills?.[i]||{},'skills',i);
+      addSkillEditor('奥義',draftOver,base.over||{},'over');
+      addSkillEditor('秘奥義',draftHi,base.hi||{},'hi');
+      drawPreview();
+    }
+    slotEl.addEventListener('change',()=>{
+      const number=Number(slotEl.value);
+      if(!Number.isInteger(number)||number<1||number>SLOT_MAX){tell('通常技のスロット数は1～24枠です。','error');slotEl.value=slotCount;return;}
+      while(draftSkills.length<number)draftSkills.push(generatedSkill(ELEMENTS[7],'projectile',TIERS.normal,draftSkills.length));
+      slotCount=number;drawSkillEditors();tell('スロット数を変更しました。保存するまで公開されません。');
+    });
+    modeEl.addEventListener('change',()=>{skillMode=modeEl.value;drawPreview();});
+    function applyStats(g,copyBasic=false,copySkills=false){
+      if(copyBasic){for(const k of ['name','title','attribute'])inputs.get(k).el.value=g[k];}
+      for(const [k]of STAT_FIELDS){inputs.get(k).el.value=String(g[k]);}
+      if(copySkills){
+        slotCount=g.slots;slotEl.value=slotCount;skillMode=g.mode;modeEl.value=skillMode;
+        draftSkills=g.skills.map(v=>clone(v));draftOver=clone(g.over);draftHi=clone(g.hi);drawSkillEditors();
+      }
+      drawPreview(copyBasic?'一括ランダム生成した保存前プレビューです。':'テンプレートに応じて能力値を設定しました。');
+    }
+    applyPreset.addEventListener('click',()=>{
+      const g=generatedCharacter(tier.value,slotCount,skillMode);
+      applyStats(g,false,false);tell('「'+TIERS[tier.value].label+'」テンプレートの能力値を適用しました。保存前です。');
+    });
+    randomButton.addEventListener('click',()=>{
+      const g=generatedCharacter(tier.value,null,null);
+      applyStats(g,true,true);tell('「'+TIERS[tier.value].label+'」の基本情報・ステータス・技/魔法を一括生成しました。再生成・手動編集が可能です。');
+    });
+    drawSkillEditors();
     list.querySelectorAll('button').forEach(b=>b.classList.toggle('active',b.dataset.key===key));
-    tell('編集内容は保存ボタンを押すまで反映されません。');
+    tell('保存まで他のプレイヤーには反映されません。');
   }
   function renderList(){
     const q=search.value.toLocaleLowerCase('ja');list.replaceChildren();
     const all=Object.entries(FIGHTERS).filter(([k,d])=>d&&!d.hidden&&((d.name||'').toLocaleLowerCase('ja').includes(q)||k.includes(q))).sort((a,b)=>String(a[1].name).localeCompare(String(b[1].name),'ja'));
-    for(const [key,d] of all.slice(0,300)){const b=make('button','rf-ce-character',d.name||key);b.type='button';b.dataset.key=key;b.title=key;b.classList.toggle('active',key===selected);b.addEventListener('click',()=>select(key));list.append(b);}
+    for(const [key,d]of all.slice(0,300)){
+      const b=make('button','rf-ce-character',d.name||key);b.type='button';b.dataset.key=key;b.title=key;
+      b.classList.toggle('active',key===selected);b.addEventListener('click',()=>select(key));list.append(b);
+    }
     if(!all.length)list.append(make('p','rf-ce-note','一致するキャラクターがありません。'));
   }
   search.addEventListener('input',renderList);
-  function controlsDisabled(disabled){save.disabled=reset.disabled=refresh.disabled=disabled;}
+  function disable(flag){save.disabled=reset.disabled=refresh.disabled=flag;}
   async function saveChanges(){
-    if(busy)return;
-    if(!selected){tell('先に編集するキャラクターを選んでください。','error');return;}
-    busy=true;controlsDisabled(true);tell('入力内容を確認しています…');
-    const key=selected;
+    if(busy)return;if(!selected){tell('キャラクターを選択してください。','error');return;}
+    busy=true;disable(true);tell('編集内容を検証しています…');const key=selected;
     try{
-      if(inBattle())throw Error('戦闘中は編集できません。戦闘終了後に保存してください');
-      const patch=rfEditedPatch(key,inputs,skillInputs);
-      const all=clone(activeOverlays);
-      if(Object.keys(patch).length)all[key]=patch;else delete all[key];
-      if(JSON.stringify(all)===JSON.stringify(activeOverlays)){
-        tell('変更はありません。入力値はすでに保存済みです。');return;
-      }
-      const confirmed=await editorConfirm('キャラクター編集を保存しますか？',
-        '「'+(FIGHTERS[key]?.name||key)+'」の設定をサーバーに保存し、全プレイヤーの次の戦闘から反映します。',
-        '変更を保存する');
-      if(!confirmed){tell('保存をキャンセルしました。');return;}
-      tell('運営長の権限を確認しています…');
-      if(!(await authorized()))throw Error('運営長の認証が必要です。設定から再認証してください');
-      tell('サーバーへ保存中…');
-      const r=await api('/chief/characters/save',{token:tokenOf(),revision,overrides:all});
-      if(!r.ok){
-        if(r.error==='stale')throw Error('別の編集が先に保存されました。「サーバーから再読込」を押してからやり直してください');
-        if(r.error==='invalid_character_values')throw Error('サーバーが設定値を拒否しました。技の数と入力値、Workerの更新を確認してください');
-        if(r.error==='denied')throw Error('運営長の認証が無効です。再認証してください');
-        if(r.status===404)throw Error('保存APIが見つかりません。server/worker.jsのデプロイを確認してください');
-        throw Error('保存できませんでした（'+(r.error||('HTTP '+r.status))+'）');
-      }
-      // A successful save must be reported even if the follow-up GET temporarily fails.
+      if(inBattle())throw Error('戦闘中は変更できません');
+      const patch=rfEditedPatch(key,inputs,draftSkills,slotCount,skillMode,draftOver,draftHi);
+      const all=clone(activeOverlays);if(Object.keys(patch).length)all[key]=patch;else delete all[key];
+      if(JSON.stringify(all)===JSON.stringify(activeOverlays)){tell('保存済みの内容と同じです。');return;}
+      const n=inputs.get('name').el.value;
+      const confirm=await editorConfirm('変更を全プレイヤーへ公開しますか？',
+        '対象：'+(n||key)+' ／ 通常技'+slotCount+'枠 ／ '+(skillMode==='fixed'?'固定':'順番')+'方式。基本情報・能力値・技構成が次の戦闘から反映されます。','保存・公開する');
+      if(!confirm){tell('保存をキャンセルしました。');return;}
+      tell('運営長の権限を照合しています…');if(!(await authorized()))throw Error('運営長の認証が必要です。設定から再認証してください');
+      tell('サーバーに保存しています…');const r=await api('/chief/characters/save',{token:tokenOf(),revision,overrides:all});
+      if(!r.ok){if(r.error==='stale')throw Error('他の編集が先に保存されました。再読込してください');
+        if(r.error==='denied')throw Error('運営長の認証が無効です');
+        if(r.error==='invalid_character_values')throw Error('技の設定値が不正です。新規スロットの種類・名前・数値を確認してください');
+        if(r.status===404)throw Error('Cloudflare WorkerをV31に更新してください');
+        throw Error('保存に失敗：'+(r.error||('HTTP '+r.status)));}
       applyPublic(all);revision=Number.isSafeInteger(r.revision)?r.revision:revision+1;lastFetch=0;
-      let reloaded=true;
-      try{await syncPublic(true);}catch(e){reloaded=false;console.warn('[Character editor] save succeeded, refresh failed:',e);}
-      renderList();select(key);
-      tell(reloaded?'保存しました。次の戦闘から全プレイヤーに反映されます。':'保存は成功しました。最新データの再読込だけ失敗したため、通信が回復したら再読込してください。','success');
-    }catch(err){console.warn('[Character editor] save:',err);tell(err.message||String(err),'error');}
-    finally{busy=false;controlsDisabled(false);}
+      let refreshed=true;try{await syncPublic(true);}catch(e){refreshed=false;console.warn('[Character editor V31] refresh:',e);}
+      renderList();select(key);tell(refreshed?'保存しました。次の戦闘から全プレイヤーに反映されます。':'サーバー保存済みです。再取得のみ失敗しました。','success');
+    }catch(e){console.warn('[Character editor V31] save:',e);tell(e.message||String(e),'error');}
+    finally{busy=false;disable(false);}
   }
-  // Direct click means the UI always responds—even if a browser considers a pre-existing value step-mismatched.
   save.addEventListener('click',()=>{void saveChanges();});
   right.addEventListener('submit',e=>{e.preventDefault();void saveChanges();});
   reset.addEventListener('click',async()=>{
-    if(busy)return;
-    if(!selected){tell('先にキャラクターを選んでください。','error');return;}
-    busy=true;controlsDisabled(true);
-    const key=selected;
+    if(busy||!selected)return;busy=true;disable(true);const key=selected;
     try{
-      const all=clone(activeOverlays);
-      if(!Object.hasOwn(all,key)){tell('このキャラクターには保存済みの変更がありません。');return;}
-      const confirmed=await editorConfirm('初期設定に戻しますか？',
-        '「'+(FIGHTERS[key]?.name||key)+'」に保存された編集内容を削除し、ゲーム本来の能力値と技へ戻します。',
-        '初期設定に戻す',true);
+      if(!Object.hasOwn(activeOverlays,key)){tell('保存済み変更がありません。');return;}
+      const confirmed=await editorConfirm('初期設定へ戻しますか？','「'+(FIGHTERS[key]?.name||key)+'」の保存済み編集を削除します。','初期設定へ戻す',true);
       if(!confirmed){tell('初期化をキャンセルしました。');return;}
-      tell('運営長の権限を確認しています…');
-      if(!(await authorized()))throw Error('運営長の認証が必要です。設定から再認証してください');
-      if(inBattle())throw Error('戦闘中は編集できません。戦闘終了後に実行してください');
-      delete all[key];tell('サーバーへ初期化内容を保存中…');
+      if(inBattle())throw Error('戦闘中は変更できません');
+      if(!(await authorized()))throw Error('運営長の再認証が必要です');
+      const all=clone(activeOverlays);delete all[key];tell('初期化をサーバーに保存中…');
       const r=await api('/chief/characters/save',{token:tokenOf(),revision,overrides:all});
-      if(!r.ok)throw Error(r.error==='stale'?'別の編集が先に保存されました。再読込してからやり直してください':'初期化に失敗しました（'+(r.error||r.status)+'）');
-      applyPublic(all);revision=Number.isSafeInteger(r.revision)?r.revision:revision+1;lastFetch=0;
-      let reloaded=true;
-      try{await syncPublic(true);}catch(e){reloaded=false;console.warn('[Character editor] reset succeeded, refresh failed:',e);}
-      renderList();select(key);
-      tell(reloaded?'初期設定へ戻しました。':'初期設定の保存は成功しましたが、再読込に失敗しました。','success');
-    }catch(err){console.warn('[Character editor] reset:',err);tell(err.message||String(err),'error');}
-    finally{busy=false;controlsDisabled(false);}
+      if(!r.ok)throw Error('初期化できませんでした（'+(r.error||r.status)+'）');
+      applyPublic(all);revision=r.revision;lastFetch=0;try{await syncPublic(true);}catch{}
+      renderList();select(key);tell('初期設定に戻しました。','success');
+    }catch(e){tell(e.message||String(e),'error');}finally{busy=false;disable(false);}
   });
-  refresh.addEventListener('click',async()=>{try{await syncPublic(true);renderList();select(selected);tell('最新データを取得しました。','success');}catch(e){tell(e.message,'error');}});
-  root.addEventListener('keydown',e=>{if(e.key==='Escape'){e.stopPropagation();closePanel();}});
+  refresh.addEventListener('click',async()=>{if(busy)return;try{await syncPublic(true);renderList();select(selected);tell('最新データを取得しました。','success');}catch(e){tell(e.message,'error');}});
+  root.addEventListener('keydown',e=>{if(e.key==='Escape'&&!document.querySelector('.rf-ce-confirm-overlay')){e.stopPropagation();closePanel();}});
   return {root,tell,open:async()=>{root.hidden=false;document.body.classList.add('rf-character-editor-open');try{await syncPublic(true);renderList();select(selected&&FIGHTERS[selected]?selected:Object.keys(FIGHTERS)[0]);}catch(e){tell(e.message,'error');}},close:()=>{root.hidden=true;document.body.classList.remove('rf-character-editor-open');}};
 }
 function closePanel(){panel?.close();}
+// The standard game has only two spell buttons. This makes slots 1–24 genuinely usable.
+function setupBattleSlotPanel({Fighter,getState}){
+  if(!Fighter?.prototype||Fighter.prototype.__rfChiefSlotsV31||typeof document==='undefined')return;
+  Fighter.prototype.__rfChiefSlotsV31=true;
+  let queued=null;
+  const oldUpdate=Fighter.prototype.update;
+  Fighter.prototype.update=function(dt,input){
+    if(queued&&queued.f===this&&!this.remoteAuth&&this.isPlayer&&!this.dead){
+      const next={...(input||{}),skill:false,skill2:false,attack:false,heal:false,over:false,skillIdx:queued.slot};
+      queued=null;return oldUpdate.call(this,dt,next);
+    }
+    return oldUpdate.call(this,dt,input);
+  };
+  const panel=make('div','rf-ce-battle-slots');panel.id='rf-ce-battle-slots';panel.hidden=true;
+  const head=make('div','rf-ce-battle-slots-header');
+  const toggle=make('button','rf-ce-battle-slots-toggle','技一覧');toggle.type='button';
+  const label=make('span','','');head.append(toggle,label);
+  const list=make('div','rf-ce-battle-slots-list');panel.append(head,list);document.body.append(panel);
+  let expanded=false,lastSig='';
+  toggle.onclick=()=>{expanded=!expanded;list.hidden=!expanded;toggle.textContent=expanded?'技を閉じる':'技一覧';};
+  list.hidden=true;
+  const current=()=>{
+    const state=typeof getState==='function'?getState():null;
+    if(!state?.battle||state.paused||document.querySelector('.screen.on'))return null;
+    return state.battle.fighters?.find(f=>f.isPlayer&&!f.remoteAuth&&!f.dead)||null;
+  };
+  document.addEventListener('keydown',e=>{
+    if(e.repeat||e.ctrlKey||e.metaKey||e.altKey||e.target?.closest?.('input,textarea,select,[contenteditable]'))return;
+    if(!expanded||!/^Digit[1-9]$/.test(e.code))return;
+    const f=current();if(!f||!Object.hasOwn(activeOverlays,f.key))return;
+    const slot=Number(e.code.slice(-1))-1;
+    if(slot<f.def.skills.length){queued={f,slot};e.preventDefault();}
+  });
+  setInterval(()=>{
+    const f=current();const changed=f&&Object.hasOwn(activeOverlays,f.key)&&(f.def.skills?.length>4||!!activeOverlays[f.key]?.skillMode);
+    if(!changed){panel.hidden=true;queued=null;return;}
+    panel.hidden=false;
+    const mode=f.def.pool?.length?'順番':'固定';
+    label.textContent=f.def.name+' · '+f.def.skills.length+'技 · '+mode;
+    const sig=f.key+'|'+mode+'|'+f.def.skills.map(s=>s?.name).join(';');
+    if(sig===lastSig)return;lastSig=sig;list.replaceChildren();
+    f.def.skills.forEach((s,i)=>{
+      const b=make('button','',String(i+1).padStart(2,'0')+' · '+String(s?.name||'新技'));b.type='button';
+      b.addEventListener('click',()=>{queued={f,slot:i};});list.append(b);
+    });
+  },220);
+}
 export function initChiefCharacterEditor(options){
   if(!options?.FIGHTERS||typeof document==='undefined')return;
   FIGHTERS=options.FIGHTERS;chiefCheck=options.isChief||(()=>false);tokenOf=options.roleToken||(()=> '');inBattle=options.inBattle||(()=>false);
+  setupBattleSlotPanel(options);
   if(!document.getElementById('rf-chief-editor-css')){const link=document.createElement('link');link.id='rf-chief-editor-css';link.rel='stylesheet';link.href=new URL('./character-editor.css?v='+VERSION,import.meta.url).href;document.head.append(link);}
   recordOriginal();
   const mount=()=>{

@@ -1,5 +1,5 @@
 // RF_CHIEF_CHAR_EDITOR_V28
-import { initChiefCharacterEditor } from './character-editor.js?v=rf-chief-editor-v28-20261110';
+import { initChiefCharacterEditor } from './character-editor.js?v=rf-chief-editor-v31-20261110';
 // RF_KINOSAKI_V27_INSTALL
 import {installStaffAvatarScale} from './staff-character-scale.js?v=rf-kinosaki-v27-20261110';
 import {installKinosakiMotion} from './kinosaki-motion.js?v=rf-kinosaki-v27-20261110';
@@ -4412,7 +4412,7 @@ renderer.setAnimationLoop((time) => {
 });
 
 // RF_CHIEF_CHAR_EDITOR_V28: secure chief-only page; server enforces authorization.
-initChiefCharacterEditor({ FIGHTERS, isChief: () => chiefUnlocked(), roleToken: () => roleState.tok, inBattle: () => !!state.battle });
+initChiefCharacterEditor({ FIGHTERS, isChief:()=>chiefUnlocked(), roleToken:()=>roleState.tok, inBattle:()=>!!state.battle, getState:()=>state, Fighter:MaouFighter });
 show('scr-press');
 window.__arkeiaBootOk = true;
 window.dispatchEvent(new Event('arkeia-boot-ready'));

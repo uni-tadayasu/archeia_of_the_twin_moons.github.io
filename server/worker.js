@@ -1494,7 +1494,7 @@ export default {
 };
 
 // 運営/運営長キー → 役割トークン（キーのハッシュはサーバーの秘密変数にだけ置く）
-// RF_CHIEF_CHAR_EDITOR_V28 — secure server-side persistence of character overrides.
+// RF_CHIEF_CHAR_EDITOR_V31_ALL_RANDOM_SLOTS — secure server-side persistence of character overrides.
 // Role authentication is enforced here, not by visibility of the client UI.
 const RF_CHARACTER_EDITOR_STORE = 'chief-character-overrides-v28';
 const RF_CHARACTER_STATS = Object.freeze({
@@ -1502,13 +1502,24 @@ const RF_CHARACTER_STATS = Object.freeze({
   height:[0.1,12],overGain:[0.1,12],fluxMul:[0.1,12]
 });
 const RF_CHARACTER_TEXT = Object.freeze({name:40,title:90,attribute:16});
-const RF_CHARACTER_SKILL_NUM = Object.freeze({dmg:[0,100000],cost:[0,100],radius:[0,100],castTime:[0,30]});
+const RF_CHARACTER_SKILL_KIND = new Set(['projectile','shockwave','dash','rain','judgment','implode','heal']);
+const RF_CHARACTER_SKILL_MODE = new Set(['fixed','sequence']);
+const RF_CHARACTER_SKILL_VISUAL = new Set(['orb','spear','laser','meteor','blade','sword','nova','pillar','bigsword','bolt']);
+const RF_CHARACTER_MAX_SLOTS = 24;
+const RF_CHARACTER_SKILL_NUM = Object.freeze({
+  dmg:[0,100000],cost:[0,100],radius:[0,100],castTime:[0,30],
+  speed:[1,150],dur:[0.05,10],count:[1,24],spread:[0,40],spreadAng:[0,3.14],
+  delay:[0,10],interval:[0.01,3],heal:[0,100000],finalDmg:[0,100000],finalRadius:[0.1,100], elem:[0,9],color:[0,16777215],shape:[0,99],stun:[0,5],kb:[0,30],chain:[0,1],trail:[0.01,1]
+});
 function rfCharPlain(v){return v && typeof v==='object' && !Array.isArray(v);}
 function rfCharParseSkill(v,actual){
   if(!rfCharPlain(v)||!rfCharPlain(actual))return null;
   const cleaned=Object.create(null);
   for(const [k,x] of Object.entries(v)){
     if(k==='name' && typeof x==='string'&&x.trim().length>0&&[...x.trim()].length<=42)cleaned.name=x.trim();
+    else if(k==='kind'&&typeof x==='string'&&(RF_CHARACTER_SKILL_KIND.has(x)||x===actual.kind))cleaned.kind=x;
+    else if(k==='visual'&&typeof x==='string'&&(RF_CHARACTER_SKILL_VISUAL.has(x)||x===actual.visual))cleaned.visual=x;
+    else if(k==='double'&&typeof x==='boolean')cleaned.double=x;
     else if(Object.prototype.hasOwnProperty.call(RF_CHARACTER_SKILL_NUM,k)){
       const [min,max]=RF_CHARACTER_SKILL_NUM[k];
       if(typeof x!=='number'||!Number.isFinite(x)||x<min||x>max)return null;
@@ -1533,17 +1544,34 @@ function rfCharParseOverrides(input){
       } else if(Object.prototype.hasOwnProperty.call(RF_CHARACTER_TEXT,k)){
         if(typeof v!=='string'||![...v.trim()].length||[...v.trim()].length>RF_CHARACTER_TEXT[k])return null;
         entry[k]=v.trim();
+      } else if(k==='skillCount'){
+        if(!Number.isInteger(v)||v<1||v>RF_CHARACTER_MAX_SLOTS)return null;
+        entry.skillCount=v;
+      } else if(k==='skillMode'){
+        if(typeof v!=='string'||!RF_CHARACTER_SKILL_MODE.has(v))return null;
+        entry.skillMode=v;
       } else if(k==='skills'){
-        if(!Array.isArray(v)||v.length>(def.skills?.length||0)||v.length>32)return null;
+        if(!Array.isArray(v)||v.length>RF_CHARACTER_MAX_SLOTS)return null;
         const slots=[];
         for(let i=0;i<v.length;i++){
           if(v[i]===null){slots.push(null);continue;}
-          const s=rfCharParseSkill(v[i],def.skills?.[i]);if(!s)return null;slots.push(s);
+          const s=rfCharParseSkill(v[i],def.skills?.[i]||{});if(!s)return null;slots.push(s);
         }
         entry.skills=slots;
       } else if(k==='over'||k==='hi'){
-        const s=rfCharParseSkill(v,def[k]);if(!s)return null;entry[k]=s;
+        const s=rfCharParseSkill(v,def[k]||{});if(!s)return null;entry[k]=s;
       } else return null;
+    }
+    const cnt=entry.skillCount??(def.skills?.length||0);
+    if(entry.skills?.length>cnt)return null;
+    if(cnt>(def.skills?.length||0)){
+      for(let i=def.skills.length;i<cnt;i++){
+        const s=entry.skills?.[i];
+        if(!rfCharPlain(s)||!RF_CHARACTER_SKILL_KIND.has(s.kind)||typeof s.name!=='string'||!s.name.trim())return null;
+        // A newly added slot must have a usable spell configuration.
+        if(s.kind==='projectile'&&(typeof s.speed!=='number'||typeof s.radius!=='number'))return null;
+        if((s.kind==='rain'||s.kind==='judgment')&&(!Number.isInteger(s.count)||!Number.isFinite(s.interval)))return null;
+      }
     }
     clean[key]=entry;
   }
