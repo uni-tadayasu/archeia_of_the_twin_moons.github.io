@@ -797,7 +797,9 @@ const audio = {
   fadeId: 0
 };
 // データで指定した音楽を実際に再生する。旧式の自動生成曲は使わない。
+// RF_FUJIWARA_BGM_PRIORITY_V37 — Highest BGM priority (chief-only character)
 const MUSIC_FILES = {
+  fujiwara: 'fujiwara-nobuyori-theme.mp3',
   title: 'title-theme.mp3',
   story: 'title-theme.mp3',  // メニュー／物語導入は実在するタイトル音源を使用
   field: 'field-theme.mp3',
@@ -871,6 +873,21 @@ function setBgmVolume(value) {
 }
 // 音楽はシーンの希望曲と、全世界のヴァルガルド優先曲を分けて管理する。
 // 音楽が未解禁の状態で先に曲名を登録しても、最初のユーザー操作で必ず再生する。
+function shouldForceFujiwara() {
+  // Do not keep stale fighters from a previous session playing over the title UI.
+  const titleOpen = isScreen('scr-press') || isScreen('scr-title');
+  const b = state?.battle;
+  const inBattle = !titleOpen && b && !b.ended && b.fighters?.some(f => !f.dead && f.key === 'fujiwara_nobuyori');
+  const field = state?.field;
+  const fieldPresent = !titleOpen && !!field && [state.myKey, field.o?.mainKey, ...(field.o?.partyKeys || [])].includes('fujiwara_nobuyori');
+  const restPresent = !titleOpen && state?.mode === 'adventure' && !!state?.adventureRest && state.myKey === 'fujiwara_nobuyori';
+  // The online/world room receives signed per-player profile proofs from the Worker.
+  // Only a verified Fujiwara fighter can force the world-wide highest-priority BGM.
+  const worldPresent = !titleOpen && apiEnabled() && Object.values(state?.worldPeers || {}).some(p =>
+    p?.fk === 'fujiwara_nobuyori' && ['field','story','op'].includes(p.role) &&
+    typeof p.id === 'string' && peerVerified(p.id,'fujiwara_nobuyori'));
+  return !!(inBattle || fieldPresent || restPresent || worldPresent);
+}
 function shouldForceValgard() {
   // タイトル／メニュー／設定画面では必ずメニュー曲を優先する。
   if (audio.wanted === 'title' || isScreen('scr-title') || isScreen('scr-press')) return false;
@@ -885,12 +902,12 @@ function playTrack(name) {
 }
 // RF_BGM_EXCLUSIVE_V10 — Atomic single-track BGM switch; no crossfade races.
 function syncMusicTrack() {
-  const key = state.mode === 'adventure' ? 'adventure' : shouldForceValgard() ? 'valgard' : musicKey(audio.wanted);
+  const key = shouldForceFujiwara() ? 'fujiwara' : state.mode === 'adventure' ? 'adventure' : shouldForceValgard() ? 'valgard' : musicKey(audio.wanted);
   if (!key || !audio.tracks[key]) return;
   const next = audio.tracks[key];
   const previous = audio.tracks[audio.currentKey];
   const shouldRestart = next !== previous;
-  audio.current = key === 'valgard' ? 'valgard' : audio.wanted;
+  audio.current = (key === 'fujiwara' || key === 'valgard') ? key : audio.wanted;
   audio.currentKey = key;
   // Invalidate any earlier fade callback left over from older runtime versions.
   ++audio.fadeId;
@@ -1425,7 +1442,7 @@ const state = { mode: null, myKey: null, oppKey: null, chapter: 0, battle: null,
 setInterval(() => {
   const fighters = state.battle?.fighters;
   if (fighters?.some((f) => f.key === 'bloodfiend') &&
-      !fighters.some((f) => f.key === 'valgard') &&
+      !fighters.some((f) => f.key === 'valgard' || f.key === 'fujiwara_nobuyori') &&
       musicKey(audio.wanted) !== 'zarugureibu') playTrack('zarugureibu');
   refreshGlobalValgardBgm();
   if (audio.unlocked) syncMusicTrack();
@@ -2319,7 +2336,16 @@ function beginBattle(boss) {
   const participants = state.battle.fighters.map((f) => f.key);
   const ks = state.battle.fighters.filter((f) => f.team === 1 || state.mode === 'invade').map((f) => f.key);
   const apex = ks.some((k) => k === 'sovereign' || k === 'sovereign2') ? 2 : ks.includes('chief') || ks.includes('valgard') || ks.includes('bloodfiend') || ks.includes('valdarion') ? 1 : 0;
-  if (state.mode === 'adventure') {
+  if (participants.includes('fujiwara_nobuyori')) {
+    // Keep the original scene music as the fallback. Fujiwara takes priority inside syncMusicTrack().
+    const fallback = state.mode === 'adventure' ? 'adventure'
+      : participants.includes('valgard') ? 'valgard'
+      : participants.includes('bloodfiend') ? 'zarugureibu'
+      : apex ? 'apex:' + apex
+      : state.mode === 'event' ? 'event' : boss ? 'boss' : 'battle';
+    playTrack(fallback);
+    ui.banner({ name: '— ♪ 藤原信頼 専用BGM —' }, '他の全BGMより最優先');
+  } else if (state.mode === 'adventure') {
     playTrack('adventure');
     ui.banner({ name: '— ♪ ADVENTURE —' }, '休憩所と戦闘で同じBGM');
   } else if (participants.some((k) => k === 'valgard')) {
