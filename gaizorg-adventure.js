@@ -8,7 +8,7 @@ import {attachKinosakiRestMotion} from './kinosaki-motion.js?v=rf-kinosaki-v27-2
  * Builds a small freely walkable rest camp, stage portal and a 10-battle chapter.
  * Runs inside the game's existing scene/battle system; no new renderer or audio loop.
  */
-import { instantiateModel, disposeModel } from './model-runtime.js?v=rf-mobile-v7-20261109';
+import { instantiateModel, disposeModel } from './model-runtime.js?v=rf-fujiwara-noble-motion-v36-20261110';
 import { attachValgardMotion } from './valgard-motion.js?v=20261108-grand-four-v3';
 // RF_OPERATOR_GIGANTES_ADVENTURE_20261108
 
@@ -233,6 +233,7 @@ export function setupGaizorgAdventure(ctx){
     rest.motion?.stop();
     rest.kinMotion?.dispose();
     rest.udaMotion?.dispose();
+    rest.fujMotion?.dispose();
     if(rest.instance)disposeModel(rest.instance,rest.mixer);
     for(const asset of rest.owned)asset?.dispose?.();
     rest=null;
@@ -242,6 +243,7 @@ export function setupGaizorgAdventure(ctx){
   function drawStatus(text){status.textContent=text;}
   function stageTitle(index){return STAGE_PLAN[clamp(index,0,9)]?.name||'十重の試練';}
   async function start(key){
+    if(key==='fujiwara_nobuyori'&&!chiefUnlocked()){ui.banner({name:'使用権限がありません'},'藤原信頼は運営長専用です');goTitle();return;}
       if(key==='kinosaki_sanmi'&&!chiefUnlocked()){ui.banner({name:'使用権限がありません'},'城崎三位は運営長専用です');goTitle();return;}
     if(busy)return;
     busy=true;
@@ -271,11 +273,12 @@ export function setupGaizorgAdventure(ctx){
     const motion=attachValgardMotion(instance.model,k);
     const kinMotion=k==='kinosaki_sanmi' ? attachKinosakiRestMotion(instance.model,original?.animations||[]) : null;
     const udaMotion=k==='udaijin' ? window.__rfAttachUdaijinRestMotion?.(instance.model,original?.animations||[]) : null;
+    const fujMotion=k==='fujiwara_nobuyori' ? window.__rfAttachFujiwaraRestMotion?.(instance.model,original?.animations||[]) : null;
     const clips=original?.animations||[];
     const walk=clips.find(c=>/walk/i.test(c.name));
     const run=clips.find(c=>/run/i.test(c.name));
     const idle=clips.find(c=>/idle/i.test(c.name));
-    rest={...env,p,instance,mixer,motion,kinMotion,udaMotion,walk,run,idle,action:null,owned:env.owned,pos:new THREE.Vector3(0,0,8),facing:0,portalHold:0};
+    rest={...env,p,instance,mixer,motion,fujMotion,kinMotion,udaMotion,walk,run,idle,action:null,owned:env.owned,pos:new THREE.Vector3(0,0,8),facing:0,portalHold:0};
     if(idle)rest.action=mixer.clipAction(idle).play();
     state.adventureRest=true;state.battle=null;state.field=null;state.mode='adventure';
     state.battleLoading=false;
@@ -317,6 +320,7 @@ export function setupGaizorgAdventure(ctx){
     rest.kinMotion?.update(dt,moving,running);
     rest.motion?.update(dt,moving?(running?'run':'walk'):false);
     rest.udaMotion?.update(dt,moving,running);
+    rest.fujMotion?.update(dt,moving,running);
     // A little idle motion for models with no authored animation.
     if(!rest.walk && !rest.run && !rest.idle && !rest.motion)rest.instance.wrapper.position.y=Math.abs(Math.sin(performance.now()/170))*(moving?.09:.02);
     rest.portal.rotation.z+=dt*.45;

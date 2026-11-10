@@ -1,9 +1,10 @@
+import {installFujiwaraCombat} from './fujiwara-nobuyori.js?v=rf-fujiwara-noble-motion-v36-20261110';
 // RF_CHIEF_CHAR_EDITOR_V28
 import { initChiefCharacterEditor } from './character-editor.js?v=rf-chief-editor-v33-20261110';
 // RF_KINOSAKI_V27_INSTALL
 import {installStaffAvatarScale} from './staff-character-scale.js?v=rf-kinosaki-v27-20261110';
 import {installKinosakiMotion} from './kinosaki-motion.js?v=rf-kinosaki-v27-20261110';
-import {installUdaijinCombat} from './udaijin-curse.js?v=rf-udaijin-exact-v21-20261109';
+import {installUdaijinCombat} from './udaijin-curse.js?v=rf-fujiwara-noble-motion-v36-20261110';
 // RF_AUTO_RIG_V17_MAIN
 // RF_MOTION_GUARD_V16_MAIN
 // RF_ULTRA_V12_MAIN
@@ -17,11 +18,11 @@ import './boss-abilities.js?v=rf-v9-2-20261109';
 import './exact-model-portraits.js?v=rf-v9-2-20261109';
 // RF_GRAND_FOUR_20261108 main.js
 import * as THREE from 'three';
-import { setupGaizorgAdventure } from './gaizorg-adventure.js?v=rf-mobile-v7-20261109';
+import { setupGaizorgAdventure } from './gaizorg-adventure.js?v=rf-fujiwara-noble-motion-v36-20261110';
 import { installOperatorCombatFx } from './operator-combat-fx.js?v=20261108-grand-four-v3';
 import { renderExactPortrait } from './glb-portrait.js?v=rf-mobile-v7-20261109';
 // RF_OPERATOR_GIGANTES_MAIN_20261108
-import { loadModel } from './model-runtime.js?v=rf-combo-v15-20261109';
+import { loadModel } from './model-runtime.js?v=rf-fujiwara-noble-motion-v36-20261110';
 import { Battle, ARENA_R } from './game.js?v=rf-combo-v15-20261109';
 import { installNepterionCombat } from './nepterion-water.js?v=rf-v18-20261109';
 import { installActorMotion } from './character-motion.js?v=rf-v18-20261109';
@@ -41,6 +42,7 @@ installOperatorCombatFx(Battle);
 installNepterionCombat({ Battle, Fighter: MaouFighter });
 installActorMotion({ Fighter: MaouFighter, Battle });
 installUdaijinCombat({Fighter:MaouFighter,Battle,state:()=>state});
+installFujiwaraCombat({Fighter:MaouFighter,Battle,state:()=>state});
 installNepterionFixedSeven({ Fighter: MaouFighter, FIGHTERS, state:()=>state });
 installStaffAvatarScale({Fighter:MaouFighter,FIGHTERS,ROSTER});
 installKinosakiMotion({Fighter:MaouFighter,Battle});
@@ -1602,6 +1604,7 @@ const foeCpu = (base) => Math.max(0.15, Math.min(1, base * DIFFS[save.diff].c));
 const foeHp = (m) => (m || 1) * DIFFS[save.diff].h;
 // その戦士を使えるか（運営専用・ショップ解放）
 function canUse(k) {
+  if (k === 'fujiwara_nobuyori') return chiefUnlocked();
   if (k === "kinosaki_sanmi") return chiefUnlocked();
   if (k === 'udaijin') return chiefUnlocked();
   if (k === 'nepterion') return chiefUnlocked();
@@ -1618,7 +1621,7 @@ function canUse(k) {
   if (d.locked) return operatorUnlocked();
   return true;
 }
-const SELECT_KEYS = () => [...ROSTER, 'seraphel', 'chief', 'sovereign', 'bloodfiend', 'valgard', 'gaizorg', 'operator_gigantes', 'valdarion', 'crimson', 'maou', 'nepterion', 'udaijin', 'kinosaki_sanmi'];
+const SELECT_KEYS = () => [...ROSTER, 'seraphel', 'chief', 'sovereign', 'bloodfiend', 'valgard', 'gaizorg', 'operator_gigantes', 'valdarion', 'crimson', 'maou', 'nepterion', 'udaijin', 'kinosaki_sanmi', 'fujiwara_nobuyori'];
 function refreshTitle() {
   $('#btn-invade').hidden = !operatorUnlocked();
   if ($('#btn-evmaker')) $('#btn-evmaker').hidden = !chiefUnlocked();
@@ -2601,7 +2604,7 @@ function rollFoeCount() {
   return n;
 }
 function storyParty() {
-  const party = (save.party.length ? save.party : ['rowen']).filter(k => k !== 'nepterion' || chiefUnlocked());
+  const party = (save.party.length ? save.party : ['rowen']).filter(k => !['nepterion','udaijin','fujiwara_nobuyori'].includes(k) || chiefUnlocked());
   if (!party.length) party.push('rowen');
   const mainKey = party.includes(save.main) ? save.main : party[0];
   return { party, mainKey };
@@ -3286,10 +3289,11 @@ async function onInvaded(e) {
   state.paused = false;
   $('#pause').hidden = true;
   const p = state.worldPeers?.[e.from];
+  if (apiEnabled() && p?.fk && ['udaijin','fujiwara_nobuyori'].includes(p.fk)) await verifyPeer(p);
   const apexOk = !apiEnabled() || tr === 'chief' || tr === 'op';
-  const chiefOnlyAttempt = (['valgard', 'gaizorg', 'valdarion', 'maou'].includes(p?.fk)) && tr !== 'chief' && apiEnabled();
+  const chiefOnlyAttempt = (['valgard', 'gaizorg', 'valdarion', 'maou', 'udaijin', 'fujiwara_nobuyori'].includes(p?.fk)) && tr !== 'chief' && apiEnabled();
     const opOnlyAttempt = p?.fk === 'operator_gigantes' && tr !== 'op' && apiEnabled();
-  const ik = apexOk && !chiefOnlyAttempt && !opOnlyAttempt && ['chief', 'sovereign', 'sovereign2', 'bloodfiend', 'valgard', 'gaizorg', 'operator_gigantes', 'valdarion'].includes(p?.fk) && (!apiEnabled() || peerVerified(e.from, p.fk)) ? p.fk : 'seraphel';
+  const ik = apexOk && !chiefOnlyAttempt && !opOnlyAttempt && ['chief', 'sovereign', 'sovereign2', 'bloodfiend', 'valgard', 'gaizorg', 'operator_gigantes', 'valdarion', 'maou', 'udaijin', 'fujiwara_nobuyori'].includes(p?.fk) && (!apiEnabled() || peerVerified(e.from, p.fk)) ? p.fk : 'seraphel';
   b.add(ik, { team: 1, remote: true, netId: e.from, pos: p ? [p.x, p.z] : [0, -9], facing: Math.PI, name: `乱入者・${e.name}`, ...peerOpts(e.from, ik) });
   b.net = w;
   b.strictNet = apiEnabled();
@@ -3324,7 +3328,7 @@ function renderInvadeList() {
 
 $('#invade-who').addEventListener('click', () => {
   sfx('ui');
-  const order = operatorUnlocked() ? ['seraphel', 'chief', 'sovereign', 'bloodfiend', ...(chiefUnlocked() ? ['valgard', 'gaizorg', 'valdarion', 'maou'] : []), ...(operatorOnlyUnlocked() ? ['operator_gigantes'] : [])] : ['seraphel'];
+  const order = operatorUnlocked() ? ['seraphel', 'chief', 'sovereign', 'bloodfiend', ...(chiefUnlocked() ? ['valgard', 'gaizorg', 'valdarion', 'maou', 'udaijin', 'fujiwara_nobuyori'] : []), ...(operatorOnlyUnlocked() ? ['operator_gigantes'] : [])] : ['seraphel'];
   state.invadeKey = order[(order.indexOf(state.invadeKey) + 1) % order.length];
   $('#invade-who').textContent = `乱入する姿：${FIGHTERS[state.invadeKey].name}`;
 });
@@ -3345,9 +3349,19 @@ async function startInvade(p) {
     return;
   }
   const invadeHero = ((['chief','sovereign','bloodfiend'].includes(state.invadeKey) && operatorUnlocked()) ||
-    (['valgard','gaizorg','valdarion','maou'].includes(state.invadeKey) && chiefUnlocked()) ||
+    (['valgard','gaizorg','valdarion','maou','udaijin','fujiwara_nobuyori'].includes(state.invadeKey) && chiefUnlocked()) ||
     (state.invadeKey==='operator_gigantes' && operatorOnlyUnlocked())) ? state.invadeKey : 'seraphel';
   if (!(await ensureAllModelsReady([invadeHero,peerKeyOf(p.id,p.fk)]))) return;
+  // RF_FUJ_UDA_INVADE_PROFILE_V36
+  if (apiEnabled() && ['udaijin','fujiwara_nobuyori'].includes(invadeHero)) {
+    if (profState.key === invadeHero && !profState.tok) profState.at = 0;
+    await refreshProfile(invadeHero);
+    if (profState.key !== invadeHero || !profState.tok) {
+      ui.banner({name:'— 乱入できません —'},'運営長の認証と同期コードを確認してください');
+      state.battleLoading = false;
+      return;
+    }
+  }
   // サーバー設定時：乱入の許可をサーバーで判定し、署名付き許可証を相手に渡す
   let tk = '';
   if (apiEnabled()) {
@@ -3360,14 +3374,16 @@ async function startInvade(p) {
     tk = r.ticket;
   }
   state.mode = 'invade';
-  w.invade({ to: p.id, from: w.myId, name: '運営', tk });
+  // V36: invitation is sent after signed presence is advertised.
   setStage(stageById(STORY[p.ch]?.stage));
   const b = makeBattle(w);
-  const ik = (['chief', 'sovereign', 'bloodfiend'].includes(state.invadeKey) && operatorUnlocked()) || ((['valgard', 'gaizorg', 'valdarion', 'maou'].includes(state.invadeKey)) && chiefUnlocked()) || (state.invadeKey === 'operator_gigantes' && operatorOnlyUnlocked()) ? state.invadeKey : 'seraphel';
+  const ik = (['chief', 'sovereign', 'bloodfiend'].includes(state.invadeKey) && operatorUnlocked()) || ((['valgard', 'gaizorg', 'valdarion', 'maou', 'udaijin', 'fujiwara_nobuyori'].includes(state.invadeKey)) && chiefUnlocked()) || (state.invadeKey === 'operator_gigantes' && operatorOnlyUnlocked()) ? state.invadeKey : 'seraphel';
   b.add(ik, { team: 0, player: true, awk: save.awk, netId: w.myId, pos: [0, -9], name: FIGHTERS[ik].name + '（運営）', upg: upgFor(ik), gear: gearFor(ik) });
   b.add(peerKeyOf(p.id, p.fk), { team: 1, remote: true, netId: p.id, pos: [p.x, p.z], name: p.name, gear: { w: p.gw, a: p.ga }, ...peerOpts(p.id, peerKeyOf(p.id, p.fk)) });
   b.strictNet = apiEnabled();
   beginBattle(true);
+  worldTick(0.2);
+  w.invade({ to: p.id, from: w.myId, name: '運営', tk });
   ui.flash();
   ui.banner({ name: `— ${STORY[p.ch]?.title || '旅の途中'} —` }, '裁きの時間だ');
 }
@@ -3385,7 +3401,7 @@ function worldTick(dt) {
   worldTimer = 0;
   const b = state.battle;
   const me = b?.fighters.find((f) => f.isPlayer);
-  const gk = state.myKey || '';
+  const gk = (state.mode === 'invade' && me?.key) ? me.key : (state.myKey || '');
   if (gk) refreshProfile(gk);
   // 運営長のヴァルガルドが物語フィールド/戦闘、または乱入中に実際に存在する時だけ
   // 短期署名を付ける。無権限のpresenceを受けても他プレイヤーのBGMを変えない。

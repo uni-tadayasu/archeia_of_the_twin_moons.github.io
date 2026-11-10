@@ -1366,3 +1366,22 @@ FIGHTERS.kinosaki_sanmi = {
   hi:{name:'秘奥義《九霄神風》',kind:'judgment',visual:'sword',finalVisual:'nova',count:12,spread:5.2,radius:2,dmg:88,delay:.48,interval:.085,finalDmg:530,finalRadius:8.1,castTime:2.45,elem:3,color:0xe1fff0,vivid:true,hi:true}
 };
 if(!SPECIAL_KEYS.includes('kinosaki_sanmi'))SPECIAL_KEYS.push('kinosaki_sanmi');
+
+// RF_FUJIWARA_NOBUYORI_V36 — 運営長専用・呪属性。添付GLBを無加工で使用。
+FIGHTERS.fujiwara_nobuyori = {
+  name:'藤原信頼', title:'禍呪の公卿（運営長専用）',
+  model:'assets/models/fujiwara-nobuyori-original.glb',
+  face:'assets/portraits/fujiwara-nobuyori.svg',
+  color:0xbd7bff, tint:null, attribute:'呪', element:6,
+  height:3.55, hp:120000, speed:6.75, power:2.2, armor:.26,
+  fluxMul:2.1, overGain:1.8, locked:true, special:'chief',
+  fixedSlots:true, curseExclusive:true,
+  light:{name:'呪印',dmg:0,range:24,color:0xca85ff},
+  skills:[
+    {name:'鬼火',kind:'projectile',visual:'orb',cost:16,castTime:0.42,count:1,dmg:0,speed:22,radius:.35,elem:6,color:0xff9565,vivid:true},
+    {name:'呪いの光',kind:'projectile',visual:'laser',cost:24,castTime:0.65,count:1,dmg:0,speed:25,radius:.4,elem:6,color:0xc77aff,vivid:true}
+  ],
+  over:{name:'呪いの光',kind:'shockwave',cost:0,castTime:1.0,dmg:0,radius:1,elem:6,color:0xc778ff},
+  hi:{name:'呪いの光',kind:'shockwave',cost:0,castTime:1.3,dmg:0,radius:1,elem:6,color:0xe4b5ff,hi:true}
+};
+if (!SPECIAL_KEYS.includes('fujiwara_nobuyori')) SPECIAL_KEYS.push('fujiwara_nobuyori');

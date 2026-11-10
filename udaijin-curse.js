@@ -1,6 +1,7 @@
 // RF_UDAIJIN_CG_AND_SAFE_MOTION_V26 右大臣 – chief-exclusive curse fighter.
 // Exact source geometry, materials and textures; procedural remeshing disabled.
 import * as THREE from 'three';
+import { createNobleMotion } from './noble-motion.js?v=rf-noble-motion-v35';
 const KEY='udaijin', CURSE_TIME=30, CURSE_RADIUS=5.65;
 const PURPLE=0xaf5dff, C=0xbc72ff;
 const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
@@ -338,82 +339,7 @@ function udNamedLooseParts(model){
   return mapped;
 }
 function udMotionController(model,clips=[]){
-  if(!model)return null;
-  const names=udClipMap(clips);
-  if(!names.run && names.walk) names.run = names.walk;
-  if(!names.walk && names.run) names.walk = names.run;
-  if(!names.attack && names.cast) names.attack = names.cast;
-  const bones=udNamedBones(model),usableBones=Number(!!bones.lArm)+Number(!!bones.rArm)+Number(!!bones.lThigh)+Number(!!bones.rThigh);
-  let underlying=null,mode='whole';
-  if(usableBones>=3){
-    const bases=Object.fromEntries(Object.entries(bones).map(([k,v])=>[k,v.quaternion.clone()]));
-    underlying={mode:'bones',bones,bases,model,baseY:model.position.y,
-      update(dt,p){udPoseNamedBones(this,p.walk,p.run,p.attack,p.cast,p.time);},
-      dispose(){for(const [k,b] of Object.entries(bones))b.quaternion.copy(bases[k]);}
-    };mode='bones';
-  }
-  if(!underlying){
-    const parts=udNamedLooseParts(model);
-    const suitable=['lArm','rArm','lLeg','rLeg'].filter(k=>parts[k]).length;
-    if(suitable>=3){
-      const initial=Object.fromEntries(Object.entries(parts).map(([k,o])=>[k,o.rotation.clone()]));
-      underlying={mode:'loose-limbs',parts,initial,
-        update(dt,p){
-          const a=Math.sin(p.time*(p.run>p.walk?12:7));
-          const stride=(p.walk*.35+p.run*.65)*a;
-          const pose=(k,x=0,y=0,z=0)=>{const o=parts[k],old=initial[k];if(!o||!old)return;
-            o.rotation.set(old.x+x,old.y+y,old.z+z);};
-          pose('lArm',-stride-.25*p.cast+.16*p.attack);
-          pose('rArm',stride-.25*p.cast-.65*p.attack);
-          pose('lFore',-.12-.12*p.attack-.2*p.cast);
-          pose('rFore',-.12-.45*p.attack-.2*p.cast);
-          pose('lLeg',stride);pose('rLeg',-stride);
-          pose('lCalf',-Math.max(0,-a)*p.run*.3);
-          pose('rCalf',-Math.max(0,a)*p.run*.3);
-          pose('head',-.03*a*(p.walk+p.run));pose('torso',-.09*p.attack-.04*p.cast);
-        },
-        dispose(){for(const [k,o] of Object.entries(parts))o.rotation.copy(initial[k]);}
-      };mode='loose-limbs';
-    }
-  }
-  if(!underlying){
-    const basePosition=model.position.clone(),baseRotation=model.rotation.clone();
-    underlying={mode:'whole',update(dt,p){
-      const walk=Math.max(0,p.walk||0),run=Math.max(0,p.run||0),attack=Math.max(0,p.attack||0),cast=Math.max(0,p.cast||0);
-      const moving=walk+run,rate=run>walk?12.5:7.8;
-      const phase=Math.sin(p.time*rate),phase2=Math.cos(p.time*rate*2.0),step=Math.abs(phase);
-      model.position.copy(basePosition);
-      model.position.y += (walk*.018+run*.05)*step + attack*0.012*Math.sin(p.time*18);
-      model.position.z += attack*0.08;
-      model.rotation.copy(baseRotation);
-      model.rotation.x += .03*walk+.095*run+.14*attack-.04*cast;
-      model.rotation.y += .032*moving*phase-.22*attack+.03*cast*phase2;
-      model.rotation.z += .024*moving*Math.cos(p.time*rate)+.028*cast+.018*attack*Math.sin(p.time*14);
-    },dispose(){model.position.copy(basePosition);model.rotation.copy(baseRotation);}};
-  }
-  const state={model,mode,clips:names,time:0,walk:0,run:0,attack:0,cast:0,lastAuthored:''};
-  const blend=(old,value,dt,rate)=>old+(value-old)*(1-Math.exp(-rate*dt));
-  return {
-    ...state,
-    update(dt,{moving=false,running=false,attack=0,cast=0}={}){
-      dt=clamp(+dt||0,0,.05);this.time+=dt;
-      this.walk=blend(this.walk,moving&&!running?1:0,dt,10);
-      this.run=blend(this.run,moving&&running?1:0,dt,11.5);
-      this.attack=blend(this.attack,attack,dt,18);
-      this.cast=blend(this.cast,cast,dt,9);
-      const idleWeight=(this.walk+this.run+this.attack+this.cast)<.18;
-      const authoredKey = this.attack>0.28 && names.attack ? 'attack'
-        : this.cast>0.35 && names.cast ? 'cast'
-        : this.run>0.42 && names.run ? 'run'
-        : this.walk>0.28 && names.walk ? 'walk'
-        : idleWeight && names.idle ? 'idle'
-        : '';
-      this.lastAuthored = authoredKey;
-      if(authoredKey) return;
-      underlying.update(dt,{time:this.time,walk:this.walk,run:this.run,attack:this.attack,cast:this.cast});
-    },
-    dispose(){underlying.dispose();}
-  };
+  return createNobleMotion(model,clips,{name:'右大臣'});
 }
 function attachRig(f,glb){
   const model=f.modelInstance?.model;
@@ -431,7 +357,7 @@ function attachRig(f,glb){
     if(controller.clips.walk==null && controller.clips.run)f.clips.walk||=controller.clips.run;
     if(controller.clips.idle)f.clips.idle||=controller.clips.idle;
   }
-  console.info('[右大臣 Motion V24 / Enhanced WalkRunAttack]',controller?.mode||'none', 'original model preserved');
+  console.info('[右大臣 Motion V35 / Detailed Safe WalkRunAttack]',controller?.mode||'none', 'original model preserved');
 }
 function animateRig(f,dt){
   const controller=f._udaRig;
@@ -441,7 +367,7 @@ function animateRig(f,dt){
   const running=moving && (speed>5.25 || f.action?.type==='dash' || !!f._udaSprint);
   const pulse=Number(f._udaStrike)||0;
   const attackAction = f.action?.type==='light' || f.action?.type==='cast' && pulse>0.1;
-  const attack=pulse>0?Math.sin(Math.PI*clamp(1-pulse/.46,0,1)):0;
+  const attack=pulse>0?Math.sin(Math.PI*clamp(1-pulse/.62,0,1)):0;
   f._udaStrike=Math.max(0,pulse-dt);
   const casting=!!(f.action?.type==='chant'||f.action?.type==='cast'||f._udaCastPulse>0);
   f._udaCastPulse=Math.max(0,(f._udaCastPulse||0)-dt);
@@ -502,6 +428,7 @@ export function installUdaijinCombat({Fighter,Battle,state}){
     const frozen=!!(st&&st.until>t&&!this.dead),wasPos=frozen?this.pos.clone():null;
     if(st&&!frozen)releaseStasis(this);
     const inp={...(input||{})};
+    if(this.key===KEY && !inp.attack)this._udaAttackHeld=false;
     if(frozen){
       this.vel.set(0,0,0);this.action=null;this.chantToken=null;
       this.stun=Math.max(.1,this.stun||0);
@@ -531,6 +458,8 @@ export function installUdaijinCombat({Fighter,Battle,state}){
   const baseLight=Fighter.prototype.startLight;
   Fighter.prototype.startLight=function(...args){
     if(this.key!==KEY)return baseLight.apply(this,args);
+    if(this._udaAttackHeld)return;
+    this._udaAttackHeld=true;
     const target=this.battle?.nearestEnemy?.(this);
     this._udaStrike=.62;
     this.anim?.('udaAttack');
