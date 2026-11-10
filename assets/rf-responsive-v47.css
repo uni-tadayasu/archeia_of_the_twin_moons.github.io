@@ -1,0 +1,149 @@
+
+/* RF47 : no accidental UI text wrapping / overflow, while paragraphs stay legible */
+:root{--rf47-pad:clamp(8px,2.1vw,25px);--rf47-min-hit:36px}
+*,*::before,*::after{box-sizing:border-box}
+html,body{min-width:0;max-width:100%;width:100%;overflow-x:clip;-webkit-text-size-adjust:100%;text-size-adjust:100%}
+#ui{left:0;right:0;width:100%;max-width:100%;min-width:0}
+#ui .screen{width:100%;max-width:100%;min-width:0;overflow-x:clip;padding-left:max(var(--rf47-pad),env(safe-area-inset-left));padding-right:max(var(--rf47-pad),env(safe-area-inset-right))}
+#ui .screen.on{overflow-y:auto;overscroll-behavior-y:contain;-webkit-overflow-scrolling:touch}
+#ui .screen .inner,#ui .portal-wrap{min-width:0;max-width:100%;width:min(100%,1060px);margin-left:auto;margin-right:auto}
+#ui .inner>*{max-width:100%;min-width:0}
+#ui :is(.topbar,.menu,.grid,.field,.forge,.fpanel,.frow,.portal-header,.portal-topnav,.portal-overview,.portal-modes,.portal-services,.portal-section,.portal-hero,.portal-hero-bottom,.world-gallery,#select-grid,#stage-grid,#party-slots,.party-picker-results){min-width:0;max-width:100%}
+#ui .topbar{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+#ui .topbar .crumb{flex:1 1 90px;min-width:0;text-align:right}
+#ui :is(.portal-header,.portal-topnav){flex-wrap:wrap;gap:clamp(3px,.8vw,10px)}
+#ui :is(.portal-header,.portal-topnav,.portal-hero,.hero-center,.mode-main,.mode-tile,.mode-tile .tile-arrow,.portal-services button,.world-gallery button,.portal-account,.brand-type,.card){min-width:0}
+#ui img,#ui video,#ui picture,#ui svg{max-width:100%;height:auto}
+#ui .card img.face{width:100%;aspect-ratio:1;object-fit:contain}
+#ui .sthumb{width:100%;aspect-ratio:16/9;background-size:cover;background-position:center}
+#ui .portal-hero .hero-figure{max-height:100%;object-fit:contain;pointer-events:none}
+#ui .menu{width:min(100%,520px);grid-template-columns:minmax(0,1fr)}
+#ui .menu :is(.btn,button){min-width:0;max-width:100%;text-align:left}
+#ui :is(.card,.fpanel,.chip,.frow,.mode-tile,.party-slot,.overview-panel,.world-gallery>*,.portal-services>*){min-width:0}
+#ui .forge{grid-template-columns:minmax(120px,180px) minmax(0,1fr);width:100%}
+#ui .frow{grid-template-columns:minmax(0,1fr) auto}
+#ui .frow>span{min-width:0}
+#ui :is(#select-grid,#stage-grid,#party-slots,.party-picker-results){width:100%}
+#ui #select-grid{grid-template-columns:repeat(auto-fill,minmax(min(100%,158px),1fr))}
+#ui #stage-grid{grid-template-columns:repeat(auto-fill,minmax(min(100%,195px),1fr))}
+#ui :is(#party-slots,.party-picker-results){grid-template-columns:repeat(auto-fit,minmax(min(100%,165px),1fr))}
+#ui :is(.portal-overview,.portal-services,.world-gallery){grid-template-columns:repeat(auto-fit,minmax(min(100%,230px),1fr))}
+#ui .portal-modes{grid-template-columns:repeat(auto-fit,minmax(min(100%,255px),1fr))}
+#ui .hero-center{max-width:100%;z-index:2}
+#ui :is(input,select,textarea,button){max-width:100%;min-width:0}
+#ui input:not([type=checkbox]):not([type=radio]){box-sizing:border-box}
+#ui #story-box{width:min(100%,800px);padding:clamp(10px,2vw,20px);max-width:100%}
+#ui :is(#story-line,.overview-panel p,.portal-hero p,.portal-section p,.foot,.world-footnote,.story-text,#res-text,#pause-note){white-space:normal;overflow-wrap:break-word;word-break:normal;line-height:1.5}
+#ui #world-panel{width:min(94vw,480px);max-width:calc(100vw - 16px);max-height:min(80dvh,720px);overflow-x:hidden;overflow-y:auto}
+#ui #world-req{max-width:calc(100vw - 16px);max-height:76dvh;overflow-y:auto}
+#ui #pause{max-width:100%;width:100%;max-height:100%;overflow-y:auto}
+#ui .plate{max-width:100%;min-width:0}
+#ui #hud-left,#ui #hud-right{min-width:0}
+#ui #gauges{min-width:0}
+#ui #touch{max-width:100%;overflow:hidden}
+#ui #joy,#ui #tbtns{touch-action:none}
+#ui #tbtns button{display:grid;place-items:center}
+#ui #cutin .ci-band{max-width:110%;overflow:hidden}
+#ui #cutin .ci-text{max-width:70vw;min-width:0;overflow:hidden}
+#ui #skillname{max-width:min(94vw,720px)}
+#ui :is(.modal,.dialog,dialog,[role="dialog"],.modal-content){max-width:min(96vw,960px);max-height:calc(100dvh - 18px);overflow:auto}
+#ui [hidden]{display:none!important}
+/* Compact UI labels: ONE line only. JavaScript reduces font size where necessary.
+   Long story text and descriptive paragraphs intentionally remain readable. */
+#ui :is(.crumb,.label,.back,.btn,.chip,.card b,.card em,.card small,
+ .mode-tile b,.mode-tile small,.portal-topnav button,.portal-services button b,
+ .portal-services button small,.portal-hero h1,.hero-kicker,
+ .brand-type,.world-gallery button span,.section-heading h2,.section-heading span,
+ .overview-panel h2,.portal-hero-bottom span,#res-title,#story-chapter,
+ #skillname .sn-name,#skillname .sn-who,#skillname .sn-kind,
+ #cutin .ci-title,#cutin .ci-who,#banner b,#banner i,
+ .plate b,#field-region,#field-obj,#field-prompt,#btn-pause,#tbtns button){
+  min-width:0;max-width:100%;white-space:nowrap!important;overflow:hidden;text-overflow:ellipsis;
+  word-break:keep-all!important;overflow-wrap:normal!important;
+}
+#ui .menu button{max-width:100%;min-width:0}
+#ui .menu button:not(:has(small)):not(:has(b)){white-space:nowrap!important;overflow:hidden;text-overflow:ellipsis}
+#ui .menu button :is(b,small,span){max-width:100%;min-width:0;white-space:nowrap!important;overflow:hidden;text-overflow:ellipsis}
+#ui .portal-hero h1{font-size:clamp(20px,4.2vw,58px);letter-spacing:clamp(0px,.15vw,2px)}
+#ui .portal-hero h1 span{display:block;min-width:0;max-width:100%;font-size:clamp(9px,1.25vw,15px);letter-spacing:0;white-space:nowrap!important;overflow:hidden;text-overflow:ellipsis}
+#ui h1:not(.portal-hero h1){font-size:clamp(22px,4.6vw,56px);letter-spacing:clamp(0px,.12vw,2px)}
+#ui .card b{font-size:clamp(13px,2.4vw,20px)}
+#ui .card small{font-size:clamp(10px,1.2vw,12px)}
+#ui .label{font-size:clamp(16px,2.8vw,25px);letter-spacing:.06em}
+#ui #skillname .sn-name{font-size:clamp(15px,3vw,32px)}
+#ui #cutin .ci-title{font-size:clamp(17px,4.5vw,50px)}
+#ui #banner b{font-size:clamp(19px,5vw,47px)}
+#ui #tbtns button{font-size:clamp(11px,3.1vmin,17px)}
+#ui :is(.card,.mode-tile,.portal-services button,.overview-panel){overflow:hidden}
+@media(min-width:1200px){
+ #ui .screen .inner{width:min(100%,1100px)}
+ #ui .portal-wrap{max-width:1230px}
+}
+@media(max-width:900px){
+ #ui .portal-modes{grid-template-columns:repeat(2,minmax(0,1fr))}
+ #ui :is(.portal-overview,.portal-services,.world-gallery){grid-template-columns:repeat(2,minmax(0,1fr))}
+ #ui .portal-topnav{width:100%;justify-content:center}
+}
+@media(max-width:600px){
+ :root{--rf47-pad:10px}
+ #ui .screen .inner{width:100%}
+ #ui .topbar{column-gap:6px}
+ #ui .topbar .crumb{flex:1;min-width:0}
+ #ui .back{padding:7px 9px;letter-spacing:0}
+ #ui :is(.portal-overview,.portal-services,.world-gallery,.portal-modes){grid-template-columns:minmax(0,1fr)}
+ #ui .portal-header{gap:6px;flex-wrap:wrap}
+ #ui .portal-topnav{width:100%;flex-wrap:nowrap;gap:2px}
+ #ui .portal-topnav button{flex:1 1 0%;min-width:0;padding:6px 2px;letter-spacing:0}
+ #ui .portal-hero .hero-figure{max-width:48vw;opacity:.35}
+ #ui .portal-hero .hero-center{padding-inline:6px}
+ #ui .portal-hero h1{font-size:clamp(21px,6vw,36px)}
+ #ui .portal-hero h1 span{font-size:clamp(9px,2.3vw,13px)}
+ #ui #select-grid,#ui #stage-grid,#ui #party-slots,#ui .party-picker-results{grid-template-columns:repeat(2,minmax(0,1fr));gap:clamp(5px,1.8vw,9px)}
+ #ui .card{padding:clamp(6px,2vw,9px)}
+ #ui .card b{font-size:clamp(12px,3.5vw,17px)}
+ #ui .card small{font-size:clamp(9px,2.65vw,11px)}
+ #ui .forge{grid-template-columns:minmax(0,1fr)}
+ #ui #forge-list{display:flex;flex-direction:row;flex-wrap:wrap;max-height:none;overflow:visible}
+ #ui #forge-list>*{min-width:0;flex:1 1 120px}
+ #ui .fpanel{padding:8px}
+ #ui #story-box{padding:10px;max-height:min(52dvh,420px);overflow-y:auto}
+ #ui #hud-left,#ui #hud-right{width:calc(50% - 47px);top:5px}
+ #ui #btn-pause{max-width:84px;padding:3px 5px;font-size:11px}
+ #ui #gauges{max-width:82px;width:82px;top:34px}
+ #ui #field-info{max-width:calc(50vw - 50px)}
+ #ui #field-info small{display:none}
+ #ui #tbtns{--tb:clamp(38px,12vmin,53px);gap:4px}
+ #ui #joy{width:clamp(88px,26vmin,132px)}
+ #ui #skillname{top:clamp(104px,17vh,140px)}
+ #ui #cutin .ci-text{max-width:62vw}
+}
+@media(max-width:360px){
+ #ui .screen{padding-left:max(7px,env(safe-area-inset-left));padding-right:max(7px,env(safe-area-inset-right))}
+ #ui .portal-topnav button{padding:5px 1px}
+ #ui .portal-hero .hero-figure{opacity:.25}
+ #ui .card b{font-size:12px}
+ #ui #tbtns{--tb:37px}
+ #ui #joy{width:84px}
+ #ui #hud-left,#ui #hud-right{width:calc(50% - 42px)}
+ #ui #gauges{max-width:76px;width:76px}
+}
+@media(max-height:530px) and (orientation:landscape){
+ #ui .screen{padding-top:max(3px,env(safe-area-inset-top));padding-bottom:max(3px,env(safe-area-inset-bottom))}
+ #ui .screen .inner{gap:4px}
+ #ui .menu{gap:4px}
+ #ui .menu button{padding:5px 9px;min-height:32px}
+ #ui .portal-topnav button{padding:3px 6px}
+ #ui .portal-hero h1{font-size:clamp(20px,5vh,32px)}
+ #ui .portal-modes{grid-template-columns:repeat(2,minmax(0,1fr))}
+ #ui .forge{grid-template-columns:minmax(95px,140px) minmax(0,1fr)}
+ #ui #forge-list{max-height:45vh;overflow-y:auto}
+ #ui #story-box{max-height:45vh;overflow-y:auto}
+ #ui #skillname{top:clamp(59px,18vh,92px)}
+ #ui #tbtns{--tb:clamp(36px,12vh,44px);gap:3px}
+ #ui #joy{width:clamp(80px,25vh,104px)}
+}
+@media(pointer:coarse){
+ #ui :is(input,textarea,select):not([type=range]){font-size:max(16px,1rem)}
+ #ui button{touch-action:manipulation}
+}
+@media(prefers-reduced-motion:reduce){#ui .screen{scroll-behavior:auto}}
