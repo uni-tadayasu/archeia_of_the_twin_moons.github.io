@@ -1462,6 +1462,7 @@ export default {
         case '/sync/pull': return await syncPull(req, env, H, body);
         case '/entitlements': return await entitlements(req, env, H, body);
         case '/profile': return await profile(req, env, H, body);
+        case '/minamoto/buy': return await rf48BuyMinamoto(req, env, H, body);
         case '/guild/create': return await guildRoute(req, env, H, body, 'create');
         case '/guild/get': return await guildRoute(req, env, H, body, 'get');
         case '/guild/join': return await guildRoute(req, env, H, body, 'join');
@@ -1829,7 +1830,11 @@ async function profile(req, env, H, { code, key, role, buyer }) {
   if (key === 'maou_shade') return json(H, {error:'denied'}, 403);
   if (CHIEF_ONLY.has(key) && r !== 'chief') return json(H, { error: 'denied' }, 403);
   if (OP_ONLY.has(key) && !r) return json(H, { error: 'denied' }, 403);
-  if (FIGHTERS[key].shop && !(await ownedKeys(env, buyer)).includes(key)) return json(H, { error: 'not purchased' }, 403);
+  if(key==='minamoto_yoritomo'){
+    const check=await doCall(env.SYNC_LOCK.get(env.SYNC_LOCK.idFromName(h)),{op:'minamoto-owned'});
+    if(!check.data?.owned)return json(H,{error:'not purchased'},403);
+  }
+  if (FIGHTERS[key].shop && key !== 'minamoto_yoritomo' && !(await ownedKeys(env, buyer)).includes(key)) return json(H, { error: 'not purchased' }, 403);
   const u = statsFor(save, key);
   // 証明をプレイヤー(pid)に結びつける：同期コードに固定された pid だけを入れる
   const pid = String(save.pid || '');
@@ -2477,6 +2482,24 @@ export class SyncLock {
       const row = (await store.get('row')) || null;
       const res = (x, status = 200) => new Response(JSON.stringify(x), { status });
       if (op === 'get') return res({ row });
+            // RF48: purchase and debit are a single durable-object transaction.
+            if(op==='minamoto-owned')return res({owned:!!(await store.get('purchase:minamoto_yoritomo'))});
+            if(op==='minamoto-buy'){
+              let sv;try{sv=JSON.parse(row?.data||'null');}catch{sv=null;}
+              if(!sv||!PID_RE.test(String(pid||''))||sv.pid!==pid)return res({error:'nosync'},403);
+              if(await store.get('purchase:minamoto_yoritomo'))return res({ok:true,already:true,data:row.data,ver:row.ver,shards:sv.shards});
+              if(!Number.isSafeInteger(sv.shards)||sv.shards<0)return res({error:'bad_balance'},422);
+              if(sv.shards<100000)return res({error:'shards'},402);
+              sv.shards-=100000;
+              sv.gemChars=[...new Set([...(Array.isArray(sv.gemChars)?sv.gemChars:[]),'minamoto_yoritomo'])];
+              const ver=(row.ver||0)+1,now=Date.now(),serialized=JSON.stringify(sv);
+              if(serialized.length>200000)return res({error:'size'},413);
+              await writeTogether(store,[
+                ['row',{...row,data:serialized,ver,at:now,wealth:wealthOf(sv),wid:''}],
+                ['purchase:minamoto_yoritomo',{at:now,pid,paid:100000,ver}]
+              ]);
+              return res({ok:true,data:serialized,ver,shards:sv.shards});
+            }
       if (['mail-state', 'mail-read', 'mail-claim'].includes(op)) {
         let save;
         try { save = JSON.parse(row?.data || 'null'); } catch { save = null; }
@@ -2565,6 +2588,13 @@ export class SyncLock {
       if (!validateSaveShape(data) || !Number.isSafeInteger(base) || base < 0) return res({ error: 'bad' }, 400);
       const ver = row?.ver || 0;
       const myWid = typeof wid === 'string' && /^[A-Za-z0-9_-]{8,64}$/.test(wid) ? wid : '';
+            // RF48: restore purchased status exclusively from server receipt.
+      if(data&&typeof data==='object'&&!Array.isArray(data)){
+        const owned=!!(await store.get('purchase:minamoto_yoritomo'));
+        const prev=Array.isArray(data.gemChars)?data.gemChars:[];
+        const keep=prev.filter(k=>k!=='minamoto_yoritomo');
+        data.gemChars=owned?[...new Set([...keep,'minamoto_yoritomo'])]:keep;
+      }
       const payload = JSON.stringify(data);
       const digest = myWid ? await sha256(JSON.stringify([base, data])) : '';
       const writeKey = 'write:' + myWid;
@@ -2728,3 +2758,29 @@ CHIEF_ONLY.add('fujiwara_nobuyori');
 
 FIGHTERS.uninomiya_tadayasu={name:'宇邇宮忠靖親王',title:'無窮の親王（運営長専用）',model:'assets/models/uninomiya-tadayasu-rigged.glb',face:'assets/face-uninomiya.webp',color:0xffffff,tint:null,attribute:'無',element:0,height:3.7,hp:250000,speed:8.5,power:3.9,armor:.12,fluxMul:3,overGain:2.3,locked:true,special:'chief',fixedSlots:true,light:{name:'虚空断',kind:'slash',dmg:16000,range:8,color:0xffffff},skills:[{name:'無明天衝',kind:'projectile',cost:15,castTime:.25,count:5,dmg:28000,speed:35,radius:.7,elem:0,color:0xffffff},{name:'因果封絶',kind:'shockwave',cost:25,castTime:.5,dmg:49000,radius:8,elem:0,color:0xffffff},{name:'時界停止',kind:'shockwave',cost:35,castTime:.7,dmg:58000,radius:12,elem:0,color:0xffffff},{name:'万象砕滅',kind:'projectile',cost:48,castTime:1,count:12,dmg:90000,speed:42,radius:1,elem:0,color:0xffffff}],over:{name:'王命・天地崩解',kind:'shockwave',cost:0,castTime:1.2,dmg:160000,radius:18,elem:0,color:0xffffff},hi:{name:'終極秘奥義・零界帰滅',kind:'shockwave',cost:0,castTime:2.2,dmg:300000,radius:28,elem:0,color:0xffffff,hi:true}};
 CHIEF_ONLY.add("uninomiya_tadayasu");
+
+
+FIGHTERS.minamoto_yoritomo={
+ name:'源頼朝',title:'蒼潮の征夷大将軍（灯晶10万）',
+ model:'assets/models/minamoto-yoritomo.glb',face:'assets/portraits/minamoto-yoritomo.svg',
+ color:0x5fdcff,tint:null,attribute:'水',element:7,
+ height:3.55,hp:18000,speed:7.3,power:2.65,armor:.38,fluxMul:2.6,overGain:2.2,
+ fixedSlots:true,shop:true,locked:true,shardPrice:100000,
+ light:{name:'水陣刀・青嵐斬',dmg:280,range:3.8,color:0x6bdfff},
+ skills:[
+  {name:'蒼龍水牙',kind:'projectile',visual:'orb',cost:16,castTime:.38,count:6,spreadAng:.10,chain:.045,dmg:530,speed:31,radius:1.06,elem:7,color:0x34baff,vivid:true},
+  {name:'潮影瞬閃',kind:'dash',cost:21,castTime:.3,dmg:1400,speed:30,dur:.48,elem:7,color:0x36e0ff,vivid:true},
+  {name:'八重潮波陣',kind:'shockwave',cost:26,castTime:.75,dmg:1850,radius:9.6,elem:7,color:0x44d6ff,vivid:true},
+  {name:'天雨千波槍',kind:'rain',visual:'spear',cost:32,castTime:1.15,count:14,spread:4.8,radius:1.7,dmg:380,delay:.38,interval:.065,elem:7,color:0x69eaff,vivid:true}
+ ],
+ over:{name:'征夷水神陣・蒼海制圧',kind:'judgment',visual:'pillar',finalVisual:'nova',count:16,spread:5.6,radius:2.3,dmg:650,delay:.55,interval:.08,finalDmg:2800,finalRadius:10.4,cost:0,castTime:2,elem:7,color:0x65eaff,vivid:true},
+ hi:{name:'秘奥義・大海龍王断',kind:'judgment',visual:'pillar',finalVisual:'bigsword',count:22,spread:7,radius:2.7,dmg:810,delay:.58,interval:.07,finalDmg:5200,finalRadius:13.2,cost:0,castTime:2.7,elem:7,color:0xb5faff,vivid:true,hi:true}
+};
+// RF48_WORKER_MINAMOTO
+async function rf48BuyMinamoto(req,env,H,{code,pid}){
+ if(await limited(env,req,'minamoto-buy',10,60000))return json(H,{error:'limit'},429);
+ const h=await syncKey(env,code);
+ if(!h||!PID_RE.test(String(pid||''))||!(await bindPid(env,pid,h)))return json(H,{error:'nosync'},403);
+ const r=await doCall(env.SYNC_LOCK.get(env.SYNC_LOCK.idFromName(h)),{op:'minamoto-buy',pid});
+ return json(H,r.data,r.status);
+}

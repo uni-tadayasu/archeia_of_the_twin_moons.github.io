@@ -8,7 +8,7 @@ import {attachKinosakiRestMotion} from './kinosaki-motion.js?v=rf-kinosaki-v27-2
  * Builds a small freely walkable rest camp, stage portal and a 10-battle chapter.
  * Runs inside the game's existing scene/battle system; no new renderer or audio loop.
  */
-import { instantiateModel, disposeModel } from './model-runtime.js?v=rf-fujiwara-noble-motion-v36-20261110';
+import { instantiateModel, disposeModel } from './model-runtime.js?v=rf-minamoto-v48-20261111';
 import { attachValgardMotion } from './valgard-motion.js?v=20261108-grand-four-v3';
 // RF_OPERATOR_GIGANTES_ADVENTURE_20261108
 

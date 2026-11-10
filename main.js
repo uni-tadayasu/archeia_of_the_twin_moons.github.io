@@ -15,21 +15,21 @@ import {installUdaijinCombat} from './udaijin-curse.js?v=rf-fujiwara-noble-motio
 // RF_BATCH_SCALE_STARTUP_V92
 // RF_BATTLE_FIX_V9_1_20261109
 import { installMaouCombat } from './maou-abilities.js?v=rf-v9-2-20261109';
-import { Fighter as MaouFighter } from './game.js?v=rf-responsive-v45-20261110';
+import { Fighter as MaouFighter } from './game.js?v=rf-minamoto-v48-20261111';
 import './boss-abilities.js?v=rf-v9-2-20261109';
 import './exact-model-portraits.js?v=rf-v9-2-20261109';
 // RF_GRAND_FOUR_20261108 main.js
 import * as THREE from 'three';
-import { setupGaizorgAdventure } from './gaizorg-adventure.js?v=rf-fujiwara-noble-motion-v36-20261110';
+import { setupGaizorgAdventure } from './gaizorg-adventure.js?v=rf-minamoto-v48-20261111';
 import { installOperatorCombatFx } from './operator-combat-fx.js?v=20261108-grand-four-v3';
 import { renderExactPortrait } from './glb-portrait.js?v=rf-mobile-v7-20261109';
 // RF_OPERATOR_GIGANTES_MAIN_20261108
-import { loadModel } from './model-runtime.js?v=rf-fujiwara-noble-motion-v36-20261110';
-import { Battle, ARENA_R } from './game.js?v=rf-responsive-v45-20261110';
+import { loadModel } from './model-runtime.js?v=rf-minamoto-v48-20261111';
+import { Battle, ARENA_R } from './game.js?v=rf-minamoto-v48-20261111';
 import { installNepterionCombat } from './nepterion-water.js?v=rf-v18-20261109';
 import { installActorMotion } from './character-motion.js?v=rf-v18-20261109';
 import { installNepterionFixedSeven } from './nepterion-fixed-seven.js?v=rf-v18-20261109';
-import { FIGHTERS, spellCastTime, STORY, ROSTER, UPGRADES, MAX_LV, STAGES, BGM, APEX_BGM, ENEMY_ROSTER, UPG_CAP, LB_MAX, lbMaxLv, lbMul, lbCost, WEAPONS, ARMORS, SUMMONS, STAT_LABEL, SPECIAL_KEYS, BOSS_ROSTER, currentEvent, sanitizeEvent, EV_FOE_KINDS } from './data.js?v=rf-v9-2-20261109';
+import { FIGHTERS, spellCastTime, STORY, ROSTER, UPGRADES, MAX_LV, STAGES, BGM, APEX_BGM, ENEMY_ROSTER, UPG_CAP, LB_MAX, lbMaxLv, lbMul, lbCost, WEAPONS, ARMORS, SUMMONS, STAT_LABEL, SPECIAL_KEYS, BOSS_ROSTER, currentEvent, sanitizeEvent, EV_FOE_KINDS } from './data.js?v=rf-minamoto-v48-20261111';
 import { sayBattle, setVoiceMuted, setVoiceVolume, stopVoices } from './voice.js?v=audio-cast-20261107d';
 import { initSocial, uiConfirm } from './social.js?v=valgard-exact-20261107';
 import { initMailbox } from './mailbox.js?v=audio-cast-20261107d';
@@ -1647,6 +1647,7 @@ const foeCpu = (base) => Math.max(0.15, Math.min(1, base * DIFFS[save.diff].c));
 const foeHp = (m) => (m || 1) * DIFFS[save.diff].h;
 // その戦士を使えるか（運営専用・ショップ解放）
 function canUse(k) {
+  if (k === 'minamoto_yoritomo') return save.gemChars.includes(k);
 if (k === 'uninomiya_tadayasu') return chiefUnlocked();
   if (k === 'fujiwara_nobuyori') return chiefUnlocked();
   if (k === "kinosaki_sanmi") return chiefUnlocked();
@@ -1665,7 +1666,7 @@ if (k === 'uninomiya_tadayasu') return chiefUnlocked();
   if (d.locked) return operatorUnlocked();
   return true;
 }
-const SELECT_KEYS = () => [...ROSTER, 'seraphel', 'chief', 'sovereign', 'bloodfiend', 'valgard', 'gaizorg', 'operator_gigantes', 'valdarion', 'crimson', 'maou', 'nepterion', 'udaijin', 'kinosaki_sanmi', 'fujiwara_nobuyori', 'uninomiya_tadayasu'];
+const SELECT_KEYS = () => [...ROSTER, 'seraphel', 'chief', 'sovereign', 'bloodfiend', 'valgard', 'gaizorg', 'operator_gigantes', 'valdarion', 'crimson', 'maou', 'nepterion', 'udaijin', 'kinosaki_sanmi', 'fujiwara_nobuyori', 'uninomiya_tadayasu', 'minamoto_yoritomo'];
 function refreshTitle() {
   $('#btn-invade').hidden = !operatorUnlocked();
   if ($('#btn-evmaker')) $('#btn-evmaker').hidden = !chiefUnlocked();
@@ -4113,9 +4114,9 @@ function renderShop() {
   const list = $('#shop-list');
   list.replaceChildren();
   // 運営長限定：灯晶で買える特別キャラ（運営長の時だけ表示）
-  if (chiefUnlocked()) {
+  if (true) {
     for (const [k, d] of Object.entries(FIGHTERS)) {
-      if (!d.shardPrice) continue;
+      if (!d.shardPrice || (k !== 'minamoto_yoritomo' && !chiefUnlocked())) continue;
       const row = document.createElement('div');
       row.className = 'card';
       row.style.setProperty('--c', '#' + d.color.toString(16).padStart(6, '0'));
@@ -4141,8 +4142,24 @@ function renderShop() {
         buy.className = 'btn mini';
         buy.textContent = `灯晶 ${d.shardPrice} で購入`;
         buy.disabled = save.shards < d.shardPrice;
-        buy.addEventListener('click', () => {
-          if (!chiefUnlocked() || save.shards < d.shardPrice || save.gemChars.includes(k)) return;
+        buy.addEventListener('click', async () => {
+          if ((k !== 'minamoto_yoritomo' && !chiefUnlocked()) || save.shards < d.shardPrice || save.gemChars.includes(k)) return;
+          // RF48_MINAMOTO_PURCHASE: server-side one-time purchase.
+          if (k === 'minamoto_yoritomo' && apiEnabled()) {
+            const code=syncCodeNow();
+            if(code.length!==12){$('#shop-msg').textContent='オンライン購入には「旅支度」の同期コード設定が必要です。';return;}
+            buy.disabled=true;$('#shop-msg').textContent='灯晶10万の購入をサーバーで確認しています…';
+            try {
+              const result=await api('/minamoto/buy',{code,pid:save.pid});
+              if(!result?.ok){$('#shop-msg').textContent='購入失敗：'+(result?.error||'サーバー確認失敗');buy.disabled=false;return;}
+              const latest=JSON.parse(result.data||'{}');
+              if(latest.pid!==save.pid)throw Error('同期アカウントが一致しません');
+              save.shards=latest.shards;
+              save.gemChars=(Array.isArray(latest.gemChars)?latest.gemChars:[]).filter(id=>FIGHTERS[id]?.shardPrice);
+              persist(false);sfx('burst');$('#shop-msg').textContent='源頼朝が仲間になりました！';renderShop();
+            }catch(e){buy.disabled=false;$('#shop-msg').textContent='購入エラー：'+e.message;}
+            return;
+          }
           save.shards -= d.shardPrice;
           save.gemChars.push(k);
           persist();

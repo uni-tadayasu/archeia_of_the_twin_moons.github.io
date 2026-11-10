@@ -1388,3 +1388,22 @@ if (!SPECIAL_KEYS.includes('fujiwara_nobuyori')) SPECIAL_KEYS.push('fujiwara_nob
 
 FIGHTERS.uninomiya_tadayasu={name:'宇邇宮忠靖親王',title:'無窮の親王（運営長専用）',model:'assets/models/uninomiya-tadayasu-rigged.glb',face:'assets/face-uninomiya.webp',color:0xffffff,tint:null,attribute:'無',element:0,height:3.7,hp:250000,speed:8.5,power:3.9,armor:.12,fluxMul:3,overGain:2.3,locked:true,special:'chief',fixedSlots:true,light:{name:'虚空断',kind:'slash',dmg:16000,range:8,color:0xffffff},skills:[{name:'無明天衝',kind:'projectile',cost:15,castTime:.25,count:5,dmg:28000,speed:35,radius:.7,elem:0,color:0xffffff},{name:'因果封絶',kind:'shockwave',cost:25,castTime:.5,dmg:49000,radius:8,elem:0,color:0xffffff},{name:'時界停止',kind:'shockwave',cost:35,castTime:.7,dmg:58000,radius:12,elem:0,color:0xffffff},{name:'万象砕滅',kind:'projectile',cost:48,castTime:1,count:12,dmg:90000,speed:42,radius:1,elem:0,color:0xffffff}],over:{name:'王命・天地崩解',kind:'shockwave',cost:0,castTime:1.2,dmg:160000,radius:18,elem:0,color:0xffffff},hi:{name:'終極秘奥義・零界帰滅',kind:'shockwave',cost:0,castTime:2.2,dmg:300000,radius:28,elem:0,color:0xffffff,hi:true}};
 if(!SPECIAL_KEYS.includes("uninomiya_tadayasu")) SPECIAL_KEYS.push("uninomiya_tadayasu");
+
+// RF48
+
+FIGHTERS.minamoto_yoritomo={
+ name:'源頼朝',title:'蒼潮の征夷大将軍（灯晶10万）',
+ model:'assets/models/minamoto-yoritomo.glb',face:'assets/portraits/minamoto-yoritomo.svg',
+ color:0x5fdcff,tint:null,attribute:'水',element:7,
+ height:3.55,hp:18000,speed:7.3,power:2.65,armor:.38,fluxMul:2.6,overGain:2.2,
+ fixedSlots:true,shop:true,locked:true,shardPrice:100000,
+ light:{name:'水陣刀・青嵐斬',dmg:280,range:3.8,color:0x6bdfff},
+ skills:[
+  {name:'蒼龍水牙',kind:'projectile',visual:'orb',cost:16,castTime:.38,count:6,spreadAng:.10,chain:.045,dmg:530,speed:31,radius:1.06,elem:7,color:0x34baff,vivid:true},
+  {name:'潮影瞬閃',kind:'dash',cost:21,castTime:.3,dmg:1400,speed:30,dur:.48,elem:7,color:0x36e0ff,vivid:true},
+  {name:'八重潮波陣',kind:'shockwave',cost:26,castTime:.75,dmg:1850,radius:9.6,elem:7,color:0x44d6ff,vivid:true},
+  {name:'天雨千波槍',kind:'rain',visual:'spear',cost:32,castTime:1.15,count:14,spread:4.8,radius:1.7,dmg:380,delay:.38,interval:.065,elem:7,color:0x69eaff,vivid:true}
+ ],
+ over:{name:'征夷水神陣・蒼海制圧',kind:'judgment',visual:'pillar',finalVisual:'nova',count:16,spread:5.6,radius:2.3,dmg:650,delay:.55,interval:.08,finalDmg:2800,finalRadius:10.4,cost:0,castTime:2,elem:7,color:0x65eaff,vivid:true},
+ hi:{name:'秘奥義・大海龍王断',kind:'judgment',visual:'pillar',finalVisual:'bigsword',count:22,spread:7,radius:2.7,dmg:810,delay:.58,interval:.07,finalDmg:5200,finalRadius:13.2,cost:0,castTime:2.7,elem:7,color:0xb5faff,vivid:true,hi:true}
+};
