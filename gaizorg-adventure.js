@@ -243,6 +243,7 @@ export function setupGaizorgAdventure(ctx){
   function drawStatus(text){status.textContent=text;}
   function stageTitle(index){return STAGE_PLAN[clamp(index,0,9)]?.name||'十重の試練';}
   async function start(key){
+if(key==='uninomiya_tadayasu'&&!chiefUnlocked()){goTitle();return;}
     if(key==='fujiwara_nobuyori'&&!chiefUnlocked()){ui.banner({name:'使用権限がありません'},'藤原信頼は運営長専用です');goTitle();return;}
       if(key==='kinosaki_sanmi'&&!chiefUnlocked()){ui.banner({name:'使用権限がありません'},'城崎三位は運営長専用です');goTitle();return;}
     if(busy)return;

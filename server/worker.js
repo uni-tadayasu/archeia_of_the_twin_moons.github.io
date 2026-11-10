@@ -2725,3 +2725,6 @@ FIGHTERS.fujiwara_nobuyori = {
 
 // RF_FUJIWARA_AUTH_V36: Cloudflare Worker accepts this model only for chief.
 CHIEF_ONLY.add('fujiwara_nobuyori');
+
+FIGHTERS.uninomiya_tadayasu={name:'宇邇宮忠靖親王',title:'無窮の親王（運営長専用）',model:'assets/models/uninomiya-tadayasu-rigged.glb',face:'assets/face-uninomiya.webp',color:0xffffff,tint:null,attribute:'無',element:0,height:3.7,hp:250000,speed:8.5,power:3.9,armor:.12,fluxMul:3,overGain:2.3,locked:true,special:'chief',fixedSlots:true,light:{name:'虚空断',kind:'slash',dmg:16000,range:8,color:0xffffff},skills:[{name:'無明天衝',kind:'projectile',cost:15,castTime:.25,count:5,dmg:28000,speed:35,radius:.7,elem:0,color:0xffffff},{name:'因果封絶',kind:'shockwave',cost:25,castTime:.5,dmg:49000,radius:8,elem:0,color:0xffffff},{name:'時界停止',kind:'shockwave',cost:35,castTime:.7,dmg:58000,radius:12,elem:0,color:0xffffff},{name:'万象砕滅',kind:'projectile',cost:48,castTime:1,count:12,dmg:90000,speed:42,radius:1,elem:0,color:0xffffff}],over:{name:'王命・天地崩解',kind:'shockwave',cost:0,castTime:1.2,dmg:160000,radius:18,elem:0,color:0xffffff},hi:{name:'終極秘奥義・零界帰滅',kind:'shockwave',cost:0,castTime:2.2,dmg:300000,radius:28,elem:0,color:0xffffff,hi:true}};
+CHIEF_ONLY.add("uninomiya_tadayasu");
