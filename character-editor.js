@@ -1,8 +1,8 @@
-// RF_CHIEF_CHAR_EDITOR_V31_ALL_RANDOM_SLOTS — reliable save, accessible in-game confirmation.
+// RF_CHIEF_CHAR_EDITOR_V32_BULK_TEMPLATES — reliable save, accessible in-game confirmation.
 // All mutations are authorized again on the server. No local-only admin fallback.
 import { api, apiEnabled, verifyToken } from './api.js';
 
-const VERSION='rf-chief-editor-v31-20261110';
+const VERSION='rf-chief-editor-v32-20261110';
 const SKILL_FIELDS=[
  ['name','技・魔法名','text',0,42],['kind','技の種類','select',0,0],
  ['visual','CG・立体演出の種類','select',0,0],['elem','技の属性','select',0,9],['color','魔法色','color',0,0xffffff],
@@ -306,6 +306,135 @@ function rfEditedPatch(key,inputs,draftSkills,skillCount,skillMode,over,hi){
   }
   return patch;
 }
+// V32: Preview-first, one-commit batch balancing. Never alter models or permission flags.
+const RF_BULK_STATS=['hp','speed','power','armor','height','overGain','fluxMul'];
+const RF_BULK_MODES=[['stats','能力値だけ（名前・固有技は変更しない）'],['balance','能力値＋技・奥義の威力・コスト'],['random','基本情報・能力値・技構成もランダム生成']];
+const RF_BULK_SCOPES=[['all','全キャラクター（隠しキャラ含む）'],['general','一般・通常キャラのみ'],['staff','運営・運営長・特別キャラのみ']];
+const rfHash=(s)=>{let h=2166136261;for(const c of String(s)){h=Math.imul(h^c.charCodeAt(0),16777619);}return h>>>0;};
+const rfUnit=(s)=>rfHash(s)/4294967296;
+const rfNum=(d,key)=>{const v=Number(d?.[key]);return Number.isFinite(v)&&v>0?v:(DEFAULT_STAT_VALUES[key]||1);};
+function bulkTier(key,def,selection){
+  if(selection!=='auto')return TIERS[selection]?selection:'normal';
+  const hp=rfNum(def,'hp');
+  if(/final|lastboss|endboss|ultimate/i.test(key)||def?.finalBoss)return 'final';
+  if(/boss|maou|gaizorg|gigantes/i.test(key)||hp>=9000)return 'great';
+  if(def?.special==='chief'||hp>=4000)return 'middle';
+  if(def?.special||def?.locked||def?.hidden||hp>=1900)return 'small';
+  return 'normal';
+}
+function bulkTargets(scope){
+  return Object.entries(FIGHTERS).filter(([key,d])=>{
+    if(!d||typeof d!=='object'||!Array.isArray(d.skills))return false;
+    const special=!!(d.special||d.locked||d.hidden);
+    return scope==='general'?!special:scope==='staff'?special:true;
+  });
+}
+function balancedStatsFor(entries,options){
+  const ranks={};
+  for(const k of RF_BULK_STATS){
+    const sorted=entries.slice().sort((a,b)=>rfNum(a[1],k)-rfNum(b[1],k));
+    ranks[k]=new Map(sorted.map(([id],i)=>[id,sorted.length===1?.5:i/(sorted.length-1)]));
+  }
+  const output={};
+  for(const [key,def]of entries){
+    const tierKey=bulkTier(key,def,options.tier),tier=TIERS[tierKey],stats={};
+    for(const field of RF_BULK_STATS){
+      if(field==='height'&&options.preserveHeight)continue;
+      const [low,high]=tier[field];
+      const q=ranks[field].get(key)??.5;
+      const variation=(rfUnit(key+'/'+field+'/'+options.seed)-.5)*.16;
+      const rank=clampNum(.12 + .76*q + variation,.04,.96);
+      const result=low+(high-low)*rank;
+      stats[field]=field==='hp'?Math.max(1,Math.round(result/10)*10):round(result,2);
+    }
+    output[key]={tierKey,stats};
+  }
+  return output;
+}
+function clampNum(n,min,max){return Math.min(max,Math.max(min,n));}
+function compactRandomSkill(s,originalSkill={},full=false){
+  if(full)return clone(s);
+  const allowed=['name','kind','elem','color','visual','dmg','cost','radius','castTime','speed','count','spread','delay','interval','finalDmg','finalRadius','heal','dur','stun','kb','shape'];
+  const out={};for(const k of allowed)if(s[k]!==undefined&&s[k]!==originalSkill[k])out[k]=s[k];
+  return out;
+}
+function planBulkChange(options){
+  const targets=bulkTargets(options.scope);
+  if(!targets.length)throw Error('対象キャラクターがいません。');
+  const result=balancedStatsFor(targets,options);
+  const all=clone(activeOverlays),rows=[];
+  for(const [key,def]of targets){
+    const b=original(key)||{},prev=all[key]||{},item=result[key],tier=TIERS[item.tierKey];
+    const p=clone(prev);
+    Object.assign(p,item.stats);
+    let slots=Number.isInteger(p.skillCount)?p.skillCount:(def.skills?.length||1);
+    if(options.slots!=='keep')slots=Number(options.slots);
+    slots=clampNum(slots,1,SLOT_MAX);
+    const originalCount=b.skills?.length||0;
+    const prevSkills=Array.isArray(p.skills)?p.skills:[];
+    const shownSlots=Array.isArray(def.skills)?def.skills.length:0;
+    const mode=options.skillMode==='keep'?(p.skillMode||(def.pool?.length?'sequence':'fixed')):options.skillMode;
+    const element=ELEMENTS.find(v=>v[0]===String(def.attribute||'').trim())||ELEMENTS.find(v=>v[1]===def.element)||ELEMENTS[7];
+    if(options.editMode==='random'){
+      const g=generatedCharacter(item.tierKey,slots,mode);
+      if(options.randomIdentity){for(const id of ['name','title','attribute'])p[id]=g[id];}
+      // Skills are generated individually, while original GLB and roster identity remain unchanged by default.
+      const currentElem=options.randomIdentity?(ELEMENTS.find(v=>v[0]===g.attribute)||element):element;
+      const kinds=SKILL_TYPES.map(v=>v[0]);
+      p.skills=Array.from({length:slots},(_,i)=>{
+        const spec=generatedSkill(currentElem,pick(kinds),tier,i);
+        return compactRandomSkill(spec,b.skills?.[i]||{},i>=originalCount);
+      });
+      p.over=compactRandomSkill(generatedSkill(currentElem,pick(['judgment','rain','implode','shockwave']),tier,0,'over'),b.over||{},!Object.keys(b.over||{}).length);
+      p.hi=compactRandomSkill(generatedSkill(currentElem,'judgment',tier,0,'hi'),b.hi||{},!Object.keys(b.hi||{}).length);
+    }else if(options.editMode==='balance'){
+      const list=[];
+      const originals=Array.isArray(def.skills)?def.skills:[];
+      for(let i=0;i<slots;i++){
+        const old=originals[i],keep=prevSkills[i]||{};
+        if(i>=shownSlots){list[i]=generatedSkill(element,'projectile',tier,i);continue;}
+        const kind=old?.kind||'projectile',foundation=TYPE_DEFAULTS[kind]||TYPE_DEFAULTS.projectile;
+        const weight=.83+rfUnit(key+':skill:'+i)*.34;
+        const newValues={...keep};
+        if(kind==='heal')newValues.heal=Math.round((foundation.heal||185)*tier.strength*weight);
+        else newValues.dmg=Math.round((foundation.dmg||95)*tier.strength*weight);
+        if(kind==='judgment')newValues.finalDmg=Math.round((foundation.finalDmg||310)*tier.strength*weight);
+        newValues.cost=Math.round(clampNum((foundation.cost||16)*(0.86+rfUnit(key+':cost:'+i)*.27),0,90));
+        list[i]=newValues;
+      }
+      // All added slots must be complete spells based on the ORIGINAL server definitions.
+      for(let i=originalCount;i<slots;i++)if(!list[i]?.kind)list[i]=generatedSkill(element,'projectile',tier,i);
+      p.skills=list;
+      for(const skillName of ['over','hi']){
+        const old=def[skillName]||{},kind=old.kind||'judgment',f=TYPE_DEFAULTS[kind]||TYPE_DEFAULTS.judgment;
+        const weight=(skillName==='hi'?2.4:1.8)*tier.strength*(.91+.18*rfUnit(key+skillName));
+        const v={...(prev[skillName]||{})};
+        if(kind==='heal')v.heal=Math.round((f.heal||190)*weight);
+        else v.dmg=Math.round((f.dmg||115)*weight);
+        if(kind==='judgment')v.finalDmg=Math.round((f.finalDmg||310)*weight);
+        p[skillName]=v;
+      }
+    }else if(options.slots!=='keep'){
+      // Stats-only should never rewrite existing spells. Add defaults only when expanding slots.
+      const list=Array.from({length:slots},(_,i)=>prevSkills[i]||null);
+      for(let i=originalCount;i<slots;i++)if(!list[i])list[i]=generatedSkill(element,'projectile',tier,i);
+      p.skills=list;
+    }
+    if(options.slots!=='keep')p.skillCount=slots;
+    if(options.skillMode!=='keep')p.skillMode=options.skillMode;
+    all[key]=p;
+    rows.push({key,name:def.name||key,tier:tier.label,oldHp:rfNum(def,'hp'),hp:p.hp,oldPower:rfNum(def,'power'),power:p.power,oldArmor:rfNum(def,'armor'),armor:p.armor,oldSpeed:rfNum(def,'speed'),speed:p.speed,oldSlots:shownSlots,slots,mode});
+  }
+  if(options.keepGaizorgTop && all.gaizorg && rows.some(r=>r.key==='gaizorg')){
+    const maxOther=Math.max(0,...Object.entries(FIGHTERS).filter(([k])=>k!=='gaizorg').map(([k,d])=>Number(all[k]?.hp??d.hp)||0));
+    const top=Math.min(200000,Math.max(Number(all.gaizorg.hp)||0,maxOther+100));
+    all.gaizorg.hp=top;const row=rows.find(r=>r.key==='gaizorg');row.hp=top;
+  }
+  const serialized=JSON.stringify(all);
+  if(serialized.length>142000)throw Error('全件の保存サイズが大きすぎます（'+Math.round(serialized.length/1024)+'KB）。技スロット数を減らすか、「能力値のみ」を選んでください。');
+  return {all,rows,baseRevision:revision,serializedSize:serialized.length,scope:options.scope,editMode:options.editMode,tier:options.tier};
+}
+
 function createPanel(){
   const root=make('div','rf-ce-root');root.id='rf-chief-character-editor';root.hidden=true;
   root.setAttribute('role','dialog');root.setAttribute('aria-modal','true');root.setAttribute('aria-label','運営長専用キャラクター編集');
@@ -325,6 +454,83 @@ function createPanel(){
   let selected='',inputs=new Map(),draftSkills=[],draftOver=null,draftHi=null,slotCount=1,skillMode='fixed',tierChoice='normal';
   let skillArea=null,slotEl=null,modeEl=null,preview=null;
   const tell=(msg,type='')=>{status.textContent=msg;status.dataset.type=type;};
+  // V32: Apply a tier to ALL characters in one preview-and-confirmed transaction.
+  let bulkDraft=null;
+  const bulk=make('section','rf-ce-bulk');bulk.setAttribute('aria-label','全キャラクター一括編集');
+  bulk.append(make('h3','','全キャラクター一括バランス編集'));
+  bulk.append(make('p','rf-ce-note','強さのテンプレートを選択し、対象キャラの能力値を一括で調整します。名前・元モデル・使用権限は初期設定では変更されません。必ず変更一覧を確認してから公開してください。'));
+  const bulkTools=make('div','rf-ce-bulk-grid');
+  const bulkTierChoice=makeSelect([['auto','役割別に自動割当（おすすめ）'],...Object.entries(TIERS).map(([k,v])=>[k,v.label])],'auto');
+  bulkTierChoice.setAttribute('aria-label','全キャラの強さテンプレート');
+  const bulkScopeChoice=makeSelect(RF_BULK_SCOPES,'all');bulkScopeChoice.setAttribute('aria-label','一括編集の対象');
+  const bulkEditChoice=makeSelect(RF_BULK_MODES,'stats');bulkEditChoice.setAttribute('aria-label','一括編集の内容');
+  const bulkSlotChoice=makeSelect([['keep','技スロット数を維持'],...Array.from({length:SLOT_MAX},(_,i)=>[String(i+1),(i+1)+'枠'])],'keep');
+  const bulkModeChoice=makeSelect([['keep','元の固定／順番設定を維持'],['fixed','全員を固定方式'],['sequence','全員を順番方式']],'keep');
+  bulkTools.append(formGroup('強さテンプレート',bulkTierChoice),formGroup('対象キャラクター',bulkScopeChoice),formGroup('編集範囲',bulkEditChoice),formGroup('技スロット数',bulkSlotChoice),formGroup('固定／順番',bulkModeChoice));
+  const bulkOptions=make('div','rf-ce-bulk-options');
+  const bulkHeight=make('input');bulkHeight.type='checkbox';bulkHeight.checked=true;
+  const bulkIdentity=make('input');bulkIdentity.type='checkbox';bulkIdentity.checked=false;
+  const bulkGaiz=make('input');bulkGaiz.type='checkbox';bulkGaiz.checked=true;
+  const checkField=(title,el)=>{const lbl=make('label','rf-ce-check');lbl.append(el,make('span','',title));return lbl;};
+  bulkOptions.append(checkField('既存キャラの表示身長を維持する',bulkHeight),checkField('全ランダム生成時にキャラ名・肩書き・属性も変更する',bulkIdentity),checkField('ガイゾルグのHP最上位を維持する',bulkGaiz));
+  const bulkActions=make('div','rf-ce-bulk-actions');
+  const bulkPreviewButton=make('button','rf-ce-outline','一括変更をプレビュー');bulkPreviewButton.type='button';
+  const bulkSaveButton=make('button','rf-ce-primary','確認して一括保存・公開');bulkSaveButton.type='button';bulkSaveButton.disabled=true;
+  bulkActions.append(bulkPreviewButton,bulkSaveButton);
+  const bulkNotice=make('p','rf-ce-bulk-note','プレビュー段階では保存・公開されません。');bulkNotice.setAttribute('aria-live','polite');
+  const bulkTable=make('div','rf-ce-bulk-preview');bulkTable.hidden=true;
+  bulk.append(bulkTools,bulkOptions,bulkActions,bulkNotice,bulkTable);
+  shell.insertBefore(bulk,content);
+  function invalidateBulk(){bulkDraft=null;bulkSaveButton.disabled=true;bulkTable.hidden=true;bulkTable.replaceChildren();bulkNotice.textContent='設定を変更しました。「一括変更をプレビュー」を押してください。';}
+  for(const el of [bulkTierChoice,bulkScopeChoice,bulkEditChoice,bulkSlotChoice,bulkModeChoice,bulkHeight,bulkIdentity,bulkGaiz])el.addEventListener('change',invalidateBulk);
+  function drawBulkPreview(draft){
+    bulkTable.replaceChildren();
+    const info=make('p','rf-ce-bulk-summary',draft.rows.length+'キャラ分の変更案 ／ '+Math.round(draft.serializedSize/1024)+'KB ／ テンプレート：'+(draft.tier==='auto'?'役割別に自動':TIERS[draft.tier].label));
+    const table=make('table','rf-ce-bulk-table'),thead=make('thead'),tr=make('tr');
+    for(const label of ['キャラクター','階級','HP（前→後）','攻撃倍率','被ダメ倍率','速度','技枠'])tr.append(make('th','',label));
+    thead.append(tr);table.append(thead);
+    const tb=make('tbody');const fmt=n=>typeof n==='number'?Number(n.toFixed(2)).toLocaleString('ja-JP'):String(n);
+    for(const row of draft.rows){const tr=make('tr');for(const value of [row.name,row.tier,fmt(row.oldHp)+' → '+fmt(row.hp),fmt(row.oldPower)+' → '+fmt(row.power),fmt(row.oldArmor)+' → '+fmt(row.armor),fmt(row.oldSpeed)+' → '+fmt(row.speed),row.oldSlots+' → '+row.slots])tr.append(make('td','',value));tb.append(tr);}
+    table.append(tb);bulkTable.append(info,table);bulkTable.hidden=false;
+  }
+  bulkPreviewButton.addEventListener('click',async()=>{
+    if(busy)return;bulkPreviewButton.disabled=true;bulkNotice.textContent='保存済みデータを確認し、変更一覧を作成しています…';
+    try{
+      if(inBattle())throw Error('戦闘中は一括編集できません。');
+      if(!(await authorized()))throw Error('運営長の権限を確認できません。再認証してください。');
+      await syncPublic(true);
+      const options={tier:bulkTierChoice.value,scope:bulkScopeChoice.value,editMode:bulkEditChoice.value,slots:bulkSlotChoice.value,skillMode:bulkModeChoice.value,
+        preserveHeight:bulkHeight.checked,randomIdentity:bulkIdentity.checked,keepGaizorgTop:bulkGaiz.checked,seed:Date.now()};
+      bulkDraft=planBulkChange(options);drawBulkPreview(bulkDraft);bulkSaveButton.disabled=false;
+      bulkNotice.textContent='変更前後を確認してください。まだサーバーには保存していません。再プレビューで別の数値を生成できます。';
+    }catch(e){bulkDraft=null;bulkSaveButton.disabled=true;bulkTable.hidden=true;bulkNotice.textContent=e.message||String(e);tell('一括プレビュー：'+(e.message||String(e)),'error');}
+    finally{bulkPreviewButton.disabled=false;}
+  });
+  bulkSaveButton.addEventListener('click',async()=>{
+    if(busy||!bulkDraft)return;busy=true;disable(true);bulkPreviewButton.disabled=true;bulkSaveButton.disabled=true;
+    const draft=bulkDraft;
+    try{
+      if(inBattle())throw Error('戦闘中は保存できません。');
+      if(revision!==draft.baseRevision)throw Error('編集中に別の保存が行われました。再プレビューしてください。');
+      const confirmed=await editorConfirm('全キャラクターの変更を公開しますか？',
+        draft.rows.length+'キャラクターの能力値'+(draft.editMode==='stats'?'':'・技構成')+'を一括更新します。モデル・運営権限は維持されます。公開後は全プレイヤーの次回戦闘へ反映されます。','全'+draft.rows.length+'件を一括保存');
+      if(!confirmed){bulkNotice.textContent='一括保存をキャンセルしました。プレビューは保持されています。';return;}
+      if(!(await authorized()))throw Error('運営長の認証が無効です。');
+      bulkNotice.textContent='Cloudflare Workerへ一括保存しています…';
+      const r=await api('/chief/characters/save',{token:tokenOf(),revision:draft.baseRevision,overrides:draft.all});
+      if(!r.ok){if(r.error==='stale')throw Error('編集データが更新されています。再プレビューしてください。');
+        if(r.error==='invalid_character_values')throw Error('サーバーが技スロット／値を拒否しました。V31のWorkerが公開済みか確認してください。');
+        throw Error('一括保存に失敗しました：'+(r.error||('HTTP '+r.status)));}
+      applyPublic(draft.all);revision=r.revision;lastFetch=0;
+      let refreshed=true;try{await syncPublic(true);}catch(e){refreshed=false;console.warn('[Bulk balance refresh]',e);}
+      bulkDraft=null;renderList();if(selected&&FIGHTERS[selected])select(selected);
+      bulkNotice.textContent=refreshed?'全'+draft.rows.length+'件を保存・公開しました。次の戦闘から反映されます。':'保存成功。最新の再読込のみ失敗しました。';
+      tell('全キャラ一括保存：'+draft.rows.length+'件の変更を公開しました。','success');
+      bulkTable.hidden=true;
+    }catch(e){bulkNotice.textContent=e.message||String(e);tell('一括保存：'+(e.message||String(e)),'error');}
+    finally{busy=false;disable(false);bulkPreviewButton.disabled=false;bulkSaveButton.disabled=!bulkDraft;}
+  });
+
   function select(key){
     if(!FIGHTERS[key])return;selected=key;right.replaceChildren();inputs=new Map();
     const d=FIGHTERS[key],base=original(key)||{},ov=activeOverlays[key]||{};
@@ -488,6 +694,7 @@ function createPanel(){
         if(r.error==='invalid_character_values')throw Error('技の設定値が不正です。新規スロットの種類・名前・数値を確認してください');
         if(r.status===404)throw Error('Cloudflare WorkerをV31に更新してください');
         throw Error('保存に失敗：'+(r.error||('HTTP '+r.status)));}
+      bulkDraft=null;bulkSaveButton.disabled=true;bulkNotice.textContent='個別保存が行われました。一括編集は再プレビューしてください。';
       applyPublic(all);revision=Number.isSafeInteger(r.revision)?r.revision:revision+1;lastFetch=0;
       let refreshed=true;try{await syncPublic(true);}catch(e){refreshed=false;console.warn('[Character editor V31] refresh:',e);}
       renderList();select(key);tell(refreshed?'保存しました。次の戦闘から全プレイヤーに反映されます。':'サーバー保存済みです。再取得のみ失敗しました。','success');
@@ -507,6 +714,7 @@ function createPanel(){
       const all=clone(activeOverlays);delete all[key];tell('初期化をサーバーに保存中…');
       const r=await api('/chief/characters/save',{token:tokenOf(),revision,overrides:all});
       if(!r.ok)throw Error('初期化できませんでした（'+(r.error||r.status)+'）');
+      bulkDraft=null;bulkSaveButton.disabled=true;bulkNotice.textContent='個別の初期化が行われました。一括編集は再プレビューしてください。';
       applyPublic(all);revision=r.revision;lastFetch=0;try{await syncPublic(true);}catch{}
       renderList();select(key);tell('初期設定に戻しました。','success');
     }catch(e){tell(e.message||String(e),'error');}finally{busy=false;disable(false);}
