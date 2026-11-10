@@ -2719,8 +2719,8 @@ FIGHTERS.fujiwara_nobuyori = {
     {name:'鬼火',kind:'projectile',visual:'orb',cost:16,castTime:0.42,count:1,dmg:0,speed:22,radius:.35,elem:6,color:0xff9565,vivid:true},
     {name:'呪いの光',kind:'projectile',visual:'laser',cost:24,castTime:0.65,count:1,dmg:0,speed:25,radius:.4,elem:6,color:0xc77aff,vivid:true}
   ],
-  over:{name:'呪いの光',kind:'shockwave',cost:0,castTime:1.0,dmg:0,radius:1,elem:6,color:0xc778ff},
-  hi:{name:'呪いの光',kind:'shockwave',cost:0,castTime:1.3,dmg:0,radius:1,elem:6,color:0xe4b5ff,hi:true}
+  over:{name:'怪しい光',kind:'rf_fujiwara_rainbow',cost:0,castTime:1.15,dmg:0,radius:0,elem:6,color:0xfadfff,vivid:true},
+  hi:{name:'十拳剣',kind:'rf_fujiwara_totsuka',cost:0,castTime:1.8,dmg:0,radius:0,elem:6,color:0xff9f36,vivid:true,hi:true}
 };
 
 // RF_FUJIWARA_AUTH_V36: Cloudflare Worker accepts this model only for chief.

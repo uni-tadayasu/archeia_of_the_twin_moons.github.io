@@ -1,5 +1,5 @@
 import {installFujiwaraChief} from './fujiwara-chief-v39.js?v=rf-fujiwara-v42-tdzfix-20261110';
-import {installFujiwaraCombat} from './fujiwara-nobuyori.js?v=rf-fujiwara-noble-motion-v36-20261110';
+import {installFujiwaraCombat} from './fujiwara-nobuyori.js?v=rf-fujiwara-v43-rainbow-totsuka-20261110';
 // RF_CHIEF_CHAR_EDITOR_V28
 import { initChiefCharacterEditor } from './character-editor.js?v=rf-chief-editor-v33-20261110';
 // RF_KINOSAKI_V27_INSTALL
@@ -14,7 +14,7 @@ import {installUdaijinCombat} from './udaijin-curse.js?v=rf-fujiwara-noble-motio
 // RF_BATCH_SCALE_STARTUP_V92
 // RF_BATTLE_FIX_V9_1_20261109
 import { installMaouCombat } from './maou-abilities.js?v=rf-v9-2-20261109';
-import { Fighter as MaouFighter } from './game.js?v=rf-combo-v15-20261109';
+import { Fighter as MaouFighter } from './game.js?v=rf-fujiwara-v43-rainbow-totsuka-20261110';
 import './boss-abilities.js?v=rf-v9-2-20261109';
 import './exact-model-portraits.js?v=rf-v9-2-20261109';
 // RF_GRAND_FOUR_20261108 main.js
@@ -24,7 +24,7 @@ import { installOperatorCombatFx } from './operator-combat-fx.js?v=20261108-gran
 import { renderExactPortrait } from './glb-portrait.js?v=rf-mobile-v7-20261109';
 // RF_OPERATOR_GIGANTES_MAIN_20261108
 import { loadModel } from './model-runtime.js?v=rf-fujiwara-noble-motion-v36-20261110';
-import { Battle, ARENA_R } from './game.js?v=rf-combo-v15-20261109';
+import { Battle, ARENA_R } from './game.js?v=rf-fujiwara-v43-rainbow-totsuka-20261110';
 import { installNepterionCombat } from './nepterion-water.js?v=rf-v18-20261109';
 import { installActorMotion } from './character-motion.js?v=rf-v18-20261109';
 import { installNepterionFixedSeven } from './nepterion-fixed-seven.js?v=rf-v18-20261109';

@@ -386,7 +386,7 @@ function cleanup(f){
   if(f._fujCross){f._fujCross.spr.removeFromParent();f._fujCross.mat.dispose();f._fujCross=null;}
   removeCharacterCG(f,'_fujMarkCG');removeCharacterCG(f,'_fujBurnCG');
   const rig=f._fujRig;try{rig?.dispose?.();}catch(e){console.warn("[藤原信頼 Motion cleanup]",e);} 
-  f._fujRig=null;f._fujMark=null;f._fujBurn=null;f._fujStasis=null;
+  f._fujRig=null;f._fujMark=null;f._fujBurn=null;f._fujStasis=null;f._rf43PendingLeech=null;
 }
 function updateTouchUI(f){
   if(typeof document==='undefined')return;
@@ -396,6 +396,213 @@ function updateTouchUI(f){
   const labels={guard:['呪い','構'],attack:['印','斬'],skill:['鬼火','技A'],skill2:['光','技B']};
   for(const [act,text] of Object.entries(labels)){const el=b.querySelector(`[data-act="${act}"]`);if(el)el.textContent=active?text[0]:text[1];}
 }
+// RF_FUJIWARA_V43_ULTIMATE: Custom arts layered above the intact original GLB.
+// All visual assets are procedurally painted CG sprites and smooth bevelled geometry.
+// Nothing in these effects edits a character's mesh, skin, texture, or animations.
+let rf43SoftTexture = null;
+function rf43GlowTexture(){
+  if(rf43SoftTexture) return rf43SoftTexture;
+  const c=document.createElement('canvas');c.width=c.height=192;
+  const ctx=c.getContext('2d');
+  const grad=ctx.createRadialGradient(96,96,3,96,96,94);
+  grad.addColorStop(0,'rgba(255,255,255,1)');
+  grad.addColorStop(.13,'rgba(255,255,255,.96)');
+  grad.addColorStop(.37,'rgba(255,255,255,.46)');
+  grad.addColorStop(.72,'rgba(255,255,255,.09)');
+  grad.addColorStop(1,'rgba(255,255,255,0)');
+  ctx.fillStyle=grad;ctx.fillRect(0,0,192,192);
+  rf43SoftTexture=new THREE.CanvasTexture(c);
+  rf43SoftTexture.colorSpace=THREE.SRGBColorSpace;
+  return rf43SoftTexture;
+}
+function rf43Glow(scale,color,opacity=.85){
+  const m=new THREE.SpriteMaterial({map:rf43GlowTexture(),color,transparent:true,opacity,
+    blending:THREE.AdditiveBlending,depthWrite:false,depthTest:true,toneMapped:false});
+  const s=new THREE.Sprite(m);s.scale.set(scale,scale,1);return s;
+}
+function rf43Dispose(root){
+  if(!root)return;
+  root.traverse(o=>{
+    if(o.geometry)o.geometry.dispose();
+    const list=Array.isArray(o.material)?o.material:[o.material];
+    for(const mat of list)if(mat)mat.dispose();
+  });
+  root.removeFromParent();
+}
+// Resolve a stable percentage of the target's MAXIMUM HP after the defender's
+// normal damage modifiers. Guard/invincibility can still reduce or prevent a hit.
+// The existing V41 1-100% setting is applied by Battle.applyHit only once.
+function rf43PercentHit(b,caster,target,fraction,skillName){
+  if(!b||!caster||!target||target.dead||b.ended||caster.remoteAuth)return 0;
+  const maxHP=Math.max(1,Number(target.maxHp)||1);
+  const attack=Math.max(.001,Number(caster.atkMul)||1);
+  const defOriginal=Number(target.defMul);
+  const defEffective=Number.isFinite(defOriginal)&&defOriginal>0?defOriginal:1;
+  const curse=target.status?.curse?1.3:1;
+  const awakened=target.awakened>0?.5:1;
+  const blind=caster.status?.blind ? 0.6 : 1;
+  // Compensate for power/armor so 50%/75% means the actual HP change on a
+  // normally unguarded victim, rather than an arbitrary raw damage number.
+  const input=Math.max(1,Math.round(maxHP*fraction/(attack*defEffective*curse*awakened*blind)));
+  const before=Math.max(0,Number(target.hp)||0);
+  // Some legacy full-limit-break saves have a negative defense multiplier.
+  // Only for this single hit, avoid turning a damage ability into healing.
+  if(!target.remoteAuth && !(defOriginal>0))target.defMul=1;
+  try{
+    b.applyHit(caster,target,input,.45,1.8,caster.pos,{name:skillName,kind:'curse',elem:6,color:0xffd7f0,vivid:true});
+  }finally{
+    if(!target.remoteAuth && !(defOriginal>0))target.defMul=defOriginal;
+  }
+  if(target.remoteAuth){
+    // Await peer's HP report before awarding lifesteal; do not heal on
+    // unconfirmed outgoing packets. Network play can have acknowledgement lag.
+    if(fraction===.5){
+      caster._rf43PendingLeech={target,before,until:performance.now()/1000+4,
+        ceiling:Math.min(before,Math.round(maxHP*fraction)),done:false};
+    }
+    return 0;
+  }
+  return Math.max(0,before-Math.max(0,Number(target.hp)||0));
+}
+function rf43Heal(caster,amount,b){
+  if(!caster||caster.dead||caster.remoteAuth||!(amount>0))return;
+  const healed=Math.max(0,Math.min(Math.round(amount),caster.maxHp-caster.hp));
+  if(healed<=0)return;
+  caster.hp+=healed;
+  b.ui?.popup?.(caster.pos,'吸収 +'+healed,'#9effcf');
+  b.spark?.(caster.pos.clone().setY(1.6),0x75fff0,.8);
+}
+function rf43PendingLifesteal(caster,b){
+  const q=caster?._rf43PendingLeech;
+  if(!q)return;
+  if(caster.dead||!q.target?.remoteAuth||performance.now()/1000>q.until){caster._rf43PendingLeech=null;return;}
+  if(!q.done&&q.target.hp<q.before){
+    q.done=true;
+    rf43Heal(caster,Math.min(q.ceiling,Math.max(0,q.before-q.target.hp)),b);
+    caster._rf43PendingLeech=null;
+  }
+}
+// 奥義「怪しい光」: a luminous rainbow projectile bending in three dimensions
+// around the moving target. All particles use one shared painted texture.
+function rf43RainbowUltimate(b,caster){
+  const target=b.nearestEnemy?.(caster);if(!target||target.dead)return;
+  const g=new THREE.Group();b.fx.add(g);
+  const orb=rf43Glow(2.55,0xffffff,1),halo=rf43Glow(4.5,0x80cfff,.55),core=rf43Glow(1.1,0xffffff,1);
+  g.add(halo,orb,core);
+  const trails=[];
+  for(let i=0;i<20;i++){
+    const s=rf43Glow(1.3-i*.044,0xffffff,.72-i*.026);
+    g.add(s);trails.push(s);
+  }
+  const origin=caster.pos.clone().add(v3(0,Math.max(1.35,caster.def.height*.57),0));
+  const last=[];let elapsed=0;
+  b.ui?.popup?.(caster.pos,'奥義・怪しい光','#cafffa');
+  const finish=()=>rf43Dispose(g);
+  b.addEffect(dt=>{
+    if(b.ended||target.dead){finish();return false;}
+    elapsed+=clamp(dt,0,.075);
+    const t=clamp(elapsed/1.62,0,1),ease=t*t*(3-2*t);
+    const aim=target.pos.clone().add(v3(0,Math.max(1.2,(target.def.height||2)*.6),0));
+    const direction=aim.clone().sub(origin).setY(0);
+    const len=Math.max(.01,direction.length());
+    const side=v3(-direction.z/len,0,direction.x/len);
+    const swirl=(1-ease)*(Math.sin(t*Math.PI*7.6)*1.5+Math.sin(t*Math.PI*18)*.18);
+    const position=origin.clone().lerp(aim,ease)
+      .addScaledVector(side,swirl)
+      .add(v3(0,(1-ease)*Math.sin(t*Math.PI*11)*.65,0));
+    orb.position.copy(position);halo.position.copy(position);core.position.copy(position);
+    orb.material.color.setHSL((t*2.8+elapsed*.7)%1,1,.66);
+    halo.material.color.setHSL((t*2.8+elapsed*.7+.28)%1,1,.5);
+    orb.scale.setScalar(2.3+.6*Math.sin(elapsed*16));
+    halo.scale.setScalar(3.8+.6*Math.sin(elapsed*11));
+    last.unshift(position.clone());if(last.length>42)last.pop();
+    for(let i=0;i<trails.length;i++){
+      const s=trails[i],pt=last[Math.min(last.length-1,(i+1)*2)];
+      if(pt)s.position.copy(pt);
+      s.material.color.setHSL(((elapsed*.68-i*.063)%1+1)%1,1,.60);
+      s.material.opacity=Math.max(0,.63*(1-i/trails.length));
+    }
+    if(elapsed<1.62)return true;
+    // One hit only. Recover exactly the HP actually lost, capped at the caster's maxHP.
+    const dealt=rf43PercentHit(b,caster,target,.5,'怪しい光');
+    rf43Heal(caster,dealt,b);
+    const point=target.pos.clone().setY(Math.max(1.2,target.def.height*.65));
+    b.flashLight?.(point,0xffffff,1.7,.4);
+    for(let j=0;j<7;j++){
+      b.fxPop?.(point.clone().add(v3(Math.sin(j*2.4)*.7,Math.cos(j*2.4)*.4,Math.cos(j*3)*.7)),j%2?5:6,8,1.3,.4,{grow:2,op:.7});
+    }
+    b.ui?.popup?.(target.pos,'怪しい光・生命吸収','#b6f9ff');
+    finish();return false;
+  });
+}
+function rf43SwordGeometry(){
+  // Cross-section/extrusion with smooth bevels: a proper 3D silhouette,
+  // not a low-poly cone or a flat billboard.
+  const shape=new THREE.Shape();
+  shape.moveTo(0,-5.8);shape.lineTo(-.65,-4.8);shape.lineTo(-.78,1.4);
+  shape.lineTo(-.48,2.05);shape.lineTo(0,2.4);
+  shape.lineTo(.48,2.05);shape.lineTo(.78,1.4);
+  shape.lineTo(.65,-4.8);shape.closePath();
+  const geom=new THREE.ExtrudeGeometry(shape,{depth:.45,steps:1,bevelEnabled:true,bevelThickness:.15,
+    bevelSize:.12,bevelSegments:5,curveSegments:16});
+  geom.translate(0,0,-.225);geom.computeVertexNormals();return geom;
+}
+function rf43TotsukaSword(b,caster){
+  const target=b.nearestEnemy?.(caster);if(!target||target.dead)return;
+  const g=new THREE.Group();b.fx.add(g);
+  const bladeMat=new THREE.MeshStandardMaterial({color:0xffad34,metalness:.65,roughness:.20,
+    emissive:0xff5c10,emissiveIntensity:1.6,side:THREE.DoubleSide});
+  const blade=new THREE.Mesh(rf43SwordGeometry(),bladeMat);g.add(blade);
+  // Metallic crossguard, grip and pearl of incandescent orange light.
+  const gold=new THREE.MeshStandardMaterial({color:0xffd578,metalness:.85,roughness:.25,emissive:0xff700f,emissiveIntensity:.6});
+  const gripMat=new THREE.MeshStandardMaterial({color:0x4a1408,metalness:.4,roughness:.42,emissive:0xaf2605,emissiveIntensity:.2});
+  const cross=new THREE.Mesh(new THREE.CylinderGeometry(.28,.29,3.2,20),gold);
+  cross.rotation.z=Math.PI/2;cross.position.y=2.5;g.add(cross);
+  const grip=new THREE.Mesh(new THREE.CylinderGeometry(.25,.27,2.25,20),gripMat);
+  grip.position.y=3.75;g.add(grip);
+  const pommel=new THREE.Mesh(new THREE.SphereGeometry(.42,24,16),gold);
+  pommel.position.y=5.08;g.add(pommel);
+  const gem=new THREE.Mesh(new THREE.IcosahedronGeometry(.28,3),new THREE.MeshStandardMaterial({
+    color:0xfff2b0,metalness:.30,roughness:.15,emissive:0xffa020,emissiveIntensity:2.3}));
+  gem.position.set(0,2.50,.4);g.add(gem);
+  const flare=rf43Glow(9.5,0xff7a1c,.48);flare.position.y=-1.2;g.add(flare);
+  const hot=rf43Glow(5,0xffdda0,.65);hot.position.y=-3.8;g.add(hot);
+  const trail=[];for(let i=0;i<11;i++){const s=rf43Glow(2.8+i*.18,i%2?0xffa020:0xff4207,.32);b.fx.add(s);trail.push(s);}
+  let elapsed=0,hit=false;
+  const clean=()=>{for(const s of trail){s.material.dispose();s.removeFromParent();}rf43Dispose(g);};
+  b.ui?.popup?.(target.pos,'秘奥義・十拳剣','#ffb463');
+  b.addEffect(dt=>{
+    if(b.ended||target.dead){clean();return false;}
+    elapsed+=clamp(dt,0,.075);
+    const fall=clamp(elapsed/1.48,0,1);
+    const accel=fall*fall*(3-2*fall);
+    const x=target.pos.x,z=target.pos.z;
+    g.position.set(x,24.4-(24.4-5.84)*accel,z);
+    g.rotation.set(.055*Math.sin(elapsed*6),.1*Math.sin(elapsed*5),.035*Math.sin(elapsed*4));
+    flare.material.opacity=Math.max(.14,.38+(1-fall)*.2);
+    hot.material.opacity=.55+.25*Math.sin(elapsed*17);
+    for(let i=0;i<trail.length;i++){
+      const t=trail[i];t.position.set(x+Math.sin(elapsed*9+i)*.36,g.position.y+3+i*.61,z+Math.cos(elapsed*10+i)*.36);
+      t.material.opacity=Math.max(0,.5*(1-fall)*(1-i/(trail.length+2)));
+    }
+    if(fall<1)return true;
+    if(!hit){
+      hit=true;
+      rf43PercentHit(b,caster,target,.75,'十拳剣');
+      const impact=target.pos.clone().setY(.8);
+      b.flashLight?.(impact,0xffaa35,2.3,.6);
+      b.grandFx?.(target.pos.clone(),6,0xff7a14,1.9);
+      b.burst?.(impact,0xff8b24,2.7,{elem:6,color:0xff8b24});
+      b.fxPop?.(impact,6,8,8,.72,{grow:2.4,op:.9});
+      b.fxPop?.(target.pos.clone().setY(.1),6,4,9,.8,{flat:true,grow:3.2,op:.9});
+      b.ui?.popup?.(target.pos,'十拳剣・天降の一撃','#ffb048');
+      b.ui?.flash?.();b.shake=Math.max(b.shake,.9);
+    }
+    if(elapsed<1.80){g.scale.setScalar(Math.max(.05,1-(elapsed-1.48)*2.9));return true;}
+    clean();return false;
+  });
+}
+
 export function installFujiwaraCombat({Fighter,Battle,state}){
   if(!Fighter?.prototype||Fighter.prototype.__fujiwara_nobuyoriCurseV24Motion)return;
   Fighter.prototype.__fujiwara_nobuyoriCurseV24Motion=true;
@@ -443,11 +650,15 @@ export function installFujiwaraCombat({Fighter,Battle,state}){
       if(inp.skill||inp.skill2){inp.skillIdx=inp.skill2?1:0;inp.skill=false;inp.skill2=false;}
       // H / L can still trigger the same fixed spells, without adding a fifth move.
       if(inp.heal){inp.skillIdx=0;inp.heal=false;}
-      if(inp.over){inp.skillIdx=1;inp.over=false;}
+      // V43: L/C and controller ultimate now stay on native over/hi; do not remap to skill2.
     }
     const out=baseUpdate.call(this,dt,inp);
     if(frozen&&wasPos){this.pos.copy(wasPos);this.vel.set(0,0,0);this.sync?.();}
-    if(this.key===KEY){updateSeal(this,clamp(dt,0,.05));animateRig(this,clamp(dt,0,.05));}
+    if(this.key===KEY){
+      updateSeal(this,clamp(dt,0,.05));
+      animateRig(this,clamp(dt,0,.05));
+      rf43PendingLifesteal(this,this.battle);
+    }
     tickMark(this);tickBurn(this);
     if(this._fujMarkCG){this._fujMarkCG.material.rotation+=dt*.7;
       this._fujMarkCG.material.opacity=.72+.15*Math.sin(performance.now()*.005);}
@@ -485,12 +696,20 @@ export function installFujiwaraCombat({Fighter,Battle,state}){
     };
     const baseExecute=proto.executeCast;
     proto.executeCast=function(f,slot,net){
+      // Signed remote cast windows are needed for the bounded online HP-ratio hit check.
+      if(f?.key===KEY && f.remoteAuth && net && (slot==='over'||slot==='hi')){
+        f._rf43UltimateWindow={slot,at:performance.now()/1000,used:false};
+      }
       const result=baseExecute.call(this,f,slot,net);
       if(f?.key===KEY){
         f._fujCastPulse=0.75;
-        const index=Number(slot?.slice(1));
-        if(index===0)startOrbs(this,f);
-        else if(index===1 || slot==='over' || slot==='hi')eyeLaser(this,f);
+        if(slot==='over') rf43RainbowUltimate(this,f);
+        else if(slot==='hi') rf43TotsukaSword(this,f);
+        else if(typeof slot==='string' && /^[sf][0-9]+$/.test(slot)){
+          const index=Number(slot.slice(1));
+          if(index===0)startOrbs(this,f);
+          else if(index===1)eyeLaser(this,f);
+        }
       }
       return result;
     };

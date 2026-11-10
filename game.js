@@ -1607,7 +1607,21 @@ export class Battle {
       const dx = a.pos.x - t.pos.x, dz = a.pos.z - t.pos.z;
       const dist = Math.hypot(dx, dz);
       if (!(dist <= ARENA_R * 2 + 2)) return; // 闘技場の外からの攻撃は無効
-      let dmg = Math.max(0, Math.min(+e.dmg || 0, netHitCap(a)));
+      // RF43: One signed, recently cast 藤原信頼 over/hi per target.
+      // All other fighters remain subject to the original hit cap.
+      const art=a._rf43UltimateWindow;
+      const special= a.key==='fujiwara_nobuyori' && a.verified === true && art &&
+        !art.used && (art.slot==='over'||art.slot==='hi') &&
+        now-art.at>=0 && now-art.at<=3.4;
+      const ratio=art?.slot==='hi' ? .75 : .5;
+      const defensive=(Number(t.defMul)>0?Number(t.defMul):1) *
+        (t.status?.curse?1.3:1) * (t.awakened>0?.5:1);
+      const artCap=special ? Math.ceil((Math.max(1,t.maxHp)*ratio)/Math.max(.001,defensive)*1.08)+3 : 0;
+      const incoming=Number(e.dmg);
+      if(!Number.isFinite(incoming)||incoming<=0)return;
+      // Reject rather than clamp an overpowered forged hit packet.
+      if(special && incoming>artCap)return;
+      let dmg = Math.max(0, Math.min(incoming, special ? artCap : netHitCap(a)));
       // 通常攻撃の届く距離を超える大きな一撃は、直前（3秒以内）に技・奥義を出していなければ無効
       const lightCap = Math.round((+a.def.light?.dmg || 30) * (1 + 0.06 * (a.verified ? a.upg.atk || 0 : 0)) * (a.def.power || 1) * 1.6);
       const castRecent = a.netCastAt && now - a.netCastAt < 3;
@@ -1616,10 +1630,16 @@ export class Battle {
       // 攻撃回数：1秒あたり最大10撃、1秒あたりの総ダメージは上限の3倍まで
       const w = (a.netHitWin ||= { t: now, n: 0, d: 0 });
       if (now - w.t > 1) { w.t = now; w.n = 0; w.d = 0; }
-      if (w.n >= 10 || w.d + dmg > netHitCap(a) * 3) return;
+      if (w.n >= 10 || w.d + dmg > (special ? Math.max(netHitCap(a)*3,artCap) : netHitCap(a)*3)) return;
       w.n++;
       w.d += dmg;
-      const real = t.receive(dmg, e.stun, e.kx, e.kz);
+      if(special)art.used=true;
+      const originalDef=t.defMul;
+      // Safeguard for old maximum-enhancement saves with negative DEF multipliers.
+      if(special && !(t.defMul>0))t.defMul=1;
+      let real;
+      try{real=t.receive(dmg,e.stun,e.kx,e.kz);}
+      finally{if(special && !(originalDef>0))t.defMul=originalDef;}
       this.ui.popup(t.pos, real, '#ff8f7a');
       if (e.st) t.applyStatus(e.st);
       this.ui.sfx('hit');
