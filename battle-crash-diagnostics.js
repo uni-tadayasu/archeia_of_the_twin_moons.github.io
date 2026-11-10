@@ -88,14 +88,10 @@
 
   // 2. Avoid a 4x framebuffer on HiDPI desktops. Main.js manages scaling
   // dynamically and uses window.devicePixelRatio only as the starting ceiling.
+  // V45: Keep native window.devicePixelRatio intact. The renderer now sets
+  // a user-selectable, bounded pixel ratio in main.js (low/standard/high).
+  // Redefining DPR globally prevented high quality and conflicted with resize.
   const touch = typeof matchMedia === 'function' && matchMedia('(pointer:coarse)').matches;
-  const nativeDpr = Math.max(1, Number(window.devicePixelRatio) || 1);
-  const dprLimit = touch ? 0.85 : 1.0;
-  try {
-    if (nativeDpr > dprLimit) Object.defineProperty(window, 'devicePixelRatio', {
-      configurable: true, get: () => dprLimit
-    });
-  } catch { /* Readonly DPR: renderer's own dynamic resolution still works. */ }
 
   // 3. Gameplay timings are untouched. These runtime hooks only reduce graphics
   // processing; all attacks, hitboxes, spells, AI and multiplayer still tick.
@@ -107,7 +103,7 @@
     try {
       const gameResource = performance.getEntriesByType('resource')
         .find(entry => /(?:^|\/)game\.js(?:\?|$)/i.test(new URL(entry.name).pathname + new URL(entry.name).search))?.name;
-      const gamePath = gameResource || new URL('./game.js?v=rf-v9-2-20261109', document.baseURI).href;
+      const gamePath = new URL('./game.js?v=rf-responsive-v45-20261110', document.baseURI).href;
       const dataResource = performance.getEntriesByType('resource')
         .find(entry => /(?:^|\/)data\.js(?:\?|$)/i.test(new URL(entry.name).pathname + new URL(entry.name).search))?.name;
       const dataPath = dataResource || new URL('./data.js?v=rf-v9-2-20261109', document.baseURI).href;

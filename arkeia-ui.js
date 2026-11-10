@@ -441,7 +441,7 @@
       return t;
     }
     function spawn(b,pos,elem,slot,size,life,options={}){
-      if(!b?.fx || !pos || !Number.isFinite(size) || size<=0 || liveSprites>=210)return null;
+      if(!b?.fx || !pos || !Number.isFinite(size) || size<=0 || liveSprites>=(window.RF45Performance?.fxLimit() ?? 210))return null;
       const tex=paintedTexture(elem,slot);if(!tex)return null;
       const flat=!!options.flat;
       const op=THREE.MathUtils.clamp(options.op ?? 1,0,1);

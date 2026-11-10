@@ -1,0 +1,130 @@
+/* Riftfall Arena V45: desktop, tablet, phone portrait/landscape. Loaded last. */
+:root { --rf45-button-size:50px; --rf45-joy-size:110px; }
+html,body { width:100%; max-width:100%; margin:0; overflow-x:clip; }
+body.rf45-responsive { touch-action:pan-y; }
+body.rf45-responsive #game-container { position:fixed; inset:0; width:100%; height:100dvh; overflow:hidden; }
+body.rf45-responsive #ui { position:fixed; inset:0; width:100%; height:100dvh; }
+body.rf45-responsive .screen { box-sizing:border-box; width:100%; height:100dvh; max-height:100dvh; overflow-x:hidden; overflow-y:auto;
+  overscroll-behavior-y:contain; -webkit-overflow-scrolling:touch;
+  padding:max(12px,env(safe-area-inset-top)) max(12px,env(safe-area-inset-right)) max(16px,env(safe-area-inset-bottom)) max(12px,env(safe-area-inset-left)); }
+body.rf45-responsive .screen .inner { box-sizing:border-box; width:min(1100px,100%); min-width:0; max-width:100%; margin-inline:auto; }
+body.rf45-responsive .screen :is(.topbar,.menu,.portal-wrap,.portal-services,.portal-modes,.forge,.fpanel,.field,.card,.select-tools) { box-sizing:border-box; min-width:0; max-width:100%; }
+body.rf45-responsive .screen :is(input,select,textarea) { box-sizing:border-box; max-width:100%; min-width:0; }
+body.rf45-responsive .screen button { max-width:100%; overflow-wrap:anywhere; }
+body.rf45-responsive .screen :is(.topbar,.portal-header,.portal-topnav,.party-picker-top) { flex-wrap:wrap; }
+body.rf45-responsive #scr-title .portal-wrap { width:min(1200px,100%); margin-inline:auto; }
+body.rf45-responsive #scr-title .portal-overview,
+body.rf45-responsive #scr-title .portal-services,
+body.rf45-responsive #scr-title .portal-modes { min-width:0; }
+body.rf45-responsive #scr-title .portal-hero { overflow:hidden; max-width:100%; }
+body.rf45-responsive #scr-title .hero-center { max-width:100%; min-width:0; padding-inline:clamp(8px,2vw,24px); }
+body.rf45-responsive #scr-title .hero-center h1 { overflow-wrap:anywhere; }
+body.rf45-responsive #scr-select #select-grid { min-width:0; max-width:100%; grid-template-columns:repeat(auto-fit,minmax(min(158px,100%),1fr)); }
+body.rf45-responsive #scr-forge .forge { min-width:0; width:100%; grid-template-columns:minmax(160px, .9fr) minmax(0, 2fr); }
+body.rf45-responsive #scr-forge :is(#forge-list,#forge-rows,.fpanel,.ftabs,.frow) { min-width:0; max-width:100%; }
+body.rf45-responsive #chat-panel:not([hidden]), body.rf45-responsive #world-panel:not([hidden]) { max-width:calc(100vw - 18px); max-height:calc(100dvh - 52px); overflow-y:auto; }
+body.rf45-responsive :is(#rf-chief-character-editor,#rf-nep-seven,#rf-gaiz-six,#rf-ce-battle-slots,#gaizorg-adventure-ui) { box-sizing:border-box; max-width:calc(100vw - 16px); }
+body.rf45-responsive #hud-left, body.rf45-responsive #hud-right { min-width:0; width:min(260px,calc(50vw - 67px)); max-width:calc(50vw - 67px); top:max(8px, env(safe-area-inset-top)); }
+body.rf45-responsive #hud .hud-side .plate { max-width:100%; min-width:0; }
+body.rf45-responsive #hud .hud-side .plate b { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+body.rf45-responsive #hud #btn-pause { top:max(8px, env(safe-area-inset-top)); z-index:30; }
+body.rf45-responsive #hud #gauges { top:calc(max(8px,env(safe-area-inset-top)) + 34px); max-width:min(112px,26vw); }
+body.rf45-responsive #field-prompt { max-width:calc(100vw - 24px); white-space:normal; overflow-wrap:anywhere; }
+body.rf45-responsive #world-panel { width:min(440px,calc(100vw - 18px)); }
+body.rf45-responsive #pause { width:100%; height:100dvh; max-height:100dvh; overflow-y:auto; }
+body.rf45-responsive #cutin .ci-title { overflow-wrap:anywhere; white-space:normal; }
+body.rf45-responsive #skillname { max-width:min(94vw,680px); }
+body.rf45-responsive #skillname .sn-name { white-space:normal; overflow-wrap:anywhere; }
+/* Real touch input elements are individually positionable; do not put a blocking panel over the game. */
+body.rf45-responsive #touch { position:absolute; inset:0; overflow:visible!important; touch-action:none; pointer-events:none; }
+body.rf45-responsive #touch #tbtns { position:absolute!important; inset:0!important; top:0!important; left:0!important; right:0!important; bottom:0!important;
+  width:100%!important; height:100%!important; max-width:none!important; max-height:none!important;
+  transform:none!important; display:block!important; padding:0!important; margin:0!important; background:none!important;
+  pointer-events:none!important; overflow:visible!important; }
+body.rf45-responsive #touch #tbtns button { position:absolute!important; z-index:15; box-sizing:border-box!important;
+  width:var(--rf45-button-size)!important; height:var(--rf45-button-size)!important; min-width:0!important;
+  min-height:0!important; border-radius:50%!important; padding:0!important; line-height:1.1!important;
+  font-size:clamp(12px,2.4vmin,17px)!important; font-weight:750; text-align:center;
+  pointer-events:auto!important; touch-action:none!important; user-select:none; -webkit-user-select:none; }
+body.rf45-responsive #touch #joy { position:absolute!important; z-index:15; width:var(--rf45-joy-size)!important; height:var(--rf45-joy-size)!important;
+  min-width:0!important; max-width:none!important; pointer-events:auto!important; touch-action:none!important; }
+body.rf45-responsive #touch #knob { pointer-events:none; }
+body.rf45-responsive #touch.active #tbtns button, body.rf45-responsive #touch.active #joy { visibility:visible; }
+body.rf45-responsive #touch:not(.active) #tbtns button, body.rf45-responsive #touch:not(.active) #joy { pointer-events:none!important; }
+/* Settings */
+body.rf45-responsive #scr-options .menu { width:min(760px,100%); }
+.rf45-settings { box-sizing:border-box; width:100%; min-width:0; text-align:left; padding:clamp(12px,2.5vw,20px);
+  border:1px solid rgba(194,161,230,.6); border-radius:12px; background:rgba(20,19,47,.9); color:#f4edff; }
+.rf45-settings h3 { font-size:clamp(15px,2.6vw,19px); margin:0 0 9px; }
+.rf45-settings-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; }
+.rf45-settings-grid label { display:flex; min-width:0; flex-direction:column; gap:6px; font-size:14px; }
+.rf45-settings :is(select,input[type=range]) { width:100%; min-width:0; min-height:38px; border-radius:8px; font-size:16px; }
+.rf45-settings select { color:#f7eeff; background:#261b3d; border:1px solid #bba0e3; padding:7px 10px; }
+.rf45-quality-status { margin:8px 0; font-size:12px; color:#d6c7ed; }
+.rf45-settings-actions { display:flex; flex-wrap:wrap; gap:8px; margin:11px 0; }
+.rf45-settings-actions button { flex:1 1 165px; min-width:0; min-height:44px; border:1px solid #c8a9f1; color:#fff; background:#463460; border-radius:8px; padding:8px; }
+.rf45-settings small { display:block; color:#c9bcdd; font-size:12px; line-height:1.5; }
+/* Full viewport layout editor, touch events consumed only while open. */
+#rf45-layout-editor[hidden] { display:none!important; }
+#rf45-layout-editor { position:fixed; inset:0; z-index:300000; width:100vw; height:100dvh;
+  color:#fff; background:linear-gradient(140deg,#07172af5,#201333ef); overflow:hidden; touch-action:none; }
+#rf45-layout-editor .rf45-editor-head { position:absolute; z-index:3; top:max(8px,env(safe-area-inset-top));
+  left:max(8px,env(safe-area-inset-left)); right:max(8px,env(safe-area-inset-right)); display:flex; flex-wrap:wrap;
+  align-items:center; gap:6px; background:#111c35eb; padding:8px; border:1px solid #799ac0; border-radius:9px; }
+#rf45-layout-editor .rf45-editor-head strong { font-size:13px; margin-right:auto; }
+#rf45-layout-editor .rf45-editor-head label { display:flex; align-items:center; gap:5px; font-size:12px; }
+#rf45-layout-editor .rf45-editor-head select { color:white; background:#25314d; border:1px solid #7b97c0; font-size:14px; padding:6px; }
+#rf45-layout-editor .rf45-editor-head button { color:#e9f3ff; border:1px solid #8fabc6; background:#26354f; padding:7px 9px;
+  font-size:12px; border-radius:7px; min-height:35px; }
+#rf45-layout-editor .rf45-editor-head .rf45-primary { color:#151b2f; background:#e5d1ff; font-weight:800; }
+#rf45-layout-editor .rf45-editor-help { position:absolute; z-index:1; top:clamp(100px,19dvh,160px);
+  left:12%; right:12%; text-align:center; font-size:clamp(11px,2vw,13px); color:#d3dcef; pointer-events:none; }
+#rf45-layout-editor #rf45-editor-controls { position:absolute; inset:0; pointer-events:none; }
+#rf45-layout-editor .rf45-editor-control { position:absolute!important; pointer-events:auto!important; touch-action:none; border:2px solid #e3cb8b;
+  background:#2a5773a6; color:white; border-radius:50%; padding:0; cursor:grab; font-weight:800; font-size:15px; user-select:none; }
+#rf45-layout-editor .rf45-editor-control:active { cursor:grabbing; background:#5a498f; }
+#rf45-layout-editor .rf45-editor-joy { border:3px dashed #a9e0fb; background:#264c6880; font-size:35px; }
+@media(max-width:820px) {
+  body.rf45-responsive #scr-title .portal-overview { grid-template-columns:repeat(2,minmax(0,1fr)); }
+  body.rf45-responsive #scr-forge .forge { grid-template-columns:minmax(140px, .85fr) minmax(0, 1.6fr); }
+  body.rf45-responsive #scr-select #select-grid { grid-template-columns:repeat(auto-fit,minmax(min(136px,100%),1fr)); }
+  body.rf45-responsive #scr-title .portal-services,body.rf45-responsive #scr-title .portal-modes { grid-template-columns:repeat(2,minmax(0,1fr)); }
+}
+@media(max-width:600px) {
+  body.rf45-responsive .screen { padding-inline:max(8px,env(safe-area-inset-left)) max(8px,env(safe-area-inset-right)); }
+  body.rf45-responsive #scr-title :is(.portal-overview,.portal-services,.portal-modes) { grid-template-columns:minmax(0,1fr); }
+  body.rf45-responsive #scr-select #select-grid { grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; }
+  body.rf45-responsive #scr-forge .forge { grid-template-columns:minmax(0,1fr); }
+  body.rf45-responsive #scr-forge #forge-list { flex-wrap:wrap; max-height:36dvh; overflow:auto; }
+  body.rf45-responsive .screen :is(.topbar,.portal-topnav) { gap:6px; }
+  body.rf45-responsive .screen button { min-height:40px; }
+  body.rf45-responsive #touch #tbtns button { min-height:0!important; }
+  body.rf45-responsive #hud-left,body.rf45-responsive #hud-right { width:calc(50vw - 50px); max-width:calc(50vw - 50px); }
+  body.rf45-responsive #hud #gauges { width:min(88px,26vw); min-width:0; }
+  body.rf45-responsive #field-info { max-width:calc(100vw - 122px); }
+  body.rf45-responsive #field-map { width:min(96px,23vw); }
+  body.rf45-responsive #world-panel { width:calc(100vw - 18px); left:50%; transform:translateX(-50%); top:10%; max-height:77dvh; }
+  body.rf45-responsive #skillname { top:clamp(95px,19dvh,136px); }
+  .rf45-settings-grid { grid-template-columns:minmax(0,1fr); }
+  #rf45-layout-editor .rf45-editor-head { font-size:11px; }
+}
+@media(max-width:860px) and (orientation:landscape) {
+  body.rf45-responsive .screen { padding-top:max(7px,env(safe-area-inset-top)); padding-bottom:max(9px,env(safe-area-inset-bottom)); }
+  body.rf45-responsive #hud-left,body.rf45-responsive #hud-right { top:6px; max-height:25dvh; }
+  body.rf45-responsive #hud .hud-side .plate { margin-bottom:2px; }
+  body.rf45-responsive #hud #gauges { top:30px; }
+  body.rf45-responsive #skillname { top:clamp(70px,20dvh,100px); }
+  body.rf45-responsive #field-info small { display:none; }
+  body.rf45-responsive #world-panel { top:5%; max-height:88dvh; }
+  #rf45-layout-editor .rf45-editor-head { max-width:95vw; }
+  #rf45-layout-editor .rf45-editor-help { top:clamp(72px,24dvh,108px); }
+}
+@media(max-width:360px) {
+  body.rf45-responsive #scr-select #select-grid { gap:5px; }
+  body.rf45-responsive .screen :is(input,select,textarea) { font-size:16px; }
+  body.rf45-responsive #hud .hud-side .plate b { font-size:10px; }
+  #rf45-layout-editor .rf45-editor-head button { min-height:30px; padding:4px; }
+}
+@media(prefers-reduced-motion:reduce) {
+  body.rf45-responsive *, #rf45-layout-editor * { scroll-behavior:auto!important; animation-duration:.01ms!important; }
+}

@@ -1,3 +1,4 @@
+import {initResponsiveV45} from './assets/rf-responsive-v45.js?v=rf-responsive-v45-20261110';
 import {installFujiwaraChief} from './fujiwara-chief-v39.js?v=rf-fujiwara-v42-tdzfix-20261110';
 import {installFujiwaraCombat} from './fujiwara-nobuyori.js?v=rf-fujiwara-v43-rainbow-totsuka-20261110';
 // RF_CHIEF_CHAR_EDITOR_V28
@@ -14,7 +15,7 @@ import {installUdaijinCombat} from './udaijin-curse.js?v=rf-fujiwara-noble-motio
 // RF_BATCH_SCALE_STARTUP_V92
 // RF_BATTLE_FIX_V9_1_20261109
 import { installMaouCombat } from './maou-abilities.js?v=rf-v9-2-20261109';
-import { Fighter as MaouFighter } from './game.js?v=rf-fujiwara-v43-rainbow-totsuka-20261110';
+import { Fighter as MaouFighter } from './game.js?v=rf-responsive-v45-20261110';
 import './boss-abilities.js?v=rf-v9-2-20261109';
 import './exact-model-portraits.js?v=rf-v9-2-20261109';
 // RF_GRAND_FOUR_20261108 main.js
@@ -24,7 +25,7 @@ import { installOperatorCombatFx } from './operator-combat-fx.js?v=20261108-gran
 import { renderExactPortrait } from './glb-portrait.js?v=rf-mobile-v7-20261109';
 // RF_OPERATOR_GIGANTES_MAIN_20261108
 import { loadModel } from './model-runtime.js?v=rf-fujiwara-noble-motion-v36-20261110';
-import { Battle, ARENA_R } from './game.js?v=rf-fujiwara-v43-rainbow-totsuka-20261110';
+import { Battle, ARENA_R } from './game.js?v=rf-responsive-v45-20261110';
 import { installNepterionCombat } from './nepterion-water.js?v=rf-v18-20261109';
 import { installActorMotion } from './character-motion.js?v=rf-v18-20261109';
 import { installNepterionFixedSeven } from './nepterion-fixed-seven.js?v=rf-v18-20261109';
@@ -46,11 +47,13 @@ installActorMotion({ Fighter: MaouFighter, Battle });
 installStaffAvatarScale({Fighter:MaouFighter,FIGHTERS,ROSTER});
 installKinosakiMotion({Fighter:MaouFighter,Battle});
 const isTouch = matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window;
+// V45 quality and touch positioning: initialized after the HTML has been parsed.
+const rf45UI=initResponsiveV45({isTouch});
 
 // ---------- Renderer / scene ----------
 const container = $('#game-container');
 const renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: 'high-performance' });
-renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, isTouch ? 0.8 : 1.15));
+renderer.setPixelRatio(rf45UI.pixelRatio());
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.shadowMap.enabled = false;
 renderer.shadowMap.type = THREE.PCFShadowMap;
@@ -69,6 +72,13 @@ function onResize() {
 }
 window.addEventListener('resize', onResize);
 window.visualViewport?.addEventListener('resize', onResize);
+// Explicit user quality changes override the adaptive ceiling without restarting the game.
+document.addEventListener('riftfall-quality-change',()=>{
+  const ratio=rf45UI.pixelRatio();
+  renderer.setPixelRatio(ratio);
+  if(adaptQ){adaptQ.pr=ratio;adaptQ.max=ratio;}
+  onResize();
+});
 
 const hemi = new THREE.HemisphereLight(0xcfd8ff, 0x3a2a40, 0.9);
 scene.add(hemi);
@@ -265,15 +275,24 @@ async function ensureAllModelsReady(requiredKeys = null) {
   const requested = requiredExpanded?.length
     ? [...new Set(requiredExpanded.map((key) => FIGHTERS[key]?.model).filter(Boolean))]
     : modelUrls;
+  // V45: only truly missing models count toward the loading progress.
+  // Always complete this check BEFORE making any fighter or beginning any battle.
   if (!requested.length) return true;
-  // RF_LOADING_MODEL_COUNTER_V6
-  const loadToken=window.RiftfallLoading?.begin('冒険と3Dモデルを準備しています',{total:requested.length,note:'必要なモデルを確認しています'});
+  const missing = requested.filter(url => !byUrl[url]);
+  if (!missing.length) return true;
+  const loadToken=window.RiftfallLoading?.begin('戦闘に必要な3Dモデルを読み込み中',{
+    total:missing.length,note:'0 / '+missing.length+' 体 — 必要なモデルのみ順番に準備しています'
+  });
   let completedModels=0;
-  for (const url of requested) {
-    try { if (!byUrl[url]) await retrieveModel(url); }
-    finally { completedModels++; window.RiftfallLoading?.progress(loadToken,completedModels,requested.length,url.split('/').pop()); }
-    // Yield a frame between heavy GLB decodes on mobile devices.
-    if (completedModels < requested.length) await new Promise(resolve=>setTimeout(resolve,0));
+  for (const url of missing) {
+    try { await retrieveModel(url); }
+    finally {
+      completedModels++;
+      window.RiftfallLoading?.progress(loadToken,completedModels,missing.length,
+        completedModels+' / '+missing.length+' 体：'+url.split('/').pop());
+    }
+    // Avoid concurrent expensive GLB decoding on low-memory phones.
+    if (completedModels < missing.length) await new Promise(resolve=>setTimeout(resolve,0));
   }
   const failed = requested.filter((url) => !byUrl[url]);
   if (failed.length) {
@@ -4417,12 +4436,14 @@ renderer.setAnimationLoop((time) => {
   const t = time / 1000;
   // 軽量化：重い端末では描画解像度を自動で下げ、余裕があれば戻す
   {
-    const q = (adaptQ ||= { avg: 1 / 60, t: 0, pr: renderer.getPixelRatio(), max: renderer.getPixelRatio() });
+    const q = (adaptQ ||= { avg: 1 / 60, t: 0, pr: renderer.getPixelRatio(), max: rf45UI.pixelRatio() });
+    q.max=rf45UI.pixelRatio();
     q.avg += (Math.min(0.2, rawDt) - q.avg) * 0.05;
     q.t += rawDt;
     if (q.t > 2) {
       q.t = 0;
-      const next = q.avg > 1 / 40 ? Math.max(0.6, q.pr - 0.15) : q.avg < 1 / 57 ? Math.min(q.max, q.pr + 0.1) : q.pr;
+      const floor = Math.min(0.5, q.max);
+      const next = q.avg > 1 / 34 ? Math.max(floor, q.pr - 0.13) : q.avg < 1 / 55 ? Math.min(q.max, q.pr + 0.08) : q.pr;
       if (Math.abs(next - q.pr) > 0.01) {
         q.pr = next;
         renderer.setPixelRatio(next);
@@ -4455,9 +4476,11 @@ renderer.setAnimationLoop((time) => {
     camera.position.set(Math.sin(t * 0.1) * 16, 7, Math.cos(t * 0.1) * 16);
     camera.lookAt(0, 2, 0);
   }
-  if (!isTouch || (rfV12RenderClock += rawDt) >= 1/30) {
-    if (isTouch) rfV12RenderClock = 0;
-    renderer.render(scene, camera);
+  const frameInterval=1/rf45UI.fps();
+  rfV12RenderClock += rawDt;
+  if(rfV12RenderClock>=frameInterval){
+    rfV12RenderClock=Math.min(frameInterval,rfV12RenderClock-frameInterval);
+    renderer.render(scene,camera);
   }
 });
 

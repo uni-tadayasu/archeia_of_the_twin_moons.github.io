@@ -31,8 +31,9 @@
     const isTouch = visible(touch) && visible(buttons) && touch.classList.contains('active');
     body.classList.toggle('rf-ui-touch-active',isTouch);
     if (isTouch) {
-      const r = buttons.getBoundingClientRect();
-      const bottom = Math.max(70, Math.round(window.innerHeight - r.top + 10));
+      const rects=[...buttons.querySelectorAll('button[data-act]')].filter(visible).map(b=>b.getBoundingClientRect());
+      const nearestTop=rects.length?Math.min(...rects.map(r=>r.top)):buttons.getBoundingClientRect().top;
+      const bottom = Math.max(70, Math.round(window.innerHeight - nearestTop + 10));
       const value = bottom + 'px';
       if (body.style.getPropertyValue('--rf-ui-controls-space') !== value)
         body.style.setProperty('--rf-ui-controls-space',value);

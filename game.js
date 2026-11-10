@@ -2019,7 +2019,7 @@ export class Battle {
 
   // 属性ごとの立体エフェクト（炎の柱・氷晶・雷撃・旋風・岩塊・光柱・闇の結び目・波紋・毒泡・血の刃）
   fx3d(pos, elem, power = 1, color = 0xffffff) {
-    if (fx3dLive >= 10) return; // 同時発生数を制限して重くならないように
+    if (fx3dLive >= (window.RF45Performance?.maxThreeDEffects() ?? 10)) return; // V45: quality-dependent cosmetic limit
     fx3dLive++;
     const e = ((elem ?? 5) % 10 + 10) % 10;
     const g = new THREE.Group();
@@ -2121,7 +2121,7 @@ export class Battle {
 
   // 素材エフェクトを1枚出して、拡大・回転・上昇・フェードさせる
   fxPop(pos, elem, slot, size, life, o = {}) {
-    if (this.fx.children.length > 65) return null;
+    if (this.fx.children.length >= (window.RF45Performance?.maxPaintedFx() ?? 65)) return null;
     const obj = o.flat ? fxFlat(elem, slot, size, o.op ?? 1) : fxSprite(elem, slot, size, o.op ?? 1);
     obj.position.copy(pos);
     if (o.flat) obj.rotation.y = o.rot ?? Math.random() * Math.PI * 2;
