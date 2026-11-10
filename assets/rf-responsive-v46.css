@@ -1,0 +1,157 @@
+
+/* RF46: layout-only overrides for PC, tablets, mobile portrait/landscape */
+:root{--rf46-gutter:clamp(10px,2.25vw,26px);--rf46-visible-h:100dvh}
+*,*::before,*::after{box-sizing:border-box}
+html,body{min-width:0;max-width:100%;width:100%;margin:0;overflow-x:clip;text-size-adjust:100%;-webkit-text-size-adjust:100%}
+#ui{max-width:100%;width:100%;left:0;right:0}
+#ui .screen{max-width:100%;min-width:0;width:100%;overflow-x:clip;padding-left:max(var(--rf46-gutter),env(safe-area-inset-left));padding-right:max(var(--rf46-gutter),env(safe-area-inset-right))}
+#ui .screen.on{overflow-y:auto;overscroll-behavior-y:contain;-webkit-overflow-scrolling:touch}
+#ui .inner{width:min(100%,1080px);max-width:100%;min-width:0}
+#ui .inner>*{max-width:100%}
+#ui .topbar{width:100%;min-width:0;gap:8px;flex-wrap:wrap;align-items:center}
+#ui .topbar .crumb{flex:1;min-width:0;line-height:1.35;overflow-wrap:anywhere;letter-spacing:.06em}
+#ui .back{white-space:normal;max-width:100%;min-height:35px}
+#ui :is(h1,h2,h3,h4,p,b,span,small,label,.label,.foot,.crumb){overflow-wrap:anywhere;word-break:normal}
+#ui h1{font-size:clamp(23px,4.6vw,64px);line-height:1.24;letter-spacing:clamp(.02em,.25vw,.13em)}
+#ui h2{font-size:clamp(19px,3vw,34px);line-height:1.35}
+#ui .label{font-size:clamp(16px,2.8vw,26px);letter-spacing:clamp(.04em,.3vw,.2em)}
+#ui :is(img,svg,video,picture){max-width:100%;height:auto}
+#ui :is(.menu,.grid,.field,.fpanel,.forge,.portal-wrap,.portal-section,.portal-header,.portal-overview,.portal-services,.portal-modes,.world-gallery){min-width:0;max-width:100%}
+#ui .menu{width:min(520px,100%);grid-template-columns:minmax(0,1fr)}
+#ui .menu button,#ui .btn{white-space:normal;min-width:0;max-width:100%;font-size:clamp(13px,1.4vw + 9px,17px);line-height:1.4}
+#ui :is(input,textarea,select,button){max-width:100%;min-width:0}
+#ui .field{width:min(100%,800px)}
+#ui :is(.card,.chip,.fpanel,.frow,.party-slot){min-width:0;overflow-wrap:anywhere}
+#ui .card :is(b,small,em){white-space:normal;overflow-wrap:anywhere;line-height:1.4}
+#ui .card img.face{width:100%;height:auto;aspect-ratio:1;object-fit:contain}
+#ui .sthumb{width:100%;aspect-ratio:16/9;background-position:center;background-size:cover}
+#ui :is(#select-grid,#stage-grid,#party-slots,.party-picker-results){width:100%;max-width:100%;min-width:0}
+#ui #select-grid{grid-template-columns:repeat(auto-fit,minmax(min(100%,156px),1fr))}
+#ui #stage-grid{grid-template-columns:repeat(auto-fit,minmax(min(100%,185px),1fr))}
+#ui #party-slots,#ui .party-picker-results{grid-template-columns:repeat(auto-fit,minmax(min(100%,170px),1fr))}
+#ui .forge{width:100%;grid-template-columns:minmax(115px,180px) minmax(0,1fr)}
+#ui .fpanel{min-width:0}
+#ui .frow{grid-template-columns:minmax(0,1fr) auto}
+#ui #story-box{width:min(100%,800px);max-width:100%;padding:clamp(10px,2vw,22px);overflow-wrap:anywhere}
+#ui #story-line{font-size:clamp(14px,1.3vw + 9px,19px);line-height:1.65}
+#ui #story-chapter{font-size:clamp(17px,3.2vw,32px);letter-spacing:.09em}
+#ui :is(.portal-wrap,.portal-hero,.portal-header,.portal-overview,.portal-section,.portal-services,.portal-world,.portal-modes,.world-gallery){width:100%;max-width:100%;min-width:0}
+#ui .portal-wrap{margin-inline:auto}
+#ui .portal-header{flex-wrap:wrap;gap:10px}
+#ui .portal-topnav{flex-wrap:wrap;gap:5px;max-width:100%}
+#ui .portal-topnav button{white-space:normal;min-width:0}
+#ui :is(.portal-overview,.portal-services,.world-gallery){grid-template-columns:repeat(auto-fit,minmax(min(100%,240px),1fr))}
+#ui .portal-modes{grid-template-columns:repeat(auto-fit,minmax(min(100%,260px),1fr))}
+#ui :is(.portal-overview>*,.portal-services>*,.world-gallery>*,.portal-modes>*){min-width:0;max-width:100%}
+#ui .portal-hero{overflow:hidden}
+#ui .portal-hero .hero-center{z-index:2;min-width:0;max-width:100%}
+#ui .portal-hero :is(.hero-figure-left,.hero-figure-right){pointer-events:none;object-fit:contain;max-height:100%}
+#ui .portal-hero h1{font-size:clamp(23px,4.7vw,60px);line-height:1.18;letter-spacing:.065em}
+#ui :is(.mode-tile,.portal-services button,.world-gallery button){max-width:100%;min-width:0}
+#ui :is(.mode-tile,.portal-services button) :is(b,small,span){white-space:normal;overflow-wrap:anywhere}
+#ui .portal-controls{width:100%;max-width:100%}
+#ui #skillname{max-width:min(94vw,850px)}
+#ui #skillname .sn-name{max-width:100%;font-size:clamp(17px,3.3vw,34px);white-space:normal;overflow-wrap:anywhere}
+#ui #banner b{font-size:clamp(20px,5vw,48px);overflow-wrap:anywhere}
+#ui #cutin .ci-text{min-width:0}
+#ui #cutin .ci-title{font-size:clamp(17px,4.8vw,54px);white-space:normal;line-height:1.18}
+#ui #pause{max-width:100%;width:100%;max-height:100%;overflow-y:auto;padding:clamp(12px,3vw,30px)}
+#ui :is(#world-panel,#world-req){max-width:calc(100vw - 18px);overflow-x:hidden;overflow-y:auto}
+#ui #world-panel{max-height:min(80dvh,750px)}
+#ui #world-req{max-height:75dvh}
+#ui #field-prompt{white-space:normal;max-width:min(90vw,540px)}
+#ui .plate{max-width:100%;min-width:0}
+#ui .plate b{max-width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#ui #gauges{min-width:0}
+#ui #touch{max-width:100%;overflow:hidden}
+#ui #joy,#ui #tbtns{touch-action:none}
+#ui #tbtns button{display:grid;place-items:center;min-width:0}
+#ui :is(dialog,[role=dialog],.modal,.dialog,.modal-content){max-width:min(96vw,980px);max-height:calc(100dvh - 18px);overflow-y:auto;overflow-x:hidden}
+#ui [hidden]{display:none!important}
+@media(min-width:1150px){
+ #ui .portal-wrap{max-width:1240px}
+ #ui .screen .inner{width:min(100%,1080px)}
+ #ui #select-grid{grid-template-columns:repeat(auto-fit,minmax(155px,1fr))}
+}
+@media(max-width:900px){
+ #ui .portal-header{flex-wrap:wrap}
+ #ui .portal-topnav{width:100%;justify-content:center}
+ #ui .portal-modes{grid-template-columns:repeat(2,minmax(0,1fr))}
+ #ui :is(.portal-overview,.portal-services,.world-gallery){grid-template-columns:repeat(2,minmax(0,1fr))}
+ #ui .forge{grid-template-columns:minmax(110px,160px) minmax(0,1fr)}
+}
+@media(max-width:600px){
+ #ui .screen{padding-left:max(10px,env(safe-area-inset-left));padding-right:max(10px,env(safe-area-inset-right))}
+ #ui .screen .inner{width:100%;gap:clamp(5px,1.5vh,12px)}
+ #ui .topbar{align-items:flex-start;gap:6px}
+ #ui .back{padding:7px 10px;font-size:clamp(12px,3.5vw,15px)}
+ #ui :is(.menu,.field,.fpanel,.forge){width:100%}
+ #ui .menu button{min-height:42px;padding:9px 11px}
+ #ui .portal-header{gap:7px}
+ #ui .portal-topnav{width:100%;gap:4px}
+ #ui .portal-topnav button{flex:1 1 auto;padding:6px;font-size:clamp(10px,3vw,13px)}
+ #ui :is(.portal-overview,.portal-services,.world-gallery,.portal-modes){grid-template-columns:minmax(0,1fr)}
+ #ui .portal-hero{min-height:0}
+ #ui .portal-hero :is(.hero-figure-left,.hero-figure-right){max-width:48vw;opacity:.35}
+ #ui .portal-hero .hero-center{padding-inline:8px}
+ #ui .portal-hero h1{font-size:clamp(22px,6.5vw,38px);letter-spacing:.03em}
+ #ui #select-grid,#ui #stage-grid,#ui #party-slots,#ui .party-picker-results{grid-template-columns:repeat(2,minmax(0,1fr));gap:clamp(6px,2vw,10px)}
+ #ui .card{padding:clamp(6px,2vw,10px)}
+ #ui .card b{font-size:clamp(13px,3.8vw,17px)}
+ #ui .card small{font-size:clamp(10px,2.6vw,12px);line-height:1.35}
+ #ui .forge{grid-template-columns:minmax(0,1fr)}
+ #ui #forge-list{display:flex;flex-direction:row;flex-wrap:wrap;max-height:none;overflow:visible;gap:5px}
+ #ui #forge-list>*{flex:1 1 125px;min-width:0}
+ #ui .fpanel{padding:10px}
+ #ui #story-box{padding:12px;max-height:min(50dvh,440px);overflow-y:auto}
+ #ui #story-chapter{font-size:clamp(17px,4vw,24px)}
+ #ui #field-info{max-width:calc(50vw - 50px);padding:4px 7px}
+ #ui #field-info b{font-size:clamp(11px,3vw,15px)}
+ #ui #field-info span{font-size:clamp(10px,2.5vw,13px)}
+ #ui #field-info small{display:none}
+ #ui #hud-left,#ui #hud-right{width:calc(50% - 49px);top:6px}
+ #ui #btn-pause{top:6px;max-width:85px;padding:4px 6px;font-size:11px}
+ #ui #gauges{top:36px;max-width:86px;width:86px;gap:3px;font-size:9px}
+ #ui #tbtns{--tb:clamp(38px,12vmin,55px);gap:4px}
+ #ui #tbtns button{font-size:clamp(12px,3.5vmin,17px)}
+ #ui #joy{width:clamp(90px,26vmin,136px)}
+ #ui #world-panel{width:calc(100vw - 18px);padding:10px}
+ #ui #cutin .ci-band{padding-left:6%;padding-right:5%;gap:9px}
+ #ui #cutin img{max-width:28vw}
+ #ui #cutin .ci-text{max-width:62vw}
+ #ui #skillname{top:clamp(104px,18vh,145px)}
+}
+@media(max-width:360px){
+ #ui .screen{padding-left:8px;padding-right:8px}
+ #ui .portal-topnav button{font-size:10px;padding:5px}
+ #ui .portal-hero .hero-figure{opacity:.28}
+ #ui #tbtns{--tb:38px}
+ #ui #joy{width:86px}
+ #ui #hud-left,#ui #hud-right{width:calc(50% - 43px)}
+ #ui #gauges{width:78px;max-width:78px}
+ #ui #btn-pause{max-width:76px}
+}
+@media(max-height:540px) and (orientation:landscape){
+ #ui .screen{padding-top:max(4px,env(safe-area-inset-top));padding-bottom:max(4px,env(safe-area-inset-bottom))}
+ #ui .screen .inner{gap:4px}
+ #ui .topbar{gap:5px}
+ #ui .topbar .back{min-height:30px;padding:3px 8px}
+ #ui .menu{gap:4px}
+ #ui .menu button{min-height:34px;padding:5px 10px}
+ #ui .portal-hero{min-height:0}
+ #ui .portal-hero h1{font-size:clamp(19px,4.2vh,28px)}
+ #ui .portal-hero .hero-figure{max-height:76vh}
+ #ui .portal-modes{grid-template-columns:repeat(2,minmax(0,1fr))}
+ #ui .forge{grid-template-columns:minmax(100px,150px) minmax(0,1fr)}
+ #ui #forge-list{max-height:48vh;overflow:auto}
+ #ui #story-box{max-height:48vh;overflow-y:auto}
+ #ui #skillname{top:clamp(58px,18vh,90px);padding:3px 10px}
+ #ui #tbtns{--tb:clamp(36px,12vh,44px);gap:3px}
+ #ui #joy{width:clamp(80px,25vh,104px)}
+ #ui #cutin .ci-band{height:min(30vh,160px)}
+}
+@media(pointer:coarse){
+ #ui input:not([type=range]),#ui select,#ui textarea{font-size:max(16px,1rem)}
+ #ui button,#ui .btn{touch-action:manipulation}
+}
+@media(prefers-reduced-motion:reduce){#ui .screen{scroll-behavior:auto}}
