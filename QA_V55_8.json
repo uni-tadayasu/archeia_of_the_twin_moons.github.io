@@ -1,0 +1,294 @@
+{
+  "release": "V55.8 CG UI + generic texture repair",
+  "baseRepo": "uni-tadayasu/archeia_of_the_twin_moons.github.io",
+  "baseRevision": "main at 2026-11-12, source index SHA f88499bd2cd46524c691ef08d27cb9cfab620aa1",
+  "jsSyntaxChecks": {
+    "assets/rf556-model-portraits.js": "PASS",
+    "assets/rf558-cg-render.js": "PASS",
+    "assets/rf558-ultimate.js": "PASS",
+    "model-runtime.js": "PASS"
+  },
+  "cssErrors": {
+    "assets/rf558-ultimate.css": []
+  },
+  "realGLBAtlasesChecked": [
+    {
+      "model": "hero-swordsman",
+      "paintedMaterials": 1,
+      "images": 2,
+      "validTextureReferences": true,
+      "uv0": true,
+      "animations": 81
+    },
+    {
+      "model": "mage-weaver",
+      "paintedMaterials": 1,
+      "images": 2,
+      "validTextureReferences": true,
+      "uv0": true,
+      "animations": 81
+    },
+    {
+      "model": "brute-axe",
+      "paintedMaterials": 1,
+      "images": 2,
+      "validTextureReferences": true,
+      "uv0": true,
+      "animations": 81
+    },
+    {
+      "model": "shinobi-twin",
+      "paintedMaterials": 1,
+      "images": 1,
+      "validTextureReferences": true,
+      "uv0": true,
+      "animations": 81
+    },
+    {
+      "model": "old-knight",
+      "paintedMaterials": 1,
+      "images": 2,
+      "validTextureReferences": true,
+      "uv0": true,
+      "animations": 0
+    },
+    {
+      "model": "alchemist-boy",
+      "paintedMaterials": 1,
+      "images": 2,
+      "validTextureReferences": true,
+      "uv0": true,
+      "animations": 81
+    },
+    {
+      "model": "ranger-archer",
+      "paintedMaterials": 1,
+      "images": 2,
+      "validTextureReferences": true,
+      "uv0": true,
+      "animations": 0
+    },
+    {
+      "model": "dark-mercenary",
+      "paintedMaterials": 1,
+      "images": 2,
+      "validTextureReferences": true,
+      "uv0": true,
+      "animations": 81
+    },
+    {
+      "model": "bell-priestess",
+      "paintedMaterials": 1,
+      "images": 2,
+      "validTextureReferences": true,
+      "uv0": true,
+      "animations": 0
+    },
+    {
+      "model": "wolf-warrior",
+      "paintedMaterials": 1,
+      "images": 2,
+      "validTextureReferences": true,
+      "uv0": true,
+      "animations": 81
+    },
+    {
+      "model": "monk-brawler",
+      "paintedMaterials": 1,
+      "images": 2,
+      "validTextureReferences": true,
+      "uv0": true,
+      "animations": 81
+    },
+    {
+      "model": "dragoon-lancer",
+      "paintedMaterials": 1,
+      "images": 2,
+      "validTextureReferences": true,
+      "uv0": true,
+      "animations": 81
+    },
+    {
+      "model": "clockwork-puppeteer",
+      "paintedMaterials": 1,
+      "images": 2,
+      "validTextureReferences": true,
+      "uv0": true,
+      "animations": 81
+    },
+    {
+      "model": "verdict-maiden-v2",
+      "paintedMaterials": 1,
+      "images": 1,
+      "validTextureReferences": true,
+      "uv0": true,
+      "animations": 81
+    }
+  ],
+  "createImageBitmap": {
+    "upper": [
+      107,
+      112,
+      122,
+      255
+    ],
+    "lower": [
+      19,
+      18,
+      11,
+      255
+    ],
+    "flippedUpper": [
+      19,
+      18,
+      11,
+      255
+    ],
+    "flippedLower": [
+      107,
+      112,
+      122,
+      255
+    ],
+    "correctlyDistinct": true
+  },
+  "screenSizes": [
+    {
+      "name": "desktop",
+      "modeButtons": 8,
+      "overflow": [],
+      "jsErrors": []
+    },
+    {
+      "name": "laptop",
+      "modeButtons": 8,
+      "overflow": [],
+      "jsErrors": []
+    },
+    {
+      "name": "tablet",
+      "modeButtons": 8,
+      "overflow": [],
+      "jsErrors": []
+    },
+    {
+      "name": "mobile",
+      "modeButtons": 8,
+      "overflow": [],
+      "jsErrors": []
+    },
+    {
+      "name": "small",
+      "modeButtons": 8,
+      "overflow": [],
+      "jsErrors": []
+    },
+    {
+      "name": "landscape",
+      "modeButtons": 8,
+      "overflow": [],
+      "jsErrors": []
+    }
+  ],
+  "fourPartyHudTests": [
+    {
+      "screen": "desktop",
+      "result": {
+        "crowded": true,
+        "left": 168,
+        "maxH": "265px",
+        "right": 168,
+        "leftScroll": 168,
+        "aClient": 168,
+        "screenWidth": 1440
+      },
+      "jsErrors": []
+    },
+    {
+      "screen": "mobile",
+      "result": {
+        "crowded": true,
+        "left": 152,
+        "maxH": "240px",
+        "right": 152,
+        "leftScroll": 152,
+        "aClient": 152,
+        "screenWidth": 390
+      },
+      "jsErrors": []
+    },
+    {
+      "screen": "small",
+      "result": {
+        "crowded": true,
+        "left": 206,
+        "maxH": "224px",
+        "right": 206,
+        "leftScroll": 206,
+        "aClient": 206,
+        "screenWidth": 320
+      },
+      "jsErrors": []
+    },
+    {
+      "screen": "landscape",
+      "result": {
+        "crowded": true,
+        "left": 126,
+        "maxH": "175.5px",
+        "right": 126,
+        "leftScroll": 126,
+        "aClient": 126,
+        "screenWidth": 844
+      },
+      "jsErrors": []
+    }
+  ],
+  "live3DAndOnlineTested": false,
+  "changes": [
+    [
+      "assets/rf556-model-portraits.js",
+      8765
+    ],
+    [
+      "assets/rf558/arcane-ring.webp",
+      16590
+    ],
+    [
+      "assets/rf558/blue-mist.webp",
+      48294
+    ],
+    [
+      "assets/rf558/energy-slash.webp",
+      12572
+    ],
+    [
+      "assets/rf558/film-fine.webp",
+      11272
+    ],
+    [
+      "assets/rf558/luminous-flare.webp",
+      13726
+    ],
+    [
+      "assets/rf558-cg-render.js",
+      6472
+    ],
+    [
+      "assets/rf558-ultimate.css",
+      35664
+    ],
+    [
+      "assets/rf558-ultimate.js",
+      16757
+    ],
+    [
+      "index.html",
+      67228
+    ],
+    [
+      "model-runtime.js",
+      16910
+    ]
+  ]
+}

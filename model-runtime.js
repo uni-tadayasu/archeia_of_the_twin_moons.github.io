@@ -88,14 +88,17 @@ async function getMeshopt() {
 // Decode the WebP bytes already contained in the GLB. No blob: or data:
 // resource is fetched, so restrictive connect-src policies cannot block
 // the texture like ImageBitmapLoader did.
-async function decodeInMemoryImage(image, i, preserveOrientation = false) {
+// RF558_TEXTURE_COLOR_REPAIR_20261112 — Always honor native GLB UV image orientation.
+async function decodeInMemoryImage(image, i) {
   const blob = new Blob([image.bytes], { type: image.mime });
   if (typeof createImageBitmap === 'function') {
     try {
       return await createImageBitmap(blob, {
-        // Original GLB UV coordinates and Three.js Texture.flipY=false expect
-        // the bitmap's unmodified orientation, not a second vertical flip.
-        imageOrientation: preserveOrientation ? 'none' : 'flipY',
+        // All GLB model images use the same unmodified top-left pixel layout.
+        // The glTF UVs and Texture.flipY=false already define orientation.
+        // A previous generic-only flipY placed skin and costume colors on
+        // the wrong UV islands and appeared as mottled, patchy surfaces.
+        imageOrientation: 'none',
         premultiplyAlpha: 'none',
         colorSpaceConversion: 'none'
       });
@@ -133,11 +136,10 @@ function samplerSetting(THREE, sampler, texture) {
 }
 async function restoreInMemoryTextures(gltf, detached, sourceUrl = '') {
   if (!detached?.images.length || !detached.materials.length) return;
-  // The ice warlord model must keep the unmodified texture atlas orientation.
-  // Preserve this GLB without changing how the other fighters are decoded.
-  const preserveOrientation = /(?:^|\/)(?:iron-warlord(?:-f2)?|gaizorg-boss|valdarion|operator-gigantes|chief-empress|maou-lord|nepterion-chief|crimson-swordsman|kraid-lightweight|udaijin-original|udaijin-exact-v21|kinosaki-sanmi-original|fujiwara-nobuyori-original|uninomiya-tadayasu-rigged|minamoto-yoritomo)\.glb(?:[?#]|$)/i.test(sourceUrl);
+  // One orientation policy for ALL models (generic heroes, bosses, admin GLBs).
+  // The embedded WebP pixel bytes and model UV coordinates remain untouched.
   const decoded = await Promise.all(detached.images.map((image, i) =>
-    decodeInMemoryImage(image, i, preserveOrientation)
+    decodeInMemoryImage(image, i)
   ));
   const textureCache = new Map();
   const textureFor = (index, isColor) => {
@@ -151,16 +153,28 @@ async function restoreInMemoryTextures(gltf, detached, sourceUrl = '') {
     const texture = new THREE.Texture(bitmap);
     texture.flipY = false; // glTF UVs: do not reverse image coordinates a second time.
     texture.colorSpace = isColor ? THREE.SRGBColorSpace : THREE.NoColorSpace;
-    texture.needsUpdate = true;
+    // Preserve PBR channel meanings: diffuse/emissive use sRGB; roughness,
+    // metalness, normals and AO remain linear (see textureFor callers).
+    // Anisotropic sampling suppresses distant aliasing in compact UV atlases.
+    texture.anisotropy = (typeof navigator !== 'undefined' &&
+      /Android|iPhone|iPad/i.test(navigator.userAgent||'')) ? 2 : 4;
     samplerSetting(THREE, detached.samplers[textureDef.sampler], texture);
+    texture.needsUpdate = true;
     textureCache.set(k, texture);
     return texture;
   };
   const apply = (material, spec) => {
     if (!material || !spec) return;
-    material.map = textureFor(spec.baseColor, true);
+    const albedo = textureFor(spec.baseColor, true);
+    if (spec.baseColor !== null && !albedo) {
+      throw new Error('GLBの肌・衣装テクスチャを正しく割り当てられませんでした');
+    }
+    material.map = albedo;
     const mr = textureFor(spec.metalRough, false);
-    if (mr) { material.metalnessMap = mr; material.roughnessMap = mr; }
+    material.metalnessMap = mr;
+    material.roughnessMap = mr;
+    material.userData ||= {};
+    material.userData.arkeiaPaintedAlbedo = !!albedo;
     material.normalMap = textureFor(spec.normal, false);
     if (material.normalMap && material.normalScale) material.normalScale.set(spec.normalScale, spec.normalScale);
     material.aoMap = textureFor(spec.occlusion, false);
@@ -288,7 +302,10 @@ export function instantiateModel(gltf, height, tint = null) {
         material.metalness = Math.min(0.18, material.metalness ?? 0);
         material.roughness = Math.max(0.7, material.roughness ?? 0.8);
       }
-      material.color.lerp(tintColor, 0.22);
+      // Keep the painted skin, face and costume readable. Unique palettes are
+      // still indicated by the fighter's ornaments and a very subtle tint.
+      // This leaves the source GLB image, UVs and skeleton unchanged.
+      material.color.lerp(tintColor, material.map ? 0.075 : 0.22);
       rfLocalMaterialCache.set(source, material);
       materials.add(material);
       return material;

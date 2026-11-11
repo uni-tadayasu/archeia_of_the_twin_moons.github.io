@@ -11,7 +11,8 @@ if(!window.__rf556Portraits){
  const mobile=!!matchMedia?.('(pointer:coarse)')?.matches;
  // V55.7: higher definition real-GLB captures on desktop; preserve mobile budget and old cache.
  const W=(mobile||lowMemory)?240:384,H=(mobile||lowMemory)?320:512;
- const CACHE_VER=(mobile||lowMemory)?'rf556-20261112':'rf557-illustration-20261112';
+ // RF558_TEXTURE_COLOR_REPAIR — discard stale GLB captures generated with inverted atlas UVs.
+ const CACHE_VER=(mobile||lowMemory)?'rf558-color-correct-mobile-20261112':'rf558-color-correct-desktop-20261112';
  const completed=new Map(),busyKeys=new Map();
  let renderer=null,locked=false,queue=[],observer=null,paused=false;
  let lastFailure='',dbPromise=null;

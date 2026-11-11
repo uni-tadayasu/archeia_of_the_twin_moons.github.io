@@ -1,0 +1,536 @@
+/* Riftfall Arena / 双月のアルケイア — V55.8 ULTIMATE CG UI
+   Non-destructive presentation layer. Only applied under rf558-ultimate.
+   The gameplay canvas, server requests, saved control positions and rules are untouched. */
+:root {
+  --rf8-void:#050a14;--rf8-deep:#081326;--rf8-panel:#0e1f34ee;
+  --rf8-panel-light:#18304be0;--rf8-panel-strong:#091727fa;
+  --rf8-outline:#91b6d657;--rf8-outline-bright:#b9e6ffad;
+  --rf8-accent:#8cdeff;--rf8-accent-deep:#357eb7;
+  --rf8-gold:#e6cb95;--rf8-white:#f4f9ff;--rf8-muted:#bfd1e2;
+  --rf8-card-radius:16px;--rf8-ease:cubic-bezier(.19,.68,.23,1);
+  --rf8-size:1;--rf8-rhythm:1;--rf8-viewport:100dvh;
+  --rf8-shadow:0 16px 49px #01051384,0 2px 9px #030b1670;
+  --rf8-cloud:url('./rf558/blue-mist.webp');
+}
+html.rf557-cg body.rf556-nextgen.rf558-ultimate {
+  --ink:#0c192b;--paper:var(--rf8-white);--brass:var(--rf8-gold);
+  background:var(--rf8-void);color:var(--rf8-white);
+  font-size:calc(16px * var(--rf8-size));
+  -webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility;
+}
+html.rf557-cg body.rf556-nextgen.rf558-ultimate #ui {
+  font-family:Inter,'Noto Sans JP','Hiragino Kaku Gothic ProN','Yu Gothic',system-ui,sans-serif;
+  letter-spacing:.012em;
+}
+html.rf557-cg body.rf556-nextgen.rf558-ultimate :is(button,a,input,select,textarea) {
+  -webkit-tap-highlight-color:transparent;
+}
+html.rf557-cg body.rf556-nextgen.rf558-ultimate :is(button,a,input,select,textarea):focus-visible {
+  outline:2px solid var(--rf8-accent)!important;outline-offset:3px!important;
+}
+html.rf557-cg body.rf556-nextgen.rf558-ultimate button:disabled,
+html.rf557-cg body.rf556-nextgen.rf558-ultimate [aria-disabled='true'] {
+  cursor:not-allowed;opacity:.56!important;filter:grayscale(.18);
+}
+html.rf557-cg body.rf556-nextgen.rf558-ultimate #ui :is(.screen.on,#chat-panel,#world-panel,#rf-chief-character-editor) {
+  overscroll-behavior:contain;
+}
+html.rf557-cg body.rf556-nextgen.rf558-ultimate #ui .screen.on {
+  scrollbar-color:#6f9ac282 transparent; scrollbar-width:thin;
+}
+/* Filmic launcher; remove decorative noise and keep actionable controls in real DOM. */
+html.rf557-cg body.rf556-nextgen.rf558-ultimate #scr-title {
+  background:#050c1a!important;
+}
+html.rf557-cg body.rf556-nextgen.rf558-ultimate #scr-title .portal-wrap {
+  width:min(1510px,100%)!important;max-width:100%!important;
+  box-shadow:0 18px 82px #0008;
+  background:linear-gradient(180deg,#07111f,#071120 52%,#0b1322);
+}
+html.rf557-cg body.rf556-nextgen.rf558-ultimate #scr-title .portal-header {
+  position:sticky!important;top:0;z-index:160!important;
+  border:1px solid #8badc644!important;border-bottom:1px solid #90bbe576!important;
+  background:linear-gradient(115deg,#071321f5,#122443ed 48%,#091528f5)!important;
+  border-radius:0 0 12px 12px!important;
+  box-shadow:0 8px 32px #020814a8!important;
+  min-height:69px;gap:clamp(8px,1.6vw,24px);
+  -webkit-backdrop-filter:blur(13px);backdrop-filter:blur(13px);
+}
+html.rf557-cg body.rf556-nextgen.rf558-ultimate #scr-title .brand-type {
+  font-size:clamp(15px,1.5vw,21px)!important;color:#f1f8ff!important;
+  letter-spacing:.08em!important;
+}
+html.rf557-cg body.rf556-nextgen.rf558-ultimate #scr-title .brand-type small {
+  color:#a1c7e6!important;letter-spacing:.17em!important;font-size:9px!important;
+}
+html.rf557-cg body.rf556-nextgen.rf558-ultimate #scr-title .portal-topnav {
+  gap:clamp(2px,.7vw,10px);min-width:0;flex-wrap:wrap;
+}
+html.rf557-cg body.rf556-nextgen.rf558-ultimate #scr-title .portal-topnav button {
+  min-height:42px!important;padding:8px 13px!important;
+  font-size:clamp(11px,.92vw,14px)!important;font-weight:700!important;
+  color:#c4d5e5!important;border:1px solid transparent!important;
+}
+html.rf557-cg body.rf556-nextgen.rf558-ultimate #scr-title .portal-topnav button:hover,
+html.rf557-cg body.rf556-nextgen.rf558-ultimate #scr-title .portal-topnav button.rf558-nav-selected {
+  background:#28517b76!important;border-color:#8dc4f167!important;
+  box-shadow:inset 0 -2px #8ddafa!important;color:#fff!important;
+}
+html.rf557-cg body.rf556-nextgen.rf558-ultimate #scr-title .portal-account .shards {
+  display:inline-flex;align-items:center;justify-content:center;
+  min-height:39px;white-space:nowrap;font-size:clamp(11px,1vw,14px)!important;
+  background:#162b43cc!important;border-radius:20px!important;
+  border:1px solid #baa47d60!important;color:#ffe6b2!important;
+}
+/* Hero image composition puts the player character on display, not under a giant glass sheet. */
+html.rf557-cg body.rf556-nextgen.rf558-ultimate #scr-title .portal-hero {
+  position:relative!important;min-height:clamp(570px,49vw,780px)!important;
+  display:flex!important;align-items:center!important;justify-content:flex-end!important;
+  background-image:
+    linear-gradient(90deg,transparent 0%,#0614250a 37%,#08162968 66%,#061327af 100%),
+    linear-gradient(0deg,#050b18f8 0%,transparent 28%),
+    url('./rf555/hero-cg.webp')!important;
+  background-position:center,center,49% 45%!important;
+  background-size:cover!important;
+  border-radius:0 0 19px 19px!important;
+  overflow:hidden!important;
+  border:1px solid #9fc4ec25!important;
+  box-shadow:inset 0 -25px 60px #0008,0 19px 65px #0007!important;
+}
+html.rf557-cg body.rf556-nextgen.rf558-ultimate #scr-title .portal-hero::before {
+  pointer-events:none;content:'';position:absolute;inset:0;z-index:1;
+  background-image:var(--rf8-cloud),radial-gradient(ellipse at 68% 25%,#5ca7e01a,transparent 60%);
+  background-size:105% auto,cover;background-position:center bottom;
+  background-repeat:no-repeat;opacity:.8;mix-blend-mode:screen;
+}
+html.rf557-cg body.rf556-nextgen.rf558-ultimate #scr-title .portal-hero::after {
+  content:'';position:absolute;inset:0;z-index:2;pointer-events:none;
+  background:linear-gradient(0deg,#050b18f2 0%,transparent 24%,transparent 76%,#04102448 100%)!important;
+}
+html.rf557-cg body.rf556-nextgen.rf558-ultimate #scr-title .hero-center {
+  position:relative!important;inset:auto!important;transform:none!important;
+  width:min(530px,47%)!important;max-width:47%!important;
+  padding:clamp(23px,3vw,46px)!important;
+  margin:clamp(15px,3vw,45px) clamp(14px,4%,68px) clamp(15px,3vw,45px) auto!important;
+  background:linear-gradient(145deg,#07172abb,#101f3eb7 52%,#081224cf)!important;
+  border:1px solid #abd4f064!important;border-radius:19px!important;
+  box-shadow:0 18px 58px #020612ad,inset 0 1px 0 #f5fbff24!important;
+  -webkit-backdrop-filter:blur(7px) saturate(115%);backdrop-filter:blur(7px) saturate(115%);
+  text-align:center!important;z-index:5!important;
+}
+html.rf557-cg body.rf556-nextgen.rf558-ultimate #scr-title .hero-kicker {
+  color:#a6dfff!important;letter-spacing:.18em!important;font-weight:730!important;
+  font-size:clamp(10px,1vw,13px)!important;
+}
+html.rf557-cg body.rf556-nextgen.rf558-ultimate #scr-title .hero-center h1 {
+  font-family:'Shippori Mincho','Yu Mincho',Georgia,serif!important;
+  font-size:clamp(30px,3.5vw,55px)!important;letter-spacing:.035em!important;
+  font-weight:800!important;color:#fff!important;line-height:1.19!important;
+  text-shadow:0 3px 24px #021128!important;
+}
+html.rf557-cg body.rf556-nextgen.rf558-ultimate #scr-title .hero-center h1 span {
+  display:block;color:#b4dff5!important;font-size:clamp(9px,.74vw,11px)!important;
+  line-height:1.8!important;letter-spacing:.15em!important;
+}
+html.rf557-cg body.rf556-nextgen.rf558-ultimate #scr-title .hero-center p {
+  color:#e4effe!important;line-height:1.9!important;
+  font-size:clamp(13px,1vw,16px)!important;
+}
+html.rf557-cg body.rf556-nextgen.rf558-ultimate #scr-title .hero-cta,
+html.rf557-cg body.rf556-nextgen.rf558-ultimate #scr-title .action-primary {
+  background:linear-gradient(115deg,#11649f,#277eae 42%,#376fa9)!important;
+  color:#fff!important;border:1px solid #abddf9cb!important;border-radius:11px!important;
+  min-height:57px!important;
+  box-shadow:0 10px 32px #0b436699,inset 0 1px #d4f6ff85!important;
+  font-weight:800!important;letter-spacing:.06em!important;
+}
+html.rf557-cg body.rf556-nextgen.rf558-ultimate #scr-title .hero-quick {
+  color:#dcecff!important;border-color:#a0bfd461!important;
+  background:#12253ace!important;border-radius:11px!important;min-height:41px;
+}
+html.rf557-cg body.rf556-nextgen.rf558-ultimate #scr-title .portal-hero-bottom {
+  z-index:4;color:#c5d6e8ac!important;letter-spacing:.18em!important;
+}
+/* Consistent hierarchy between mode selection, service actions and character previews. */
+html.rf557-cg body.rf556-nextgen.rf558-ultimate #scr-title :is(.portal-overview,.portal-section) {
+  background:linear-gradient(180deg,#081326,#07111e 70%,#0c1728)!important;
+  padding:clamp(19px,2.8vw,44px) clamp(14px,3vw,43px)!important;
+}
+html.rf557-cg body.rf556-nextgen.rf558-ultimate #scr-title .section-heading h2,
+html.rf557-cg body.rf556-nextgen.rf558-ultimate #scr-title .section-cap h2 {
+  font-family:'Shippori Mincho','Yu Mincho',serif!important;font-weight:800!important;
+  letter-spacing:.055em!important;color:#f6faff!important;
+}
+html.rf557-cg body.rf556-nextgen.rf558-ultimate #scr-title :is(.section-heading,.section-cap) span {
+  font:750 clamp(10px,.9vw,12px)/1.3 Inter,system-ui,sans-serif!important;
+  letter-spacing:.20em!important;color:#89ccee!important;
+}
+html.rf557-cg body.rf556-nextgen.rf558-ultimate #scr-title :is(.portal-overview,.portal-modes,.portal-services,.world-gallery) {
+  gap:clamp(9px,1.25vw,19px)!important;
+}
+html.rf557-cg body.rf556-nextgen.rf558-ultimate #scr-title .overview-panel {
+  border-radius:14px!important;padding:clamp(16px,1.6vw,24px)!important;
+  background:linear-gradient(150deg,#142940ec,#0b1d35e9 78%)!important;
+  border:1px solid #809fb974!important;box-shadow:var(--rf8-shadow)!important;
+}
+html.rf557-cg body.rf556-nextgen.rf558-ultimate #scr-title .portal-modes {
+  display:grid!important;grid-template-columns:repeat(4,minmax(0,1fr))!important;
+  gap:clamp(10px,1.35vw,22px)!important;
+}
+html.rf557-cg body.rf556-nextgen.rf558-ultimate #scr-title .mode-tile {
+  position:relative;isolation:isolate;display:flex!important;
+  flex-direction:column;align-items:stretch;justify-content:flex-end;
+  min-height:clamp(196px,17vw,272px)!important;
+  padding:clamp(13px,1.4vw,22px)!important;gap:9px!important;
+  border:1px solid #96bdd36d!important;border-radius:14px!important;
+  background:#0e1f37!important;overflow:hidden!important;
+  box-shadow:0 12px 34px #0207159c,inset 0 1px #efffff16!important;
+  transition:filter .24s var(--rf8-ease),border-color .24s var(--rf8-ease),transform .24s var(--rf8-ease),box-shadow .24s var(--rf8-ease)!important;
+  text-align:left;
+}
+html.rf557-cg body.rf556-nextgen.rf558-ultimate #scr-title .mode-tile::before {
+  content:''!important;position:absolute;inset:-2px;z-index:-2!important;
+  background-image:var(--rf555-mode-art,var(--rf7-sky));background-size:cover;background-position:center;
+  transform:scale(1.01);filter:saturate(1.03) contrast(1.04)!important;
+  transition:transform .55s var(--rf8-ease),filter .5s!important;
+}
+html.rf557-cg body.rf556-nextgen.rf558-ultimate #scr-title .mode-tile::after {
+  content:''!important;position:absolute;inset:0;z-index:-1!important;
+  background:linear-gradient(180deg,#06122200 4%,#05102214 33%,#050c18d9 84%,#040b16fa 100%)!important;
+}
+html.rf557-cg body.rf556-nextgen.rf558-ultimate #scr-title .mode-tile:hover {
+  transform:translateY(-4px)!important;border-color:#b4e4fbd8!important;
+  box-shadow:0 22px 46px #010612bc,0 0 19px #69bfff24!important;
+}
+html.rf557-cg body.rf556-nextgen.rf558-ultimate #scr-title .mode-tile:hover::before {transform:scale(1.055)!important;filter:brightness(1.09) saturate(1.12)!important}
+html.rf557-cg body.rf556-nextgen.rf558-ultimate #scr-title .mode-tile .mode-icon {
+  display:grid!important;place-items:center;
+  width:43px!important;min-width:43px!important;height:43px!important;
+  border-radius:11px!important;background:#0a182fd6!important;border:1px solid #9ed1f385!important;
+  -webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);
+  color:#b4eaff!important;
+}
+html.rf557-cg body.rf556-nextgen.rf558-ultimate #scr-title .mode-tile .mode-main {display:flex!important;flex-direction:column;gap:4px!important;min-width:0;max-width:100%}
+html.rf557-cg body.rf556-nextgen.rf558-ultimate #scr-title .mode-tile .mode-main b {
+  font-size:clamp(15px,1.42vw,20px)!important;font-weight:800!important;line-height:1.3!important;
+  color:#f3faff!important;letter-spacing:.035em!important;text-shadow:0 2px 15px #000b!important;
+}
+html.rf557-cg body.rf556-nextgen.rf558-ultimate #scr-title .mode-tile .mode-main small {
+  font-size:clamp(10px,.93vw,12px)!important;color:#c5d5e8!important;
+  line-height:1.5;
+}
+html.rf557-cg body.rf556-nextgen.rf558-ultimate #scr-title .mode-tile .tile-arrow {
+  color:#e5f6ff!important;line-height:1;
+}
+html.rf557-cg body.rf556-nextgen.rf558-ultimate #scr-title .world-gallery button,
+html.rf557-cg body.rf556-nextgen.rf558-ultimate #scr-title .portal-services button {
+  border-radius:14px!important;border:1px solid #86aacf67!important;
+  background:linear-gradient(160deg,#192c46e9,#0b1b31ea)!important;
+  box-shadow:0 10px 27px #0008,inset 0 1px #d0e9ff20!important;
+}
+html.rf557-cg body.rf556-nextgen.rf558-ultimate #scr-title .portal-services button {
+  min-height:103px!important;padding:clamp(12px,1.5vw,19px)!important;
+  align-items:flex-start!important;gap:7px!important;
+}
+html.rf557-cg body.rf556-nextgen.rf558-ultimate #scr-title .service-icon {
+  display:grid!important;place-items:center;width:42px!important;height:42px!important;
+  border-radius:12px!important;background:#152e4bb8!important;
+  border:1px solid #83bfe875!important;
+}
+html.rf557-cg body.rf556-nextgen.rf558-ultimate #scr-title .service-icon svg {width:23px;height:23px;stroke-width:1.7px;color:#9de8ff}
+html.rf557-cg body.rf556-nextgen.rf558-ultimate #scr-title .world-gallery img {aspect-ratio:16/9;object-fit:cover;border-radius:12px 12px 0 0!important}
+/* Other screens retain their original form elements but are restyled as one system. */
+html.rf557-cg body.rf556-nextgen.rf558-ultimate #ui .screen:not(#scr-title):not(#scr-press) {
+  background-image:linear-gradient(145deg,#061225ed,#091b35de),
+  var(--rf7-screen-illustration,url('./rf555/world-sky.webp'))!important;
+  background-size:cover!important;background-position:center!important;
+  padding-bottom:max(18px,env(safe-area-inset-bottom))!important;
+}
+html.rf557-cg body.rf556-nextgen.rf558-ultimate #ui .screen:not(#scr-title):not(#scr-press) > .inner {
+  width:min(1150px,100%)!important;max-width:100%!important;
+  margin-inline:auto!important;gap:clamp(9px,1.4vw,19px)!important;
+}
+html.rf557-cg body.rf556-nextgen.rf558-ultimate #ui .topbar {
+  border-radius:12px!important;border:1px solid #94b8d65c!important;
+  background:linear-gradient(100deg,#102a44e6,#102039db)!important;
+  -webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px);
+  box-shadow:0 8px 24px #0006!important;
+}
+html.rf557-cg body.rf556-nextgen.rf558-ultimate #ui :is(.label,#story-chapter) {
+  font-family:'Shippori Mincho','Yu Mincho',serif!important;letter-spacing:.06em!important;
+  color:#f7fbff!important;
+}
+html.rf557-cg body.rf556-nextgen.rf558-ultimate #ui :is(.field,.fpanel,.frow,#party-bar,#party-quick-picker,.shop-card,.cr-target,#rf552-event-coop,.rf552-choice-panel,.rf552-board) {
+  background:linear-gradient(145deg,#162f4ae8,#0a1a30eb)!important;
+  border:1px solid #9abbdf61!important;border-radius:13px!important;
+  box-shadow:0 9px 24px #0007,inset 0 1px #ffffff15!important;
+  color:var(--rf8-white)!important;
+}
+html.rf557-cg body.rf556-nextgen.rf558-ultimate #ui :is(.btn,.back,.chip,.cr-button,.mode-tile) {
+  min-height:43px;border-radius:11px!important;
+  font-weight:750!important;line-height:1.45;
+  transition:border-color .2s,filter .2s,box-shadow .2s,transform .2s!important;
+}
+html.rf557-cg body.rf556-nextgen.rf558-ultimate #ui :is(.btn,.back,.chip,.cr-button):not(:disabled):hover {
+  border-color:#a9dafbe9!important;filter:brightness(1.09);
+}
+html.rf557-cg body.rf556-nextgen.rf558-ultimate #ui :is(input:not([type=range]),select,textarea) {
+  min-height:44px;font-size:16px!important;max-width:100%;min-width:0;
+  background:#09192eec!important;border:1px solid #779dbbd8!important;
+  border-radius:10px!important;color:#eff8ff!important;
+  padding:10px 12px;
+}
+html.rf557-cg body.rf556-nextgen.rf558-ultimate #ui :is(input:not([type=range]),textarea,select):focus {
+  border-color:#8dd9f0!important;box-shadow:0 0 0 3px #75d0fe2f!important;
+}
+html.rf557-cg body.rf556-nextgen.rf558-ultimate #ui .foot,
+html.rf557-cg body.rf556-nextgen.rf558-ultimate #ui small {color:#bed0e3}
+/* Full-body real-GLB cards (existing model renderer remains the only image source). */
+html.rf557-cg body.rf556-nextgen.rf558-ultimate #scr-select #select-grid {
+  grid-template-columns:repeat(auto-fill,minmax(min(180px,100%),1fr))!important;
+  gap:clamp(8px,1.25vw,17px)!important;
+}
+html.rf557-cg body.rf556-nextgen.rf558-ultimate #scr-select #select-grid .card {
+  min-width:0;position:relative;isolation:isolate;
+  border-radius:14px!important;overflow:hidden!important;
+  border:1px solid #91bedf72!important;
+  background:linear-gradient(160deg,#244062,#09182d 76%)!important;
+  box-shadow:0 13px 30px #0009,inset 0 1px #e6ffff19!important;
+}
+html.rf557-cg body.rf556-nextgen.rf558-ultimate #scr-select .card img.face {
+  width:100%!important;aspect-ratio:3/4!important;
+  object-fit:contain!important;object-position:center!important;
+  background:radial-gradient(ellipse 53% 48% at 50% 57%,#6b8cc239,transparent 72%)!important;
+}
+html.rf557-cg body.rf556-nextgen.rf558-ultimate #scr-select .card[data-rf556-portrait='loading'] img.face {opacity:.55;filter:saturate(.65)}
+html.rf557-cg body.rf556-nextgen.rf558-ultimate #scr-select .card[data-rf556-portrait='done'] img.face {opacity:1;filter:none}
+html.rf557-cg body.rf556-nextgen.rf558-ultimate #scr-select .card .rf557-portrait-badge {
+  top:10px!important;right:9px!important;padding:3px 7px!important;
+  background:#0b2037d6!important;border-color:#c2e7ff65!important;
+  color:#d7eeff!important;border-radius:5px!important;
+}
+html.rf557-cg body.rf556-nextgen.rf558-ultimate #scr-select .select-tools {
+  position:sticky;top:0;z-index:21;width:100%;min-width:0;
+  padding:8px 11px;border-radius:11px;
+  background:#0b1e32ef;border:1px solid #97bbd35a;
+  -webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px);
+}
+html.rf557-cg body.rf556-nextgen.rf558-ultimate #scr-select .select-search-label {min-width:0;max-width:100%}
+html.rf557-cg body.rf556-nextgen.rf558-ultimate #scr-forge .forge {width:100%;min-width:0;gap:clamp(8px,1.4vw,20px)}
+html.rf557-cg body.rf556-nextgen.rf558-ultimate #scr-forge #forge-list {scrollbar-width:thin;scrollbar-color:#8bb7d888 transparent}
+/* HUD: leave room for four allies and bosses without hiding health bars. */
+html.rf557-cg body.rf556-nextgen.rf558-ultimate #hud .hud-side {
+  max-height:clamp(110px,33dvh,320px)!important;
+  overflow-y:auto!important;overflow-x:hidden!important;
+  scrollbar-width:thin;scrollbar-color:#8ac5de70 transparent;
+  overscroll-behavior:contain;
+}
+html.rf557-cg body.rf556-nextgen.rf558-ultimate #hud .plate {
+  box-sizing:border-box!important;
+  border:1px solid #96b3cc73!important;
+  border-radius:9px!important;
+  background:linear-gradient(110deg,#142a44dc,#0b1a30e6)!important;
+  box-shadow:0 3px 11px #030b16ad,inset 0 1px #fff2!important;
+  margin-bottom:3px!important;padding:clamp(3px,.6vw,7px)!important;
+}
+html.rf557-cg body.rf556-nextgen.rf558-ultimate #hud .plate b {font-size:clamp(10px,.95vw,13px)!important;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+html.rf557-cg body.rf556-nextgen.rf558-ultimate #hud .plate i {background:#0b1222!important;border-radius:30px!important;overflow:hidden;border:1px solid #8c9db653}
+html.rf557-cg body.rf556-nextgen.rf558-ultimate #hud .plate u {border-radius:30px;box-shadow:0 0 13px #78cde07e}
+html.rf557-cg body.rf556-nextgen.rf558-ultimate.rf558-crowded #hud .hud-side {max-height:min(32dvh,265px)!important}
+html.rf557-cg body.rf556-nextgen.rf558-ultimate.rf558-crowded #hud .plate {padding:3px 6px!important;margin-bottom:2px!important}
+html.rf557-cg body.rf556-nextgen.rf558-ultimate.rf558-crowded #hud .plate i {height:6px!important}
+html.rf557-cg body.rf556-nextgen.rf558-ultimate #gauges {
+  border:1px solid #86b4d273!important;background:linear-gradient(150deg,#142b47d9,#0a192beb)!important;
+  box-shadow:0 6px 25px #0006;border-radius:11px!important;
+}
+html.rf557-cg body.rf556-nextgen.rf558-ultimate #gauges :is(#flux,#over,#awk) i {border-radius:30px!important;overflow:hidden!important}
+html.rf557-cg body.rf556-nextgen.rf558-ultimate #btn-pause {
+  border-radius:9px!important;border:1px solid #9bc8e2ad!important;
+  background:#0c223bdd!important;color:#e6f7ff!important;
+}
+html.rf557-cg body.rf556-nextgen.rf558-ultimate #skillname {
+  border-radius:10px!important;background:linear-gradient(90deg,#07172bde,#183c59de,#07192be6)!important;
+  border:1px solid #7ebad989!important;box-shadow:0 10px 27px #0009!important;
+}
+html.rf557-cg body.rf556-nextgen.rf558-ultimate #skillname .sn-name {font-weight:800!important}
+html.rf557-cg body.rf556-nextgen.rf558-ultimate #rf552-endless-hud {
+  background:linear-gradient(110deg,#152840f7,#09213bdc)!important;
+  border-color:#91c8e5a6!important;box-shadow:0 8px 25px #0009!important;
+}
+/* Text and accessibility at mobile scale, without changing saved touch positions. */
+html.rf557-cg body.rf556-nextgen.rf558-ultimate .rf557-mobile-nav:not([hidden]) {
+  border-top:1px solid #91cce67d!important;
+  background:#0b2038f6!important;box-shadow:0 -9px 37px #0008!important;
+}
+html.rf557-cg body.rf556-nextgen.rf558-ultimate .rf557-mobile-nav-button {border-radius:10px!important;min-height:48px!important;gap:4px!important}
+html.rf557-cg body.rf556-nextgen.rf558-ultimate .rf557-mobile-nav-button[aria-current='page'] {background:linear-gradient(120deg,#215279cc,#162e54aa)!important;color:#fff!important}
+html.rf557-cg body.rf556-nextgen.rf558-ultimate .rf557-mobile-nav-button svg {width:21px;height:21px!important}
+/* Additional first-party UI settings card. */
+html.rf557-cg body.rf556-nextgen.rf558-ultimate .rf558-settings {
+  display:grid;gap:11px;width:min(700px,100%);margin:13px auto;padding:clamp(15px,2vw,23px);
+  border:1px solid #92bcdb8c;border-radius:15px;
+  background:linear-gradient(145deg,#162e4ce6,#0a192ce9);
+  box-shadow:var(--rf8-shadow);color:#e8f3ff;
+}
+html.rf557-cg body.rf556-nextgen.rf558-ultimate .rf558-settings h3 {font:800 19px/1.4 'Shippori Mincho','Yu Mincho',serif;margin:0;color:#f3f8ff}
+html.rf557-cg body.rf556-nextgen.rf558-ultimate .rf558-settings label {display:grid;gap:6px;font-size:13px;font-weight:700;color:#cbdff0}
+html.rf557-cg body.rf556-nextgen.rf558-ultimate .rf558-settings .rf558-row {display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+html.rf557-cg body.rf556-nextgen.rf558-ultimate .rf558-settings select,
+html.rf557-cg body.rf556-nextgen.rf558-ultimate .rf558-settings input:not([type=checkbox]) {width:100%;max-width:100%;min-height:45px}
+html.rf557-cg body.rf556-nextgen.rf558-ultimate .rf558-settings .rf558-tools {display:flex;flex-wrap:wrap;gap:9px}
+html.rf557-cg body.rf556-nextgen.rf558-ultimate .rf558-settings .rf558-tools button {border:1px solid #a0d8e9a2;border-radius:10px;background:#163d59;color:#e7f7ff;min-height:43px;padding:8px 15px;font-weight:750}
+html.rf557-cg body.rf556-nextgen.rf558-ultimate .rf558-settings p {margin:0;color:#b5d0e1;font-size:12px;line-height:1.6}
+/* Density/accessibility user settings */
+html.rf557-cg body.rf556-nextgen.rf558-ultimate.rf558-compact #ui .screen:not(#scr-title) .inner {gap:9px!important}
+html.rf557-cg body.rf556-nextgen.rf558-ultimate.rf558-compact #scr-title :is(.portal-overview,.portal-section) {padding-block:15px!important}
+html.rf557-cg body.rf556-nextgen.rf558-ultimate.rf558-high-contrast #ui :is(.card,.btn,.field,.fpanel,.cr-button,.mode-tile) {border-color:#c9ecff!important}
+html.rf557-cg body.rf556-nextgen.rf558-ultimate.rf558-high-contrast #ui :is(small,.foot,.mode-main small) {color:#e6f3ff!important}
+html.rf557-cg body.rf556-nextgen.rf558-ultimate.rf558-no-effects :is(.portal-hero,.mode-tile,.rf557-mobile-nav) {animation:none!important;transition:none!important}
+html.rf557-cg body.rf556-nextgen.rf558-ultimate.rf558-no-effects #game-container::after {display:none!important}
+html.rf557-cg body.rf556-nextgen.rf558-ultimate.rf558-low-power :is(.portal-header,.hero-center,.rf557-mobile-nav,.topbar,#world-panel,#chat-panel) {backdrop-filter:none!important;-webkit-backdrop-filter:none!important}
+html.rf557-cg body.rf556-nextgen.rf558-ultimate.rf558-low-power #game-container canvas {filter:none!important}
+/* Managed keyboard viewport; never force a zoom reset or disable pinch gestures. */
+html.rf557-cg body.rf556-nextgen.rf558-ultimate.rf558-keyboard #ui :is(#chat-panel,#world-panel,[role='dialog']) {
+  max-height:calc(var(--rf8-viewport) - 18px - env(safe-area-inset-top))!important;
+  overflow-y:auto!important;
+}
+html.rf557-cg body.rf556-nextgen.rf558-ultimate.rf558-keyboard #ui .screen.on {scroll-padding-bottom:130px}
+html.rf557-cg body.rf556-nextgen.rf558-ultimate #ui [hidden],
+html.rf557-cg body.rf556-nextgen.rf558-ultimate .rf558-settings[hidden] {display:none!important}
+/* Tablet & intermediate widths */
+@media (max-width:1180px) {
+ html.rf557-cg body.rf556-nextgen.rf558-ultimate #scr-title .portal-modes {grid-template-columns:repeat(3,minmax(0,1fr))!important}
+ html.rf557-cg body.rf556-nextgen.rf558-ultimate #scr-title .hero-center {width:min(520px,52%)!important;max-width:52%!important}
+}
+@media (max-width:860px) {
+ html.rf557-cg body.rf556-nextgen.rf558-ultimate #scr-title .portal-modes {grid-template-columns:repeat(2,minmax(0,1fr))!important}
+ html.rf557-cg body.rf556-nextgen.rf558-ultimate #scr-title .portal-header {position:relative!important;min-height:0;flex-wrap:wrap}
+ html.rf557-cg body.rf556-nextgen.rf558-ultimate #scr-title .portal-hero {
+  display:flex!important;align-items:flex-end!important;justify-content:center!important;
+  min-height:clamp(590px,85svh,730px)!important;
+  background-position:center,center,35% 35%!important;
+  padding:0 0 clamp(15px,4vw,27px)!important;
+ }
+ html.rf557-cg body.rf556-nextgen.rf558-ultimate #scr-title .hero-center {
+  position:relative!important;left:auto!important;right:auto!important;top:auto!important;
+  transform:none!important;width:calc(100% - 28px)!important;
+  max-width:calc(100% - 28px)!important;
+  margin:auto 14px 0!important;padding:clamp(16px,3vw,27px)!important;
+  background:linear-gradient(150deg,#071830d7,#0c1e34ec)!important;
+ }
+ html.rf557-cg body.rf556-nextgen.rf558-ultimate #scr-title .hero-center h1 {font-size:clamp(30px,5.5vw,47px)!important}
+ html.rf557-cg body.rf556-nextgen.rf558-ultimate #scr-title .mode-tile {min-height:clamp(178px,25vw,230px)!important}
+ html.rf557-cg body.rf556-nextgen.rf558-ultimate #scr-title .portal-topnav button {min-height:40px!important}
+}
+@media (max-width:600px) {
+ html.rf557-cg body.rf556-nextgen.rf558-ultimate #scr-title .portal-wrap {padding:0!important}
+ html.rf557-cg body.rf556-nextgen.rf558-ultimate #scr-title .portal-hero {
+  min-height:clamp(610px,96svh,740px)!important;background-position:center,center,34% center!important;
+ }
+ html.rf557-cg body.rf556-nextgen.rf558-ultimate #scr-title .hero-center {
+  margin:0 12px 13px!important;max-width:calc(100% - 24px)!important;width:calc(100% - 24px)!important;
+  padding:17px 15px!important;border-radius:15px!important;
+ }
+ html.rf557-cg body.rf556-nextgen.rf558-ultimate #scr-title .hero-center h1 {font-size:clamp(25px,7vw,35px)!important}
+ html.rf557-cg body.rf556-nextgen.rf558-ultimate #scr-title .hero-center h1 span {font-size:9px!important;letter-spacing:.065em!important}
+ html.rf557-cg body.rf556-nextgen.rf558-ultimate #scr-title .portal-hero-bottom {display:none!important}
+ html.rf557-cg body.rf556-nextgen.rf558-ultimate #scr-title .portal-modes {grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:9px!important}
+ html.rf557-cg body.rf556-nextgen.rf558-ultimate #scr-title .mode-tile {min-height:167px!important;padding:10px!important;gap:6px!important}
+ html.rf557-cg body.rf556-nextgen.rf558-ultimate #scr-title .mode-tile .mode-icon {width:36px!important;min-width:36px!important;height:36px!important}
+ html.rf557-cg body.rf556-nextgen.rf558-ultimate #scr-title .mode-tile .mode-main b {font-size:clamp(13px,3.45vw,17px)!important}
+ html.rf557-cg body.rf556-nextgen.rf558-ultimate #scr-title .mode-tile .mode-main small {font-size:10px!important}
+ html.rf557-cg body.rf556-nextgen.rf558-ultimate #scr-title .portal-services {grid-template-columns:repeat(2,minmax(0,1fr))!important}
+ html.rf557-cg body.rf556-nextgen.rf558-ultimate #scr-title .portal-services button {min-height:94px!important;padding:11px!important}
+ html.rf557-cg body.rf556-nextgen.rf558-ultimate #scr-title :is(.portal-overview,.portal-section) {padding:19px 13px!important}
+ html.rf557-cg body.rf556-nextgen.rf558-ultimate #scr-title .overview-panel {padding:15px!important}
+ html.rf557-cg body.rf556-nextgen.rf558-ultimate #scr-select #select-grid {grid-template-columns:repeat(2,minmax(0,1fr))!important}
+ html.rf557-cg body.rf556-nextgen.rf558-ultimate #scr-select .select-tools {position:relative;top:auto}
+ html.rf557-cg body.rf556-nextgen.rf558-ultimate #hud .hud-side {max-height:min(31dvh,220px)!important}
+ html.rf557-cg body.rf556-nextgen.rf558-ultimate.rf558-crowded #hud .hud-side {max-height:min(35dvh,240px)!important}
+ html.rf557-cg body.rf556-nextgen.rf558-ultimate .rf558-settings .rf558-row {grid-template-columns:minmax(0,1fr)}
+}
+@media (max-width:390px) {
+ html.rf557-cg body.rf556-nextgen.rf558-ultimate #scr-title .portal-hero {min-height:630px!important}
+ html.rf557-cg body.rf556-nextgen.rf558-ultimate #scr-title .hero-center {padding:14px 12px!important}
+ html.rf557-cg body.rf556-nextgen.rf558-ultimate #scr-title .hero-center p {line-height:1.6!important;font-size:12px!important}
+ html.rf557-cg body.rf556-nextgen.rf558-ultimate #scr-title .mode-tile {min-height:154px!important}
+ html.rf557-cg body.rf556-nextgen.rf558-ultimate #scr-title .portal-services button {min-height:85px!important}
+}
+@media (max-height:540px) and (orientation:landscape) {
+ html.rf557-cg body.rf556-nextgen.rf558-ultimate #scr-title .portal-hero {min-height:390px!important}
+ html.rf557-cg body.rf556-nextgen.rf558-ultimate #scr-title .hero-center {max-width:min(590px,68%)!important;width:min(590px,68%)!important;padding:13px 18px!important}
+ html.rf557-cg body.rf556-nextgen.rf558-ultimate #scr-title .hero-center h1 {font-size:clamp(24px,3.9vw,37px)!important}
+ html.rf557-cg body.rf556-nextgen.rf558-ultimate #scr-title .hero-center p {line-height:1.4!important;margin:5px 0}
+ html.rf557-cg body.rf556-nextgen.rf558-ultimate #scr-title .mode-tile {min-height:151px!important}
+ html.rf557-cg body.rf556-nextgen.rf558-ultimate #hud .hud-side {max-height:45dvh!important}
+ html.rf557-cg body.rf556-nextgen.rf558-ultimate #rf552-endless-hud {max-width:45vw!important}
+}
+@media (pointer:coarse) {
+ html.rf557-cg body.rf556-nextgen.rf558-ultimate #ui :is(input:not([type=range]),select,textarea) {font-size:16px!important}
+ html.rf557-cg body.rf556-nextgen.rf558-ultimate #ui button:not(.mode-tile) {touch-action:manipulation}
+ html.rf557-cg body.rf556-nextgen.rf558-ultimate #touch :is(#joy,#knob,#tbtns button) {touch-action:none!important}
+ html.rf557-cg body.rf556-nextgen.rf558-ultimate #scr-title .mode-tile:hover {transform:none!important}
+ html.rf557-cg body.rf556-nextgen.rf558-ultimate #scr-title .hero-center {backdrop-filter:none!important;-webkit-backdrop-filter:none!important}
+}
+@media (prefers-reduced-motion:reduce) {
+ html.rf557-cg body.rf556-nextgen.rf558-ultimate * {scroll-behavior:auto!important;animation:none!important;transition:none!important}
+}
+@media (prefers-contrast:more) {
+ html.rf557-cg body.rf556-nextgen.rf558-ultimate #ui :is(button,.card,.mode-tile,.fpanel,.field) {border-color:#ecf9ff!important}
+ html.rf557-cg body.rf556-nextgen.rf558-ultimate #ui small {color:#f5fbff!important}
+}
+/* Palette & readability options, independent of gameplay and model appearance. */
+html[data-rf558-tone='vivid'].rf557-cg body.rf556-nextgen.rf558-ultimate #scr-title .portal-hero {filter:saturate(1.14) contrast(1.03)}
+html[data-rf558-tone='calm'].rf557-cg body.rf556-nextgen.rf558-ultimate #scr-title .portal-hero {filter:saturate(.83) contrast(.98)}
+html[data-rf558-tone='calm'].rf557-cg body.rf556-nextgen.rf558-ultimate #scr-title .mode-tile::before {filter:saturate(.8)!important}
+html.rf557-cg body.rf556-nextgen.rf558-ultimate #ui .btn,
+html.rf557-cg body.rf556-nextgen.rf558-ultimate #scr-title .mode-tile .mode-main b {font-size:calc(clamp(13px,1.2vw,17px) * var(--rf8-size))!important}
+html.rf557-cg body.rf556-nextgen.rf558-ultimate #scr-title .mode-tile .mode-main b {font-size:calc(clamp(14px,1.45vw,19px) * var(--rf8-size))!important}
+html.rf557-cg body.rf556-nextgen.rf558-ultimate .rf558-model-refresh {
+ min-height:40px!important;padding:8px 13px!important;white-space:normal;
+ color:#b9e6ff!important;background:#132f49!important;border:1px solid #83bdd781!important;
+ border-radius:9px!important;font:700 12px/1.3 Inter,system-ui,sans-serif!important;
+}
+html.rf557-cg body.rf556-nextgen.rf558-ultimate .rf558-model-refresh:hover {filter:brightness(1.1)}
+/* Mobile hero composition: artwork remains visible above the genuine button panel. */
+@media (max-width:860px) and (orientation:portrait){
+ html.rf557-cg body.rf556-nextgen.rf558-ultimate #scr-title .portal-hero {
+  flex-direction:column!important;justify-content:flex-end!important;align-items:center!important;
+ }
+ html.rf557-cg body.rf556-nextgen.rf558-ultimate #scr-title .hero-center {
+  flex:0 0 auto!important;margin-top:auto!important;
+ }
+}
+/* Prevent an inherited flex-basis from turning character search into a 300px empty panel. */
+html.rf557-cg body.rf556-nextgen.rf558-ultimate #scr-select .select-tools {
+ display:grid!important;grid-template-columns:minmax(0,1fr) max-content!important;
+ align-items:end!important;align-content:start!important;
+ justify-content:initial!important;min-height:0!important;height:auto!important;
+ gap:8px 12px!important;
+}
+html.rf557-cg body.rf556-nextgen.rf558-ultimate #scr-select .select-search-label {
+ flex:none!important;min-width:0!important;height:auto!important;min-height:0!important;
+ display:flex!important;flex-direction:column!important;align-self:start!important;
+}
+html.rf557-cg body.rf556-nextgen.rf558-ultimate #scr-select .rf558-model-refresh {
+ align-self:end!important;min-width:0!important;height:auto!important;
+}
+@media(max-width:720px){
+ html.rf557-cg body.rf556-nextgen.rf558-ultimate #scr-select .select-tools {grid-template-columns:minmax(0,1fr)!important}
+ html.rf557-cg body.rf556-nextgen.rf558-ultimate #scr-select .rf558-model-refresh {justify-self:stretch!important}
+}
+/* Landscape team HUD: four allies and four enemies remain visible above controls. */
+@media (max-height:540px) and (orientation:landscape){
+ html.rf557-cg body.rf556-nextgen.rf558-ultimate.rf558-crowded #hud .hud-side {
+  max-height:min(45dvh,183px)!important;
+ }
+ html.rf557-cg body.rf556-nextgen.rf558-ultimate.rf558-crowded #hud .plate {
+  padding:1px 5px!important;margin-bottom:1px!important;
+ }
+ html.rf557-cg body.rf556-nextgen.rf558-ultimate.rf558-crowded #hud .plate b {
+  line-height:13px!important;font-size:10px!important;
+ }
+ html.rf557-cg body.rf556-nextgen.rf558-ultimate.rf558-crowded #hud .plate i {
+  height:5px!important;margin-top:1px!important;
+ }
+}

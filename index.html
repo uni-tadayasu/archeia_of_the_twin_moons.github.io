@@ -1,3 +1,4 @@
+<!-- RF558_ULTIMATE_CG_UI_20261112 -->
 <!-- RF557_CINEMATIC_ILLUSTRATION_20261112 -->
 <!-- RF556_NEXTGEN_OVERHAUL_20261112 -->
 <!-- RF553_CHIEF_GLOBAL_CPU_20261111 -->
@@ -386,6 +387,8 @@
 <link rel="stylesheet" href="./rf-start-confirm-v51.css?v=rf51-20261111"><link id="rf53-character-ui" rel="stylesheet" href="./assets/rf-character-library-v53.css?v=rf53-cg-20261111">
 <link rel="stylesheet" href="./assets/rf54-privacy.css?v=rf54-20261111"><link id="rf555-cinematic-css" rel="stylesheet" href="./assets/rf555-modern-ui.css?v=20261112-v556"><link id="rf556-nextgen-css" rel="stylesheet" href="./assets/rf556-nextgen.css?v=20261112-v556">
   <link id="rf557-cg-illustration-css" rel="stylesheet" href="./assets/rf557-cg-illustration.css?v=20261112-v557" />
+  <link rel="preload" as="image" href="./assets/rf555/hero-cg.webp" fetchpriority="high" />
+  <link id="rf558-ultimate-css" rel="stylesheet" href="./assets/rf558-ultimate.css?v=20261112-v558" />
 </head>
   <body>
     <noscript>
@@ -706,10 +709,12 @@
 <!-- RF556_NEXTGEN_CINEMATIC_OVERHAUL_20261112: additive UI and CG modules; gameplay preserved -->
 <script defer src="./assets/rf555-modern-ui.js?v=20261112-v556"></script>
 <script type="module" src="./assets/rf556-cg-engine.js?v=20261112-v556"></script>
-<script type="module" src="./assets/rf556-model-portraits.js?v=20261112-v556"></script>
+<script type="module" src="./assets/rf556-model-portraits.js?v=rf558-colorfix-20261112"></script>
 <script defer src="./assets/rf556-nextgen.js?v=20261112-v556"></script>
   <!-- V55.7 CG illustration layer: additive, preserves V55.6 / gameplay -->
   <script defer src="./assets/rf557-cg-illustration.js?v=20261112-v557"></script>
   <script type="module" src="./assets/rf557-cg-effects.js?v=20261112-v557"></script>
+<script id="rf558-ultimate-js" defer src="./assets/rf558-ultimate.js?v=20261112-v558"></script>
+<script type="module" src="./assets/rf558-cg-render.js?v=20261112-v558"></script>
 </body>
 </html>
