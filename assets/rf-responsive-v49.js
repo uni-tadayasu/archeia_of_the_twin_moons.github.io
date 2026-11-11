@@ -1,3 +1,4 @@
+// RF554_ORIENTATION_KEYBOARD_STABILITY_20261111
 /* RF49: fit compact labels and handle responsive device viewport changes.
    Does not mutate character models, move user-customized touch controls or modify gameplay. */
 (()=>{
@@ -20,6 +21,7 @@
  ].join(',');
  const data=new WeakMap();
  let scheduled=false,lastWidth=0,lastHeight=0,observer=null;
+ let stableLandscape=(window.innerWidth||0)>(window.innerHeight||0);
  const raf=window.requestAnimationFrame?.bind(window)||((fn)=>setTimeout(fn,0));
  function visible(el){const style=getComputedStyle(el);return style.display!=='none'&&style.visibility!=='hidden'&&!!el.getClientRects().length&&el.getBoundingClientRect().width>4;}
  function directText(el){
@@ -56,20 +58,24 @@
  }
  function viewport(){
   const vv=window.visualViewport;
-  const w=Math.round(vv?.width||window.innerWidth||root.clientWidth);
-  const h=Math.round(vv?.height||window.innerHeight||root.clientHeight);
+  const keyboard=root.classList.contains('rf554-keyboard-open');
+  const w=Math.round(window.innerWidth||vv?.width||root.clientWidth);
+  // Keyboard shrinking the visual viewport must not flip portrait into landscape.
+  const h=Math.round(keyboard?(parseFloat(root.style.getPropertyValue('--rf554-layout-height'))||window.innerHeight||root.clientHeight):(vv?.height||window.innerHeight||root.clientHeight));
+  if(!keyboard)stableLandscape=(window.innerWidth||w)>(window.innerHeight||h);
   if(w!==lastWidth||h!==lastHeight){
    lastWidth=w;lastHeight=h;
    root.style.setProperty('--rf49-view-height',h+'px');
    root.classList.toggle('rf49-phone',w<=600);
    root.classList.toggle('rf49-short',h<=560);
-   root.classList.toggle('rf49-landscape',w>h);
+   root.classList.toggle('rf49-landscape',stableLandscape);
   }
   const editor=document.querySelector('#rf45-layout-editor:not([hidden]) .rf45-editor-head');
   if(editor)root.style.setProperty('--rf49-editor-head-height',Math.min(h*.31,editor.getBoundingClientRect().height+10)+'px');
  }
  function run(){
   scheduled=false;viewport();
+  if(root.classList.contains('rf554-keyboard-open'))return;
   const nodes=ui.querySelectorAll(compactSelectors);
   let i=0;
   for(const el of nodes){if(++i>640)break;fit(el);}

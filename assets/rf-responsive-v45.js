@@ -1,3 +1,4 @@
+// RF554_TOUCH_SAFE_AREA_20261111: preserve saved positions and clamp visible controls to safe areas.
 /** Riftfall Arena V45 responsive control & graphics settings.
  * DOM-only configuration: never alters fighter state, authentication, combat damage, or GLB assets.
  */
@@ -51,7 +52,7 @@ export function initResponsiveV45({ isTouch=false }={}){
   const actualButtonPx = () => {
     const portrait=orientation()==='portrait';
     const base=portrait?CLAMP(window.innerWidth*.12,42,60):CLAMP(window.innerHeight*.115,39,57);
-    return base*buttonScale/100;
+    return Math.max(44,base*buttonScale/100);
   };
   const actualJoyPx = () => {
     const portrait=orientation()==='portrait';
@@ -59,10 +60,25 @@ export function initResponsiveV45({ isTouch=false }={}){
     return base*buttonScale/100;
   };
   function saveLayouts(){save(LAYOUT_KEY,JSON.stringify(layouts));}
+  // Read physical notch / home-indicator insets from resolved CSS env() values.
+  // Do not change LAYOUT_KEY or write clamped values back to saved settings.
+  let safeProbe=null;
+  function safeInsets(){
+    if(!safeProbe){
+      safeProbe=document.createElement('div');
+      safeProbe.setAttribute('aria-hidden','true');
+      safeProbe.style.cssText='position:fixed;left:-99999px;top:-99999px;width:0;height:0;visibility:hidden;pointer-events:none;padding:env(safe-area-inset-top,0px) env(safe-area-inset-right,0px) env(safe-area-inset-bottom,0px) env(safe-area-inset-left,0px)';
+      (document.body||document.documentElement).append(safeProbe);
+    }
+    const c=getComputedStyle(safeProbe), num=v=>Math.max(0,parseFloat(v)||0);
+    return {top:num(c.paddingTop),right:num(c.paddingRight),bottom:num(c.paddingBottom),left:num(c.paddingLeft)};
+  }
   function applyPosition(element,p,size){
     if(!element||!p)return;
-    const edge=size/2+6,w=Math.max(1,window.innerWidth),h=Math.max(1,window.innerHeight);
-    const x=CLAMP(p[0]*w/100,edge,w-edge), y=CLAMP(p[1]*h/100,edge,h-edge);
+    const safe=safeInsets(),edge=size/2+6,w=Math.max(1,window.innerWidth),h=Math.max(1,window.innerHeight);
+    const lx=Math.min(w/2,safe.left+edge),rx=Math.max(lx,w-safe.right-edge);
+    const ty=Math.min(h/2,safe.top+edge),by=Math.max(ty,h-safe.bottom-edge);
+    const x=CLAMP(p[0]*w/100,lx,rx), y=CLAMP(p[1]*h/100,ty,by);
     element.style.setProperty('left',x+'px','important');
     element.style.setProperty('top',y+'px','important');
     element.style.setProperty('right','auto','important');
@@ -180,8 +196,28 @@ export function initResponsiveV45({ isTouch=false }={}){
   window.RF45Performance=active;
   const initDom=()=>{document.body.dataset.rf45Quality=selected;createOptions();relayout();};
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',initDom,{once:true});else initDom();
-  window.addEventListener('resize',relayout,{passive:true});
-  window.addEventListener('orientationchange',relayout,{passive:true});
-  window.visualViewport?.addEventListener('resize',relayout,{passive:true});
+  // Layout coordinates are based on the layout viewport, not the reduced keyboard viewport.
+  // Avoid dozens of expensive style updates while Safari animates the on-screen keyboard.
+  let relayoutPending=false,lastWidth=0,lastHeight=0;
+  function queueRelayout(){
+    if(document.documentElement.classList.contains('rf554-keyboard-open'))return;
+    if(relayoutPending)return;
+    relayoutPending=true;
+    requestAnimationFrame(()=>{
+      relayoutPending=false;
+      if(document.documentElement.classList.contains('rf554-keyboard-open'))return;
+      const w=window.innerWidth,h=window.innerHeight;
+      if(w===lastWidth&&h===lastHeight)return;
+      lastWidth=w;lastHeight=h;relayout();
+    });
+  }
+  window.addEventListener('resize',queueRelayout,{passive:true});
+  window.addEventListener('orientationchange',()=>{
+    lastWidth=0;lastHeight=0;queueRelayout();
+    setTimeout(()=>{lastWidth=0;queueRelayout();},160);
+    setTimeout(()=>{lastWidth=0;queueRelayout();},430);
+  },{passive:true});
+  window.visualViewport?.addEventListener('resize',queueRelayout,{passive:true});
+  document.addEventListener('rf554-keyboard-closed',()=>{lastWidth=0;lastHeight=0;queueRelayout();});
   return active;
 }

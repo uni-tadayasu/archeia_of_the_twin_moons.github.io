@@ -209,3 +209,98 @@ html,body{width:100%;max-width:100%;min-width:0;margin:0;overflow-x:clip;-webkit
  #ui button,#ui .btn{touch-action:manipulation;}
 }
 @media (prefers-reduced-motion:reduce){#ui .screen{scroll-behavior:auto;}}
+
+
+/* RF554_MOBILE_RESPONSIVE_INTEGRATION_20261111
+   Final mobile-specific layer. Keeps V45 manually positioned controls intact. */
+:root{
+ --rf554-visible-height:100dvh;
+ --rf554-viewport-width:100vw;
+ --rf554-view-top:0px;
+ --rf554-keyboard-space:0px;
+}
+@media (max-width:900px), (pointer:coarse){
+  html,body{overscroll-behavior:none;}
+  body #ui .screen.on{box-sizing:border-box;max-width:100%;min-width:0;overflow-x:clip;overscroll-behavior-y:contain;scroll-padding-block:50px 22px;}
+  body #ui .screen.on .inner{min-width:0;max-width:100%;}
+  body #ui .screen.on .inner > .topbar{position:sticky;top:0;z-index:35;isolation:isolate;padding:5px 3px;background:#12182bd9;border-radius:7px;min-width:0;}
+  body #ui .screen.on .topbar .crumb{min-width:0;overflow-wrap:anywhere;}
+  body #ui .screen.on :is(button,.btn,input,textarea,select){box-sizing:border-box;max-width:100%;}
+  body #ui .screen.on :is(button,.btn){min-height:44px;touch-action:manipulation;}
+  body #ui :is(#select-grid,#stage-grid,#party-slots,.party-picker-results){min-width:0;max-width:100%;}
+  body #ui #scr-select .select-tools{position:sticky;top:48px;z-index:12;background:#11162bdd;padding:7px 4px;border-radius:8px;}
+  body #ui :is(#scr-forge,#scr-shop,#scr-castle) :is(.forge,.menu,.field,.fpanel){max-width:100%;min-width:0;}
+  body #ui :is(#scr-castle,#scr-lobby,#scr-options) :is(input,select,textarea){min-width:0;max-width:100%;}
+  body #ui #scr-castle .cr-row{flex-wrap:wrap;gap:8px;min-width:0;}
+  body #ui #scr-castle .cr-row > *{min-width:0;max-width:100%;}
+  body #ui #rf552-event-coop{box-sizing:border-box;max-width:100%;min-width:0;max-height:calc(var(--rf554-visible-height) - 190px);overflow-x:hidden;overflow-y:auto;overscroll-behavior:contain;}
+  body #ui #rf552-event-coop :is(button,select){min-height:44px;max-width:100%;}
+  body #ui #rf552-event-coop ol{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(150px,100%),1fr));gap:6px;}
+  body :is(.rf552-choice-panel,.rf552-board){box-sizing:border-box;max-height:calc(var(--rf554-visible-height) - 28px);overflow-y:auto;overscroll-behavior:contain;}
+  body #ui #hud-left,body #ui #hud-right{box-sizing:border-box;max-height:min(34dvh,210px);overflow-x:hidden;overflow-y:auto;overscroll-behavior:contain;scrollbar-width:thin;}
+  body #ui .hud-side .plate{min-width:0;flex:0 0 auto;}
+  body #ui .hud-side .plate b{white-space:nowrap!important;overflow:hidden!important;text-overflow:ellipsis!important;max-width:100%;line-height:1.12;letter-spacing:0;}
+  body #ui .hud-side .plate i{height:7px;min-height:5px;margin-top:1px;}
+  body.rf554-hud-crowded #ui .hud-side{gap:2px!important;max-height:min(36dvh,230px);}
+  body.rf554-hud-crowded #ui .hud-side .plate b{font-size:clamp(9px,2.25vw,12px)!important;line-height:1.02;}
+  body.rf554-hud-crowded #ui .hud-side .plate i{height:6px;margin:0;}
+  body.rf554-hud-very-crowded #ui .hud-side{gap:1px!important;max-height:min(42dvh,260px);}
+  body.rf554-hud-very-crowded #ui .hud-side .plate i{height:5px;}
+  body #ui #gauges{pointer-events:none;}
+  body #rf552-endless-hud:not([hidden]){box-sizing:border-box;min-width:0;max-width:min(86vw,390px);overflow-wrap:anywhere;}
+  body #ui :is(#chat-panel,#world-panel,#world-req),body :is(#mailbox-dialog,#rf-chief-character-editor){max-width:calc(100vw - 18px);max-height:calc(var(--rf554-visible-height) - 22px);overflow-x:hidden;overscroll-behavior:contain;}
+  body #chat-panel:not([hidden]){display:flex;flex-direction:column;}
+  body #chat-panel :is(.cp-messages,.cp-log,.chat-messages){min-height:0;overflow-y:auto;overscroll-behavior:contain;}
+  body #chat-panel form{flex:0 0 auto;min-width:0;max-width:100%;}
+  body #chat-panel form :is(input,textarea){min-width:0;flex:1 1 auto;}
+  body #rf45-layout-editor{box-sizing:border-box;max-height:100dvh;}
+  body #rf45-layout-editor :is(input,select,button){min-height:44px;}
+}
+@media(max-width:600px){
+  body #ui .screen.on{padding-bottom:max(12px,env(safe-area-inset-bottom));}
+  body #ui .screen.on .inner{gap:clamp(6px,1.5dvh,12px);}
+  body #ui .screen.on .topbar .back{min-height:44px;}
+  body #ui :is(#select-grid,#stage-grid,#party-slots,.party-picker-results){grid-template-columns:repeat(2,minmax(0,1fr));}
+  body #ui #scr-select .select-tools{top:47px;}
+  body #ui #scr-lobby .field{min-width:0;max-width:100%;width:100%;}
+  body #ui #hud-left,body #ui #hud-right{width:calc(50vw - 51px);max-width:calc(50vw - 51px);max-height:min(32dvh,200px);}
+  body #ui #hud .hud-side .plate b{font-size:clamp(9px,2.45vw,11px)!important;}
+  body #ui #gauges{width:min(84px,23vw);max-width:min(84px,23vw);min-width:0;}
+  body #rf552-endless-hud:not([hidden]){top:clamp(160px,21dvh,205px)!important;bottom:auto!important;width:min(74vw,330px);max-width:min(74vw,330px);font-size:clamp(10px,2.5vw,13px);padding:5px 9px;}
+  body #ui #world-panel:not([hidden]){max-height:calc(var(--rf554-visible-height) - 50px);}
+}
+@media(max-width:360px){
+ body #ui :is(#select-grid,#stage-grid,#party-slots,.party-picker-results){gap:5px;}
+ body #ui .screen.on .topbar .crumb{font-size:11px;letter-spacing:0;}
+ body #ui #hud-left,body #ui #hud-right{width:calc(50vw - 45px);max-width:calc(50vw - 45px);}
+ body #ui #gauges{max-width:70px;width:70px;}
+ body #rf552-endless-hud:not([hidden]){max-width:80vw;width:80vw;top:160px!important;bottom:auto!important;}
+}
+@media(max-height:560px) and (orientation:landscape){
+ body #ui .screen.on .inner > .topbar{position:sticky;top:0;}
+ body #ui #hud-left,body #ui #hud-right{max-height:min(45dvh,180px);}
+ body #ui .hud-side .plate b{font-size:10px!important;line-height:1.05;}
+ body #ui #rf552-event-coop{max-height:calc(var(--rf554-visible-height) - 84px);}
+ body #rf552-endless-hud:not([hidden]){top:clamp(115px,31dvh,145px)!important;bottom:auto!important;width:min(38vw,270px);max-width:min(38vw,270px);font-size:10px;padding:4px 7px;}
+ body #ui #world-panel:not([hidden]){max-height:calc(var(--rf554-visible-height) - 18px);}
+}
+@media(min-width:601px) and (pointer:coarse){
+  body #rf552-endless-hud:not([hidden]){top:clamp(140px,18dvh,205px)!important;bottom:auto!important;width:min(53vw,420px);max-width:min(53vw,420px);}
+}
+/* WebKit keyboard: the visual viewport is smaller than the canvas/layout viewport. */
+body.rf554-keyboard-open #ui .screen.on{max-height:var(--rf554-visible-height);scroll-padding-bottom:48px;}
+body.rf554-keyboard-open #chat-panel:not([hidden]){
+ position:fixed!important;top:calc(var(--rf554-view-top) + 8px)!important;bottom:auto!important;
+ left:50%!important;right:auto!important;transform:translateX(-50%)!important;
+ width:min(440px,calc(100vw - 16px))!important;
+ height:calc(var(--rf554-visible-height) - 16px)!important;
+ max-height:calc(var(--rf554-visible-height) - 16px)!important;
+ overflow:hidden!important;display:flex!important;flex-direction:column!important;
+}
+body.rf554-keyboard-open #world-panel:not([hidden]){
+ position:fixed!important;top:calc(var(--rf554-view-top) + var(--rf554-visible-half))!important;
+ bottom:auto!important;left:50%!important;transform:translate(-50%,-50%)!important;
+ max-height:calc(var(--rf554-visible-height) - 14px)!important;overflow-y:auto!important;
+}
+body.rf554-keyboard-open :is(.ui-dialog,#mailbox-dialog,#rf-chief-character-editor,[role="dialog"]):not([hidden]){max-height:calc(var(--rf554-visible-height) - 18px)!important;overflow-y:auto;}
+@media(prefers-reduced-motion:reduce){body #ui .screen,body #rf552-endless-hud{scroll-behavior:auto;transition:none;}}
