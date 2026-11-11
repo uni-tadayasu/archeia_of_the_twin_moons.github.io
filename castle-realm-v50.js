@@ -1,3 +1,4 @@
+// RF54_FIX_20261111
 // Riftfall Castle Realm V50 - browser UI, all rules enforced by Cloudflare Worker.
 import {api,apiEnabled} from './api.js';
 export function initCastleRealm({save,persist,FIGHTERS,canUse,show,goTitle,state,playerName,syncCodeNow,roleToken,syncBefore,markSynced,syncVer}){
@@ -25,10 +26,15 @@ if(!apiEnabled())throw Error('拠点機能にはCloudflare Workersとの通信�
 const code=syncCodeNow();
 if(code.length!==12)throw Error(errorMap.nosync);
 // Synchronize pending player progress before any server balance is read or changed.
-if(!['list','raid/current'].includes(name))await syncBefore?.();
-const out=await api('/castle/'+name,{code,name:playerName(),token:roleToken?.()||'',...body});
-if(!out?.ok)throw Error(errorMap[out?.error]||('通信エラー：'+(out?.error||'server')));
-return out;
+let release=null;
+try{
+ if(!['list','raid/current'].includes(name))release=await syncBefore?.();
+ const out=await api('/castle/'+name,{code,name:playerName(),token:roleToken?.()||'',...body});
+ if(!out?.ok)throw Error(errorMap[out?.error]||('通信エラー：'+(out?.error||'server')));
+ const receipt=out.result||out;
+ if(typeof receipt.data==='string'&&Number.isSafeInteger(receipt.ver)&&Number.isSafeInteger(receipt.shards))updateBalance(receipt.shards,receipt.ver,receipt.data);
+ return out;
+}finally{release?.()}
 }
 async function run(fn){if(S.busy)return;S.busy=true;render();try{await fn();}catch(e){S.notice=e?.message||String(e);}finally{S.busy=false;render();}}
 function roster(){return Object.entries(FIGHTERS).filter(([k,d])=>d&&!d.hidden&&!d.special&&canUse(k)).sort((a,b)=>a[1].name.localeCompare(b[1].name,'ja'))}
@@ -48,7 +54,23 @@ if(tier>=5)scene.append(node('div','cr-fort-extra cr-extra3','⚔ 防衛陣'));
 if(tier>=8)scene.append(node('div','cr-fort-extra cr-extra4','✦ 王城の威光'));
 return scene;
 }
-function updateBalance(n,ver){if(!Number.isSafeInteger(n))return;save.shards=n;persist(false);if(Number.isInteger(ver)&&ver===syncVer?.()+1&&!localStorage.getItem('arkeia-sync-dirty'))markSynced?.(ver,Date.now(),n);}
+function updateBalance(n,ver,data){
+ if(!Number.isSafeInteger(n)||n<0||n>999999||!Number.isSafeInteger(ver)||ver<syncVer())return false;
+ if(localStorage.getItem('arkeia-sync-dirty'))return false;
+ let pend=[];try{pend=JSON.parse(localStorage.getItem('arkeia-sync-pend')||'[]')}catch{return false}
+ if(Array.isArray(pend)&&pend.length)return false;
+ if(typeof data!=='string')return false;
+ let remote;try{remote=JSON.parse(data)}catch{return false}
+ if(!remote||remote.pid!==save.pid||remote.shards!==n)return false;
+ const chars=Array.isArray(save.chars)?save.chars:[];
+ const prefs=save.rfCharacterPrefs||{},buyId=save.buyId;
+ Object.assign(save,remote);
+ save.chars=[...new Set([...(Array.isArray(remote.chars)?remote.chars:[]),...chars])];
+ save.buyId=buyId;
+ save.rfCharacterPrefs={...(remote.rfCharacterPrefs||{})};
+ for(const [k,v] of Object.entries(prefs))if((v?.at||0)>=(save.rfCharacterPrefs[k]?.at||0))save.rfCharacterPrefs[k]=v;
+ persist(false);markSynced(ver,Date.now(),n);return true;
+}
 function meter(label,amount,max){const wrap=node('div','cr-meter');wrap.append(node('div','',label+' '+fmt(amount)+' / '+fmt(max)));
 const back=node('div','cr-meter-bg');const value=node('div','cr-meter-fill');value.style.width=Math.max(0,Math.min(100,(amount/Math.max(1,max))*100))+'%';back.append(value);wrap.append(back);return wrap;}
 function render(){
@@ -63,7 +85,7 @@ if(!c){
  types.onchange=()=>{const preview=document.getElementById('castle-preview');preview?.replaceWith(stylePreview(types.value,1));document.querySelector('.cr-castle-scene').id='castle-preview'};
  const preview=stylePreview(types.value,1);preview.id='castle-preview';
  ui.append(preview,line('拠点の種類'),types,line('初代領主'),lord,
-   button('この拠点を建設する',()=>run(async()=>{const r=await request('create',{style:types.value,lord:lord.value});S.castle=r.castle;updateBalance(r.shards,r.ver);S.notice='拠点が完成しました。'}),'cr-accent'));
+   button('この拠点を建設する',()=>run(async()=>{const r=await request('create',{style:types.value,lord:lord.value});S.castle=r.castle;updateBalance(r.shards,r.ver,r.data);S.notice='拠点が完成しました。'}),'cr-accent'));
 }else{
  const style=c.style==='wa'?'和風':'洋風',next=c.nextCost;
  ui.append(row(node('strong','','Lv'+c.level+'　'+style+'の拠点'),node('span','cr-small','防衛ダンジョン '+c.floors+'階層')));
@@ -71,7 +93,7 @@ if(!c){
  const lordName=FIGHTERS[c.lord]?.name||c.lord;ui.append(line('領主：'+lordName+'　／　所持灯晶：'+fmt(save.shards)));
  if(c.shieldUntil>Date.now())ui.append(line('保護期間：'+new Date(c.shieldUntil).toLocaleString('ja-JP')+'まで'));
  const actionRow=row();
- actionRow.append(button(c.level<100?'城をレベルアップ（'+fmt(next)+'灯晶）':'城 Lv100 到達',()=>run(async()=>{const r=await request('level');S.castle=r.castle;updateBalance(r.shards,r.ver);S.notice='城Lv'+r.castle.level+'に強化しました。'}),'cr-accent'));
+ actionRow.append(button(c.level<100?'城をレベルアップ（'+fmt(next)+'灯晶）':'城 Lv100 到達',()=>run(async()=>{const r=await request('level');S.castle=r.castle;updateBalance(r.shards,r.ver,r.data);S.notice='城Lv'+r.castle.level+'に強化しました。'}),'cr-accent'));
  if(c.level>=100)actionRow.firstChild.disabled=true;
  actionRow.append(button('状態を更新',()=>run(refresh)));ui.append(actionRow);
  const lord=selectFighter(c.lord);ui.append(heading('領主キャラクター'),lord,button('領主を変更',()=>run(async()=>{const r=await request('lord',{lord:lord.value});S.castle=r.castle;S.notice='領主を変更しました。'})));
@@ -105,19 +127,19 @@ ui.append(node('div','cr-log',r.lastLog||''));
 if(r.status==='active'){
  const acts=row();for(const [name,id] of [['斬る','attack'],['強技','skill'],['防御','guard'],['回復','heal'],['奥義','over']]){
  const b=button(name,()=>run(async()=>{const t=await request('raid/act',{raidId:r.id,action:id});S.raid=t.raid;
- if(t.result){updateBalance(t.result.shards,t.result.ver);S.notice='勝利！ 灯晶 '+fmt(t.result.amount)+' を獲得しました。';}
+ if(t.result){updateBalance(t.result.shards,t.result.ver,t.result.data);S.notice='勝利！ 灯晶 '+fmt(t.result.amount)+' を獲得しました。';}
  else if(t.settlementPending)S.notice='勝利しました。戦利品の確定を再試行してください。';
  }));b.disabled=S.busy;acts.append(b);
  }ui.append(acts);
 }else if(r.status==='won'){
  ui.append(heading('攻城戦勝利'));
- ui.append(button('戦利品を受け取る／再試行',()=>run(async()=>{const t=await request('raid/claim',{raidId:r.id});updateBalance(t.shards,t.ver);S.raid=null;await refresh();S.notice='灯晶 '+fmt(t.amount)+' を獲得しました。'}),'cr-accent'));
+ ui.append(button('戦利品を受け取る／再試行',()=>run(async()=>{const t=await request('raid/claim',{raidId:r.id});updateBalance(t.shards,t.ver,t.data);S.raid=null;await refresh();S.notice='灯晶 '+fmt(t.amount)+' を獲得しました。'}),'cr-accent'));
 }else ui.append(heading('攻城戦終了：'+(r.status==='lost'?'敗退':'時間切れ')));
 ui.append(button('拠点管理へ戻る',()=>run(async()=>{S.raid=null;await refresh();})));
 }
 async function refresh(){
  const me=await request('self');S.castle=me.castle;S.pendingLoot=me.pendingLoot||0;
- if(Number.isFinite(me.shards)){updateBalance(me.shards,me.ver);}
+ if(Number.isFinite(me.shards)){updateBalance(me.shards,me.ver,me.data);}
  const castles=await request('list');S.list=castles.castles||[];
  const current=await request('raid/current').catch(()=>null);
  if(current?.raid&&['active','won'].includes(current.raid.status))S.raid=current.raid;

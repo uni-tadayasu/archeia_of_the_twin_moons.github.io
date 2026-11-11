@@ -1,6 +1,7 @@
+// RF54_FIX_20261111
 import {installCharacterLibrary} from './assets/rf-character-library-v53.js?v=rf53-cg-20261111';
 // RF53_CHAR_LIBRARY_INSTALLED
-import {initCastleRealm} from './castle-realm-v50.js?v=rf-castle-v50-20261111';
+import {initCastleRealm} from './castle-realm-v50.js?v=rf54-20261111';
 import {initResponsiveV45} from './assets/rf-responsive-v45.js?v=rf-responsive-v45-20261110';
 import {installFujiwaraChief} from './fujiwara-chief-v39.js?v=rf-fujiwara-v42-tdzfix-20261110';
 import {installFujiwaraCombat} from './fujiwara-nobuyori.js?v=rf-fujiwara-v43-rainbow-totsuka-20261110';
@@ -34,7 +35,7 @@ import { installActorMotion } from './character-motion.js?v=rf-v18-20261109';
 import { installNepterionFixedSeven } from './nepterion-fixed-seven.js?v=rf-v18-20261109';
 import { FIGHTERS, spellCastTime, STORY, ROSTER, UPGRADES, MAX_LV, STAGES, BGM, APEX_BGM, ENEMY_ROSTER, UPG_CAP, LB_MAX, lbMaxLv, lbMul, lbCost, WEAPONS, ARMORS, SUMMONS, STAT_LABEL, SPECIAL_KEYS, BOSS_ROSTER, currentEvent, sanitizeEvent, EV_FOE_KINDS } from './data.js?v=rf-minamoto-v48-20261111';
 import { sayBattle, setVoiceMuted, setVoiceVolume, stopVoices } from './voice.js?v=audio-cast-20261107d';
-import { initSocial, uiConfirm } from './social.js?v=valgard-exact-20261107';
+import { initSocial, uiConfirm } from './social.js?v=rf54-20261111';
 import { initMailbox } from './mailbox.js?v=audio-cast-20261107d';
 import { OPERATOR_KEY_SHA256, CHIEF_KEY_SHA256, MAX_KEY_ATTEMPTS, LOCKOUT_MS, SHOP_ITEMS } from './config.js';
 import { connect, issueInvite, redeemInvite, syncPush, syncPullV } from './net.js?v=rf-v18-20261109';
@@ -4444,7 +4445,16 @@ const gaizorgAdventure = setupGaizorgAdventure({
 
 
 // RF50_CASTLE_INIT
-initCastleRealm({save,persist,FIGHTERS,canUse,show,goTitle,state,playerName:myName,syncCodeNow,roleToken:()=>roleState.tok,markSynced,syncVer,syncBefore:async()=>{if(localStorage.getItem('arkeia-sync-dirty')||getPends().length)await autoPush({forSpend:true,reload:false});if(localStorage.getItem('arkeia-sync-dirty')||getPends().length)throw Error('sync');}});
+initCastleRealm({save,persist,FIGHTERS,canUse,show,goTitle,state,playerName:myName,syncCodeNow,roleToken:()=>roleState.tok,markSynced,syncVer,syncBefore:async()=>{
+  let tries=0;
+  while(autoBusy||syncSpendBusy||syncImportBusy){if(++tries>250)throw Error('busy');await new Promise(resolve=>setTimeout(resolve,100))}
+  syncSpendBusy=true;
+  try{
+    if(localStorage.getItem('arkeia-sync-dirty')||getPends().length)await autoPush({forSpend:true,reload:false});
+    if(localStorage.getItem('arkeia-sync-dirty')||getPends().length)throw Error('sync');
+    return ()=>{syncSpendBusy=false};
+  }catch(err){syncSpendBusy=false;throw err}
+ }});
 // ---------- Loop ----------
 setupTouch();
 const timer = new THREE.Timer();

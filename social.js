@@ -1,3 +1,4 @@
+// RF54_FIX_20261111
 // 交流機能：画面上部のお知らせテロップ・世界／ギルド／フレンド／運営会議チャット・ギルド
 // サーバー（config.js の API_BASE）設定時：ギルドの存在・役職・除名・寄付・チャンネル参加資格・運営長の署名はすべてサーバーで検証。
 // 未設定時：端末内判定の簡易モード（改ざん耐性なし。寄付は不正防止のため停止）。
@@ -567,13 +568,41 @@ function rfCountryName(code) {
   if (!/^[A-Z]{2}$/.test(String(code || '')) || code === 'ZZ' || code === 'XX') return '不明';
   try { return new Intl.DisplayNames(['ja'], {type: 'region'}).of(code) || code; } catch { return code; }
 }
+
+const RF54_JP_PREF={'01':'北海道','02':'青森県','03':'岩手県','04':'宮城県','05':'秋田県','06':'山形県','07':'福島県','08':'茨城県','09':'栃木県','10':'群馬県','11':'埼玉県','12':'千葉県','13':'東京都','14':'神奈川県','15':'新潟県','16':'富山県','17':'石川県','18':'福井県','19':'山梨県','20':'長野県','21':'岐阜県','22':'静岡県','23':'愛知県','24':'三重県','25':'滋賀県','26':'京都府','27':'大阪府','28':'兵庫県','29':'奈良県','30':'和歌山県','31':'鳥取県','32':'島根県','33':'岡山県','34':'広島県','35':'山口県','36':'徳島県','37':'香川県','38':'愛媛県','39':'高知県','40':'福岡県','41':'佐賀県','42':'長崎県','43':'熊本県','44':'大分県','45':'宮崎県','46':'鹿児島県','47':'沖縄県'};
+function rf54Location(p){
+ if(p.consent!==true)return '';
+ let region=String(p.region||'').slice(0,56),city=String(p.city||'').slice(0,56);
+ if(String(p.country).toUpperCase()==='JP'){
+   const code=String(p.regionCode||'').replace(/^JP-/i,'').padStart(2,'0');
+   region=RF54_JP_PREF[code]||region;
+ }
+ return region||city?' ｜ IP推定地域：'+[region,city].filter(Boolean).join(' / '):'';
+}
+function rf54RegionSetting(){
+ if(document.getElementById('rf54-location-consent'))return;
+ const area=document.querySelector('#scr-options .inner');if(!area)return;
+ const label=document.createElement('label');label.className='rf54-privacy';
+ const input=document.createElement('input');input.type='checkbox';input.id='rf54-location-consent';
+ input.checked=localStorage.getItem('rf54-region-optin')==='yes';
+ const note=document.createElement('span');note.textContent='運営・運営長の接続一覧に、IPから推定した地域・市区町村を表示することを許可する（初期OFF）。';
+ label.append(input,note);
+ input.addEventListener('change',()=>{
+   localStorage.setItem('rf54-region-optin',input.checked?'yes':'no');
+   rfActivityPingAt=0;
+   rfRecordActivity().catch(()=>{});
+ });
+ area.append(label);
+}
+if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',rf54RegionSetting,{once:true});else rf54RegionSetting();
+
 async function rfRecordActivity() {
   if (!S || !S.net || !serverMode() || document.hidden || rfActivityPingBusy) return;
   const code = String(S.opts.syncCode?.() || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
   if (code.length !== 12 || Date.now() - rfActivityPingAt < 170000) return;
   rfActivityPingBusy = true;
   try {
-    const r = await api('/activity/ping', {code, name: S.opts.myName()});
+    const r = await api('/activity/ping', {code, name:S.opts.myName(),shareRegion:localStorage.getItem('rf54-region-optin')==='yes'});
     if (r.ok) rfActivityPingAt = Date.now();
   } catch (err) { console.warn('[24h activity] ping unavailable:', err?.message || err); }
   finally { rfActivityPingBusy = false; }
@@ -1289,7 +1318,7 @@ function renderOnline() {
     const at = Number(p.lastAt);
     const atText = Number.isFinite(at) && at > 0 ? new Date(at).toLocaleString('ja-JP') : '不明';
     const country = rfCountryName(p.country);
-    row.append(el('div','rf-history-meta','接続国：'+country+' ｜ 最終確認：'+(p.online ? '現在オンライン' : atText)+(p.pid ? ' ｜ ID #'+String(p.pid).slice(0,6) : '')));
+    row.append(el('div','rf-history-meta','接続国：'+country+rf54Location(p)+' ｜ 最終確認：'+(p.online ? '現在オンライン' : atText)+(p.pid ? ' ｜ ID #'+String(p.pid).slice(0,6) : '')));
     if(p.gname) row.append(el('div','rf-history-meta','ギルド：'+String(p.gname).slice(0,32)));
     box.append(row);
   }

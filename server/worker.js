@@ -1,3 +1,4 @@
+// RF54_FIX_20261111
 // RF_GRAND_FOUR_20261108 server/worker.js
 // Riftfall Arena Cloudflare Worker — runtime/preview guard update (2026-11-06).
 // Single-file ES module for the existing Worker.
@@ -1946,13 +1947,18 @@ async function guildBoardRoute(req, env, H) {
 
 
 // RF_ACTIVITY_24H_V18 — Country from trusted Cloudflare CF metadata; never record IP.
-async function rfActivityPing(req, env, H, {code, name}) {
+async function rfActivityPing(req, env, H, {code, name, shareRegion}) {
   if (await limited(env, req, 'activity-ping', 60, 600000)) return json(H,{error:'limit'},429);
   const me = await whoAmI(env, code, name);
   if (!me) return json(H,{error:'nosync'},403);
   const candidate = String(req.cf?.country || '').toUpperCase();
   const country = /^[A-Z]{2}$/.test(candidate) ? candidate : 'ZZ';
-  const r = await storeCall(env, 'chat-activity-v18', {op:'activity-ping', pid:me.pid, name:me.name, country});
+  // Store region and city only with explicit visitor consent. Never persist IP/GPS.
+  const consent=shareRegion===true;
+  const region=consent?cleanTxt(req.cf?.region||'',56):'';
+  const regionCode=consent?cleanTxt(req.cf?.regionCode||'',16):'';
+  const city=consent?cleanTxt(req.cf?.city||'',56):'';
+  const r = await storeCall(env, 'chat-activity-v18', {op:'activity-ping', pid:me.pid, name:me.name, country,consent,region,regionCode,city});
   return json(H, r.data, r.status);
 }
 async function rfActivityList(req, env, H, {token}) {
@@ -2431,8 +2437,10 @@ export class Store {
           const name=String(b.name||'旅人').slice(0,12).replace(/[\u0000-\u001f<>]/g,'');
           const country=/^[A-Z]{2}$/.test(b.country)?b.country:'ZZ';
           const prior=rows.find(x=>x.pid===pid);
-          if (prior) {prior.name=name;prior.country=country;prior.lastAt=now;}
-          else rows.push({pid,name,country,firstAt:now,lastAt:now});
+          // Withdrawn consent removes the previously recorded city on the next ping.
+          const location=b.consent===true?{consent:true,region:String(b.region||'').slice(0,56),regionCode:String(b.regionCode||'').slice(0,16),city:String(b.city||'').slice(0,56)}:{consent:false,region:'',regionCode:'',city:''};
+          if(prior)Object.assign(prior,{name,country,lastAt:now},location);
+          else rows.push({pid,name,country,firstAt:now,lastAt:now,...location});
           rows.sort((a,b)=>b.lastAt-a.lastAt);
           if(rows.length>500)rows.length=500;
           await s.put('v',rows);
@@ -2817,19 +2825,19 @@ async function rf50Wallet(storage,row,res,b){
  const balance=s.shards;
  if(!Number.isSafeInteger(balance)||balance<0||balance>RF50_LIMIT)return res({error:'bad_balance'},422);
  const old=await storage.get('castle:home');
- if(op==='castle-self')return res({ok:true,castle:rf50Castle(old),shards:balance,ver:row.ver||0});
+ if(op==='castle-self')return res({ok:true,castle:rf50Castle(old),shards:balance,ver:row.ver||0,data:row.data});
  if(op==='castle-create'){
   if(old)return res({error:'already_exists'},409);
   if(!['wa','west'].includes(b.style)||!ownValue(FIGHTERS,b.lord))return res({error:'bad'},400);
   const castle={style:b.style,level:1,lord:b.lord,createdAt:now,shieldUntil:now+24*3600000};
   await storage.put('castle:home',castle);
-  return res({ok:true,castle:rf50Castle(castle),shards:balance,ver:row.ver||0});
+  return res({ok:true,castle:rf50Castle(castle),shards:balance,ver:row.ver||0,data:row.data});
  }
  if(op==='castle-lord'){
   if(!old||!ownValue(FIGHTERS,b.lord))return res({error:'bad'},400);
   const updated={...old,lord:b.lord};
   await storage.put('castle:home',updated);
-  return res({ok:true,castle:rf50Castle(updated),shards:balance,ver:row.ver||0});
+  return res({ok:true,castle:rf50Castle(updated),shards:balance,ver:row.ver||0,data:row.data});
  }
  if(op==='castle-level'){
   if(!old)return res({error:'no_castle'},404);
@@ -2840,7 +2848,7 @@ async function rf50Wallet(storage,row,res,b){
   const upgraded={...old,level:old.level+1},ver=(row.ver||0)+1;
   const data=JSON.stringify(s);if(data.length>200000)return res({error:'size'},413);
   await writeTogether(storage,[['row',{...row,data,ver,at:now,wealth:wealthOf(s),wid:''}],['castle:home',upgraded]]);
-  return res({ok:true,castle:rf50Castle(upgraded),shards:s.shards,ver,cost});
+  return res({ok:true,castle:rf50Castle(upgraded),shards:s.shards,ver,cost,data});
  }
  if(op==='castle-shield'){
   if(!old||!/^[a-f0-9-]{36}$/i.test(String(b.raidId||'')))return res({error:'bad'},400);
@@ -2862,21 +2870,53 @@ async function rf50Wallet(storage,row,res,b){
  if(op==='castle-credit'){
   if(!/^[a-f0-9-]{36}$/i.test(String(b.raidId||''))||!Number.isSafeInteger(b.amount)||b.amount<0||b.amount>100000)return res({error:'bad'},400);
   const key='castle:credit:'+b.raidId,prev=await storage.get(key);
-  if(prev)return res({ok:true,...prev,already:true});
+  if(prev)return res({ok:true,...prev,already:true,shards:balance,ver:row.ver||0,data:row.data});
   const credit=Math.min(b.amount,RF50_LIMIT-balance),pending=b.amount-credit;
   s.shards=balance+credit;
   const ver=(row.ver||0)+1,receipt={raidId:b.raidId,amount:b.amount,credited:credit,pending,shards:s.shards,ver,pid};
-  await writeTogether(storage,[['row',{...row,data:JSON.stringify(s),ver,at:now,wealth:wealthOf(s),wid:''}],[key,receipt],['castle:loot:'+b.raidId,pending]]);
-  return res({ok:true,...receipt});
+  const data=JSON.stringify(s);
+  const writes=[['row',{...row,data,ver,at:now,wealth:wealthOf(s),wid:''}],[key,receipt]];
+  if(pending>0)writes.push(['castle:loot:'+b.raidId,pending]);
+  await writeTogether(storage,writes);
+  return res({ok:true,...receipt,data});
  }
+
  if(op==='castle-loot-collect'){
-  const pending=await storage.list({prefix:'castle:loot:',limit:100});
-  let free=RF50_LIMIT-balance,claimed=0;const updates=[];
-  for(const [key,value] of pending){const v=Number(value)||0;if(free<=0||v<=0)continue;const part=Math.min(free,v);free-=part;claimed+=part;updates.push([key,v-part]);}
-  if(!claimed)return res({ok:true,collected:0,pending:[...pending.values()].reduce((a,v)=>a+(Number(v)||0),0),shards:balance,ver:row.ver||0});
-  s.shards=balance+claimed;const ver=(row.ver||0)+1;
-  await writeTogether(storage,[['row',{...row,data:JSON.stringify(s),ver,at:now,wealth:wealthOf(s),wid:''}],...updates]);
-  return res({ok:true,collected:claimed,pending:[...pending.values()].reduce((a,v)=>a+(Number(v)||0),0)-claimed,shards:s.shards,ver});
+  // Pagination also clears legacy zero records that previously hid unclaimed prizes.
+  const positive=[],trash=[];
+  let cursor='',more=false;
+  for(let page=0;page<20;page++){
+    const entries=[...(await storage.list({prefix:'castle:loot:',limit:500,...(cursor?{startAfter:cursor}:{})})).entries()];
+    if(!entries.length){more=false;break;}
+    for(const [key,value] of entries){
+      const n=Number(value);
+      if(!Number.isSafeInteger(n)||n<=0)trash.push(key);
+      else positive.push([key,n]);
+    }
+    cursor=entries[entries.length-1][0];
+    more=entries.length===500;
+    if(!more)break;
+  }
+  let room=RF50_LIMIT-balance,collected=0,pending=0;
+  const keep=[];
+  for(const [key,value] of positive){
+    const payout=Math.min(room,value);
+    if(payout>0){room-=payout;collected+=payout;}
+    const rest=value-payout;
+    if(rest>0){pending+=rest;if(payout>0)keep.push([key,rest]);}
+    else trash.push(key);
+  }
+  if(collected||trash.length||keep.length){
+    if(collected)s.shards=balance+collected;
+    const ver=(row.ver||0)+(collected?1:0),data=JSON.stringify(s);
+    await storage.transaction(async tx=>{
+      if(collected)await tx.put('row',{...row,data,ver,at:now,wealth:wealthOf(s),wid:''});
+      for(const key of trash)await tx.delete(key);
+      for(const [key,v] of keep)await tx.put(key,v);
+    });
+    return res({ok:true,shards:s.shards,ver,data,collected,pending,morePending:more});
+  }
+  return res({ok:true,shards:balance,ver:row.ver||0,data:row.data,collected:0,pending,morePending:more});
  }
  return res({error:'bad'},400);
 }
@@ -2886,6 +2926,11 @@ async function rf50CastleHub(storage,b,now,out){
   if(!PID_RE.test(String(b.pid||''))||!c||!['wa','west'].includes(c.style)||!Number.isInteger(c.level)||c.level<1||c.level>100||typeof b.h!=='string'||!HEX64.test(b.h))return out({error:'bad'},400);
   await storage.put('castle:fort:'+b.pid,{pid:b.pid,name:String(b.name||'旅人').slice(0,12),h:b.h,style:c.style,level:c.level,lord:c.lord,lordName:b.lordName||c.lord,createdAt:c.createdAt||now,shieldUntil:c.shieldUntil||0});
   return out({ok:true});
+ }
+ if(b.op==='castle-pending'){
+  if(!PID_RE.test(String(b.pid||'')))return out({error:'bad'},400);
+  const items=await storage.list({prefix:'castle:pending:'+b.pid+':',limit:5});
+  return out({ok:true,raids:[...items.values()]});
  }
  if(b.op==='castle-directory'){
   const all=await storage.list({prefix:'castle:fort:',limit:500});
@@ -2927,7 +2972,13 @@ async function rf50CastleHub(storage,b,now,out){
   if(b.op==='castle-finalize'){
    if(r.status!=='won')return out({error:'not_won'},409);
    r.paidAt=r.paidAt||now;
-   await writeTogether(storage,[['castle:raid:'+id,r],['castle:active:'+b.pid,null],['castle:underattack:'+r.targetPid,null]]);
+   await storage.transaction(async tx=>{
+     await tx.put('castle:raid:'+id,r);
+     await tx.put('castle:active:'+b.pid,null);
+     await tx.put('castle:underattack:'+r.targetPid,null);
+     await tx.delete('castle:pending:'+r.attackerPid+':'+id);
+     await tx.delete('castle:pending:'+r.targetPid+':'+id);
+   });
    const defender=await storage.get('castle:fort:'+r.targetPid);
    if(defender)await storage.put('castle:fort:'+r.targetPid,{...defender,shieldUntil:Math.max(defender.shieldUntil||0,now+12*3600000)});
    return out({ok:true,raid:rf50View(r)});
@@ -2960,6 +3011,11 @@ async function rf50CastleHub(storage,b,now,out){
    if(r.hp===0||r.turn>=240){r.status='lost';r.lastLog='攻略失敗。防衛軍の勝利';}
   }
   if(r.status==='lost')await writeTogether(storage,[['castle:raid:'+id,r],['castle:active:'+b.pid,null],['castle:underattack:'+r.targetPid,null]]);
+  else if(r.status==='won')await writeTogether(storage,[
+    ['castle:raid:'+id,r],
+    ['castle:pending:'+r.attackerPid+':'+id,{id,attackerPid:r.attackerPid}],
+    ['castle:pending:'+r.targetPid+':'+id,{id,attackerPid:r.attackerPid}]
+  ]);
   else await storage.put('castle:raid:'+id,r);
   return out({ok:true,raid:rf50View(r)});
  }
@@ -2988,7 +3044,7 @@ async function rf50Settle(env,pid,raidId){
  ]);
  if(n.some(x=>x.status!==200))return {status:503,data:{error:'mail_retry',amount:debit.data.amount}};
  const done=await doCall(hub,{op:'castle-finalize',pid,raidId});
- return {status:done.status,data:{ok:done.status===200,amount:debit.data.amount,credited:credit.data.credited,pending:credit.data.pending,shards:credit.data.shards,ver:credit.data.ver}};
+ return {status:done.status,data:{ok:done.status===200,amount:debit.data.amount,credited:credit.data.credited,pending:credit.data.pending,shards:credit.data.shards,ver:credit.data.ver,data:credit.data.data}};
 }
 async function rf50Route(req,env,H,body,action){
  if(!env.SYNC_LOCK||!env.MAIL_STORE||!env.PID_BIND||!env.LIMITER||!env.PEPPER)return json(H,{error:'castle_not_ready'},503);
@@ -2997,24 +3053,35 @@ async function rf50Route(req,env,H,body,action){
  if(!me)return json(H,{error:'nosync'},403);
  const sync=env.SYNC_LOCK.get(env.SYNC_LOCK.idFromName(me.h)),hub=mailStub(env);
  async function fighterStats(key){
-  const row=await syncRow(env,me.h),s=rf50Save(row),def=FIGHTERS[key];
-  if(!s||!def||def.hidden)return null;
-  const admin=(await verify(env,body.token,'role'))?.r;
-  if(def.special==='chief'&&admin!=='chief')return null;
-  if(def.special&&def.special!=='chief'&&!admin)return null;
-  if(!def.special){
-   const free=ROSTER.includes(key)||key==='uninomiya';
-   const paid=(Array.isArray(s.gemChars)&&s.gemChars.includes(key))||(Array.isArray(s.chars)&&s.chars.includes(key));
-   if(!free&&!paid)return null;
-   if(key==='minamoto_yoritomo'){
-    const owned=await doCall(sync,{op:'minamoto-owned'});if(!owned.data?.owned)return null;
-   }
-  }
-  const u=statsFor(s,key);
+  const row=await syncRow(env,me.h),sv=rf50Save(row),def=ownValue(FIGHTERS,key);
+  if(!sv||!def||def.hidden||def.enemy)return null;
+  const role=(await verify(env,body.token,'role'))?.r||null;
+  if((CHIEF_ONLY.has(key)||def.special==='chief')&&role!=='chief')return null;
+  if((OP_EXCLUSIVE.has(key)||def.special==='operator')&&role!=='op')return null;
+  if(OP_ONLY.has(key)&&!role)return null;
+  if(key==='minamoto_yoritomo'){
+    const receipt=await doCall(sync,{op:'minamoto-owned'});
+    if(receipt.status!==200||!receipt.data?.owned)return null;
+  }else if(def.shop){
+    const owned=await ownedKeys(env,sv.buyId);
+    if(!owned.includes(key))return null;
+  }else if(def.shardPrice&&!def.special){
+    if(!Array.isArray(sv.gemChars)||!sv.gemChars.includes(key))return null;
+  }else if(!ROSTER.includes(key)&&key!=='uninomiya'&&!def.special&&!role)return null;
+  const u=statsFor(sv,key);
   return {hp:Math.round((def.hp||1000)*(1+.08*(u.hp||0))),power:(def.power||1)*(1+.06*(u.atk||0))};
  }
  const name=cleanTxt(body.name||me.name,12);
  if(['self','create','level','lord'].includes(action)){
+  if(action==='self'){
+    const queue=await doCall(hub,{op:'castle-pending',pid:me.pid});
+    if(queue.status===200)for(const task of queue.data?.raids||[]){
+      if(task&&PID_RE.test(String(task.attackerPid||''))&&/^[a-f0-9-]{36}$/i.test(String(task.id||''))){
+        try{await rf50Settle(env,task.attackerPid,task.id)}
+        catch(e){console.warn('[castle recovery]',e?.message||String(e))}
+      }
+    }
+  }
   if((action==='create'||action==='lord')&&!await fighterStats(body.lord))return json(H,{error:'fighter_locked'},403);
   const op={self:'castle-self',create:'castle-create',level:'castle-level',lord:'castle-lord'}[action];
   const r=await doCall(sync,{op,pid:me.pid,style:body.style,lord:body.lord});
@@ -3025,7 +3092,7 @@ async function rf50Route(req,env,H,body,action){
   }
   if(action==='self'){
    const loot=await doCall(sync,{op:'castle-loot-collect',pid:me.pid});
-   if(loot.status===200)return json(H,{...r.data,shards:loot.data.shards,ver:loot.data.ver,pendingLoot:loot.data.pending,collectedLoot:loot.data.collected});
+   if(loot.status===200)return json(H,{...r.data,shards:loot.data.shards,ver:loot.data.ver,data:loot.data.data,pendingLoot:loot.data.pending,morePending:loot.data.morePending,collectedLoot:loot.data.collected});
   }
   return json(H,r.data,r.status);
  }

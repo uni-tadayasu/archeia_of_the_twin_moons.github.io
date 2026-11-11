@@ -1,0 +1,4 @@
+/* RF54 IP-geolocation consent (off by default) */
+#scr-options .rf54-privacy{box-sizing:border-box;display:flex;align-items:flex-start;gap:12px;max-width:100%;width:100%;margin:14px 0;padding:15px;border:1px solid #8579a6;border-radius:10px;background:#25213d;color:#e9def0;font-size:clamp(13px,2.7vw,15px);line-height:1.65;overflow-wrap:anywhere}
+#scr-options .rf54-privacy input{width:20px;height:20px;flex:0 0 20px;margin:2px 0 0;accent-color:#997cce}
+#scr-options .rf54-privacy span{flex:1 1 auto;min-width:0}
