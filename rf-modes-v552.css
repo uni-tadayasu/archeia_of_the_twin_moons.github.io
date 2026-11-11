@@ -1,0 +1,20 @@
+/* Riftfall Arena V55.2 / original moonlit castle mode and event co-op UI. */
+.rf552-choice-backdrop,.rf552-board-backdrop{position:fixed;inset:0;z-index:10020;background:rgba(6,8,24,.88);display:flex;align-items:center;justify-content:center;padding:16px;overflow:auto;backdrop-filter:blur(8px)}
+.rf552-choice-panel,.rf552-board{width:min(560px,96vw);max-height:88vh;overflow-y:auto;border:1px solid #bda276;border-radius:12px;padding:clamp(16px,3vw,26px);color:#fff3da;background:radial-gradient(ellipse at 90% 4%,#39405a,#16172a 65%);box-shadow:0 24px 90px #0009;line-height:1.6}
+.rf552-choice-panel h2,.rf552-board h2{margin:0 0 12px;font-size:clamp(20px,3.6vw,27px);color:#ffe1ab}
+.rf552-choice-panel p,.rf552-board p{margin:8px 0 18px;color:#ddd4ca}
+.rf552-choice-panel button{display:block;width:100%;margin:10px 0;padding:13px;cursor:pointer;touch-action:manipulation}
+#rf552-event-coop{margin:12px auto;max-width:640px;text-align:left;border:1px solid #bba176;border-radius:10px;padding:14px;background:linear-gradient(110deg,#121a2aee,#29233dee);color:#f1e3c8}
+#rf552-event-coop[hidden],#rf552-coop-start[hidden],#rf552-endless-hud[hidden]{display:none!important}
+#rf552-event-coop h3{font-size:clamp(17px,3vw,22px);color:#f6d69e;margin:0 0 10px}
+#rf552-event-coop h3 span{font-size:12px;font-weight:400;color:#cbd3de}
+#rf552-event-coop ol{margin:6px 0 10px;padding:0;list-style:none;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+#rf552-event-coop li{padding:9px 11px;font-size:13px;border:1px solid #665b74;background:#151b2d;border-radius:7px;overflow-wrap:anywhere}
+#rf552-event-coop p{font-size:13px;color:#d6d9ea}
+#rf552-event-coop select{display:block;padding:10px;margin:8px 0 13px;width:100%;max-width:300px;color:#fff;background:#262742;border:1px solid #a89575;border-radius:7px}
+#rf552-event-coop #rf552-coop-start{width:100%;max-width:440px;background:linear-gradient(90deg,#d6b36b,#f5dcac);color:#1c2231;font-weight:800}
+#rf552-endless-hud{position:fixed;z-index:35;top:max(12px,env(safe-area-inset-top));left:50%;transform:translateX(-50%);max-width:94vw;min-width:250px;text-align:center;pointer-events:none;border:1px solid #e9bc76;border-radius:9px;padding:9px 13px;font:700 clamp(11px,2.1vw,15px)/1.45 'Yu Mincho',serif;white-space:normal;color:#ffeccb;text-shadow:1px 1px 3px #000;background:linear-gradient(115deg,#0e1728e8,#4c253ddd,#101522e8);box-shadow:0 5px 26px #0008}
+.rf552-rank-list{padding-left:20px;max-height:44vh;overflow:auto;font:14px/1.9 system-ui,'Yu Gothic',sans-serif}
+.rf552-rank-list li{padding:5px 0;border-bottom:1px solid #545064}
+.rf552-board button{padding:10px 20px;cursor:pointer}
+@media(max-width:600px){#rf552-event-coop ol{grid-template-columns:1fr}#rf552-event-coop{padding:10px}#rf552-endless-hud{top:max(40px,env(safe-area-inset-top));font-size:10px;padding:5px 9px}}

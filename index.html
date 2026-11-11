@@ -1,3 +1,4 @@
+<!-- RF552_index.html_PATCHED_20261111 -->
 <!-- RF_BGM_EXCLUSIVE_V10 -->
 <!-- RF_BATCH_SCALE_STARTUP_V92 : import map is now registered before any ES module -->
 <!-- RF_BATTLE_FIX_V9_1_20261109 -->
@@ -59,6 +60,7 @@
     </script>
     <link rel="stylesheet" href="./rosebud-game-defaults.css" />
     <link rel="stylesheet" href="./arkeia-ui.css?v=20261106a" />
+    <link rel="stylesheet" href="./rf-modes-v552.css?v=20261111-1" />
     <link rel="stylesheet" href="./mailbox.css?v=mail-20261107" />
     <script defer src="./arkeia-ui.js?v=rf-responsive-v45-20261110"></script>
     <script src="./rosebud-game-defaults.js" defer></script>
@@ -448,6 +450,7 @@
               <button class="mode-tile" data-go="online-vs"><span class="mode-icon">04</span><span class="mode-main"><b>オンライン対戦</b><small>合言葉で決闘 / VERSUS</small></span><span class="tile-arrow">›</span></button>
               <button class="mode-tile" data-go="online-coop"><span class="mode-icon">05</span><span class="mode-main"><b>オンライン協力</b><small>力を合わせて討伐 / CO-OP</small></span><span class="tile-arrow">›</span></button>
               <button class="mode-tile" data-go="event"><span class="mode-icon">06</span><span class="mode-main"><b>期間イベント</b><small>今週の試練 / EVENT</small></span><span class="tile-arrow">›</span></button>
+              <button class="mode-tile" data-go="infinite"><span class="mode-icon">∞</span><span class="mode-main"><b>無限天守・無限階層</b><small>HP持ち越し / 到達階層・タイム競争</small></span><span class="tile-arrow">›</span></button>
               <button id="btn-adventure-mode" class="mode-tile" type="button"><span class="mode-icon">07</span><span class="mode-main"><b>アドベンチャー</b><small>全10ステージ / 最終ボス：ガイゾルグ</small></span><span class="tile-arrow">›</span></button>
             </nav>
           </section>
@@ -465,6 +468,7 @@
           <section class="portal-section" id="portal-services">
             <div class="section-heading"><div><span>YOUR JOURNEY</span><h2>工房と旅支度</h2></div><p>戦士を育て、灯晶を使い、遊ぶ環境を整えましょう。</p></div>
             <div class="portal-services">
+              <button type="button" id="rf552-infinite-rank"><span class="service-icon">🏆</span><b>無限天守ランキング</b><small>到達階層・タイム・歴代記録</small></button>
               <button type="button" id="btn-castle"><span class="service-icon">🏯</span><b>双月領国・拠点</b><small>築城・防衛・攻城戦</small></button>
 <button id="btn-forge" type="button"><span class="service-icon">⚒</span><b>鍛錬の工房</b><small>強化と限界突破</small></button>
               <button id="btn-shop" type="button"><span class="service-icon">✧</span><b>灯晶商店</b><small>装備・戦士の入手</small></button>
@@ -579,6 +583,14 @@
           <label class="field">合言葉（英数字）<input id="lobby-room" maxlength="12" autocomplete="off"></label>
           <div class="menu"><button class="btn" id="btn-join">焚き火のそばへ</button></div>
           <p id="lobby-status"></p>
+          <div id="rf552-event-coop" hidden>
+            <h3>イベント協力ルーム <span>最大4人</span></h3>
+            <ol id="rf552-coop-members" aria-live="polite"></ol>
+            <p id="rf552-coop-help">参加者が揃うと部屋主が出撃できます。</p>
+            <label for="rf552-coop-level">出撃段階（部屋主のみ）</label>
+            <select id="rf552-coop-level" aria-label="イベント協力で挑む段階"></select>
+            <button type="button" class="btn" id="rf552-coop-start" hidden>参加者全員で出撃</button>
+          </div>
         </div>
       </section>
 
@@ -650,7 +662,8 @@
       </div>
     <section id="scr-castle" class="screen" aria-label="双月領国"><div class="inner"><div class="topbar"><button type="button" class="back" id="castle-back">メニューへ戻る</button><span class="crumb">双月領国・城の管理</span></div><div id="castle-content"></div></div></section>
 </main>
-    <script type="module" src="main.js?v=rf55-event-bgm-20261111"></script>
+    <div id="rf552-endless-hud" hidden aria-live="off"></div>
+    <script type="module" src="main.js?v=rf552-coop-infinite-20261111"></script>
 <script defer src="./assets/rf-ui-safe-v34.js?v=rf-responsive-v45-20261110"></script>
 <script id="rf46-responsive-js" defer src="./assets/rf-responsive-v46.js?v=rf-responsive-v46-20261111"></script>
 <script id="rf49-js" defer src="./assets/rf-responsive-v49.js?v=rf49-20261111"></script>

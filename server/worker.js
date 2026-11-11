@@ -1,3 +1,4 @@
+// RF552_server_worker.js_PATCHED_20261111
 // RF54_FIX_20261111
 // RF_GRAND_FOUR_20261108 server/worker.js
 // Riftfall Arena Cloudflare Worker — runtime/preview guard update (2026-11-06).
@@ -1484,6 +1485,11 @@ export default {
         case '/chief/current': return await chiefCurrent(req, env, H);
         case '/chief/mail/send': return await chiefMail(req, env, H, body, 'send');
         case '/chief/mail/history': return await chiefMail(req, env, H, body, 'history');
+        // RF552_INFINITY_SERVER_RANKING: authenticated server-timed runs.
+        case '/infinite/start': return await rf552InfiniteRoute(req,env,H,body,'start');
+        case '/infinite/progress': return await rf552InfiniteRoute(req,env,H,body,'progress');
+        case '/infinite/finish': return await rf552InfiniteRoute(req,env,H,body,'finish');
+        case '/infinite/board': return await rf552InfiniteRoute(req,env,H,body,'board');
         case '/castle/self': return await rf50Route(req,env,H,body,'self');
         case '/castle/create': return await rf50Route(req,env,H,body,'create');
         case '/castle/level': return await rf50Route(req,env,H,body,'level');
@@ -1939,6 +1945,27 @@ async function guildDonate(req, env, H, body) {
   if (ranked.status !== 200) return json(H, { error: 'server' }, 500);
   return json(H, { ok: true, dup: !!spent.dup, ver: spent.ver, shards: spent.shards, total: d.data.mine, state: d.data.state });
 }
+
+// RF552_INFINITY_SERVER_RANKING_20261111
+// Leaderboards require an existing bound sync-code identity; timestamps are server-owned.
+// Combat is computed client-side, so server timing and sequential-floor checks
+// reduce but cannot eliminate forged gameplay. This is a casual leaderboard.
+async function rf552InfiniteRoute(req,env,H,body,op){
+  if(!env.STORE)return json(H,{error:'leaderboard_unavailable'},503);
+  if(await limited(env,req,'infinite-'+op,op==='board'?90:120,600000))return json(H,{error:'limit'},429);
+  if(op==='board'){
+    const r=await storeCall(env,'rf552-infinite-global',{op:'inf-board'});
+    return json(H,r.data,r.status);
+  }
+  const me=await whoAmI(env,body.code,body.name);
+  if(!me)return json(H,{error:'nosync',hint:'同期コードの登録が必要です'},403);
+  const r=await storeCall(env,'rf552-infinite-global',{
+    op:'inf-'+op,pid:me.pid,name:cleanTxt(body.name,12),
+    fighter:cleanTxt(body.fighter,32),runId:String(body.runId||''),floor:body.floor
+  });
+  return json(H,r.data,r.status);
+}
+
 async function guildBoardRoute(req, env, H) {
   if (await limited(env, req, 'board', 60, 600000)) return json(H, { error: 'limit' }, 429);
   const r = await doCall(boardStub(env), { op: 'top' });
@@ -2452,6 +2479,49 @@ export class Store {
           const rows=(Array.isArray(cur)?cur:[]).filter(p=>p && Number(p.lastAt)>cut).slice(0,500);
           if(rows.length !== (Array.isArray(cur)?cur.length:0))await s.put('v',rows);
           return out({ok:true,users:rows});
+        }
+
+        case 'inf-start': {
+          const pid=String(b.pid||'');
+          if(!/^[A-Za-z0-9]{1,24}$/.test(pid))return out({error:'bad'},400);
+          const now=Date.now(),runId=crypto.randomUUID();
+          const session={runId,pid,name:String(b.name||'旅人').slice(0,12),fighter:String(b.fighter||'').slice(0,32),startedAt:now,lastAt:now,completedFloor:0};
+          await s.put('inf:run:'+pid,session);
+          return out({ok:true,runId,startedAt:now});
+        }
+        case 'inf-progress': {
+          const pid=String(b.pid||'');const session=await s.get('inf:run:'+pid);
+          if(!session||session.runId!==b.runId||!Number.isSafeInteger(b.floor)||b.floor!==session.completedFloor+1)return out({error:'stale_floor'},409);
+          const now=Date.now();
+          if(now-session.startedAt>12*3600000)return out({error:'expired'},409);
+          // At least one real second per cleared floor, including transitions.
+          if(now-session.startedAt<b.floor*1000)return out({error:'too_fast'},429);
+          session.completedFloor=b.floor;session.lastAt=now;
+          await s.put('inf:run:'+pid,session);
+          return out({ok:true,completedFloor:b.floor});
+        }
+        case 'inf-finish': {
+          const pid=String(b.pid||''),session=await s.get('inf:run:'+pid);
+          if(!session||session.runId!==b.runId)return out({error:'no_run'},409);
+          const now=Date.now(),timeMs=Math.max(1000,now-session.startedAt);
+          const completedFloor=session.completedFloor;
+          await s.delete('inf:run:'+pid);
+          if(!completedFloor)return out({ok:true,recorded:false});
+          const item={pid,name:session.name||'旅人',fighter:session.fighter||'',floor:completedFloor,timeMs,at:now};
+          const old=await s.get('inf:board');const rows=Array.isArray(old)?old.filter(x=>x&&x.pid!==pid):[];
+          const prior=Array.isArray(old)?old.find(x=>x?.pid===pid):null;
+          const best=prior&&(
+            prior.floor>item.floor||(prior.floor===item.floor&&prior.timeMs<=item.timeMs)
+          )?prior:item;
+          rows.push(best);
+          rows.sort((a,b)=>b.floor-a.floor||a.timeMs-b.timeMs||a.at-b.at);
+          if(rows.length>100)rows.length=100;
+          await s.put('inf:board',rows);
+          return out({ok:true,recorded:true,rank:rows.findIndex(r=>r.pid===pid)+1,best});
+        }
+        case 'inf-board': {
+          const rows=await s.get('inf:board');
+          return out({ok:true,rows:(Array.isArray(rows)?rows:[]).slice(0,100).map((r)=>({name:r.name,floor:r.floor,timeMs:r.timeMs,at:r.at}))});
         }
         case 'once': // 初回だけ成功（Stripe の同じ決済を二重に処理しない）
           if (cur) return out({ ok: false }, 409);

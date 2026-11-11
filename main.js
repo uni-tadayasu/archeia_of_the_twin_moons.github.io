@@ -1,3 +1,4 @@
+// RF552_main.js_PATCHED_20261111
 // RF55_EVENT_BGM_20261111
 // RF55_CASTLE_MAIN_CACHE
 // RF54_FIX_20261111
@@ -40,7 +41,9 @@ import { sayBattle, setVoiceMuted, setVoiceVolume, stopVoices } from './voice.js
 import { initSocial, uiConfirm } from './social.js?v=rf54-20261111';
 import { initMailbox } from './mailbox.js?v=audio-cast-20261107d';
 import { OPERATOR_KEY_SHA256, CHIEF_KEY_SHA256, MAX_KEY_ATTEMPTS, LOCKOUT_MS, SHOP_ITEMS } from './config.js';
-import { connect, issueInvite, redeemInvite, syncPush, syncPullV } from './net.js?v=rf-v18-20261109';
+import { connect, issueInvite, redeemInvite, syncPush, syncPullV } from './net.js?v=rf-v552-coop-20261111';
+import { createEventCoopV552 } from './rf-event-coop-v552.js?v=20261111-1';
+import { createInfiniteDungeonV552 } from './rf-infinite-dungeon-v552.js?v=20261111-1';
 import { apiEnabled, api, verifyToken } from './api.js';
 
 const $ = (s) => document.querySelector(s);
@@ -1724,15 +1727,13 @@ document.querySelectorAll('[data-go]').forEach((b) => b.addEventListener('click'
     openPartySelect(() => runStoryChapter());
     return;
   }
-  if (state.mode === 'event') {
-    const { ev } = activeEvent();
-    openSelect('あなたが握る剣は？', `週替わりイベント › ${ev.name}`, (k) => {
-      state.myKey = k;
-      openEventLevel((lv) => {
-        state.eventRun = { ...activeEvent(), lv };
-        startOffline();
-      });
-    }, { onBack: goTitle });
+  // RF552_MODES — Event solo / 2–4 friends, plus the independent endless challenge.
+  if (state.mode === 'event') { openEventPlayChoiceV552(); return; }
+  if (state.mode === 'infinite') {
+    openSelect('無限天守へ挑む戦士を選ぶ', '無限階層・HP持ち越し・到達時間ランキング', k => {
+      state.myKey=k;
+      void infiniteDungeon.launch(k).catch(rfBattleStartError);
+    }, {onBack:goTitle});
     return;
   }
   const crumbs = { cpu: 'ひとりで手合わせ', duo: '背中をあずける', 'online-vs': 'オンライン対戦', 'online-coop': 'オンライン協力' };
@@ -1752,6 +1753,33 @@ document.querySelectorAll('[data-go]').forEach((b) => b.addEventListener('click'
   }, { onBack: goTitle });
   pickMine();
 }));
+
+// RF552_EVENT_CHOOSER — no existing solo event behavior is removed.
+function openEventPlayChoiceV552(){
+  const {ev}=activeEvent();
+  const layer=document.createElement('div');layer.className='rf552-choice-backdrop';
+  const panel=document.createElement('section');panel.className='rf552-choice-panel';
+  const h=document.createElement('h2');h.textContent='期間イベント — '+ev.name;
+  const p=document.createElement('p');p.textContent='1人で挑戦するか、最大4人で協力するかを選べます。イベントBGMは共通です。';
+  const solo=document.createElement('button');solo.type='button';solo.className='btn';solo.textContent='ソロで出撃';
+  solo.onclick=()=>{
+    layer.remove();state.mode='event';
+    openSelect('あなたが握る剣は？',`週替わりイベント › ${ev.name}`,k=>{
+      state.myKey=k;openEventLevel(lv=>{state.eventRun={...activeEvent(),lv};void startOffline();});
+    },{onBack:goTitle});
+  };
+  const coop=document.createElement('button');coop.type='button';coop.className='btn';coop.textContent='最大4人で協力する';
+  coop.onclick=()=>{
+    layer.remove();state.mode='event-coop';
+    openSelect('協力戦で使うキャラクター',`協力イベント › ${ev.name}`,k=>{
+      state.myKey=k;eventCoop.prepare();
+    },{onBack:goTitle});
+  };
+  const close=document.createElement('button');close.type='button';close.className='btn mini';close.textContent='戻る';close.onclick=()=>{layer.remove();goTitle();};
+  panel.append(h,p,solo,coop,close);layer.append(panel);
+  layer.onclick=e=>{if(e.target===layer){layer.remove();goTitle();}};
+  document.body.append(layer);
+}
 
 function openSelect(label, crumb, cb, { allowLocked = false, onBack = goTitle } = {}) {
   if ($('#select-search')) $('#select-search').value = '';
@@ -2078,6 +2106,8 @@ function goTitle() {
   state.battleLoading = false;
   window.__rfMarkBattlePhase?.('title','タイトルへ戻る');
   gaizorgAdventure?.close();
+  infiniteDungeon.stop();
+  eventCoop.close();
   endBattle();
   leaveField();
   setStage(STAGES[0]);
@@ -2375,7 +2405,7 @@ function beginBattle(boss) {
       : participants.includes('valgard') ? 'valgard'
       : participants.includes('bloodfiend') ? 'zarugureibu'
       : apex ? 'apex:' + apex
-      : state.mode === 'event' ? 'event' : boss ? 'boss' : 'battle';
+      : (state.mode === 'event' || state.mode === 'event-coop') ? 'event' : boss ? 'boss' : 'battle';
     playTrack(fallback);
     ui.banner({ name: '— ♪ 藤原信頼 専用BGM —' }, '他の全BGMより最優先');
   } else if (state.mode === 'adventure') {
@@ -2390,7 +2420,7 @@ function beginBattle(boss) {
   } else if (apex) {
     playTrack('apex:' + apex);
     ui.banner({ name: `— ♪ ${APEX_BGM[apex].name} —` }, '頂上決戦');
-  } else if (state.mode === 'event') {
+  } else if (state.mode === 'event' || state.mode === 'event-coop') {
     playTrack('event');
     ui.banner({ name: '— ♪ イベント専用曲 —' }, '特別試練');
   } else {
@@ -2471,6 +2501,21 @@ function updateHud() {
   }
 }
 
+// Event co-op uses the existing sign-verified remote fighters and InstantDB room.
+const eventCoop = createEventCoopV552({
+  state,save,FIGHTERS,ROSTER,ENEMY_ROSTER,BOSS_ROSTER,STAGES,connect,activeEvent,evCleared,
+  ensureAllModelsReady,makeBattle,beginBattle,setStage,upgFor,gearFor,foeCpu,foeHp,evLv:EV_LV,
+  refreshProfile,verifyPeer,verifyPeerProfs,peerKeyOf,peerOpts,rfBattleStartError,ui,
+  profToken:(k)=>profState.key===k?profState.tok:'',apiEnabled,show,
+  onCast:e=>{const f=state.battle?.fighters.find(x=>x.netId===e.id&&x.remoteAuth);if(f)state.battle.cast(f,e.slot,e);},
+  onHit:e=>state.battle?.receiveNetHit(e)
+});
+const infiniteDungeon=createInfiniteDungeonV552({
+  state,save,FIGHTERS,STAGES,ROSTER,ENEMY_ROSTER,BOSS_ROSTER,ensureAllModelsReady,
+  setStage,makeBattle,endBattle,beginBattle,foeCpu,foeHp,upgFor,gearFor,showResult,
+  ui,syncCodeNow,apiEnabled,api,myName,rfBattleStartError
+});
+document.getElementById('rf552-infinite-rank')?.addEventListener('click',()=>infiniteDungeon.openLeaderboard());
 const REWARD = { cpu: 30, duo: 40, story: 60, 'online-vs': 50, 'online-coop': 60 };
 function grant(n) {
   save.shards += n;
@@ -2483,6 +2528,8 @@ function onBattleEnd(won) {
     return;
   }
   if (state.mode === 'adventure') { gaizorgAdventure.finish(won); return; }
+  if (state.mode === 'infinite') { infiniteDungeon.onEnd(won); return; }
+  if (state.mode === 'event-coop') eventCoop.finished();
   state.lastWin = won;
   if (state.mode === 'invade') {
     showResult(won ? '裁きは下った' : '旅人に退けられた', won ? '物語の灯をひとつ揺らした。運営の仕事、おつかれさま。' : 'なかなかの旅人だ。物語は続く。', '', false, false);
@@ -2550,7 +2597,7 @@ function onBattleEnd(won) {
     }
     return;
   }
-  if (state.mode === 'event') {
+  if (state.mode === 'event' || state.mode === 'event-coop') {
     const run = state.eventRun || { ...activeEvent(), lv: 1 };
     const { week, ev } = run;
     const lv = run.lv || 1;
@@ -2570,7 +2617,7 @@ function onBattleEnd(won) {
     showResult(
       won ? `「${ev.name}」第${lv}段階 制覇！` : 'イベント失敗',
       won ? `見事な戦いぶりだった${note}。${lv < 8 ? `第${lv + 1}段階が開放された！` : '全8段階を制覇した！'}` : '何度でも挑戦できる。装備を整えて再挑戦だ！',
-      `灯晶 +${r}`, true, false
+      `灯晶 +${r}`, state.mode === 'event', false
     );
     return;
   }
@@ -3122,6 +3169,8 @@ $('#btn-forge').addEventListener('click', () => {
 
 // ---------- Online ----------
 function openLobby() {
+  if(state.mode==='event-coop'){eventCoop.prepare();return;}
+  const ec=document.getElementById('rf552-event-coop');if(ec)ec.hidden=true;
   $('#lobby-mode').textContent = state.mode === 'online-vs' ? '遠い誰かと剣を交える' : '遠い誰かと、裁定者に挑む';
   const params = new URLSearchParams(location.search);
   $('#lobby-room').value = (params.get('room') || Math.random().toString(36).slice(2, 7)).replace(/[^a-z0-9]/gi, '').slice(0, 12);
@@ -3131,6 +3180,7 @@ function openLobby() {
 }
 
 $('#btn-join').addEventListener('click', async () => {
+  if(state.mode==='event-coop'){await eventCoop.join();return;}
   const room = $('#lobby-room').value.replace(/[^a-z0-9]/gi, '').slice(0, 12);
   const name = $('#lobby-name').value.replace(/[<>&"']/g, '').trim().slice(0, 12) || '旅人';
   if (!room) {
@@ -3234,6 +3284,7 @@ async function startOnline(peer) {
 
 let netTimer = 0;
 function netTick(dt) {
+  if(state.mode==='event-coop'){eventCoop.tick(dt);return;}
   const b = state.battle;
   if (!state.net || !b || !state.online?.started) {
     return;
@@ -3701,8 +3752,8 @@ function togglePause() {
   if ((!state.battle && !state.field && !state.adventureRest) || document.querySelector('.screen.on')) {
     return;
   }
-  if (state.invaded || state.mode === 'invade' || state.duel) {
-    ui.banner({ name: '— いまは止まれない —' }, '乱入中');
+  if (state.invaded || state.mode === 'invade' || state.duel || (state.mode==='event-coop'&&state.online?.started)) {
+    ui.banner({ name: '— いまは止まれない —' }, state.mode==='event-coop'?'協力戦は一時停止できません':'乱入中');
     return;
   }
   state.paused = !state.paused;

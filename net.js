@@ -1,3 +1,4 @@
+// RF552_net.js_PATCHED_20261111
 // RF_MOTION_GUARD_V16_NET
 // InstantDB はオンラインモード選択時にのみ動的読み込み（初期ロード軽量化）
 let dbPromise = null;
@@ -39,7 +40,17 @@ export function sanitizePresence(p) {
     prof: typeof p.prof === 'string' && /^[A-Za-z0-9_\-.]{20,1500}$/.test(p.prof) ? p.prof : '',
     valgardActive: !!p.valgardActive,
     valgardSig: typeof p.valgardSig === 'string' && /^[A-Za-z0-9_.-]{32,1500}$/.test(p.valgardSig) ? p.valgardSig : '',
-    valgardAt: Number.isSafeInteger(p.valgardAt) && p.valgardAt > 0 ? p.valgardAt : 0
+    valgardAt: Number.isSafeInteger(p.valgardAt) && p.valgardAt > 0 ? p.valgardAt : 0,
+    // RF552_EVENT_COOP: share a maximum of four participants without exposing credentials.
+    joinedAt: Number.isFinite(+p.joinedAt) && +p.joinedAt>0 ? Math.min(1e13,Math.floor(+p.joinedAt)) : 0,
+    evWeek: Number.isSafeInteger(+p.evWeek) ? Math.max(-100000,Math.min(100000,+p.evWeek)) : 0,
+    evCap: Math.max(1,Math.min(8,Math.floor(Number(p.evCap)||1))),
+    evLv: Math.max(1,Math.min(8,Math.floor(Number(p.evLv)||1))),
+    evPhase: p.evPhase==='battle' ? 'battle':'lobby',
+    evRun: typeof p.evRun==='string'&&/^evt-[a-z0-9-]{8,50}$/i.test(p.evRun)?p.evRun:'',
+    evSeed: Number.isSafeInteger(+p.evSeed) && +p.evSeed>0 && +p.evSeed<=4294967295 ? +p.evSeed:0,
+    evStart: Number.isSafeInteger(+p.evStart) ? Math.max(0,Math.min(1e13,+p.evStart)):0,
+    evParty: Array.isArray(p.evParty)?p.evParty.slice(0,4).filter(v=>typeof v==='string'&&/^[a-zA-Z0-9-]{5,40}$/.test(v)):[]
   };
 }
 
@@ -264,6 +275,19 @@ export async function connect(mode, roomCode, handlers) {
       handlers.onBoss({ x: num(e.x, 50), z: num(e.z, 50), ry: num(e.ry, 10), hp: num(e.hp, 99999), mv: !!e.mv });
     }
   });
+  // RF552_EVENT_COOP: event start and authoritative foe snapshots.
+  room.subscribeTopic('evt-signal', (e) => {
+    if (!e || e.kind!=='start' || !Array.isArray(e.party) || e.party.length<2 || e.party.length>4) return;
+    const ids=e.party.slice(0,4).filter(v=>typeof v==='string'&&/^[A-Za-z0-9-]{5,40}$/.test(v));
+    if(ids.length!==e.party.length||new Set(ids).size!==ids.length)return;
+    const host=str(e.host,40),runId=str(e.runId,56),seed=Number(e.seed),lv=Number(e.lv),week=Number(e.week);
+    if(!ids.includes(host)||!/^evt-[a-z0-9-]{8,50}$/i.test(runId)||!Number.isSafeInteger(seed)||seed<1||seed>4294967295||!Number.isInteger(lv)||lv<1||lv>8||!Number.isSafeInteger(week))return;
+    handlers.onSignal?.({kind:'start',host,party:ids,runId,seed,lv,week,startedAt:num(e.startedAt,1e13),from:str(e.from,40)});
+  });
+  room.subscribeTopic('evt-enemy', (e) => {
+    if (!e||!/^evt\d{1,2}$/.test(e.id))return;
+    handlers.onEnemy?.({id:e.id,from:str(e.from,40),x:num(e.x,50),z:num(e.z,50),ry:num(e.ry,10),hp:Math.max(0,num(e.hp,999999999)),mv:!!e.mv});
+  });
   room.subscribeTopic('invade', (e) => {
     if (e && typeof e === 'object') {
       handlers.onInvade?.({ to: str(e.to, 40), from: str(e.from, 40), name: str(e.name, 12) || '運営', tk: typeof e.tk === 'string' && e.tk.length < 1500 ? e.tk : '' });
@@ -284,6 +308,8 @@ export async function connect(mode, roomCode, handlers) {
     cast: (e) => room.publishTopic('cast', e),
     hit: (e) => room.publishTopic('hit', { ...e, from: myId }),
     boss: (e) => room.publishTopic('boss', e),
+    signal: (e) => room.publishTopic('evt-signal',{...e,from:myId}),
+    enemy: (e) => room.publishTopic('evt-enemy',{...e,from:myId}),
     leave: () => {
       try {
         room.leaveRoom?.();
