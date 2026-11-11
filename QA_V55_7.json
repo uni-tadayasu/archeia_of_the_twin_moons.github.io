@@ -1,0 +1,123 @@
+{
+  "version": "V55.7",
+  "verified_source": "GitHub main / V55.6; 2026-11-12",
+  "javascript_syntax": "Node 22 --check passed for modified modules",
+  "css_parse": "tinycss2 parse_stylesheet passed",
+  "image_validity": "Pillow verified all WebP files",
+  "browser_layout_viewports": [
+    {
+      "name": "desktop",
+      "width": 1440,
+      "overflow": false,
+      "mode_count": 8,
+      "svg_modes": true,
+      "errors": []
+    },
+    {
+      "name": "laptop",
+      "width": 1280,
+      "overflow": false,
+      "mode_count": 8,
+      "svg_modes": true,
+      "errors": []
+    },
+    {
+      "name": "tablet",
+      "width": 768,
+      "overflow": false,
+      "mode_count": 8,
+      "svg_modes": true,
+      "errors": []
+    },
+    {
+      "name": "mobile",
+      "width": 390,
+      "overflow": false,
+      "mode_count": 8,
+      "svg_modes": true,
+      "errors": []
+    },
+    {
+      "name": "small",
+      "width": 320,
+      "overflow": false,
+      "mode_count": 8,
+      "svg_modes": true,
+      "errors": []
+    },
+    {
+      "name": "landscape",
+      "width": 844,
+      "overflow": false,
+      "mode_count": 8,
+      "svg_modes": true,
+      "errors": []
+    }
+  ],
+  "hud_and_select_checks": [
+    {
+      "device": "small",
+      "hud4": true,
+      "cards": {
+        "count": 8,
+        "columns": 2,
+        "overflow": 0,
+        "screen": true
+      },
+      "quality": {
+        "exists": true,
+        "options": [
+          "quality",
+          "balanced",
+          "economy"
+        ],
+        "width": 320
+      },
+      "errors": []
+    },
+    {
+      "device": "mobile",
+      "hud4": true,
+      "cards": {
+        "count": 8,
+        "columns": 2,
+        "overflow": 0,
+        "screen": true
+      },
+      "quality": {
+        "exists": true,
+        "options": [
+          "quality",
+          "balanced",
+          "economy"
+        ],
+        "width": 390
+      },
+      "errors": []
+    },
+    {
+      "device": "desktop",
+      "hud4": true,
+      "cards": {
+        "count": 8,
+        "columns": 5,
+        "overflow": 0,
+        "screen": true
+      },
+      "quality": {
+        "exists": true,
+        "options": [
+          "quality",
+          "balanced",
+          "economy"
+        ],
+        "width": 1440
+      },
+      "errors": []
+    }
+  ],
+  "gameplay_runtime": "not tested (offline static UI fixture)",
+  "GLB_runtime": "not tested (requires actual model hosting)",
+  "iOS_android_hardware": "not tested",
+  "backend": "unchanged; no live deployment"
+}

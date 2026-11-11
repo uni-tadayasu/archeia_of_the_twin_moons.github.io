@@ -6,10 +6,12 @@ import {FIGHTERS} from '../data.js?v=rf-minamoto-v48-20261111';
 import {loadModel,instantiateModel,disposeModel} from '../model-runtime.js?v=rf-minamoto-v48-20261111';
 if(!window.__rf556Portraits){
  window.__rf556Portraits=true;
- const CACHE_VER='rf556-20261112',DB='rf556-model-portraits';
- const W=240,H=320;
+ const DB='rf556-model-portraits';
  const lowMemory=(Number(navigator.deviceMemory)||8)<=4;
  const mobile=!!matchMedia?.('(pointer:coarse)')?.matches;
+ // V55.7: higher definition real-GLB captures on desktop; preserve mobile budget and old cache.
+ const W=(mobile||lowMemory)?240:384,H=(mobile||lowMemory)?320:512;
+ const CACHE_VER=(mobile||lowMemory)?'rf556-20261112':'rf557-illustration-20261112';
  const completed=new Map(),busyKeys=new Map();
  let renderer=null,locked=false,queue=[],observer=null,paused=false;
  let lastFailure='',dbPromise=null;
@@ -70,7 +72,7 @@ if(!window.__rf556Portraits){
    const sun=new THREE.DirectionalLight(0xffffff,3.25);sun.position.set(4,9,8);scene.add(sun);
    const rim=new THREE.DirectionalLight(0x89caff,2.2);rim.position.set(-5,5,-7);scene.add(rim);
    const r=readyRenderer();r.render(scene,camera);
-   const blob=await new Promise((resolve,reject)=>r.domElement.toBlob(v=>v?resolve(v):reject(Error('WebP画像の書き出しに失敗')),'image/webp',.84));
+   const blob=await new Promise((resolve,reject)=>r.domElement.toBlob(v=>v?resolve(v):reject(Error('WebP画像の書き出しに失敗')),'image/webp',mobile ? 0.84 : 0.89));
    if(blob.size<500)throw Error('空白の画像が出力されました');
    return blob;
   }finally{

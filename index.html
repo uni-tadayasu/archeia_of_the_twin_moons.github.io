@@ -1,3 +1,4 @@
+<!-- RF557_CINEMATIC_ILLUSTRATION_20261112 -->
 <!-- RF556_NEXTGEN_OVERHAUL_20261112 -->
 <!-- RF553_CHIEF_GLOBAL_CPU_20261111 -->
 <!-- RF553_CASTLE_NAME_BULK_MOBILE_20261111 -->
@@ -384,6 +385,7 @@
 <link rel="stylesheet" href="./castle-realm-v50.css?v=rf-castle-v50-20261111">
 <link rel="stylesheet" href="./rf-start-confirm-v51.css?v=rf51-20261111"><link id="rf53-character-ui" rel="stylesheet" href="./assets/rf-character-library-v53.css?v=rf53-cg-20261111">
 <link rel="stylesheet" href="./assets/rf54-privacy.css?v=rf54-20261111"><link id="rf555-cinematic-css" rel="stylesheet" href="./assets/rf555-modern-ui.css?v=20261112-v556"><link id="rf556-nextgen-css" rel="stylesheet" href="./assets/rf556-nextgen.css?v=20261112-v556">
+  <link id="rf557-cg-illustration-css" rel="stylesheet" href="./assets/rf557-cg-illustration.css?v=20261112-v557" />
 </head>
   <body>
     <noscript>
@@ -493,8 +495,8 @@
           <section class="portal-section" id="portal-services">
             <div class="section-heading"><div><span>YOUR JOURNEY</span><h2>工房と旅支度</h2></div><p>戦士を育て、灯晶を使い、遊ぶ環境を整えましょう。</p></div>
             <div class="portal-services">
-              <button type="button" id="rf552-infinite-rank"><span class="service-icon">🏆</span><b>無限天守ランキング</b><small>到達階層・タイム・歴代記録</small></button>
-              <button type="button" id="btn-castle"><span class="service-icon">🏯</span><b>双月領国・拠点</b><small>築城・防衛・攻城戦</small></button>
+              <button type="button" id="rf552-infinite-rank"><span class="service-icon"></span><b>無限天守ランキング</b><small>到達階層・タイム・歴代記録</small></button>
+              <button type="button" id="btn-castle"><span class="service-icon"></span><b>双月領国・拠点</b><small>築城・防衛・攻城戦</small></button>
 <button id="btn-forge" type="button"><span class="service-icon">⚒</span><b>鍛錬の工房</b><small>強化と限界突破</small></button>
               <button id="btn-shop" type="button"><span class="service-icon">✧</span><b>灯晶商店</b><small>装備・戦士の入手</small></button>
               <button id="btn-mailbox" type="button"><span class="service-icon">✉</span><b>受信箱 <span class="mail-badge" data-mail-badge></span></b><small>プレゼント・運営からのお知らせ</small></button>
@@ -656,7 +658,7 @@
           <div id="field-info"><b id="field-region"></b><span id="field-obj"></span><small>WASD／スティックで移動・Shiftで駆け足・赤い輪の魔物に触れると戦闘</small></div>
           <canvas id="field-map" width="104" height="228" aria-label="地図"></canvas>
           <div id="field-prompt" hidden></div>
-          <button id="btn-world" type="button" aria-label="世界の旅人とフレンド">👥 旅人</button>
+          <button id="btn-world" type="button" aria-label="世界の旅人とフレンド">旅人</button>
           <div id="world-panel" hidden>
             <div class="wp-head"><b>世界の旅人</b><small id="world-status"></small><button id="world-close" type="button" aria-label="閉じる">✕</button></div>
             <label class="wp-namebox">あなたの名前 <input id="world-name" maxlength="10" autocomplete="off"><small>（最大10文字）</small></label>
@@ -706,5 +708,8 @@
 <script type="module" src="./assets/rf556-cg-engine.js?v=20261112-v556"></script>
 <script type="module" src="./assets/rf556-model-portraits.js?v=20261112-v556"></script>
 <script defer src="./assets/rf556-nextgen.js?v=20261112-v556"></script>
+  <!-- V55.7 CG illustration layer: additive, preserves V55.6 / gameplay -->
+  <script defer src="./assets/rf557-cg-illustration.js?v=20261112-v557"></script>
+  <script type="module" src="./assets/rf557-cg-effects.js?v=20261112-v557"></script>
 </body>
 </html>
