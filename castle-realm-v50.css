@@ -1,0 +1,51 @@
+/* Riftfall Castle Realm V50: responsive, no collisions. */
+#scr-castle{overflow-y:auto;overflow-x:hidden;padding:clamp(10px,2vw,26px)}
+#scr-castle>.inner{width:min(1040px,100%);min-width:0;margin-inline:auto}
+#castle-content{width:100%;min-width:0;max-width:100%;display:flex;flex-direction:column;gap:12px;padding-bottom:30px}
+#castle-content :is(h2,h3,p,small,strong){overflow-wrap:anywhere}
+#castle-content .cr-heading{text-align:center;color:#f1dfb9;font-size:clamp(22px,5vw,38px);line-height:1.25;letter-spacing:.06em}
+#castle-content .cr-title{margin:12px 0 0;font-size:clamp(17px,3vw,25px);color:#f7d899}
+#castle-content .cr-note{font-size:clamp(12px,2vw,15px);line-height:1.6;margin:3px 0;color:#e0d7ed}
+#castle-content .cr-notice{min-height:20px;color:#ffd28f;font-size:14px}
+#castle-content .cr-row{display:flex;gap:9px;align-items:center;flex-wrap:wrap;min-width:0;width:100%}
+#castle-content .cr-row>*{min-width:0;flex:1 1 135px}
+#castle-content .cr-small{font-size:12px;color:#d3c4e5}
+#castle-content .cr-button,#castle-content .cr-select{background:#2d2445;color:#f3e9fa;border:1px solid #b09ae1;padding:10px 14px;border-radius:8px;font:inherit;line-height:1.35;max-width:100%}
+#castle-content .cr-button{cursor:pointer;min-height:43px}
+#castle-content .cr-button:disabled{opacity:.55;cursor:default}
+#castle-content .cr-accent{background:linear-gradient(130deg,#6f4d9e,#43346f);border-color:#ebc989}
+#castle-content .cr-select{width:100%;max-width:100%;font-size:16px}
+#castle-content .cr-target{background:rgba(16,15,35,.84);border:1px solid #8b6d83;border-radius:10px;padding:12px;display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+#castle-content .cr-target>*{min-width:0}
+#castle-content .cr-target strong{flex:1 1 240px}
+#castle-content .cr-meter{width:100%;max-width:100%;font-size:clamp(12px,2vw,15px)}
+#castle-content .cr-meter-bg{height:11px;background:#1c162f;border:1px solid #8c77aa;border-radius:10px;overflow:hidden}
+#castle-content .cr-meter-fill{height:100%;background:linear-gradient(90deg,#519bd0,#d9f0ff);border-radius:10px;transition:width .22s}
+#castle-content .cr-log{border:1px solid #997794;padding:10px;background:#100f21;border-radius:8px;min-height:48px;line-height:1.5}
+#castle-content .cr-battle-icon{text-align:center;font-size:clamp(45px,10vw,100px);line-height:1.2}
+#castle-content .cr-castle-scene{position:relative;width:100%;height:clamp(150px,30vw,330px);max-height:34dvh;border:2px solid #8e7984;border-radius:16px;overflow:hidden;display:flex;justify-content:center;align-items:center;flex-direction:column;background:linear-gradient(#152b51,#4e4d68 65%,#323c2b);box-shadow:inset 0 0 50px #0009}
+#castle-content .cr-west{background:linear-gradient(150deg,#242b5a,#82899b 70%,#3a4535)}
+#castle-content .cr-wa{background:linear-gradient(160deg,#1f244a,#677e9a 75%,#3c4829)}
+#castle-content .cr-tier-0{filter:saturate(.8)}
+#castle-content .cr-tier-3{border-color:#ab9db9;box-shadow:inset 0 0 60px #c9a96722}
+#castle-content .cr-tier-6{border-color:#ddc17b;box-shadow:inset 0 0 65px #ffd87944}
+#castle-content .cr-tier-9{border-color:#f5dc91;box-shadow:0 0 28px #c9a1634d,inset 0 0 60px #fff4c433}
+#castle-content .cr-tower{font-size:clamp(65px,15vw,154px);line-height:1.08;filter:drop-shadow(0 6px 12px #000a);z-index:2}
+#castle-content .cr-walls{color:#e1d3be;font-size:clamp(14px,3vw,30px);letter-spacing:.2em;margin-top:-10px}
+#castle-content .cr-sky{position:absolute;top:8px;left:8px;color:#f7e7b8;letter-spacing:2em}
+#castle-content .cr-fort-extra{position:absolute;bottom:4%;left:3%;font-size:clamp(9px,2vw,14px);color:#f5dfc4}
+#castle-content .cr-extra2{right:3%;left:auto;bottom:12%}
+#castle-content .cr-extra3{left:10%;bottom:35%}
+#castle-content .cr-extra4{right:10%;left:auto;top:8%;bottom:auto}
+@media(max-width:600px){
+ #scr-castle{padding:10px}
+ #scr-castle>.inner{gap:8px}
+ #castle-content{gap:9px}
+ #castle-content .cr-target{gap:8px;padding:9px}
+ #castle-content .cr-button{padding:9px 10px;min-height:42px;font-size:clamp(12px,3.4vw,15px)}
+ #castle-content .cr-castle-scene{height:clamp(145px,44vw,245px);max-height:30dvh}
+}
+@media(max-height:480px) and (orientation:landscape){
+ #castle-content .cr-castle-scene{height:35vh;min-height:100px}
+ #castle-content .cr-tower{font-size:21vh}
+}

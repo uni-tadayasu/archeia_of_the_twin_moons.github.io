@@ -1,3 +1,4 @@
+import {initCastleRealm} from './castle-realm-v50.js?v=rf-castle-v50-20261111';
 import {initResponsiveV45} from './assets/rf-responsive-v45.js?v=rf-responsive-v45-20261110';
 import {installFujiwaraChief} from './fujiwara-chief-v39.js?v=rf-fujiwara-v42-tdzfix-20261110';
 import {installFujiwaraCombat} from './fujiwara-nobuyori.js?v=rf-fujiwara-v43-rainbow-totsuka-20261110';
@@ -4440,6 +4441,9 @@ const gaizorgAdventure = setupGaizorgAdventure({
   setFog:(rest)=>{ if(rest && scene.fog){scene.fog.near=36;scene.fog.far=90;} }
 });
 
+
+// RF50_CASTLE_INIT
+initCastleRealm({save,persist,FIGHTERS,canUse,show,goTitle,state,playerName:myName,syncCodeNow,roleToken:()=>roleState.tok,markSynced,syncVer,syncBefore:async()=>{if(localStorage.getItem('arkeia-sync-dirty')||getPends().length)await autoPush({forSpend:true,reload:false});if(localStorage.getItem('arkeia-sync-dirty')||getPends().length)throw Error('sync');}});
 // ---------- Loop ----------
 setupTouch();
 const timer = new THREE.Timer();

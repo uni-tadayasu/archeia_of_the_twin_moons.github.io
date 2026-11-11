@@ -1,0 +1,13 @@
+/* RF51 confirmation and launch selection - viewport-safe UI */
+.rf51-overlay{position:fixed;inset:0;z-index:2147483646;background:rgba(5,8,19,.86);display:grid;place-items:center;padding:max(12px,env(safe-area-inset-top)) max(12px,env(safe-area-inset-right)) max(12px,env(safe-area-inset-bottom)) max(12px,env(safe-area-inset-left));overflow-y:auto;overscroll-behavior:contain;-webkit-overflow-scrolling:touch}
+.rf51-panel{position:relative;width:min(100%,520px);max-height:min(94dvh,740px);min-width:0;overflow-y:auto;overscroll-behavior:contain;border-radius:14px;border:1px solid #baa074;background:linear-gradient(150deg,#312b4d,#15192c);color:#fff3db;box-shadow:0 18px 60px #000a;padding:clamp(14px,4vw,30px);font-family:inherit}
+.rf51-title{margin:0 32px 12px 0;font-size:clamp(20px,5vw,30px);font-weight:800;line-height:1.3;letter-spacing:.05em;white-space:normal;overflow-wrap:anywhere}
+.rf51-message{font-size:clamp(13px,3.5vw,16px);line-height:1.7;color:#e0d7e8;margin:0 0 19px;overflow-wrap:anywhere}
+.rf51-buttons{width:100%;min-width:0;display:grid;grid-template-columns:minmax(0,1fr);gap:9px}
+.rf51-option{border:1px solid #a08ca9;background:#382d55;color:#fff6dc;border-radius:8px;min-width:0;min-height:45px;padding:9px 14px;font:inherit;font-size:clamp(13px,3.5vw,16px);font-weight:800;line-height:1.45;text-align:center;white-space:normal;overflow-wrap:anywhere;cursor:pointer}
+.rf51-option.rf51-primary{background:#5d4b87;border-color:#dec58b}
+.rf51-option.rf51-danger{background:#6b3449;border-color:#e3a3a8}
+.rf51-option[disabled]{opacity:.42;cursor:default}
+.rf51-option:focus-visible,.rf51-close:focus-visible{outline:3px solid #bfe8ff;outline-offset:2px}
+.rf51-close{position:absolute;right:11px;top:10px;width:36px;height:36px;border:1px solid #7e7891;border-radius:6px;background:#211a38;color:#fff;font-size:23px;cursor:pointer}
+@media(max-height:450px) and (orientation:landscape){.rf51-panel{max-width:680px;padding:11px 18px}.rf51-title{font-size:19px;margin-bottom:6px}.rf51-message{margin-bottom:8px}.rf51-buttons{grid-template-columns:repeat(2,minmax(0,1fr));gap:6px}.rf51-option{min-height:35px;padding:6px 10px}}

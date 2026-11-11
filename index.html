@@ -355,7 +355,8 @@
 <link id="rf-responsive-v45" rel="stylesheet" href="./assets/rf-responsive-v45.css?v=rf-responsive-v45-20261110">
 <link id="rf46-responsive-css" rel="stylesheet" href="./assets/rf-responsive-v46.css?v=rf-responsive-v46-20261111">
 <link id="rf48-css" rel="stylesheet" href="./assets/rf-minamoto-ui-v48.css?v=20261111"><link id="rf49-css" rel="stylesheet" href="./assets/rf-responsive-v49.css?v=rf49-20261111">
-</head>
+<link rel="stylesheet" href="./castle-realm-v50.css?v=rf-castle-v50-20261111">
+<link rel="stylesheet" href="./rf-start-confirm-v51.css?v=rf51-20261111"></head>
   <body>
     <noscript>
       <h1>双月のアルケイア（Arkeia of Twin Moons）</h1>
@@ -463,7 +464,8 @@
           <section class="portal-section" id="portal-services">
             <div class="section-heading"><div><span>YOUR JOURNEY</span><h2>工房と旅支度</h2></div><p>戦士を育て、灯晶を使い、遊ぶ環境を整えましょう。</p></div>
             <div class="portal-services">
-              <button id="btn-forge" type="button"><span class="service-icon">⚒</span><b>鍛錬の工房</b><small>強化と限界突破</small></button>
+              <button type="button" id="btn-castle"><span class="service-icon">🏯</span><b>双月領国・拠点</b><small>築城・防衛・攻城戦</small></button>
+<button id="btn-forge" type="button"><span class="service-icon">⚒</span><b>鍛錬の工房</b><small>強化と限界突破</small></button>
               <button id="btn-shop" type="button"><span class="service-icon">✧</span><b>灯晶商店</b><small>装備・戦士の入手</small></button>
               <button id="btn-mailbox" type="button"><span class="service-icon">✉</span><b>受信箱 <span class="mail-badge" data-mail-badge></span></b><small>プレゼント・運営からのお知らせ</small></button>
               <button id="btn-chief-mail" type="button" hidden><span class="service-icon">✦</span><b>運営長の配信管理</b><small>一斉配信・指定配信・送信履歴</small></button>
@@ -645,10 +647,11 @@
           <button class="btn back" id="btn-quit">退いて分かれ道へ</button>
         </div>
       </div>
-    </main>
-    <script type="module" src="main.js?v=rf-minamoto-v48-20261111"></script>
+    <section id="scr-castle" class="screen" aria-label="双月領国"><div class="inner"><div class="topbar"><button type="button" class="back" id="castle-back">メニューへ戻る</button><span class="crumb">双月領国・城の管理</span></div><div id="castle-content"></div></div></section>
+</main>
+    <script type="module" src="main.js?v=rf-castle-v50-20261111"></script>
 <script defer src="./assets/rf-ui-safe-v34.js?v=rf-responsive-v45-20261110"></script>
 <script id="rf46-responsive-js" defer src="./assets/rf-responsive-v46.js?v=rf-responsive-v46-20261111"></script>
 <script id="rf49-js" defer src="./assets/rf-responsive-v49.js?v=rf49-20261111"></script>
-</body>
+<script defer src="./rf-start-confirm-v51.js?v=rf51-20261111"></script></body>
 </html>
