@@ -67,20 +67,34 @@ export function installCharacterLibrary({FIGHTERS,save,persist}){
   const counter=document.getElementById('select-counter');if(counter&&counter.textContent!==count+' / '+buttons.length+'件')counter.textContent=count+' / '+buttons.length+'件';
   const empty=document.getElementById('select-empty');if(empty)empty.hidden=count>0;
  }
+ // RF55_CASTLE_CHARACTER_SEARCH_20261111 — searchable full roster; original disabled permissions are retained.
  function castleSearch(){
   const area=document.getElementById('castle-content');if(!area)return;
   for(const s of area.querySelectorAll('select.cr-select')){
-    if(s.dataset.rf53Ready)continue;
-    const orig=[...s.options].map(o=>({value:o.value,label:o.textContent}));
-    if(!orig.length||orig.some(o=>!FIGHTERS[o.value]))continue;
-    s.dataset.rf53Ready='1';
-    const i=tag('input','rf53-search rf53-castle');i.type='search';i.placeholder='領主・出撃キャラの名前を検索';
-    s.before(i);
-    i.addEventListener('input',()=>{
-      const old=s.value,valid=orig.filter(o=>match(o.value,i.value));
-      s.replaceChildren(...valid.map(o=>{const item=tag('option','',textName(o.value));item.value=o.value;return item}));
-      if(valid.some(o=>o.value===old))s.value=old;
-    });
+   if(s.dataset.rf53Ready)continue;
+   const orig=[...s.options].map(o=>({value:o.value,label:o.textContent,disabled:o.disabled}));
+   if(!orig.length||orig.some(o=>!FIGHTERS[o.value]))continue;
+   s.dataset.rf53Ready='1';
+   const ui=tag('div','rf53-castle-search');
+   const input=tag('input','rf53-search rf53-castle');input.type='search';
+   input.placeholder='全キャラクターの名前・属性・ニックネームで検索';
+   input.setAttribute('aria-label','キャラクター検索');
+   input.autocomplete='off';
+   const count=tag('small','rf53-count');
+   ui.append(input,count);s.before(ui);
+   const repaint=()=>{
+    const old=s.value,selected=orig.filter(o=>match(o.value,input.value));
+    s.replaceChildren(...selected.map(o=>{
+     const e=tag('option','',o.label);e.value=o.value;e.disabled=o.disabled;return e;
+    }));
+    const preferred=selected.find(o=>o.value===old&&!o.disabled)||selected.find(o=>!o.disabled);
+    if(preferred)s.value=preferred.value;else s.selectedIndex=-1;
+    const usable=selected.filter(o=>!o.disabled).length;
+    count.textContent='検索 '+selected.length+'件／使用可能 '+usable+'件';
+    if(!selected.length)count.textContent+=' ― 一致するキャラクターがありません';
+   };
+   input.addEventListener('input',repaint);
+   repaint();
   }
  }
  function top(){

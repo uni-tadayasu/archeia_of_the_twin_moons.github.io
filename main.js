@@ -1,7 +1,9 @@
+// RF55_EVENT_BGM_20261111
+// RF55_CASTLE_MAIN_CACHE
 // RF54_FIX_20261111
-import {installCharacterLibrary} from './assets/rf-character-library-v53.js?v=rf53-cg-20261111';
+import {installCharacterLibrary} from './assets/rf-character-library-v53.js?v=rf55-20261111';
 // RF53_CHAR_LIBRARY_INSTALLED
-import {initCastleRealm} from './castle-realm-v50.js?v=rf54-20261111';
+import {initCastleRealm} from './castle-realm-v50.js?v=rf55-event-bgm-20261111';
 import {initResponsiveV45} from './assets/rf-responsive-v45.js?v=rf-responsive-v45-20261110';
 import {installFujiwaraChief} from './fujiwara-chief-v39.js?v=rf-fujiwara-v42-tdzfix-20261110';
 import {installFujiwaraCombat} from './fujiwara-nobuyori.js?v=rf-fujiwara-v43-rainbow-totsuka-20261110';
@@ -4445,7 +4447,7 @@ const gaizorgAdventure = setupGaizorgAdventure({
 
 
 // RF50_CASTLE_INIT
-initCastleRealm({save,persist,FIGHTERS,canUse,show,goTitle,state,playerName:myName,syncCodeNow,roleToken:()=>roleState.tok,markSynced,syncVer,syncBefore:async()=>{
+initCastleRealm({save,persist,FIGHTERS,canUse,show,goTitle,state,playerName:myName,syncCodeNow,setCastleMusic:(active)=>playTrack(active?'event':'title'),roleToken:()=>roleState.tok,roleKind:()=>roleState.r,markSynced,syncVer,syncBefore:async()=>{
   let tries=0;
   while(autoBusy||syncSpendBusy||syncImportBusy){if(++tries>250)throw Error('busy');await new Promise(resolve=>setTimeout(resolve,100))}
   syncSpendBusy=true;

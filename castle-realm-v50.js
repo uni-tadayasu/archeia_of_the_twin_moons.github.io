@@ -1,7 +1,8 @@
+// RF55_EVENT_BGM_20261111
 // RF54_FIX_20261111
 // Riftfall Castle Realm V50 - browser UI, all rules enforced by Cloudflare Worker.
 import {api,apiEnabled} from './api.js';
-export function initCastleRealm({save,persist,FIGHTERS,canUse,show,goTitle,state,playerName,syncCodeNow,roleToken,syncBefore,markSynced,syncVer}){
+export function initCastleRealm({save,persist,FIGHTERS,canUse,show,goTitle,state,playerName,syncCodeNow,setCastleMusic,roleToken,roleKind,syncBefore,markSynced,syncVer}){
 const ui=document.getElementById('castle-content'),enter=document.getElementById('btn-castle');
 if(!ui||!enter)return;
 const S={castle:null,list:[],raid:null,fighter:'',target:'',busy:false,pendingLoot:0,notice:''};
@@ -37,12 +38,40 @@ try{
 }finally{release?.()}
 }
 async function run(fn){if(S.busy)return;S.busy=true;render();try{await fn();}catch(e){S.notice=e?.message||String(e);}finally{S.busy=false;render();}}
-function roster(){return Object.entries(FIGHTERS).filter(([k,d])=>d&&!d.hidden&&!d.special&&canUse(k)).sort((a,b)=>a[1].name.localeCompare(b[1].name,'ja'))}
+// RF55_CASTLE_CHARACTER_SEARCH_20261111 — show every visible character in search, without granting locked assets.
+const RF55_CHIEF_ONLY=new Set(['valgard','gaizorg','valdarion','valgard2','maou','maou_shade','uninomiya_tadayasu','fujiwara_nobuyori','udaijin','kinosaki_sanmi','nepterion']);
+function rf55DisabledReason(key,d){
+ if(d.enemy)return '敵専用';
+ if(key==='maou_shade')return '敵専用';
+ if(RF55_CHIEF_ONLY.has(key)&&roleKind?.()!=='chief')return '運営長専用';
+ if(!canUse(key))return d.special?'権限が必要':(d.shop||d.shardPrice?'未購入':'未解放');
+ if(d.shop&&key!=='minamoto_yoritomo'&&!save.chars?.includes(key))return '購入記録が必要';
+ return '';
+}
+function roster(){
+ return Object.entries(FIGHTERS).filter(([k,d])=>d&&!d.hidden&&typeof d.name==='string')
+ .sort((a,b)=>{
+  const aLock=!!rf55DisabledReason(a[0],a[1]),bLock=!!rf55DisabledReason(b[0],b[1]);
+  return Number(aLock)-Number(bLock)||a[1].name.localeCompare(b[1].name,'ja');
+ });
+}
 function selectFighter(current){
-const select=node('select','cr-select');
-for(const [k,d] of roster()){const o=node('option','',d.name);o.value=k;select.append(o);}
-if(current&&[...select.options].some(x=>x.value===current))select.value=current;
-return select;
+ const select=node('select','cr-select');
+ select.setAttribute('aria-label','攻城戦で使用するキャラクター');
+ select.dataset.rf55Searchable='1';
+ const records=roster();
+ for(const [key,d] of records){
+  const reason=rf55DisabledReason(key,d);
+  const n=window.rf53Library?.displayName?.(key)||d.name;
+  const option=node('option','',n+(reason?'【'+reason+'】':''));
+  option.value=key;option.disabled=!!reason;option.dataset.rf55Reason=reason;
+  select.append(option);
+ }
+ const candidates=[...select.options].filter(o=>!o.disabled);
+ const selected=candidates.find(o=>o.value===current)||candidates[0];
+ if(selected)select.value=selected.value;
+ else select.selectedIndex=-1;
+ return select;
 }
 function stylePreview(style,level){
 const tier=Math.min(10,Math.floor(level/10));
@@ -85,7 +114,8 @@ if(!c){
  types.onchange=()=>{const preview=document.getElementById('castle-preview');preview?.replaceWith(stylePreview(types.value,1));document.querySelector('.cr-castle-scene').id='castle-preview'};
  const preview=stylePreview(types.value,1);preview.id='castle-preview';
  ui.append(preview,line('拠点の種類'),types,line('初代領主'),lord,
-   button('この拠点を建設する',()=>run(async()=>{const r=await request('create',{style:types.value,lord:lord.value});S.castle=r.castle;updateBalance(r.shards,r.ver,r.data);S.notice='拠点が完成しました。'}),'cr-accent'));
+   button('この拠点を建設する',()=>run(async()=>{if(![...lord.options].some(o=>o.value===lord.value&&!o.disabled))throw Error('使用できる領主を選択してください。');
+const r=await request('create',{style:types.value,lord:lord.value});S.castle=r.castle;updateBalance(r.shards,r.ver,r.data);S.notice='拠点が完成しました。'}),'cr-accent'));
 }else{
  const style=c.style==='wa'?'和風':'洋風',next=c.nextCost;
  ui.append(row(node('strong','','Lv'+c.level+'　'+style+'の拠点'),node('span','cr-small','防衛ダンジョン '+c.floors+'階層')));
@@ -96,7 +126,8 @@ if(!c){
  actionRow.append(button(c.level<100?'城をレベルアップ（'+fmt(next)+'灯晶）':'城 Lv100 到達',()=>run(async()=>{const r=await request('level');S.castle=r.castle;updateBalance(r.shards,r.ver,r.data);S.notice='城Lv'+r.castle.level+'に強化しました。'}),'cr-accent'));
  if(c.level>=100)actionRow.firstChild.disabled=true;
  actionRow.append(button('状態を更新',()=>run(refresh)));ui.append(actionRow);
- const lord=selectFighter(c.lord);ui.append(heading('領主キャラクター'),lord,button('領主を変更',()=>run(async()=>{const r=await request('lord',{lord:lord.value});S.castle=r.castle;S.notice='領主を変更しました。'})));
+ const lord=selectFighter(c.lord);ui.append(heading('領主キャラクター'),lord,button('領主を変更',()=>run(async()=>{if(![...lord.options].some(o=>o.value===lord.value&&!o.disabled))throw Error('使用できる領主を選択してください。');
+const r=await request('lord',{lord:lord.value});S.castle=r.castle;S.notice='領主を変更しました。'})));
 }
 ui.append(heading('攻城可能な拠点'),line('勝利すると防衛側の灯晶残高の10％を獲得できます。防衛側の領主を倒す必要があります。'));
 if(!S.list.length)ui.append(line('現在、攻城可能な拠点がありません。'));
@@ -113,8 +144,11 @@ ui.append(button('システムメールを開く',()=>{document.getElementById('
 function renderChooseRaid(c){
 ui.replaceChildren();ui.append(heading(c.name+' の城へ攻撃'),line('防衛ダンジョン：'+c.floors+'階層。最深部の領主を倒して勝利してください。'));
 const fighter=selectFighter(S.fighter||'rowen');const back=button('戻る',render);
+if(![...fighter.options].some(o=>!o.disabled))ui.append(line('攻城戦に出せるキャラクターがありません。購入状態と運営権限をご確認ください。'));
 ui.append(stylePreview(c.style,c.level),line('出撃するキャラクター'),fighter,
-button('ダンジョンへ出撃',()=>run(async()=>{S.fighter=fighter.value;const r=await request('raid/start',{targetPid:c.pid,fighter:fighter.value});S.raid=r.raid;S.notice='ダンジョンへの侵入を開始しました。'}),'cr-accent'),back);
+button('ダンジョンへ出撃',()=>run(async()=>{const chosen=[...fighter.options].find(o=>o.value===fighter.value&&!o.disabled);
+if(!chosen)throw Error('使用権限のあるキャラクターを選んでください。');
+S.fighter=chosen.value;const r=await request('raid/start',{targetPid:c.pid,fighter:chosen.value});S.raid=r.raid;setCastleMusic?.(true);S.notice='ダンジョンへの侵入を開始しました。'}),'cr-accent'),back);
 }
 function renderRaid(){
 const r=S.raid;if(!r)return;
@@ -126,7 +160,7 @@ ui.append(meter('あなたのHP',r.attackerHp,r.maxHp),meter('敵のHP',r.enemyH
 ui.append(node('div','cr-log',r.lastLog||''));
 if(r.status==='active'){
  const acts=row();for(const [name,id] of [['斬る','attack'],['強技','skill'],['防御','guard'],['回復','heal'],['奥義','over']]){
- const b=button(name,()=>run(async()=>{const t=await request('raid/act',{raidId:r.id,action:id});S.raid=t.raid;
+ const b=button(name,()=>run(async()=>{const t=await request('raid/act',{raidId:r.id,action:id});S.raid=t.raid;if(t.raid?.status!=='active')setCastleMusic?.(false);
  if(t.result){updateBalance(t.result.shards,t.result.ver,t.result.data);S.notice='勝利！ 灯晶 '+fmt(t.result.amount)+' を獲得しました。';}
  else if(t.settlementPending)S.notice='勝利しました。戦利品の確定を再試行してください。';
  }));b.disabled=S.busy;acts.append(b);
@@ -135,16 +169,17 @@ if(r.status==='active'){
  ui.append(heading('攻城戦勝利'));
  ui.append(button('戦利品を受け取る／再試行',()=>run(async()=>{const t=await request('raid/claim',{raidId:r.id});updateBalance(t.shards,t.ver,t.data);S.raid=null;await refresh();S.notice='灯晶 '+fmt(t.amount)+' を獲得しました。'}),'cr-accent'));
 }else ui.append(heading('攻城戦終了：'+(r.status==='lost'?'敗退':'時間切れ')));
-ui.append(button('拠点管理へ戻る',()=>run(async()=>{S.raid=null;await refresh();})));
+ui.append(button('拠点管理へ戻る',()=>run(async()=>{setCastleMusic?.(false);S.raid=null;await refresh();})));
 }
 async function refresh(){
  const me=await request('self');S.castle=me.castle;S.pendingLoot=me.pendingLoot||0;
  if(Number.isFinite(me.shards)){updateBalance(me.shards,me.ver,me.data);}
  const castles=await request('list');S.list=castles.castles||[];
  const current=await request('raid/current').catch(()=>null);
- if(current?.raid&&['active','won'].includes(current.raid.status))S.raid=current.raid;
+ S.raid=(current?.raid&&['active','won'].includes(current.raid.status))?current.raid:null;
+setCastleMusic?.(S.raid?.status==='active');
 }
 enter.addEventListener('click',()=>{if(state.battle){note('戦闘中は拠点を開けません');return;}show('scr-castle');run(refresh)});
-document.getElementById('castle-back')?.addEventListener('click',()=>goTitle());
+document.getElementById('castle-back')?.addEventListener('click',()=>{setCastleMusic?.(false);goTitle()});
 return {refresh,open:()=>enter.click()};
 }

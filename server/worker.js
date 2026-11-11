@@ -3056,7 +3056,9 @@ async function rf50Route(req,env,H,body,action){
   const row=await syncRow(env,me.h),sv=rf50Save(row),def=ownValue(FIGHTERS,key);
   if(!sv||!def||def.hidden||def.enemy)return null;
   const role=(await verify(env,body.token,'role'))?.r||null;
-  if((CHIEF_ONLY.has(key)||def.special==='chief')&&role!=='chief')return null;
+  // RF55_CASTLE_CHARACTER_SEARCH_20261111 — match normal select permissions without making chief-only assets public.
+  if(CHIEF_ONLY.has(key)&&role!=='chief')return null;
+  if(def.special==='chief'&&!role)return null;
   if((OP_EXCLUSIVE.has(key)||def.special==='operator')&&role!=='op')return null;
   if(OP_ONLY.has(key)&&!role)return null;
   if(key==='minamoto_yoritomo'){
