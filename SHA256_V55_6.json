@@ -1,0 +1,112 @@
+{
+  "version": "V55.6",
+  "type": "changed-files-only",
+  "source_repository": "uni-tadayasu/archeia_of_the_twin_moons.github.io",
+  "files": [
+    {
+      "path": "QA_V55_6.json",
+      "bytes": 2927,
+      "sha256": "f7bb3893d4642e68bce5d974a94ff78e25cff003fca83762ace734d4665eb2bf"
+    },
+    {
+      "path": "README_V55_6_JA.txt",
+      "bytes": 4914,
+      "sha256": "1d1723a187096f60bbc49a80c763d36199f7f58af03d92ea4eb2aea1d4b80a42"
+    },
+    {
+      "path": "assets/rf555/hero-cg.webp",
+      "bytes": 191144,
+      "sha256": "2cdc065d7113f1ecb6fec9bfa0a975c96ecff6476e9c3a60242fd4469be669b1"
+    },
+    {
+      "path": "assets/rf555/mode-castle.webp",
+      "bytes": 24044,
+      "sha256": "85d04cb32afc1517c52255062cf38680bc34a5100e9b66cee5af226cedfb9338"
+    },
+    {
+      "path": "assets/rf555/mode-coop.webp",
+      "bytes": 25202,
+      "sha256": "0a7d8a7ae5f8f0bf9340026d7dbeb98288be9533f6bb20c2050b9ab74ef4b626"
+    },
+    {
+      "path": "assets/rf555/mode-duel.webp",
+      "bytes": 30366,
+      "sha256": "d9943a68455bd840c743b05e5c47421ff57753dcca9e1039520c11219b11a221"
+    },
+    {
+      "path": "assets/rf555/mode-endless.webp",
+      "bytes": 22596,
+      "sha256": "4c5e491d12aeb6032d4873b071b5c8f0bada75d817a0f2e49f806e2f871a08aa"
+    },
+    {
+      "path": "assets/rf555/mode-event.webp",
+      "bytes": 23650,
+      "sha256": "b4d7b880073607c4ebb49fe0efe0754048f205d450d675fd1e312e3ec1f36d56"
+    },
+    {
+      "path": "assets/rf555/mode-story.webp",
+      "bytes": 53660,
+      "sha256": "04e2c2c67d6eebe282a0dc1d22f8d5aec80e97ecae03cc2024c7125892fed358"
+    },
+    {
+      "path": "assets/rf555/world-frost.webp",
+      "bytes": 115858,
+      "sha256": "bea21d192bf9084607d04ea65c0c9b5afdd306efe2fb46fdf73df8cb14ad4937"
+    },
+    {
+      "path": "assets/rf555/world-grove.webp",
+      "bytes": 107672,
+      "sha256": "af1ba522bba65ce2d5c21b24cf81227c39a9d410a4f7894cef3e4d3c6039160a"
+    },
+    {
+      "path": "assets/rf555/world-sky.webp",
+      "bytes": 120814,
+      "sha256": "bc01ddc395f71fcf4916d27f628958f97f82676d1b7cc6c3189606f21201fc55"
+    },
+    {
+      "path": "assets/rf555-modern-ui.css",
+      "bytes": 20875,
+      "sha256": "241164eedf76a6dc70be09642b7d4299dfb58eced52c70ae0acb11edca760cd6"
+    },
+    {
+      "path": "assets/rf555-modern-ui.js",
+      "bytes": 4668,
+      "sha256": "60e4c5b742566c606b942bfb519f724f2c35ddb6492c6eedf56eb9b97ccf80b4"
+    },
+    {
+      "path": "assets/rf556/terrain-normal.webp",
+      "bytes": 546,
+      "sha256": "d99b453d3f49a96042c2fcf12c5ebf6dd277a4bdd90ee3618b7a19706e0463ee"
+    },
+    {
+      "path": "assets/rf556-cg-engine.js",
+      "bytes": 14664,
+      "sha256": "726ea8ce0d34fe8ed9db9b1a0404d4f9d86cec5dd9eb6a1e77701c3aa48f92e8"
+    },
+    {
+      "path": "assets/rf556-model-portraits.js",
+      "bytes": 8418,
+      "sha256": "7f0327194af696def44f8832d7ba871eb96f57ce2713f4738c0b1df1644c62ef"
+    },
+    {
+      "path": "assets/rf556-nextgen.css",
+      "bytes": 26072,
+      "sha256": "a7bc25a47751533ca911ddd6a8f7ea1fedfd982d0beff7dfbb437e7f357ba735"
+    },
+    {
+      "path": "assets/rf556-nextgen.js",
+      "bytes": 6581,
+      "sha256": "244667cf6993a9e699477208262ac2a5d54a89ef713158b7eb3d691e47ec34f5"
+    },
+    {
+      "path": "exact-model-portraits.js",
+      "bytes": 692,
+      "sha256": "58ff5a003ae7e45443c1602b4403fa81d59a4db2a225a334fe1653bfbca66a95"
+    },
+    {
+      "path": "index.html",
+      "bytes": 66411,
+      "sha256": "a6529d1b13c3b9e263b34a704e6658a62ad0f5b5c84fa6e57c299011825cceb9"
+    }
+  ]
+}

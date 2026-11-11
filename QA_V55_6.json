@@ -1,0 +1,145 @@
+{
+  "version": "V55.6",
+  "layout_viewports": [
+    {
+      "device": "desktop",
+      "data": {
+        "width": 1440,
+        "scrollWidth": 1440,
+        "modeCount": 8,
+        "svgMode": 8,
+        "quality": "quality",
+        "hasClass": true,
+        "outOfBounds": [],
+        "hero": {
+          "x": 310,
+          "y": 191,
+          "w": 710,
+          "h": 468
+        },
+        "firstMode": {
+          "x": 68,
+          "y": 1250,
+          "w": 311,
+          "h": 213
+        },
+        "qualitySetting": true,
+        "errors": []
+      }
+    },
+    {
+      "device": "mobile",
+      "data": {
+        "width": 390,
+        "scrollWidth": 390,
+        "modeCount": 8,
+        "svgMode": 8,
+        "quality": "quality",
+        "hasClass": true,
+        "outOfBounds": [],
+        "hero": {
+          "x": 22,
+          "y": 164,
+          "w": 346,
+          "h": 339
+        },
+        "firstMode": {
+          "x": 21,
+          "y": 1442,
+          "w": 168,
+          "h": 156
+        },
+        "qualitySetting": true,
+        "errors": []
+      }
+    },
+    {
+      "device": "small",
+      "data": {
+        "width": 320,
+        "scrollWidth": 320,
+        "modeCount": 8,
+        "svgMode": 8,
+        "quality": "quality",
+        "hasClass": true,
+        "outOfBounds": [],
+        "hero": {
+          "x": 22,
+          "y": 164,
+          "w": 276,
+          "h": 373
+        },
+        "firstMode": {
+          "x": 21,
+          "y": 1459,
+          "w": 133,
+          "h": 156
+        },
+        "qualitySetting": true,
+        "errors": []
+      }
+    },
+    {
+      "device": "landscape",
+      "data": {
+        "width": 844,
+        "scrollWidth": 844,
+        "modeCount": 8,
+        "svgMode": 8,
+        "quality": "quality",
+        "hasClass": true,
+        "outOfBounds": [],
+        "hero": {
+          "x": 132,
+          "y": 122,
+          "w": 580,
+          "h": 315
+        },
+        "firstMode": {
+          "x": 45,
+          "y": 1040,
+          "w": 243,
+          "h": 145
+        },
+        "qualitySetting": true,
+        "errors": []
+      }
+    },
+    {
+      "device": "tablet",
+      "data": {
+        "width": 768,
+        "scrollWidth": 768,
+        "modeCount": 8,
+        "svgMode": 8,
+        "quality": "quality",
+        "hasClass": true,
+        "outOfBounds": [],
+        "hero": {
+          "x": 76,
+          "y": 151,
+          "w": 615,
+          "h": 365
+        },
+        "firstMode": {
+          "x": 41,
+          "y": 1153,
+          "w": 221,
+          "h": 174
+        },
+        "qualitySetting": true,
+        "errors": []
+      }
+    }
+  ],
+  "screen_checks": {
+    "count": 28,
+    "passed": 28,
+    "failures": 0
+  },
+  "module_syntax": "checked with node --check",
+  "css_syntax": "checked with tinycss2",
+  "full_game_webgl_test": "not performed",
+  "cloud_deployment": "not performed",
+  "device_hardware_test": "not performed"
+}
