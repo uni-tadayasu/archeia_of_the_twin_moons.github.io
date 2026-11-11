@@ -1,3 +1,4 @@
+// RF553_CASTLE_NAME_BULK_MOBILE_20261111
 // RF55_EVENT_BGM_20261111
 // RF54_FIX_20261111
 // Riftfall Castle Realm V50 - browser UI, all rules enforced by Cloudflare Worker.
@@ -7,6 +8,24 @@ const ui=document.getElementById('castle-content'),enter=document.getElementById
 if(!ui||!enter)return;
 const S={castle:null,list:[],raid:null,fighter:'',target:'',busy:false,pendingLoot:0,notice:''};
 const fmt=n=>Number(n||0).toLocaleString('ja-JP');
+// RF553_CASTLE_NAME_BULK_MOBILE_20261111 — preview only; the Worker alone checks the real cost and wallet.
+const RF553_COST=lv=>500+350*lv;
+function rf553ValidCastleName(v){
+ const s=String(v??'').trim().replace(/\s+/g,' ');
+ return Array.from(s).length>=1&&Array.from(s).length<=20&&/^[\p{L}\p{N}々ー・＿_\- ]+$/u.test(s);
+}
+function rf553BulkEstimate(lv,balance,val){
+ const quantity=val==='max'?100-lv:Number(val);
+ let count=0,cost=0;
+ if(!Number.isInteger(quantity)||quantity<1||quantity>100)return {count:0,cost:0};
+ if(lv+quantity>100)return {count:0,cost:0,limit:true};
+ for(let i=lv;i<lv+quantity;i++){
+  const step=RF553_COST(i);
+  if(cost+step>balance){if(val!=='max')return {count:0,cost:0,short:true};break;}
+  cost+=step;count++;
+ }
+ return {count,cost};
+}
 const node=(tag,cls,text)=>{const e=document.createElement(tag);if(cls)e.className=cls;if(text!==undefined)e.textContent=text;return e;};
 const row=(...children)=>{const e=node('div','cr-row');children.forEach(c=>e.append(c));return e};
 const line=(t)=>node('p','cr-note',t);
@@ -21,7 +40,7 @@ return b;}
 function heading(text){return node('h3','cr-title',text);}
 function note(text){S.notice=text;const n=document.getElementById('castle-notice');if(n)n.textContent=text;}
 function allowEdit(){return !S.busy}
-const errorMap={sync:'未同期のセーブデータがあるため処理を停止しました。旅支度から同期後、もう一度お試しください。',castle_not_ready:'サーバーの拠点機能が利用できません。Cloudflare Workerの再デプロイとDurable Objectsの設定を確認してください。',already_exists:'拠点はすでに建設されています。再読込してください。',no_castle:'まだ拠点がありません。',not_found:'対象の拠点または攻城戦が見つかりません。',nosync:'旅支度から同期コードを設定し、セーブを同期してください。',shield:'この城は現在、襲撃保護中です。',new_castle:'新しい城は一定時間保護されています。',cooldown:'この城へは24時間以内に再襲撃できません。',under_attack:'ほかのプレイヤーが攻略中です。',already_active:'先に進行中のダンジョンを終えてください。',shards:'灯晶が不足しています。',fighter_locked:'選択した領主・戦士は使用できません。',level_max:'城は最大レベルです。',too_fast:'攻撃間隔を空けてください。',not_ready:'奥義ゲージが不足しています。',mail_retry:'報酬処理中です。「受け取りを再試行」を押してください。'};
+const errorMap={sync:'未同期のセーブデータがあるため処理を停止しました。旅支度から同期後、もう一度お試しください。',castle_not_ready:'サーバーの拠点機能が利用できません。Cloudflare Workerの再デプロイとDurable Objectsの設定を確認してください。',already_exists:'拠点はすでに建設されています。再読込してください。',no_castle:'まだ拠点がありません。',not_found:'対象の拠点または攻城戦が見つかりません。',nosync:'旅支度から同期コードを設定し、セーブを同期してください。',shield:'この城は現在、襲撃保護中です。',new_castle:'新しい城は一定時間保護されています。',cooldown:'この城へは24時間以内に再襲撃できません。',under_attack:'ほかのプレイヤーが攻略中です。',already_active:'先に進行中のダンジョンを終えてください。',shards:'灯晶が不足しています。',fighter_locked:'選択した領主・戦士は使用できません。',level_max:'城は最大レベルです。',invalid_castle_name:'拠点名は1〜20文字の文字・数字・空白・中点・長音・ハイフンで入力してください。',invalid_count:'一括強化のレベル数が正しくありません。',too_fast:'攻撃間隔を空けてください。',not_ready:'奥義ゲージが不足しています。',mail_retry:'報酬処理中です。「受け取りを再試行」を押してください。'};
 async function request(name,body={}){
 if(!apiEnabled())throw Error('拠点機能にはCloudflare Workersとの通信が必要です。');
 const code=syncCodeNow();
@@ -111,21 +130,59 @@ if(!c){
  ui.append(heading('拠点を建設する'),line('和風か洋風を選び、使えるキャラクターを領主に任命します。'));
  const types=node('select','cr-select');for(const [id,name] of [['wa','和風・城下町'],['west','洋風・城塞都市']]){const opt=node('option','',name);opt.value=id;types.append(opt)}
  const lord=selectFighter(S.fighter);if(!S.fighter&&lord.options.length)S.fighter=lord.value;
+ const castleName=node('input','cr-select');castleName.type='text';castleName.maxLength=20;castleName.autocomplete='off';
+ castleName.placeholder='例：双月の本丸';castleName.value=(String(playerName?.()||'旅人').slice(0,12)+'の城').slice(0,20);
+ castleName.setAttribute('aria-label','新しい拠点名');
  types.onchange=()=>{const preview=document.getElementById('castle-preview');preview?.replaceWith(stylePreview(types.value,1));document.querySelector('.cr-castle-scene').id='castle-preview'};
  const preview=stylePreview(types.value,1);preview.id='castle-preview';
- ui.append(preview,line('拠点の種類'),types,line('初代領主'),lord,
+ ui.append(preview,line('拠点名（最大20文字）'),castleName,line('拠点の種類'),types,line('初代領主'),lord,
    button('この拠点を建設する',()=>run(async()=>{if(![...lord.options].some(o=>o.value===lord.value&&!o.disabled))throw Error('使用できる領主を選択してください。');
-const r=await request('create',{style:types.value,lord:lord.value});S.castle=r.castle;updateBalance(r.shards,r.ver,r.data);S.notice='拠点が完成しました。'}),'cr-accent'));
+const name=castleName.value.trim().replace(/\s+/g,' ');
+if(!rf553ValidCastleName(name))throw Error(errorMap.invalid_castle_name);
+const r=await request('create',{style:types.value,lord:lord.value,castleName:name});S.castle=r.castle;updateBalance(r.shards,r.ver,r.data);S.notice='拠点が完成しました。'}),'cr-accent'));
 }else{
  const style=c.style==='wa'?'和風':'洋風',next=c.nextCost;
- ui.append(row(node('strong','','Lv'+c.level+'　'+style+'の拠点'),node('span','cr-small','防衛ダンジョン '+c.floors+'階層')));
+ ui.append(row(node('strong','',(c.name||playerName?.()||'双月の拠点')+'　Lv'+c.level+'　'+style),node('span','cr-small','防衛ダンジョン '+c.floors+'階層')));
  ui.append(stylePreview(c.style,c.level),line('城は10レベルごとに外観が豪華になり、ダンジョンが1階層増えます。'));
  const lordName=FIGHTERS[c.lord]?.name||c.lord;ui.append(line('領主：'+lordName+'　／　所持灯晶：'+fmt(save.shards)));
+ const nameInput=node('input','cr-select');nameInput.type='text';nameInput.autocomplete='off';nameInput.maxLength=20;
+ nameInput.value=c.name||String(playerName?.()||'旅人');nameInput.placeholder='拠点の新しい名前';
+ nameInput.setAttribute('aria-label','拠点名を入力');
+ ui.append(heading('拠点名を設定・変更'),line('攻城戦の拠点一覧に表示される名前です。'),nameInput,
+ button('拠点名を変更',()=>run(async()=>{
+  const desired=nameInput.value.trim().replace(/\s+/g,' ');
+  if(!rf553ValidCastleName(desired))throw Error(errorMap.invalid_castle_name);
+  const r=await request('name',{castleName:desired});S.castle=r.castle;
+  S.notice='拠点名を「'+r.castle.name+'」に変更しました。';
+ })));
+
  if(c.shieldUntil>Date.now())ui.append(line('保護期間：'+new Date(c.shieldUntil).toLocaleString('ja-JP')+'まで'));
  const actionRow=row();
  actionRow.append(button(c.level<100?'城をレベルアップ（'+fmt(next)+'灯晶）':'城 Lv100 到達',()=>run(async()=>{const r=await request('level');S.castle=r.castle;updateBalance(r.shards,r.ver,r.data);S.notice='城Lv'+r.castle.level+'に強化しました。'}),'cr-accent'));
  if(c.level>=100)actionRow.firstChild.disabled=true;
  actionRow.append(button('状態を更新',()=>run(refresh)));ui.append(actionRow);
+ const bulkSelect=node('select','cr-select');bulkSelect.setAttribute('aria-label','一括で強化するレベル数');
+ for(const [value,label] of [['5','5レベル'],['10','10レベル'],['20','20レベル'],['50','50レベル'],['max','所持灯晶で可能な最大数']]){
+  const option=node('option','',label);option.value=value;bulkSelect.append(option);
+ }
+ const bulkPreview=line('');
+ const bulkAction=button('まとめてレベルアップ',()=>run(async()=>{
+  const value=bulkSelect.value;
+  const r=await request('level-bulk',value==='max'?{maxAffordable:true}:{count:Number(value)});
+  S.castle=r.castle;updateBalance(r.shards,r.ver,r.data);
+  S.notice='Lv'+c.level+' → Lv'+r.castle.level+'（'+r.applied+'レベル）、灯晶 '+fmt(r.cost)+' を消費しました。';
+ }),'cr-accent');
+ const previewBulk=()=>{
+  const p=rf553BulkEstimate(c.level,Number(save.shards)||0,bulkSelect.value);
+  const ok=c.level<100&&p.count>0;
+  bulkPreview.textContent=ok?('Lv'+c.level+' → Lv'+(c.level+p.count)+'　／　消費見込み '+fmt(p.cost)+' 灯晶'):
+   (c.level>=100?'最大Lv100です。':p.limit?'Lv100の上限を超えます。':'灯晶が不足しています。');
+  bulkAction.disabled=!ok||S.busy;
+ };
+ bulkSelect.addEventListener('change',previewBulk);
+ ui.append(heading('拠点レベルの一括強化'),line('サーバーで合計費用を計算します。指定段階に不足する場合は引き落としません。'),bulkSelect,bulkPreview,bulkAction);
+ previewBulk();
+
  const lord=selectFighter(c.lord);ui.append(heading('領主キャラクター'),lord,button('領主を変更',()=>run(async()=>{if(![...lord.options].some(o=>o.value===lord.value&&!o.disabled))throw Error('使用できる領主を選択してください。');
 const r=await request('lord',{lord:lord.value});S.castle=r.castle;S.notice='領主を変更しました。'})));
 }

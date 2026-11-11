@@ -1504,6 +1504,17 @@ export class Battle {
   }
 
   add(key, o) {
+    // RF553_CHIEF_GLOBAL_CPU_20261111 — all CPU fighters (including allies, bosses, events and endless floors).
+    // Remote human-controlled fighters are untouched; 100% is exactly the old balance.
+    if(o&&o.cpu&&!o.player&&!o.remote){
+      const percent=typeof window!=='undefined'?Number(window.rf553CpuPercent?.()):100;
+      const ratio=(Number.isFinite(percent)&&percent>=1&&percent<=100?percent:100)/100;
+      const ai=0.08+0.92*ratio;
+      const hp=0.22+0.78*ratio;
+      const atk=0.12+0.88*ratio;
+      o={...o,cpu:Math.max(0.02,Math.min(1,Number(o.cpu)*ai)),
+        hpMul:(Number(o.hpMul)||1)*hp,atkMul:(Number(o.atkMul)||1)*atk};
+    }
     const f = new Fighter(this, key, o);
     this.fighters.push(f);
     return f;

@@ -4,7 +4,7 @@
 // RF54_FIX_20261111
 import {installCharacterLibrary} from './assets/rf-character-library-v53.js?v=rf55-20261111';
 // RF53_CHAR_LIBRARY_INSTALLED
-import {initCastleRealm} from './castle-realm-v50.js?v=rf55-event-bgm-20261111';
+import {initCastleRealm} from './castle-realm-v50.js?v=rf553-castle-20261111';
 import {initResponsiveV45} from './assets/rf-responsive-v45.js?v=rf-responsive-v45-20261110';
 import {installFujiwaraChief} from './fujiwara-chief-v39.js?v=rf-fujiwara-v42-tdzfix-20261110';
 import {installFujiwaraCombat} from './fujiwara-nobuyori.js?v=rf-fujiwara-v43-rainbow-totsuka-20261110';
@@ -22,7 +22,7 @@ import {installUdaijinCombat} from './udaijin-curse.js?v=rf-fujiwara-noble-motio
 // RF_BATCH_SCALE_STARTUP_V92
 // RF_BATTLE_FIX_V9_1_20261109
 import { installMaouCombat } from './maou-abilities.js?v=rf-v9-2-20261109';
-import { Fighter as MaouFighter } from './game.js?v=rf-minamoto-v48-20261111';
+import { Fighter as MaouFighter } from './game.js?v=rf553-chief-cpu-20261111';
 import './boss-abilities.js?v=rf-v9-2-20261109';
 import './exact-model-portraits.js?v=rf-v9-2-20261109';
 // RF_GRAND_FOUR_20261108 main.js
@@ -32,7 +32,7 @@ import { installOperatorCombatFx } from './operator-combat-fx.js?v=20261108-gran
 import { renderExactPortrait } from './glb-portrait.js?v=rf-mobile-v7-20261109';
 // RF_OPERATOR_GIGANTES_MAIN_20261108
 import { loadModel } from './model-runtime.js?v=rf-minamoto-v48-20261111';
-import { Battle, ARENA_R } from './game.js?v=rf-minamoto-v48-20261111';
+import { Battle, ARENA_R } from './game.js?v=rf553-chief-cpu-20261111';
 import { installNepterionCombat } from './nepterion-water.js?v=rf-v18-20261109';
 import { installActorMotion } from './character-motion.js?v=rf-v18-20261109';
 import { installNepterionFixedSeven } from './nepterion-fixed-seven.js?v=rf-v18-20261109';
@@ -42,7 +42,7 @@ import { initSocial, uiConfirm } from './social.js?v=rf54-20261111';
 import { initMailbox } from './mailbox.js?v=audio-cast-20261107d';
 import { OPERATOR_KEY_SHA256, CHIEF_KEY_SHA256, MAX_KEY_ATTEMPTS, LOCKOUT_MS, SHOP_ITEMS } from './config.js';
 import { connect, issueInvite, redeemInvite, syncPush, syncPullV } from './net.js?v=rf-v552-coop-20261111';
-import { createEventCoopV552 } from './rf-event-coop-v552.js?v=20261111-1';
+import { createEventCoopV552 } from './rf-event-coop-v552.js?v=rf553-chief-cpu-20261111';
 import { createInfiniteDungeonV552 } from './rf-infinite-dungeon-v552.js?v=20261111-1';
 import { apiEnabled, api, verifyToken } from './api.js';
 
@@ -1644,15 +1644,59 @@ function peerKeyOf(id, fk) {
 function peerOpts(peerId, key) {
   return peerVerified(peerId, key) ? { upg: profOk[peerId].d.u, verified: true } : {};
 }
-// CPUの強さ：敵の頭の良さ(cpu)と体力を倍率で変える
-const DIFFS = [
-  { n: 'イージー', c: 0.55, h: 0.7 },
-  { n: 'ノーマル', c: 1, h: 1 },
-  { n: 'ハード', c: 1.25, h: 1.3 },
-  { n: 'ベリーハード', c: 1.6, h: 1.7 }
-];
-const foeCpu = (base) => Math.max(0.15, Math.min(1, base * DIFFS[save.diff].c));
-const foeHp = (m) => (m || 1) * DIFFS[save.diff].h;
+// RF553_CHIEF_GLOBAL_CPU_20261111 — chief can change the global CPU level. A signed Worker role is required.
+// 100% preserves original combat balance. No local preference can overwrite server settings.
+const cpuServer={value:100,updatedAt:0,busy:false};
+window.rf553CpuPercent=()=>cpuServer.value;
+const foeCpu=base=>Math.max(0.02,Math.min(1,Number(base)||0));
+const foeHp=m=>(m||1);
+function rf553CpuRefreshUI(){
+ const label=document.getElementById('opt-diff');
+ if(label){label.textContent='全モードCPUの強さ：'+cpuServer.value+'％（運営長が設定）';label.disabled=true;}
+ const panel=document.getElementById('rf553-cpu-chief-panel');
+ const chief=chiefUnlocked()&&apiEnabled()&&!!roleState.tok;
+ if(panel)panel.hidden=!chief;
+ const slider=document.getElementById('rf553-cpu-strength');
+ if(slider&&slider!==document.activeElement)slider.value=String(cpuServer.value);
+ const value=document.getElementById('rf553-cpu-strength-value');
+ if(value)value.textContent=(slider?.value||cpuServer.value)+'％';
+ const submit=document.getElementById('rf553-cpu-submit');
+ if(submit)submit.disabled=!chief||cpuServer.busy;
+ const note=document.getElementById('rf553-cpu-note');
+ if(note&&!chief)note.textContent='運営長としてサーバー認証されると変更できます。';
+}
+async function rf553CpuFetch(){
+ if(!apiEnabled()){rf553CpuRefreshUI();return;}
+ try{
+  const result=await api('/settings/cpu',{action:'get'});
+  if(!result?.ok||!Number.isSafeInteger(result.percent)||result.percent<1||result.percent>100)throw Error('設定を取得できません');
+  cpuServer.value=result.percent;cpuServer.updatedAt=result.updatedAt||0;
+  rf553CpuRefreshUI();
+ }catch(err){console.warn('[CPU設定] サーバー設定取得失敗。初期値または前回値を使用:',err);}
+}
+const rf553CpuSlider=document.getElementById('rf553-cpu-strength');
+rf553CpuSlider?.addEventListener('input',()=>{
+ const label=document.getElementById('rf553-cpu-strength-value');
+ if(label)label.textContent=rf553CpuSlider.value+'％';
+});
+document.getElementById('rf553-cpu-submit')?.addEventListener('click',async()=>{
+ if(!apiEnabled()||!chiefUnlocked()||!roleState.tok||cpuServer.busy)return;
+ const v=Number(rf553CpuSlider?.value);
+ if(!Number.isSafeInteger(v)||v<1||v>100)return;
+ cpuServer.busy=true;rf553CpuRefreshUI();
+ const note=document.getElementById('rf553-cpu-note');
+ if(note)note.textContent='全プレイヤー向けの設定を更新しています…';
+ try{
+  const result=await api('/settings/cpu',{action:'set',percent:v,token:roleState.tok});
+  if(!result?.ok||result.percent!==v)throw Error(result?.error||'保存できませんでした');
+  cpuServer.value=result.percent;cpuServer.updatedAt=result.updatedAt||0;
+  if(note)note.textContent='保存しました。次のCPU戦から反映されます。';
+ }catch(error){if(note)note.textContent='更新できませんでした：'+(error?.message||String(error));}
+ finally{cpuServer.busy=false;rf553CpuRefreshUI();}
+});
+void rf553CpuFetch();
+setInterval(()=>{if(!document.hidden&&!cpuServer.busy)void rf553CpuFetch();},60000);
+document.addEventListener('visibilitychange',()=>{if(!document.hidden)void rf553CpuFetch();});
 // その戦士を使えるか（運営専用・ショップ解放）
 function canUse(k) {
   if (k === 'minamoto_yoritomo') return save.gemChars.includes(k);
@@ -3790,7 +3834,7 @@ function refreshOptions() {
   if (sc.length === 12 && !$('#sync-code').value) $('#sync-code').value = sc.match(/.{4}/g).join('-');
   if (sc.length === 12 && !$('#sync-msg').textContent) $('#sync-msg').textContent = `この端末の同期コード：${sc.match(/.{4}/g).join('-')}（自動で同期中）`;
   $('#opt-mute').textContent = audio.muted ? '音：黙らせる' : '音：鳴らす';
-  $('#opt-diff').textContent = `CPUの強さ：${DIFFS[save.diff].n}`;
+  rf553CpuRefreshUI();
   $('#op-state').textContent = chiefUnlocked()
     ? '運営長として認められています — 全運営キャラ・ヴァルガルド・ガイゾルグを選べます'
     : operatorUnlocked() ? '運営として認められています — ルミナリア・ヴェスペラ・ザルグレイヴなどを選べます（ヴァルガルドを除く）' : '運営の鍵・運営長の鍵・招待された運営キー（OP-…）を入力';
@@ -3904,18 +3948,14 @@ $('#btn-options').addEventListener('click', () => {
   sfx('ui');
   $('#op-msg').textContent = '';
   refreshOptions();
+  void rf553CpuFetch();
   show('scr-options');
 });
 $('#opt-mute').addEventListener('click', () => {
   setMuted(!audio.muted);
   refreshOptions();
 });
-$('#opt-diff').addEventListener('click', () => {
-  sfx('ui');
-  save.diff = (save.diff + 1) % DIFFS.length;
-  persist();
-  refreshOptions();
-});
+// CPU難易度は運営長のみ変更可能。サーバー側で署名済み役職を検証します。
 
 // ---------- Shop ----------
 // サーバー設定時：購入キャラはサーバー署名の購入記録とだけ一致させる（端末内の改変は消える）

@@ -163,7 +163,9 @@ export function createEventCoopV552(c) {
       lastHostId=hostId;
       for(const f of b.fighters.filter(f=>f.netId?.startsWith('evt'))){
         const local=hostId===myId();f.remoteAuth=!local;
-        f.cpu=local?{level:foeCpu(.75),t:0,strafe:0,wantGuard:false}:null;
+        // RF553_CHIEF_GLOBAL_CPU_20261111 — also apply global CPU AI level when host migration happens.
+        const cp=Math.min(100,Math.max(1,Number(window.rf553CpuPercent?.()??100)));
+        f.cpu=local?{level:Math.max(.02,foeCpu(.75)*(.08+.92*cp/100)),t:0,strafe:0,wantGuard:false}:null;
       }
       if(hostId)ui.banner({name:'— 協力戦の管理者を引き継ぎました —'},'戦闘続行');
     }
