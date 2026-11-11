@@ -1,3 +1,4 @@
+// RF53_SMOOTH_EFFECTS — smoother shading without changing model assets.
 // RF_ULTRA_V12_GAME
 // RF_BATCH_SCALE_STARTUP_V92
 // RF_GRAND_FOUR_20261108 game.js
@@ -421,7 +422,7 @@ const GEO = {
 function glow(color, opacity = 0.85) {
   const op = opacity >= 0.6 ? Math.min(1, opacity + 0.15) : opacity;
   const m = new THREE.MeshStandardMaterial({
-    color, emissive: color, emissiveIntensity: 0.1, roughness: 0.55, metalness: 0.1, flatShading: true,
+    color, emissive: color, emissiveIntensity: 0.1, roughness: 0.55, metalness: 0.1, flatShading: false,
     transparent: true, opacity: op, depthWrite: op >= 0.9, side: THREE.DoubleSide
   });
   m.userData.base = op;

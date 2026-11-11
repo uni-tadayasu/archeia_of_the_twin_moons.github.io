@@ -1,3 +1,5 @@
+import {installCharacterLibrary} from './assets/rf-character-library-v53.js?v=rf53-cg-20261111';
+// RF53_CHAR_LIBRARY_INSTALLED
 import {initCastleRealm} from './castle-realm-v50.js?v=rf-castle-v50-20261111';
 import {initResponsiveV45} from './assets/rf-responsive-v45.js?v=rf-responsive-v45-20261110';
 import {installFujiwaraChief} from './fujiwara-chief-v39.js?v=rf-fujiwara-v42-tdzfix-20261110';
@@ -53,7 +55,11 @@ const rf45UI=initResponsiveV45({isTouch});
 
 // ---------- Renderer / scene ----------
 const container = $('#game-container');
-const renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: 'high-performance' });
+const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, powerPreference: 'high-performance' });
+renderer.setClearColor(0x000000,0);
+renderer.outputColorSpace=THREE.SRGBColorSpace;
+renderer.toneMapping=THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure=1.08;
 renderer.setPixelRatio(rf45UI.pixelRatio());
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.shadowMap.enabled = false;
@@ -61,7 +67,7 @@ renderer.shadowMap.type = THREE.PCFShadowMap;
 container.appendChild(renderer.domElement);
 
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x1b1d3a);
+scene.background = null;
 scene.fog = new THREE.Fog(0x2a2850, 30, 80);
 const camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.1, 300);
 camera.position.set(0, 9, 14);
@@ -104,7 +110,7 @@ function setSky(url) {
   wantSky = url;
   const apply = (tex) => {
     if (wantSky === url) {
-      scene.background = tex;
+      scene.background = null;
       scene.environment = tex;
     }
   };
@@ -147,37 +153,23 @@ function setStage(st) {
     });
   }
   arena = new THREE.Group();
+  // RF53: CG-illustrated stage backdrop.
   crystals = [];
   const outer = (ARENA_R + 1.6) / Math.cos(Math.PI / st.seg);
-  const floor = new THREE.Mesh(new THREE.CircleGeometry(outer, st.seg), new THREE.MeshStandardMaterial({ map: floorTex, color: st.floor, roughness: 0.9 }));
+  const floor = new THREE.Mesh(new THREE.CircleGeometry(outer, Math.max(96,st.seg)), new THREE.MeshStandardMaterial({ map: floorTex, color: st.floor, roughness: 0.9 }));
   floor.rotation.x = -Math.PI / 2;
   floor.receiveShadow = true;
   arena.add(floor);
-  const rim = new THREE.Mesh(new THREE.TorusGeometry(outer, 0.16, 6, st.seg), new THREE.MeshStandardMaterial({ color: st.rim, metalness: 0.7, roughness: 0.3, emissive: st.crystal, emissiveIntensity: 0.25 }));
+  const rim = new THREE.Mesh(new THREE.TorusGeometry(outer,0.16,12,Math.max(96,st.seg)), new THREE.MeshStandardMaterial({ color: st.rim, metalness: 0.7, roughness: 0.3, emissive: st.crystal, emissiveIntensity: 0.25 }));
   rim.rotation.x = Math.PI / 2;
   rim.position.y = 0.06;
   arena.add(rim);
-  const stone = new THREE.MeshStandardMaterial({ color: st.pillar, roughness: 0.85 });
-  const cMat = new THREE.MeshStandardMaterial({ color: st.crystal, emissive: st.crystal, emissiveIntensity: 0.9, roughness: 0.2 });
-  const n = st.pshape === 'bamboo' ? 18 : 10;
-  for (let i = 0; i < n; i++) {
-    const a = (i / n) * Math.PI * 2;
-    const h = 3 + (i % 3) * 1.2;
-    const geo = pillarGeo(st.pshape, h);
-    const p = new THREE.Mesh(geo, stone);
-    geo.computeBoundingBox();
-    const ph = geo.boundingBox.max.y - geo.boundingBox.min.y;
-    const rr = outer + 2 + (st.pshape === 'bamboo' ? (i % 2) * 1.5 : 0);
-    p.position.set(Math.cos(a) * rr, ph / 2, Math.sin(a) * rr);
-    p.castShadow = true;
-    arena.add(p);
-    if (i % (st.pshape === 'bamboo' ? 2 : 1) === 0) {
-      const c = new THREE.Mesh(crystalGeo(st.cshape), cMat);
-      c.position.set(p.position.x, ph + 0.9, p.position.z);
-      arena.add(c);
-      crystals.push(c);
-    }
-  }
+  // Low-poly pillars and crystals are replaced by the existing CG illustrations.
+  const art=stageIllustration(st,0);
+  container.style.backgroundImage='linear-gradient(180deg,rgba(9,10,25,.12),rgba(9,10,25,.30)),url("'+art+'")';
+  container.style.backgroundSize='cover';
+  container.style.backgroundPosition='center center';
+
   scene.add(arena);
   scene.fog.color.set(st.fog);
   hemi.color.set(st.hemi);
@@ -373,9 +365,16 @@ function loadSave() {
   s.guildNote = typeof raw.guildNote === 'string' ? raw.guildNote.replace(/[<>\u0000-\u001f]/g, '').slice(0, 200) : null;
   // 直近の同期書き込みID（再送時の二重反映を防ぐ）
   s.wids = Array.isArray(raw.wids) ? raw.wids.filter((w) => typeof w === 'string' && /^[A-Za-z0-9_-]{8,64}$/.test(w)).slice(-20) : [];
+  s.rfCharacterPrefs = {};
+  if(raw.rfCharacterPrefs&&typeof raw.rfCharacterPrefs==='object'&&!Array.isArray(raw.rfCharacterPrefs)){
+    for(const [key,value] of Object.entries(raw.rfCharacterPrefs).slice(0,300)){
+      if(FIGHTERS[key]&&value&&typeof value==='object')s.rfCharacterPrefs[key]={favorite:!!value.favorite,nick:[...String(value.nick||'').replace(/[<>\u0000-\u001f]/g,'')].slice(0,16).join(''),at:Number.isFinite(value.at)?value.at:0};
+    }
+  }
   return s;
 }
 const save = loadSave();
+installCharacterLibrary({FIGHTERS,save,persist});
 // 購入ID：Stripeの client_reference_id に使う秘密の値（presence には載せない）
 if (typeof save.buyId !== 'string' || !/^[A-Za-z0-9]{24}$/.test(save.buyId)) {
   const A = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789';
@@ -502,6 +501,8 @@ function mergeSaves(local, remote, baseShards) {
   out.guildAt = Math.max(gla, gra);
   out.guildNote = gla >= gra ? local.guildNote ?? null : remote.guildNote ?? null;
   out.shards = Math.max(0, (+remote.shards || 0) + ((+local.shards || 0) - baseShards));
+  out.rfCharacterPrefs={...(remote.rfCharacterPrefs||{})};
+  for(const [key,entry] of Object.entries(local.rfCharacterPrefs||{}))if(FIGHTERS[key]&&(entry?.at||0)>=(out.rfCharacterPrefs[key]?.at||0))out.rfCharacterPrefs[key]=entry;
   out.wids = widList(remote.wids, local.wids);
   out.syncAt = Date.now();
   return out;
@@ -2928,6 +2929,7 @@ function renderForge() {
   for (const k of keysList) {
     const b = document.createElement('button');
     b.className = 'chip' + (k === forgeSel ? ' on' : '');
+    b.dataset.rf53Key=k;
     const total = UPGRADES.reduce((s, u) => s + lvOf(k, u.id), 0);
     b.textContent = `${FIGHTERS[k].name}${lbOf(k) ? `【突破${lbOf(k)}】` : ''}　${total}/${UPGRADES.length * maxLvOf(k)}`;
     b.addEventListener('click', () => {
@@ -3384,8 +3386,7 @@ function renderInvadeList() {
 $('#invade-who').addEventListener('click', () => {
   sfx('ui');
   const order = operatorUnlocked() ? ['seraphel', 'chief', 'sovereign', 'bloodfiend', ...(chiefUnlocked() ? ['valgard', 'gaizorg', 'valdarion', 'maou', 'udaijin', 'fujiwara_nobuyori', 'uninomiya_tadayasu'] : []), ...(operatorOnlyUnlocked() ? ['operator_gigantes'] : [])] : ['seraphel'];
-  state.invadeKey = order[(order.indexOf(state.invadeKey) + 1) % order.length];
-  $('#invade-who').textContent = `乱入する姿：${FIGHTERS[state.invadeKey].name}`;
+  window.rf53Library.choose(order,k=>{state.invadeKey=k;$('#invade-who').textContent = '乱入する姿：'+FIGHTERS[k].name;},'乱入キャラクター検索');
 });
 $('#btn-invade').addEventListener('click', async () => {
   if (!operatorUnlocked()) {

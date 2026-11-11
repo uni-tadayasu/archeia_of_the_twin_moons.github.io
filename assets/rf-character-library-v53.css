@@ -1,0 +1,34 @@
+/* V53 character UI and CG-look display */
+#ui .rf53-toolbar{width:100%;display:flex;min-width:0;padding:5px 0}
+#ui .rf53-search,.rf53-modal .rf53-search{box-sizing:border-box;min-width:0;width:100%;max-width:100%;padding:10px 12px;color:#fff2e0;background:#171b31;border:1px solid #aa9fc2;border-radius:8px;font:inherit;font-size:16px}
+#ui .rf53-toggle,#ui .rf53-open{padding:8px 12px;background:#302948;border:1px solid #af9dbb;color:#ffe9bb;border-radius:8px;font:inherit;font-size:clamp(12px,2.5vw,14px);cursor:pointer}
+#ui .rf53-toggle[aria-pressed=true]{background:#69518e}
+#ui .card,#ui #forge-list button,#ui .party-picker-choice{position:relative}
+#ui .rf53-star{position:absolute;top:5px;right:5px;width:33px;height:33px;display:grid;place-items:center;background:#201932de;border:1px solid #c6b6d1;border-radius:50%;font-size:23px;color:#cfccd9;line-height:1;z-index:8;cursor:pointer;touch-action:manipulation}
+#ui .rf53-star.is-fav{background:#514024ec;border-color:#ffda91;color:#ffe3a5}
+#ui .rf53-nick{display:block;max-width:100%;min-width:0;line-height:1.35;color:#ffe2a1;font-size:clamp(11px,2.2vw,13px);overflow-wrap:anywhere}
+#ui #forge-list .rf53-star{width:26px;height:26px;font-size:17px;top:0;right:0}
+#ui #forge-list button{padding-right:29px}
+#ui .rf53-castle{margin:6px 0}
+#ui [hidden]{display:none!important}
+.rf53-modal{position:fixed;inset:0;z-index:2147483645;padding:max(10px,env(safe-area-inset-top)) max(10px,env(safe-area-inset-right)) max(10px,env(safe-area-inset-bottom)) max(10px,env(safe-area-inset-left));display:grid;place-items:center;background:#090b18dc;overflow:auto;color:#f9e9d8}
+.rf53-panel{width:min(760px,100%);height:min(85dvh,770px);display:flex;flex-direction:column;min-height:0;gap:10px;background:linear-gradient(135deg,#302746,#17172a);border:1px solid #b79b7e;border-radius:14px;padding:clamp(12px,3vw,24px)}
+.rf53-head{display:flex;justify-content:space-between;gap:10px;align-items:center}.rf53-head h2{font-size:clamp(17px,4vw,26px);margin:0}.rf53-panel button{background:#423554;color:#ffeccc;border:1px solid #b29abd;border-radius:8px;cursor:pointer;padding:8px 12px;font:inherit}
+.rf53-only-label{display:flex;align-items:center;gap:10px;font-size:14px}.rf53-only-label input{width:18px;height:18px}
+.rf53-list{flex:1 1 auto;min-height:0;overflow-y:auto;display:flex;flex-direction:column;gap:7px}
+.rf53-item{display:flex;gap:9px;align-items:center;background:#211c33;border:1px solid #71668b;border-radius:8px;padding:9px;min-width:0}
+.rf53-item .rf53-text{flex:1;min-width:0;display:flex;flex-direction:column;overflow-wrap:anywhere}
+.rf53-item .rf53-text strong{font-size:clamp(13px,3vw,16px)}
+.rf53-item .rf53-text small{font-size:12px;color:#d1bfdf}
+.rf53-item .rf53-starbtn{font-size:22px!important;min-width:40px;padding:2px!important}
+.rf53-item .rf53-starbtn.on{background:#6f572f}
+.rf53-item .rf53-edit{font-size:12px;max-width:115px}
+.rf53-item .rf53-edit:disabled{opacity:.45;cursor:default}
+.rf53-editbox{display:flex;flex-wrap:wrap;align-items:center;gap:8px}
+.rf53-editbox label{flex:0 0 100%}
+.rf53-editbox input{flex:1 1 180px}
+#ui .portal-hero .hero-figure,#ui .card img.face,#ui .party-picker-choice img,#ui .sthumb{filter:saturate(1.12) contrast(1.04) drop-shadow(0 5px 8px #08091b88);image-rendering:auto}
+#ui .card{isolation:isolate}
+@media(max-width:480px){.rf53-item{gap:6px;padding:7px}.rf53-item .rf53-edit{padding:6px;font-size:11px}}
+
+#rf53-modal .rf53-choice,.rf53-modal .rf53-choice{display:block;width:100%;min-width:0;padding:10px 12px;text-align:left;white-space:normal;overflow-wrap:anywhere}
