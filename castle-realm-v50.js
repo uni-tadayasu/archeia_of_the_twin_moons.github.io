@@ -19,12 +19,13 @@ return b;}
 function heading(text){return node('h3','cr-title',text);}
 function note(text){S.notice=text;const n=document.getElementById('castle-notice');if(n)n.textContent=text;}
 function allowEdit(){return !S.busy}
-const errorMap={nosync:'旅支度から同期コードを設定し、セーブを同期してください。',shield:'この城は現在、襲撃保護中です。',new_castle:'新しい城は一定時間保護されています。',cooldown:'この城へは24時間以内に再襲撃できません。',under_attack:'ほかのプレイヤーが攻略中です。',already_active:'先に進行中のダンジョンを終えてください。',shards:'灯晶が不足しています。',fighter_locked:'選択した領主・戦士は使用できません。',level_max:'城は最大レベルです。',too_fast:'攻撃間隔を空けてください。',not_ready:'奥義ゲージが不足しています。',mail_retry:'報酬処理中です。「受け取りを再試行」を押してください。'};
+const errorMap={sync:'未同期のセーブデータがあるため処理を停止しました。旅支度から同期後、もう一度お試しください。',castle_not_ready:'サーバーの拠点機能が利用できません。Cloudflare Workerの再デプロイとDurable Objectsの設定を確認してください。',already_exists:'拠点はすでに建設されています。再読込してください。',no_castle:'まだ拠点がありません。',not_found:'対象の拠点または攻城戦が見つかりません。',nosync:'旅支度から同期コードを設定し、セーブを同期してください。',shield:'この城は現在、襲撃保護中です。',new_castle:'新しい城は一定時間保護されています。',cooldown:'この城へは24時間以内に再襲撃できません。',under_attack:'ほかのプレイヤーが攻略中です。',already_active:'先に進行中のダンジョンを終えてください。',shards:'灯晶が不足しています。',fighter_locked:'選択した領主・戦士は使用できません。',level_max:'城は最大レベルです。',too_fast:'攻撃間隔を空けてください。',not_ready:'奥義ゲージが不足しています。',mail_retry:'報酬処理中です。「受け取りを再試行」を押してください。'};
 async function request(name,body={}){
 if(!apiEnabled())throw Error('拠点機能にはCloudflare Workersとの通信が必要です。');
 const code=syncCodeNow();
 if(code.length!==12)throw Error(errorMap.nosync);
-if(!['list','self','raid/current','raid/claim'].includes(name))await syncBefore?.();
+// Synchronize pending player progress before any server balance is read or changed.
+if(!['list','raid/current'].includes(name))await syncBefore?.();
 const out=await api('/castle/'+name,{code,name:playerName(),token:roleToken?.()||'',...body});
 if(!out?.ok)throw Error(errorMap[out?.error]||('通信エラー：'+(out?.error||'server')));
 return out;

@@ -2805,7 +2805,7 @@ const RF50_COST=lv=>500+350*lv;
 const RF50_MONSTERS=['影狼','甲冑兵','朧蜘蛛','双月ゴーレム','霧の術師','鋼牙獣','魔晶騎士','深淵の番兵','古代石像','結界守護者'];
 function rf50Save(row){try{return JSON.parse(row?.data||'null')}catch{return null}}
 function rf50Castle(c){return c?{style:c.style,level:c.level,lord:c.lord,createdAt:c.createdAt,shieldUntil:c.shieldUntil||0,floors:RF50_FLOORS(c.level),appearanceTier:RF50_TIER(c.level),nextCost:c.level<100?RF50_COST(c.level):0}:null}
-function rf50View(r){return r?{id:r.id,status:r.status,targetPid:r.targetPid,floor:r.floor,floors:r.floors,castleLevel:r.castleLevel,style:r.style,lord:r.lord,enemyAttack:rf50EnemyAttack(r),defenseFactor:rf50EnemyDefense(r),targetPid:r.targetPid,enemyName:r.floor===r.floors?r.lordName:RF50_MONSTERS[(r.floor+r.castleLevel)%RF50_MONSTERS.length],attackerHp:r.hp,maxHp:r.maxHp,enemyHp:r.enemyHp,maxEnemyHp:r.maxEnemyHp,charge:r.charge,healsLeft:r.healsLeft,turn:r.turn,lastLog:r.lastLog,expiresAt:r.expiresAt,winAt:r.winAt||0}:null}
+function rf50View(r){return r?{id:r.id,status:r.status,targetPid:r.targetPid,floor:r.floor,floors:r.floors,castleLevel:r.castleLevel,style:r.style,lord:r.lord,enemyAttack:rf50EnemyAttack(r),defenseFactor:rf50EnemyDefense(r),enemyName:r.floor===r.floors?r.lordName:RF50_MONSTERS[(r.floor+r.castleLevel)%RF50_MONSTERS.length],attackerHp:r.hp,maxHp:r.maxHp,enemyHp:r.enemyHp,maxEnemyHp:r.maxEnemyHp,charge:r.charge,healsLeft:r.healsLeft,turn:r.turn,lastLog:r.lastLog,expiresAt:r.expiresAt,winAt:r.winAt||0}:null}
 // RF50_FLOOR_BALANCE_V2 / each floor raises enemy HP, attack and defense
 function rf50FloorRank(r){const depth=Math.max(0,r.floor-1);return {depth,progress:depth/Math.max(1,r.floors-1),boss:r.floor===r.floors}}
 function rf50Enemy(r){const {depth,progress,boss}=rf50FloorRank(r);return Math.round((300+Math.max(1,r.castleLevel)*25)*(1+.13*depth)*(1+.08*progress)*(boss?1.28:1))}
@@ -2991,7 +2991,7 @@ async function rf50Settle(env,pid,raidId){
  return {status:done.status,data:{ok:done.status===200,amount:debit.data.amount,credited:credit.data.credited,pending:credit.data.pending,shards:credit.data.shards,ver:credit.data.ver}};
 }
 async function rf50Route(req,env,H,body,action){
- if(!env.SYNC_LOCK||!env.MAIL_STORE||!env.PID_BIND)return json(H,{error:'castle_not_ready'},503);
+ if(!env.SYNC_LOCK||!env.MAIL_STORE||!env.PID_BIND||!env.LIMITER||!env.PEPPER)return json(H,{error:'castle_not_ready'},503);
  if(await limited(env,req,'castle-'+action,90,60000))return json(H,{error:'limit'},429);
  const me=await whoAmI(env,body.code,body.name);
  if(!me)return json(H,{error:'nosync'},403);
@@ -3059,4 +3059,3 @@ async function rf50Route(req,env,H,body,action){
  }
  return json(H,{error:'not_found'},404);
 }
-
