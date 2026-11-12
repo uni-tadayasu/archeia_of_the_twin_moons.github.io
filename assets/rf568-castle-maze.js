@@ -2,7 +2,6 @@
  * Continuous corridors connect the main keep, halls, side rooms and the ascent.
  */
 import * as THREE from 'three';
-import { approachYaw } from './rf-camera-v5520.js';
 import { buildCastleArchitecture, castleInstances, castlePalette, castleTextures } from './rf5530/castle-art.js?v=55.30';
 const N=13, CELL=7.2, HALF=N*CELL/2, CEILING=13.5;
 const D=[[-1,0,1,4],[0,1,2,8],[1,0,4,1],[0,-1,8,2]]; // N/E/S/W: dr,dc,wall,opposite
@@ -183,8 +182,12 @@ export class CastleMazeWorld {
  }
  clipCamera(look,target){
   const maxY=CEILING-1.1;
-  target.set(clamp(-HALF+.6,HALF-.6,target.x),clamp(2.5,maxY,target.y),clamp(-HALF+.6,HALF-.6,target.z));
-  const dx=target.x-look.x,dz=target.z-look.z;
+  const bound=HALF-.6, rayX=target.x-look.x, rayZ=target.z-look.z;
+  // Shorten the orbit ray at a boundary without changing the viewing direction.
+  const travel=(start,delta)=>delta===0?Infinity:((delta>0?bound:-bound)-start)/delta;
+  const limit=clamp(0,1,Math.min(travel(look.x,rayX),travel(look.z,rayZ)));
+  const dx=rayX*limit,dz=rayZ*limit;
+  target.set(look.x+dx,clamp(2.5,maxY,target.y),look.z+dz);
   const count=Math.max(1,Math.ceil(Math.hypot(dx,target.y-look.y,dz)/.35));
   for(let i=1;i<=count;i++){
    const t=i/count,x=look.x+dx*t,z=look.z+dz*t;
@@ -323,20 +326,27 @@ export function installCastleBattleNavigation(Battle){
   if(!me)return oldCamera.call(this,dt);
   const maze=this.rf568Maze,center=this.camCenter;
   const t=1-Math.exp(-5*Math.min(.2,Math.max(0,dt)));
-  if(!this.rfCastleCameraReady)center.copy(me.pos);
-  else center.lerp(me.pos,t);
+  const ready=this.rfCastleCameraReady;
+  if(ready)center.lerp(me.pos,t);
+  else center.copy(me.pos);
   const look=(this.rfCastleLook||=new THREE.Vector3()).set(center.x,1.45,center.z);
   const room=maze.layout.roomAt(maze.layout.cellOf(me.pos));
   const hall=room==='大広間'||room==='本丸';
   const near=this.fighters.some(f=>f.team===1&&!f.dead&&f.pos.distanceToSquared(me.pos)<45);
-  if(this.rfCameraView?.yaw==null&&Math.hypot(me.vel.x,me.vel.z)>.3)this.rfCastleYaw=approachYaw(this.rfCastleYaw??0,me.vel.x,me.vel.z,t);
-  const yaw=this.rfCameraView?.yaw??this.rfCastleYaw??0;
-  const dist=(hall?12.6:near?9.2:10.4)*(this.camera.aspect<1?.83:1);
-  const target=(this._rf568Camera||=new THREE.Vector3()).set(center.x+Math.sin(yaw)*dist,hall?11.8:near?8.8:10.4,center.z+Math.cos(yaw)*dist);
-  maze.clipCamera(look,target);
-  const pos=this.camera.position;
-  if(!this.rfCastleCameraReady){pos.copy(target);this.rfCastleCameraReady=true;}
-  else pos.lerp(target,t);
-  maze.clipCamera(look,pos);this.camera.lookAt(look);
+  // Automatic framing follows the fighter, with a fixed heading for screen-relative steering.
+  const requestedYaw=this.rfCameraView?.yaw??0;
+  const turn=ready?requestedYaw-this.rfCastleYaw:0;
+  const yaw=ready?this.rfCastleYaw+Math.atan2(Math.sin(turn),Math.cos(turn))*t:requestedYaw;
+  const distance=(hall?12.6:near?9.2:10.4)*(this.camera.aspect<1?.83:1);
+  const height=hall?11.8:near?8.8:10.4;
+  const framing=(this._rf568Framing||=new THREE.Vector2()).lerp(
+   (this._rf568FramingTarget||=new THREE.Vector2()).set(distance,height),ready?t:1);
+  const pos=this.camera.position.set(center.x+Math.sin(yaw)*framing.x,framing.y,center.z+Math.cos(yaw)*framing.x);
+  maze.clipCamera(look,pos);
+  const pitch=-Math.atan2(pos.y-look.y,Math.hypot(pos.x-look.x,pos.z-look.z));
+  this.camera.rotation.set(pitch,yaw,0,'YXZ');
+  this.camera.updateMatrixWorld();
+  this.rfCastleYaw=yaw;
+  this.rfCastleCameraReady=true;
  };
 }

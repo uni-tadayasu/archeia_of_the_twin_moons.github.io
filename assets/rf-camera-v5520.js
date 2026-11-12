@@ -7,8 +7,7 @@ export function createOrbitControls(panel, canvas, camera, active) {
   const view = { yaw: null };
   const auto = panel.querySelector('[data-view="auto"]');
   const status = panel.querySelector('output');
-  const direction = camera.position.clone();
-  const controlsDirection = camera.position.clone();
+  const screenRight = camera.position.clone();
   const dragArea = panel.querySelector('.rf5520-orbit-drag');
   let drag = null;
   function reflect() {
@@ -16,11 +15,16 @@ export function createOrbitControls(panel, canvas, camera, active) {
     auto.setAttribute('aria-pressed', String(automatic));
     status.textContent = automatic ? '自動視点' : '手動視点';
   }
+  function readScreenRight() {
+    camera.updateWorldMatrix(true, false);
+    // The right axis still defines screen direction when the camera is overhead.
+    screenRight.setFromMatrixColumn(camera.matrixWorld, 0);
+  }
   function rotate(amount) {
     if (!active()) return;
     if (view.yaw === null) {
-      camera.getWorldDirection(direction);
-      view.yaw = Math.atan2(-direction.x, -direction.z);
+      readScreenRight();
+      view.yaw = Math.atan2(-screenRight.z, screenRight.x);
     }
     view.yaw = (view.yaw + amount) % (2 * Math.PI);
     reflect();
@@ -78,13 +82,13 @@ export function createOrbitControls(panel, canvas, camera, active) {
       if(panel.hidden)drag=null;
       else fitTouchPanel();
     },
-    movement(input){
-      if(!active()||view.yaw===null)return input;
-      camera.getWorldDirection(controlsDirection);
-      const length=Math.hypot(controlsDirection.x,controlsDirection.z);
-      if(length<.001)return input;
-      const sin=-controlsDirection.x/length,cos=-controlsDirection.z/length;
-      return {...input,mx:input.mx*cos+input.mz*sin,mz:input.mz*cos-input.mx*sin};
+    movement(input, relativeInAuto = false) {
+      if ((!relativeInAuto && view.yaw === null) || (!input.mx && !input.mz) || !active()) return input;
+      readScreenRight();
+      const length = Math.hypot(screenRight.x, screenRight.z);
+      if (length < .001) return input;
+      const x = screenRight.x / length, z = screenRight.z / length;
+      return {...input, mx: input.mx * x - input.mz * z, mz: input.mx * z + input.mz * x};
     }
   };
 }

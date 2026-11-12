@@ -1452,7 +1452,7 @@ function readInput() {
     edges[k] = false;
   }
   if(state.battle?.siege&&inp.heal){state.battle.siege.heal();inp.heal=false;}
-  return orbitControls.movement(inp);
+  return orbitControls.movement(inp, Boolean(state.battle?.rf568Maze));
 }
 
 function setupTouch() {
