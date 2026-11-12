@@ -7,7 +7,7 @@ import { Battle, ARENA_R } from '../game.js?v=rf553-chief-cpu-20261111';
 if(!window.__rf564BattleStage){
  window.__rf564BattleStage=true;
  const compact=/Android|iPhone|iPad/i.test(navigator.userAgent)||(navigator.deviceMemory||8)<=4;
- const rawLimit=Math.max(10,Math.min(18,Number(ARENA_R)||14));
+ const rawLimit=Math.max(18,Math.min(48,Number(ARENA_R)||48));
  const quality=()=>document.documentElement.dataset.rf556UiQuality==='low'?'low':'normal';
  const opt={japanese:{wood:0x553b37,light:0xffcd83,cloth:0x8f202b,metal:0xc8ab6f},
   western:{wood:0x3b465b,light:0xf7d7a4,cloth:0x414f92,metal:0xd8c8a2},
@@ -105,6 +105,25 @@ if(!window.__rf564BattleStage){
    if(!compact && quality()!=='low'){
      const fill=new THREE.PointLight(colors.light,1.15,20,2);fill.position.set(0,5,gateBack+3);
      scene.add(fill);
+   }
+   // RF566: distant battlefield districts, not a circular arena enclosure.
+   // Instanced architecture is kept near the outside lanes so movement stays clear.
+   const laneMat=new THREE.MeshStandardMaterial({color:kind==='japanese'?0x665342:0x6f7580,roughness:.93,metalness:.02,transparent:true,opacity:.83});
+   const lane=new THREE.Mesh(new THREE.PlaneGeometry(rawLimit*1.7,13),laneMat);
+   lane.rotation.x=-Math.PI/2;lane.position.set(0,.133,1);scene.add(lane);
+   owned.push(lane.geometry,laneMat);
+   const longPath=new THREE.Mesh(new THREE.PlaneGeometry(12,rawLimit*1.7),laneMat);
+   longPath.rotation.x=-Math.PI/2;longPath.position.set(-5,.138,1);scene.add(longPath);
+   owned.push(longPath.geometry);
+   for(const side of [-1,1]){
+     for(let i=0;i<3;i++){
+       const z=(i-1)*rawLimit*.68;
+       const x=side*(rawLimit-5.5);
+       const m=cyl(.27,.33,5.8,timber,x,2.9,z);
+       ball(.37,metal,x,5.8,z);
+       const strip=mesh(new THREE.PlaneGeometry(1.4,1.9),cloth,x+side*.65,4.5,z,.24*side);
+       flags.push(strip);
+     }
    }
    const hidden=hideCircularDecoration(battle);
    battle.__rf564Arena={room,scene,owned,flags,hidden,kind};

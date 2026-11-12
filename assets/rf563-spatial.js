@@ -17,7 +17,7 @@ if (!window.__rf563Spatial) {
     cave: ['cave-crystals.webp', 'cave-embers.webp'],
     ruins: ['ruins-sunlight.webp', 'ruins-moonlit.webp']
   };
-  const MAX_R = Math.min(18, Number(ARENA_R) || 14);
+  const MAX_R = Math.max(18,Math.min(48,Number(ARENA_R)||48));
   const low = /Android|iPhone|iPad/i.test(navigator.userAgent) || (navigator.deviceMemory || 8) <= 4;
   const loader = new THREE.TextureLoader();
   const texCache = new Map();
@@ -75,10 +75,13 @@ if (!window.__rf563Spatial) {
     floorMaterial.map.wrapS=floorMaterial.map.wrapT=THREE.RepeatWrapping;
     // Square room floor hides the old arena ring without altering its collision radius.
     const pad = MAX_R + 2.5;
+    // Repeat the real floor texture across a broad area rather than stretch one bitmap.
+    floorMaterial.map.wrapS=floorMaterial.map.wrapT=THREE.RepeatWrapping;
+    floorMaterial.map.repeat.set(16,16);
     const floorMesh = C.add(new THREE.PlaneGeometry(2*pad,2*pad), floorMaterial,0,0.11,0);
     floorMesh.rotation.x=-Math.PI/2;
     const backgroundFile = img[kind][Math.floor((floor-1)/3) % img[kind].length] || img[kind][0];
-    const sky=C.add(new THREE.PlaneGeometry(52,31),new THREE.MeshBasicMaterial({map:texture(ROOT+backgroundFile), side:THREE.DoubleSide, depthWrite:false, toneMapped:false}),0,12,-26);
+    const sky=C.add(new THREE.PlaneGeometry(2*pad+18,65),new THREE.MeshBasicMaterial({map:texture(ROOT+backgroundFile), side:THREE.DoubleSide, depthWrite:false, toneMapped:false}),0,26,-pad-6);
     C.own.push(sky.material);
     // Rendered room depth: columns, wall side sections, arch beams and lamps.
     const wallH=10;
@@ -94,17 +97,19 @@ if (!window.__rf563Spatial) {
         }
       }
     }
-    C.add(new THREE.BoxGeometry(2*pad+3,wallH,.8),stone,0,wallH/2,-pad-1);
+    // Wide central opening reveals the illustrated city/castle depth.
+    C.add(new THREE.BoxGeometry(pad*.58,wallH,.8),stone,-pad*.71,wallH/2,-pad-1);
+    C.add(new THREE.BoxGeometry(pad*.58,wallH,.8),stone,pad*.71,wallH/2,-pad-1);
     for(let i=-2;i<=2;i++){
-      C.add(new THREE.BoxGeometry(.45,6,.75),dark,i*6,5,-pad+.1);
-      C.add(new THREE.BoxGeometry(3,.25,.8),trim,i*6,8,-pad+.1);
+      C.add(new THREE.BoxGeometry(.45,6,.75),dark,i*(pad/3),5,-pad+.1);
+      C.add(new THREE.BoxGeometry(3,.25,.8),trim,i*(pad/3),8,-pad+.1);
     }
     for(let i=-2;i<=2;i++) C.add(new THREE.BoxGeometry(2*pad+2,.32,.8),dark,0,wallH-(i%2)*.18, i*6);
     const canopy = C.mat({ color:woody?0x49312b:0x596374,roughness:.86,side:THREE.BackSide,transparent:true,opacity:.48 });
     const ceiling=C.add(new THREE.PlaneGeometry(2*pad+2,2*pad+2),canopy,0,wallH+1,0);ceiling.rotation.x=-Math.PI/2;
     const rug=C.mat({color:woody?0x6b1e2b:0x34385d, roughness:.96, transparent:true,opacity:.55});
     const strip=C.add(new THREE.PlaneGeometry(7,18),rug,0,.125,-2);strip.rotation.x=-Math.PI/2;
-    const torches=Math.min(low?1:3,low?1:3);
+    const torches=low?1:3;
     for(let i=0;i<torches;i++){
       const light=new THREE.PointLight(woody?0xffbb79:0x8bbfff, low?1.3:2.2, 14,2);
       light.position.set((i-1)*8,4,-pad+3);

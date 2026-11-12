@@ -1,4 +1,6 @@
-<link rel="stylesheet" href="./assets/rf561-stage.css?v=20261112-v561">
-<script type="module" src="./assets/rf561-appearance.js?v=20261112-v561"></script>
-<script type="module" src="./assets/rf556-model-portraits.js?v=20261112-v561"></script>
-<script defer src="./assets/rf561-stage.js?v=20261112-v561"></script>
+HEAD内（rf564-audio-lifecycle.js より後）:
+<script src="./assets/rf566-audio-start.js?v=20261112-v566" defer></script>
+<link rel="stylesheet" href="./assets/rf566-expanse.css?v=20261112-v566">
+
+BODYの末尾（main.jsより前）:
+<script type="module" src="./assets/rf566-story-flow.js?v=20261112-v566"></script>

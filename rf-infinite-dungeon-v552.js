@@ -28,7 +28,9 @@ export function createInfiniteDungeonV552(c){
   if(!run){node.hidden=true;return;}
   node.hidden=false;
   const hp=state.battle?.fighters.find(f=>f.isPlayer)?.hp;
-  node.textContent=`無限天守  第${run.floor.toLocaleString('ja-JP')}層  │  ${RANK(run.cleared+1)}級  │  HP ${Math.round(hp??run.hp??0)}  │  ${endlessElapsedText(elapsed())}`;
+  const w=state.battle?.rf566EndlessWave;
+  const crowd=w?`  │  敵兵 ${w.spawned}/${w.total}`:'';
+  node.textContent=`無限天守  第${run.floor.toLocaleString('ja-JP')}層  │  ${RANK(run.cleared+1)}級  │  HP ${Math.round(hp??run.hp??0)}${crowd}  │  ${endlessElapsedText(elapsed())}`;
  }
  function record(){
   if(!run)return;
@@ -78,7 +80,13 @@ export function createInfiniteDungeonV552(c){
   try {
     const floor=cur.floor;
     const enemies=foeKeys(floor,cur.seed);
-    if(!(await ensureAllModelsReady([cur.key,...enemies])))throw Error('階層のモデルを準備できませんでした。');
+    // RF566: use a small reusable pool of enemy GLBs for dense waves.
+    const rng=RNG(((cur.seed>>>0)+Math.imul(floor,2246822519))>>>0);
+    const minionPool=ENEMY_ROSTER.filter(k=>FIGHTERS[k]&&!FIGHTERS[k].hidden);
+    const minions=[];
+    for(let i=0;i<Math.min(3,minionPool.length);i++)minions.push(minionPool[Math.floor(rng()*minionPool.length)]);
+    const pool=[...new Set([...enemies,...minions])];
+    if(!(await ensureAllModelsReady([cur.key,...pool])))throw Error('階層のモデルを準備できませんでした。');
     if(cur!==run||state.mode!=='infinite')return;
     const stage=STAGES[((floor-1)*3+Math.floor((floor-1)/10))%STAGES.length]||STAGES[0];
     setStage(stage);
@@ -88,14 +96,59 @@ export function createInfiniteDungeonV552(c){
     if(cur.hp!==null){me.hp=Math.max(1,Math.min(me.maxHp,Math.floor(cur.hp)));}
     cur.hp=me.hp;
     const hpScale=Math.min(5000,1+(floor-1)*.22),atkScale=Math.min(100,1+(floor-1)*.035);
-    enemies.forEach((key,i)=>{
-      const a=(i/enemies.length)*Math.PI*2;
-      b.add(key,{team:1,cpu:foeCpu(Math.min(1,.58+floor*.007)),
-        hpMul:foeHp(hpScale*(floor%10===0?2:1)),atkMul:atkScale,
-        pos:enemies.length===1?[4,-3]:[4+Math.cos(a)*2.4,-2+Math.sin(a)*2.4],facing:Math.PI,
-        name:`第${floor}層・${FIGHTERS[key].name}`});
-    });
-    beginBattle(floor%10===0);
+    const isBoss=floor%10===0;
+    const mobile=/Android|iPhone|iPad/i.test(navigator.userAgent||'') || (navigator.deviceMemory||8)<=4;
+    const limit=mobile?5:9; // simultaneous live enemies, not total enemies
+    const total=mobile?Math.min(18,11+Math.floor(floor/12)):Math.min(32,18+Math.floor(floor/5));
+    const initial=isBoss?Math.min(3,limit):Math.min(mobile?4:5,limit);
+    let created=0, elapsedSince=0, previous={x:me.pos.x,z:me.pos.z}, distanceSince=0, batches=0;
+    const addEnemies=(count,first=false)=>{
+      const player=b.fighters.find(f=>f.isPlayer&&!f.dead);
+      const origin=player?.pos || {x:-4,z:3};
+      const n=Math.min(Math.max(0,count),total-created);
+      for(let i=0;i<n;i++){
+        const bossFighter=isBoss && created===0;
+        const key=bossFighter?enemies[0]:pool[Math.floor(rng()*pool.length)]||enemies[0];
+        const ang=(created*2.399963+floor*0.18+rng()*0.9);
+        const d=first ? 9+rng()*5 : 10+rng()*10;
+        const x=Math.max(-44,Math.min(44,origin.x+Math.cos(ang)*d));
+        const z=Math.max(-44,Math.min(44,origin.z+Math.sin(ang)*d));
+        b.add(key,{team:1,cpu:foeCpu(Math.min(1,.56+floor*.006)),
+          hpMul:foeHp(hpScale*(bossFighter?2.0:0.53)),
+          atkMul:atkScale*(bossFighter?1:0.72),
+          pos:[x,z],facing:Math.atan2(origin.x-x,origin.z-z),
+          name:bossFighter?`第${floor}層・守護者 ${FIGHTERS[key].name}`:`第${floor}層・敵兵 ${FIGHTERS[key].name}`});
+        created++;
+      }
+      if(!first && n){batches++;ui.banner({name:`— 第${floor}層　増援部隊 —`},`${n}体が進軍！　撃破 ${created-n}/${total}`);}
+    };
+    addEnemies(initial,true);
+    // This callback runs once per frame *after combat updates but before win judging*.
+    // Reaching new parts of the map brings reinforcements, with a safety fallback
+    // at low enemy counts so the player never gets stuck on a cleared floor.
+    b.rf566EndlessWave={
+      floor, total, get spawned(){return created;},
+      tick(dt){
+        if(cur!==run||b.ended||!Number.isFinite(dt)||dt<=0)return;
+        const player=b.fighters.find(f=>f.isPlayer&&!f.dead);
+        if(!player)return;
+        elapsedSince+=Math.min(.25,dt);
+        if(previous){distanceSince+=Math.min(6,Math.hypot(player.pos.x-previous.x,player.pos.z-previous.z));}
+        previous={x:player.pos.x,z:player.pos.z};
+        const alive=b.fighters.filter(f=>f.team===1&&!f.dead).length;
+        const remaining=total-created;
+        if(!remaining)return;
+        const travelReady=distanceSince>=11 && elapsedSince>=2.6;
+        const enemyCleared=alive<=1;
+        const sparse=alive<Math.min(3,limit) && elapsedSince>=5;
+        if(!travelReady&&!enemyCleared&&!sparse)return;
+        if(alive>=limit)return;
+        const count=Math.min(remaining,limit-alive, mobile?3:4);
+        addEnemies(count);
+        elapsedSince=0;distanceSince=0;
+      }
+    };
+    beginBattle(isBoss);
     ui.banner({name:`— 無限天守  第${floor.toLocaleString('ja-JP')}層 —`},floor%10===0?'十階ごとの守護者が待ち受ける':'残りHPを維持してさらに奥へ');
     uiTick();
   }catch(e){

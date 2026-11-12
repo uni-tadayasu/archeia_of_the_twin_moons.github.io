@@ -1,0 +1,30 @@
+{
+  "version": "V55.16",
+  "date": "2026-11-12",
+  "base_repository": "uni-tadayasu/archeia_of_the_twin_moons.github.io",
+  "source_check": {
+    "game_js_git_sha_reconstructed": "4d7318082028c65b3858d0980f0d70999e2e9c68",
+    "infinite_module_sha": "bdb35f9528234f03819224d27109444480bbd050"
+  },
+  "verified": [
+    "game.js reconstructed from exact current GitHub blob and syntactically parsed",
+    "all seven JS files pass node --check",
+    "wave mobile test: initial enemies, distance-triggered reinforcement, finite pool exhaustion",
+    "mock-browser: story chapter auto-next and new field wilderness spawn",
+    "mock-browser: one menu audio instance autoplay attempt; battle audio does not autostart concurrently",
+    "mock-browser: 8 viewport widths including 320px show no horizontal overflow",
+    "ZIP archive CRC verified"
+  ],
+  "not_tested": [
+    "actual iOS/Safari browser autoplay",
+    "real WebGL model / collision / performance for 9 CPU enemies",
+    "online multiplayer sync and historical ranking comparability",
+    "full story chapter end-to-end with actual remote services"
+  ],
+  "limitations": [
+    "Chromium/Safari may forbid unmuted media autoplay without user gesture",
+    "expanded radius may affect difficulty, camera and CPU balance",
+    "decorative castle props not fully solid world collision",
+    "chapter transitions recreate next area rather than keep one seamless 3D world map"
+  ]
+}

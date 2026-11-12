@@ -108,7 +108,7 @@ const ST_INFO = {
 };
 const ST_ELEM = Object.fromEntries(ELEMS.map((e, i) => [e.st, i]));
 
-export const ARENA_R = 13;
+export const ARENA_R = 48; // RF566 expansive playable battlefield; actual combat physics, not visual-only
 
 // --- Universal illustrated volumetric casting circle: transparent painted CG, no faceted meshes. ---
 // A few flat image layers create perceived depth; no tessellated crystals / spheres / physical polygons.
@@ -3115,6 +3115,12 @@ export class Battle {
     }
     this.updateCamera(rawDt);
     if (!this.ended) {
+      // RF566: spawn the next advancing enemy unit before victory is judged.
+      // No phantom/sentinel fighters: a floor finishes only after real enemies fall.
+      if (this.rf566EndlessWave && typeof this.rf566EndlessWave.tick === 'function') {
+        try { this.rf566EndlessWave.tick(rawDt); }
+        catch (error) { console.warn('[RF566 endless wave]', error); this.rf566EndlessWave = null; }
+      }
       const alive = [0, 1].map((t) => this.fighters.some((f) => f.team === t && !f.dead));
       if (!alive[0] || !alive[1]) {
         this.ended = true;
@@ -3143,9 +3149,22 @@ export class Battle {
         spread = Math.max(spread, f.pos.distanceTo(c));
       }
     }
+    // RF566 wide areas: track the controlled character and nearest visible skirmish.
+    // Keeps models legible when reinforcements appear across a broad map.
+    const focus = this.fighters.find((f) => f.isPlayer && !f.dead);
+    if (focus && ARENA_R >= 30) {
+      c.copy(focus.pos);
+      let nearest = null, minDist = Infinity;
+      for (const f of this.fighters) if (!f.dead && f.team !== focus.team) {
+        const d = f.pos.distanceTo(focus.pos);
+        if (d < minDist) { nearest = f; minDist = d; }
+      }
+      if (nearest && minDist < 17) c.lerp(nearest.pos, 0.16);
+      spread = Math.min(16, Math.max(8, minDist < Infinity ? minDist * 0.46 : 9));
+    }
     this.camCenter.lerp(c, 1 - Math.exp(-5 * dt));
     const portrait = this.camera.aspect < 1 ? 1.7 : 1;
-    const dist = (8 + spread * 0.9) * portrait;
+    const dist = ARENA_R >= 30 ? (11 + spread * 0.55) * portrait : (8 + spread * 0.9) * portrait;
     const target = (this._rfCameraTarget ||= new THREE.Vector3()).copy(this.camCenter);
     target.y += dist * 0.62 + 1;
     target.z += dist;

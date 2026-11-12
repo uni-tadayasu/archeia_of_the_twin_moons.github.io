@@ -1,0 +1,11 @@
+/* V55.16 — larger original scenic battles; no visible circular border. */
+body.rf564-battle-live #game-container{background-position:center center!important;background-size:cover!important}
+body.rf564-battle-live #rf561-scene-backdrop{pointer-events:none}
+#rf566-story-toggle{display:flex;align-items:center;gap:10px;margin-block:12px;padding:12px 14px;border:1px solid rgba(172,205,238,.32);border-radius:12px;background:rgba(16,25,42,.8);color:#f4f7ff;font:500 14px/1.5 system-ui,'Yu Gothic',sans-serif}
+#rf566-story-toggle input{width:19px;height:19px;accent-color:#8fc9fe;flex:0 0 auto}
+#rf566-story-toggle span{overflow-wrap:anywhere}
+#rf566-chapter-transition{position:fixed;inset:0;z-index:80;background:linear-gradient(125deg,rgba(4,11,23,.96),rgba(22,49,83,.94));display:flex;align-items:center;justify-content:center;text-align:center;color:#fff0ce;font:700 clamp(18px,5vw,38px)/1.5 'Shippori Mincho',serif;letter-spacing:.1em;pointer-events:none;animation:rf566Fade 1.35s forwards}
+@keyframes rf566Fade{0%{opacity:0}24%,65%{opacity:.93}100%{opacity:0}}
+#rf566-audio-gesture{position:fixed;bottom:max(90px,calc(env(safe-area-inset-bottom) + 60px));left:50%;transform:translateX(-50%);padding:10px 15px;border:1px solid #c8ac71;border-radius:999px;background:rgba(10,22,42,.92);color:#f3e9d5;font:600 12px/1.4 system-ui,sans-serif;text-align:center;white-space:normal;max-width:80vw;z-index:90;pointer-events:none}
+@media(max-width:600px){#rf566-story-toggle{font-size:13px;line-height:1.45;padding:9px 11px}}
+@media(prefers-reduced-motion:reduce){#rf566-chapter-transition{animation:none;opacity:.92}}
