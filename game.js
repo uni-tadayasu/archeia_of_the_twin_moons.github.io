@@ -1335,6 +1335,8 @@ export class Battle {
     this.assets = opts.assets;
     this.ui = opts.ui;
     this.net = opts.net || null;
+    this.onHostilesDefeated = opts.onHostilesDefeated;
+    this.rewardableHostiles = typeof this.onHostilesDefeated === 'function' ? new WeakSet() : null;
     this.fighters = [];
     this.summons = new Set(); // 消滅演出中で使い手から離れた召喚獣も管理する
     this.effects = [];
@@ -1422,6 +1424,7 @@ export class Battle {
     }
     const f = new Fighter(this, key, o);
     this.fighters.push(f);
+    if (f.team === 1 && !f.isPlayer) this.rewardableHostiles?.add(f);
     return f;
   }
 
@@ -2802,6 +2805,17 @@ export class Battle {
     return inp;
   }
 
+  reportHostileDefeats() {
+    if (!this.rewardableHostiles || this.ended || this.ranked || this.siege) return;
+    let defeated;
+    for (const fighter of this.fighters) {
+      if (!fighter.dead || !Number.isFinite(fighter.hp) || fighter.hp > 0 || !this.rewardableHostiles.has(fighter)) continue;
+      this.rewardableHostiles.delete(fighter);
+      (defeated ||= []).push(fighter);
+    }
+    if (defeated) this.onHostilesDefeated(this, defeated);
+  }
+
   update(rawDt, playerInput) {
     const sideView = this.storyII;
     this.slowmo -= rawDt;
@@ -2899,6 +2913,9 @@ export class Battle {
     this.presentation?.tick(rawDt);
     this.updateCamera(rawDt);
     if (!this.ended) {
+      // Revival and transformation settle during the combat update. Report
+      // real KOs before the wave controller retires their fighter instances.
+      this.reportHostileDefeats();
       // RF566: spawn the next advancing enemy unit before victory is judged.
       // No phantom/sentinel fighters: a floor finishes only after real enemies fall.
       if (this.rf566EndlessWave && typeof this.rf566EndlessWave.tick === 'function') {

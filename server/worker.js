@@ -618,11 +618,18 @@ const { callRankHub, openRankSocket, RankHub, RankDuel } = (() => {
     }
     broadcast(now=Date.now()) {
       if (!this.sockets.some(Boolean)) { this.data.fight.events=[];return; }
-      const packet=JSON.stringify(this.snapshot(now));
+      const snapshot=this.snapshot(now);
+      const winnerPacket=snapshot.result?.koWalletVersion?JSON.stringify(snapshot):null;
+      if(winnerPacket){
+        const {koWalletVersion,...publicResult}=snapshot.result;
+        snapshot.result=publicResult;
+      }
+      const packet=JSON.stringify(snapshot);
       this.data.fight.events=[];
-      for (const client of this.sockets) {
+      for (const [seat,client] of this.sockets.entries()) {
         if (client?.ws.readyState===1) {
-          try { client.ws.send(packet); } catch { /* The socket close event handles reconnect. */ }
+          try { client.ws.send(winnerPacket&&seat===snapshot.result.winner?winnerPacket:packet); }
+          catch { /* The socket close event handles reconnect. */ }
         }
       }
     }
@@ -641,7 +648,22 @@ const { callRankHub, openRankSocket, RankHub, RankDuel } = (() => {
       try {
         const answer=await callRankHub(this.env,'settle',{matchId:d.id,round:d.round,...d.outcome});
         if (!answer.ok) return;
-        d.result=await answer.json();
+        const result=await answer.json();
+        const winner=result.winner;
+        const victor=winner===0||winner===1?d.players[winner]:null;
+        if(result.reason==='ko'&&victor&&!victor.bot&&d.fight.fighters[1-winner].hp===0){
+          const binding=await doCall(this.env.PID_BIND.get(this.env.PID_BIND.idFromName(victor.pid)),{op:'ko-wallet'});
+          if(binding.status>=500)throw Error('rank_ko_wallet');
+          if(HEX64.test(binding.data.h||'')){
+            const reward=await applyKoWallet(this.env,binding.data.h,victor.pid,'rank',d.id+':'+d.round,1);
+            if(reward.status>=500)throw Error('rank_ko_reward');
+            if(reward.status===200){
+              result.koShards=reward.data.credited;
+              if(result.koShards>0)result.koWalletVersion=reward.data.ver;
+            }
+          }
+        }
+        d.result=result;
         d.phase='result';d.deadline=Date.now()+RESULT_MS;d.votes=[null,!!d.players[1].bot||null];
         await this.checkpoint();
         await this.alarmAt(d.deadline+500);
@@ -1864,6 +1886,7 @@ const CHARACTER_APPEARANCES = assignUniqueAppearances(FIGHTERS);
 const enc = new TextEncoder();
 const HEX64 = /^[0-9a-f]{64}$/;
 const DAY = 86400000;
+const KO_SHARDS = 5;
 const ownValue = (obj, key) => obj && Object.hasOwn(obj, key) ? obj[key] : undefined;
 
 // 残高や集計と操作記録は同じトランザクションで確定する。
@@ -2997,6 +3020,7 @@ export class PidBind {
     return this.state.blockConcurrencyWhile(async () => {
       const cur = await this.state.storage.get('h');
       if (op === 'lookup') return new Response(JSON.stringify({ registered: !!cur }));
+      if (op === 'ko-wallet') return Response.json({h:cur||null});
       if (typeof h !== 'string' || !HEX64.test(h)) return new Response('bad', { status: 400 });
       if (!cur) await this.state.storage.put('h', h);
       else if (cur !== h) return new Response('bound', { status: 409 });
@@ -3425,12 +3449,13 @@ export class SyncLock {
     this.state = state;
   }
   async fetch(req) {
-    const { data, base, op, amt, gid, opId, wid, pid, mail, ids, style, lord, raidId, amount, castleName, count, maxAffordable, floor, boss } = await req.json();
+    const { data, base, op, amt, gid, opId, wid, pid, mail, ids, style, lord, raidId, amount, castleName, count, maxAffordable, floor, boss, rewardKind, rewardId } = await req.json();
     return this.state.blockConcurrencyWhile(async () => {
       const store = this.state.storage;
       const row = (await store.get('row')) || null;
       const res = (x, status = 200) => new Response(JSON.stringify(x), { status });
       if (op === 'get') return res({ row });
+      if(op==='ko-reward')return creditKoWallet(store,row,res,{pid,rewardKind,rewardId,count});
       if(typeof op==='string'&&op.startsWith('castle-'))return rf50Wallet(store,row,res,{op,pid,style,lord,raidId,amount,castleName,count,maxAffordable,floor,boss});
             // RF48: purchase and debit are a single durable-object transaction.
             if(op==='minamoto-owned')return res({owned:!!(await store.get('purchase:minamoto_yoritomo'))});
@@ -3749,6 +3774,46 @@ function rf553Name(v){
 }
 const RF50_MONSTERS=['影狼','甲冑兵','朧蜘蛛','双月ゴーレム','霧の術師','鋼牙獣','魔晶騎士','深淵の番兵','古代石像','結界守護者'];
 function rf50Save(row){try{return JSON.parse(row?.data||'null')}catch{return null}}
+async function applyKoWallet(env,h,pid,rewardKind,rewardId,count){
+ const wallet=env.SYNC_LOCK.get(env.SYNC_LOCK.idFromName(h));
+ return doCall(wallet,{op:'ko-reward',pid,rewardKind,rewardId,count});
+}
+async function creditKoWallet(storage,row,res,{pid,rewardKind,rewardId,count}){
+ const valid=rewardKind==='rank'
+  ? /^[0-9a-f]{32}:[1-9][0-9]{0,14}$/.test(rewardId)&&count===1
+  : rewardKind==='castle'&&/^[0-9a-f-]{36}$/.test(rewardId)&&Number.isSafeInteger(count)&&count>=1&&count<=10;
+ if(!valid)return res({error:'bad'},400);
+ const save=rf50Save(row);
+ if(!save||!PID_RE.test(String(pid||''))||save.pid!==pid)return res({error:'nosync'},403);
+ const balance=save.shards;
+ if(!Number.isSafeInteger(balance)||balance<0||balance>RF50_LIMIT)return res({error:'bad_balance'},422);
+ const key='ko:receipt:'+rewardKind+':'+rewardId;
+ const prior=await storage.get(key);
+ const completed=prior?.count||0,previouslyCredited=prior?.credited||0;
+ if(completed>=count)return res({ok:true,count:completed,credited:previouslyCredited,added:0,ver:row.ver||0});
+ const added=Math.min((count-completed)*KO_SHARDS,RF50_LIMIT-balance),credited=previouslyCredited+added;
+ const writes=[[key,{count,credited}]];
+ let ver=row.ver||0;
+ if(added){
+  save.shards=balance+added;
+  const now=Date.now();
+  save.syncAt=now;
+  const data=JSON.stringify(save);
+  if(data.length>200000)return res({error:'size'},413);
+  ver++;
+  writes.push(['row',{...row,data,ver,at:now,wealth:wealthOf(save),wid:''}]);
+ }
+ await writeTogether(storage,writes);
+ return res({ok:true,count,credited,added,ver});
+}
+async function castleKoReward(env,h,pid,raid){
+ if(!raid?.koFloors)return {};
+ try{
+  const reward=await applyKoWallet(env,h,pid,'castle',raid.id,raid.koFloors);
+  if(reward.status===200)return {koReward:reward.data};
+ }catch{}
+ return {koRewardPending:true};
+}
 function rf55Plan(plan){
  return Array.from({length:10},(_,i)=>{
   const key=Array.isArray(plan)?plan[i]:null,def=typeof key==='string'?ownValue(FIGHTERS,key):null;
@@ -3775,7 +3840,7 @@ function rf50View(r){
  const assigned=r.bossPlan?.[r.floor-1];
  const final=r.floor===r.floors;
  return {enemyKey:assigned||(final?r.lord:rf55Defenders[index]),
-  combat:r.combat||'commands',hero:r.hero,paid:!!r.paidAt,id:r.id,status:r.status,targetPid:r.targetPid,floor:r.floor,floors:r.floors,castleLevel:r.castleLevel,style:r.style,lord:r.lord,cpuPercent:r.cpuPercent??100,enemyAttack:rf50EnemyAttack(r),defenseFactor:rf50EnemyDefense(r),enemyName:assigned?FIGHTERS[assigned].name:final?r.lordName:RF50_MONSTERS[index],attackerHp:r.hp,maxHp:r.maxHp,enemyHp:r.enemyHp,maxEnemyHp:r.maxEnemyHp,charge:r.charge,healsLeft:r.healsLeft,turn:r.turn,lastLog:r.lastLog,expiresAt:r.expiresAt,winAt:r.winAt||0}}
+  combat:r.combat||'commands',hero:r.hero,paid:!!r.paidAt,id:r.id,status:r.status,targetPid:r.targetPid,floor:r.floor,floors:r.floors,koFloors:r.koFloors||0,castleLevel:r.castleLevel,style:r.style,lord:r.lord,cpuPercent:r.cpuPercent??100,enemyAttack:rf50EnemyAttack(r),defenseFactor:rf50EnemyDefense(r),enemyName:assigned?FIGHTERS[assigned].name:final?r.lordName:RF50_MONSTERS[index],attackerHp:r.hp,maxHp:r.maxHp,enemyHp:r.enemyHp,maxEnemyHp:r.maxEnemyHp,charge:r.charge,healsLeft:r.healsLeft,turn:r.turn,lastLog:r.lastLog,expiresAt:r.expiresAt,winAt:r.winAt||0}}
 // RF50_FLOOR_BALANCE_V2 / each floor raises enemy HP, attack and defense
 function rf50FloorRank(r){const depth=Math.max(0,r.floor-1);return {depth,progress:depth/Math.max(1,r.floors-1),boss:r.floor===r.floors}}
 function rf50Enemy(r){const {depth,progress,boss}=rf50FloorRank(r);const pct=Math.min(100,Math.max(1,Number(r.cpuPercent??100)))/100;
@@ -4017,7 +4082,9 @@ async function rf50CastleHub(storage,b,now,out){
   damage=Math.max(0,Math.round(damage/rf50EnemyDefense(r)));
   r.turn++;r.lastAt=now;r.enemyHp=Math.max(0,r.enemyHp-damage);
   r.charge=Math.min(100,r.charge+(action==='attack'?23:action==='skill'?30:action==='guard'?17:action==='heal'?14:0));
-  if(r.enemyHp===0){
+  const defeated=r.enemyHp===0;
+  if(defeated){
+   r.koFloors=(r.koFloors||0)+1;
    if(r.floor>=r.floors){r.status='won';r.winAt=now;r.lastLog='最上階の防衛ボスを撃破！ 攻城戦勝利';}
    else {r.floor++;r.enemyHp=rf50Enemy(r);r.maxEnemyHp=r.enemyHp;r.healsLeft=1;r.hp=Math.min(r.maxHp,r.hp+Math.round(r.maxHp*.12));r.lastLog='階層突破！第'+r.floor+'階層へ';}
   }else{
@@ -4033,7 +4100,7 @@ async function rf50CastleHub(storage,b,now,out){
     ['castle:pending:'+r.targetPid+':'+id,{id,attackerPid:r.attackerPid}]
   ]);
   else await storage.put('castle:raid:'+id,r);
-  return out({ok:true,raid:rf50View(r)});
+  return out({ok:true,raid:rf50View(r),defeated});
  }
  return out({error:'bad'},400);
 }
@@ -4137,19 +4204,28 @@ async function rf50Route(req,env,H,body,action){
  if(['raid/current','raid/act','raid/leave'].includes(action)){
   const op={'raid/current':'castle-current','raid/act':'castle-act','raid/leave':'castle-leave'}[action];
   const r=await doCall(hub,{op,pid:me.pid,raidId:body.raidId,action:body.action,floor:body.floor,turn:body.turn});
-  if(r.status!==200)return json(H,r.data,r.status);
-  if(action==='raid/act'&&r.data.raid.status==='won'){
-   const settled=await rf50Settle(env,me.pid,r.data.raid.id);
-   if(settled.status===200)return json(H,{...r.data,result:settled.data});
-   return json(H,{...r.data,settlementPending:true,settlementError:settled.data?.error||'retry'});
+  const raid=r.data.raid;
+  const confirmKo=action!=='raid/act'||r.data.defeated||raid?.status==='lost'||['stale_raid','not_active'].includes(r.data.error);
+  const reward=confirmKo?await castleKoReward(env,me.h,me.pid,raid):{};
+  const reply={...r.data,...reward};
+  if(r.status!==200)return json(H,reply,r.status);
+  if(action==='raid/act'&&raid.status==='won'){
+   if(reward.koRewardPending)return json(H,{...reply,settlementPending:true});
+   const settled=await rf50Settle(env,me.pid,raid.id);
+   if(settled.status===200)return json(H,{...reply,result:settled.data});
+   return json(H,{...reply,settlementPending:true,settlementError:settled.data?.error||'retry'});
   }
-  if(action==='raid/act'&&r.data.raid.status==='lost'){
-   await rf50Notice(env,r.data.raid.targetPid||body.targetPid,r.data.raid.id,'defended','【拠点防衛】防衛成功',name+' を防衛ダンジョンで撃退しました。灯晶は移動していません。',Date.now());
+  if(action==='raid/act'&&raid.status==='lost'){
+   await rf50Notice(env,raid.targetPid||body.targetPid,raid.id,'defended','【拠点防衛】防衛成功',name+' を防衛ダンジョンで撃退しました。灯晶は移動していません。',Date.now());
   }
-  return json(H,r.data,r.status);
+  return json(H,reply,r.status);
  }
  if(action==='raid/claim'){
-  const r=await rf50Settle(env,me.pid,body.raidId);return json(H,r.data,r.status);
+  const current=await doCall(hub,{op:'castle-current',pid:me.pid,raidId:body.raidId});
+  const reward=await castleKoReward(env,me.h,me.pid,current.data.raid);
+  if(reward.koRewardPending)return json(H,{error:'ko_reward_retry',...reward},503);
+  const r=await rf50Settle(env,me.pid,body.raidId);
+  return json(H,{...r.data,...reward},r.status);
  }
  return json(H,{error:'not_found'},404);
 }

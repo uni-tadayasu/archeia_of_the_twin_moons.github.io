@@ -316,12 +316,10 @@ updateModelStatus();
 // ---------- Save ----------
 const SAVE_KEY = 'arkeia-save-v1';
 const clampInt = (v, lo, hi) => Math.max(lo, Math.min(hi, Math.floor(Number(v) || 0)));
-function loadSave() {
-  let raw = {};
-  try {
-    raw = JSON.parse(localStorage.getItem(SAVE_KEY) || '{}') || {};
-  } catch {
-    raw = {};
+function loadSave(raw) {
+  if (raw === undefined) {
+    try { raw = JSON.parse(localStorage.getItem(SAVE_KEY) || '{}') || {}; }
+    catch { raw = {}; }
   }
   const s = { shards: clampInt(raw.shards, 0, 999999), chapter: clampInt(raw.chapter, 0, STORY.length), upg: {}, lb: {} };
   s.story2 = readStoryII(raw.story2);
@@ -356,8 +354,9 @@ function loadSave() {
   s.party = Array.isArray(raw.party) ? raw.party.filter((k) => FIGHTERS[k]).slice(0, 4) : [];
   s.main = FIGHTERS[raw.main] ? raw.main : null;
   s.pid = raw.pid;
-  s.friends = raw.friends;
-  s.uname = raw.uname;
+  s.friends = (Array.isArray(raw.friends) ? raw.friends : []).filter(f => f && typeof f.pid === 'string').slice(0, 100)
+    .map(f => ({ pid: String(f.pid).slice(0, 24), name: String(f.name || '旅人').replace(/[<>&"']/g, '').slice(0, 12) }));
+  s.uname = typeof raw.uname === 'string' ? raw.uname : '';
   s.noHero = !!raw.noHero;
   s.awk = clampInt(raw.awk, 0, 99);
   s.buyId = raw.buyId;
@@ -389,9 +388,6 @@ if (typeof save.buyId !== 'string' || !/^[A-Za-z0-9]{24}$/.test(save.buyId)) {
 }
 // 世界でのあなたの印（端末ごとに固定）とフレンド
 if (typeof save.pid !== 'string' || !/^[a-z0-9]{8,24}$/.test(save.pid)) save.pid = (Math.random().toString(36).slice(2) + Date.now().toString(36)).slice(0, 16);
-if (!Array.isArray(save.friends)) save.friends = [];
-save.friends = save.friends.filter((f) => f && typeof f.pid === 'string').slice(0, 100).map((f) => ({ pid: String(f.pid).slice(0, 24), name: String(f.name || '旅人').replace(/[<>&"']/g, '').slice(0, 12) }));
-if (typeof save.uname !== 'string') save.uname = '';
 const lvOf = (k, id) => save.upg[k]?.[id] || 0;
 const lbOf = (k) => save.lb[k] || 0;
 const maxLvOf = (k) => lbMaxLv(lbOf(k));
@@ -637,21 +633,24 @@ async function autoPush({ forSpend = false, reload = true } = {}) {
     autoBusy = false;
   }
 }
-async function autoPull() {
+async function autoPull({ allowBattle = false, reload = true } = {}) {
   const code = syncCodeNow();
-  if (code.length !== 12 || autoBusy || syncSpendBusy || syncImportBusy || document.hidden) return;
+  const pid = save.pid;
+  if (code.length !== 12 || autoBusy || syncSpendBusy || syncImportBusy || (document.hidden && !allowBattle)) return;
   if (localStorage.getItem('arkeia-sync-dirty') || getPends().length) {
     // 未送信の変更を優先（再送待ちの間は送らない）
-    if (Date.now() >= syncHoldUntil) return autoPush();
+    if (Date.now() >= syncHoldUntil) return autoPush({ reload });
     return;
   }
   autoBusy = true;
   try {
-    let { data: json, ver } = await fetchVersioned(code);
-    if (!json || syncCodeNow() !== code) return;
-    // 戦闘中は反映せず、次回の確認（戦闘外）で取り込む
-    if (ver > syncVer() && !state.battle && !state.battleLoading && !localStorage.getItem('arkeia-sync-dirty')) {
+    const { data: json, ver } = await fetchVersioned(code);
+    if (!json || !Number.isSafeInteger(ver) || syncCodeNow() !== code || save.pid !== pid) return;
+    // 通常の同期は戦闘外。サーバーの撃破報酬だけは試合画面を開いたまま反映する。
+    if (ver > syncVer() && (allowBattle || (!state.battle && !state.battleLoading)) && !localStorage.getItem('arkeia-sync-dirty') && !getPends().length) {
       const remote = JSON.parse(json);
+      if (!remote || typeof remote !== 'object' || Array.isArray(remote) || (remote.pid != null && remote.pid !== pid)) return;
+      if (!reload && (!Number.isSafeInteger(remote.shards) || remote.shards < 0 || remote.shards > 999999)) return;
       // サーバーは購入キャラ(chars)を保存しないため、端末側の分を残す
       const uni = (a, b) => [...new Set([...(Array.isArray(a) ? a : []), ...(Array.isArray(b) ? b : [])])];
       remote.chars = uni(remote.chars, save.chars);
@@ -659,18 +658,49 @@ async function autoPull() {
       const localStoryII = readStoryII(save.story2).chapter;
       remote.story2 = { chapter: Math.max(remoteStoryII, localStoryII) };
       if (remote.pid == null && save.pid) remote.pid = save.pid;
-      json = JSON.stringify(remote);
-      localStorage.setItem(SAVE_KEY, json);
+      const restored = reload ? remote : { ...loadSave(remote), buyId: save.buyId };
+      localStorage.setItem(SAVE_KEY, JSON.stringify(restored));
       setPend(null);
       markSynced(ver, Number(remote.syncAt) || Date.now(), +remote.shards || 0);
       if (localStoryII > remoteStoryII) localStorage.setItem('arkeia-sync-dirty', '1');
-      location.reload();
+      if (reload) location.reload();
+      else {
+        Object.assign(save, restored);
+        if (localStoryII > remoteStoryII) scheduleAutoSync();
+      }
     }
   } catch {
     /* 次回再試行 */
   } finally {
     autoBusy = false;
   }
+}
+let koBalanceRefresh = null;
+function refreshServerKoBalance(confirmedVersion) {
+  const code = syncCodeNow(), pid = save.pid;
+  if (!apiEnabled() || code.length !== 12) return;
+  const version = Number.isSafeInteger(confirmedVersion) && confirmedVersion > 0 ? confirmedVersion : 0;
+  if (version && syncVer() >= version) return;
+  if (koBalanceRefresh?.code === code && koBalanceRefresh.pid === pid) {
+    koBalanceRefresh.version = Math.max(koBalanceRefresh.version, version);
+    koBalanceRefresh.again = true;
+    return koBalanceRefresh.promise;
+  }
+  const request = { code, pid, version, again: false };
+  koBalanceRefresh = request;
+  request.promise = (async () => {
+    do {
+      request.again = false;
+      for (let i = 0; i < 50 && (autoBusy || syncSpendBusy || syncImportBusy); i++) {
+        await new Promise(resolve => setTimeout(resolve, 100));
+      }
+      if (syncCodeNow() !== code || save.pid !== pid || koBalanceRefresh !== request) return;
+      if (!request.version || syncVer() < request.version) await autoPull({ allowBattle: true, reload: false });
+      const wallet = $('#title-shards');
+      if (wallet) wallet.textContent = `灯晶　${save.shards}`;
+    } while (request.again);
+  })().finally(() => { if (koBalanceRefresh === request) koBalanceRefresh = null; });
+  return request.promise;
 }
 // 寄付は同期と同じ排他範囲で実行する。応答待ちの間に減算済みセーブを取り込まない。
 function applyServerSpend(amt, ver) {
@@ -2355,7 +2385,7 @@ const ui = {
 function makeBattle(net) {
   endBattle();
   state.invaded = false;
-  state.battle = new Battle(scene, camera, { assets, ui, net });
+  state.battle = new Battle(scene, camera, { assets, ui, net, onHostilesDefeated: awardDefeatedHostiles });
   if(state.mode==='story'||state.mode==='infinite')state.battle.rfCameraView=orbitControls.view;
   return state.battle;
 }
@@ -2626,6 +2656,7 @@ const infiniteDungeon=createInfiniteDungeonV552({
 document.getElementById('rf552-infinite-rank')?.addEventListener('click',()=>infiniteDungeon.openLeaderboard());
 const ranked=createRankedMode({
   THREE,FIGHTERS,api,apiEnabled,code:syncCodeNow,name:myName,roleToken:()=>roleState.tok,show,goTitle,
+  onKoReward:refreshServerKoBalance,
   options:()=>{
     state.mode=null;
     playTrack('title');
@@ -2660,10 +2691,17 @@ $('#btn-ranked').addEventListener('click',()=>{
   void ranked.open();
 });
 const REWARD = { cpu: 30, duo: 40, story: 60, 'online-vs': 50, 'online-coop': 60 };
+const DEFEAT_SHARDS = 5;
 function grant(n) {
   save.shards += n;
   persist();
   return n;
+}
+
+function awardDefeatedHostiles(battle, defeated) {
+  if (battle !== state.battle || battle.ranked || battle.siege || state.mode === 'ranked' || state.mode === 'castle') return;
+  grant(defeated.length * DEFEAT_SHARDS);
+  for (const fighter of defeated) ui.popup(fighter.pos, `灯晶 +${DEFEAT_SHARDS}`, '#fff0ad');
 }
 
 function onBattleEnd(won) {
@@ -3478,13 +3516,15 @@ $('#btn-join').addEventListener('click', async () => {
       },
       onHit: (e) => state.battle?.receiveNetHit(e),
       onBoss: (e) => {
-        const boss = state.battle?.fighters.find((x) => x.netId === 'boss' && x.remoteAuth);
+        const battle = state.battle;
+        const boss = battle?.fighters.find((x) => x.netId === 'boss' && x.remoteAuth);
         if (boss) {
           boss.netTarget.set(e.x, 0, e.z);
           boss.netFacing = e.ry;
           boss.netMoving = e.mv;
           boss.hp = e.hp;
           boss.dead = e.hp <= 0;
+          if (boss.dead) battle.reportHostileDefeats();
         }
       }
     });
@@ -3522,11 +3562,13 @@ function onPeers(peers) {
     }
     return;
   }
+  if (!remote) return;
   remote.netTarget.set(p.x, 0, p.z);
   remote.netFacing = p.ry;
   remote.netMoving = p.mv;
   remote.hp = Math.min(remote.maxHp, p.hp);
   remote.dead = p.hp <= 0;
+  if (remote.dead) b.reportHostileDefeats();
 }
 
 async function startOnline(peer) {
@@ -3656,6 +3698,7 @@ function syncWorldRemotes(peers) {
     f.netMoving = p.mv;
     f.hp = Math.min(f.maxHp, p.hp);
     f.dead = p.hp <= 0;
+    if (f.dead) b.reportHostileDefeats();
   }
 }
 
@@ -4863,7 +4906,7 @@ async function startCastleBattle(session){
   return true;
 }
 
-const castleRealm=initCastleRealm({startBattle:startCastleBattle,endBattle,save,persist,FIGHTERS,canUse,show,goTitle,state,playerName:myName,syncCodeNow,setCastleMusic:(active)=>playTrack(active?'event':'title'),roleToken:()=>roleState.tok,roleKind:()=>roleState.r,markSynced,syncVer,syncBefore:async()=>{
+const castleRealm=initCastleRealm({startBattle:startCastleBattle,endBattle,save,persist,FIGHTERS,canUse,show,goTitle,state,playerName:myName,syncCodeNow,setCastleMusic:(active)=>playTrack(active?'event':'title'),roleToken:()=>roleState.tok,roleKind:()=>roleState.r,markSynced,syncVer,onKoReward:refreshServerKoBalance,syncBefore:async()=>{
   let tries=0;
   while(autoBusy||syncSpendBusy||syncImportBusy){if(++tries>250)throw Error('busy');await new Promise(resolve=>setTimeout(resolve,100))}
   syncSpendBusy=true;

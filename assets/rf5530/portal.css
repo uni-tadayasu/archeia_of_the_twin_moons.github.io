@@ -612,3 +612,92 @@ body.rf5530:has(#hud:not([hidden])) #net-fail-note {
   top: calc(env(safe-area-inset-top, 0px) + 58px) !important;
   bottom: auto !important;
 }
+
+/* Faint menu illustrations. Each image fills the control without changing its box. */
+body.rf5530 {
+  --rf32-arena: url('../rf5526/moon-arena-960.webp');
+  --rf32-court: url('../rf5523/moon-court.webp');
+  --rf32-keep: url('../rf562/japanese-palace.webp');
+  --rf32-river: url('../rf5523/river-path.webp');
+  --rf32-image: var(--rf32-court);
+  --rf32-position: 62% 48%;
+  --rf32-wash: linear-gradient(108deg, #16283bf2, #172b40cf);
+}
+
+body.rf5530 :is([data-go="story"], [data-go="online-coop"], #btn-adventure-mode, #btn-shop,
+  [data-portal-jump="portal-world"], [data-rf25-icon="map"], [href$="#river"]) {
+  --rf32-image: var(--rf32-river);
+  --rf32-position: 64% 56%;
+}
+
+body.rf5530 :is([data-go="infinite"], #rf552-infinite-rank, #btn-castle, #btn-forge,
+  [data-portal-jump="portal-services"], [data-rf25-icon="castle"], [data-rf25-icon="tower"], [href$="#tenshu"]) {
+  --rf32-image: var(--rf32-keep);
+  --rf32-position: 65% 47%;
+}
+
+body.rf5530 :is([data-go="cpu"], [data-go="duo"], [data-go="online-vs"], [data-go="event"],
+  #btn-invade, #scr-ranked, [data-portal-jump="portal-play"], [data-rf25-icon="sword"], [href$="#moon-arena"]) {
+  --rf32-image: var(--rf32-arena);
+  --rf32-position: 62% 59%;
+}
+
+/* Keep the individual pigments behind the mode and service card artwork. */
+html body.rf5530 #scr-title :is(.mode-tile, .portal-services > button, .rf5523-gallery > a) {
+  --rf32-wash: linear-gradient(110deg, color-mix(in srgb, var(--rf30-pigment) 94%, transparent), #14263ad1 92%);
+}
+
+body.rf5530 :is(.action-primary, .ranked-primary:not(:disabled), .rf51-primary,
+  #rf45-layout-editor .rf45-primary, #rf552-coop-start, #rf561-infinite-theme button[aria-pressed="true"]) {
+  --rf32-wash: linear-gradient(160deg, #fff0c5f2, #edbf81de 69%, #e5a775d9);
+}
+
+body.rf5530 :is(.rf51-danger, [data-go="event"].event-cta) {
+  --rf32-wash: linear-gradient(110deg, #542b3bf2, #3f2939d6);
+}
+
+html body.rf5530.rf5527.rf5525.rf5521 #ui :is(#scr-title, #scr-press, #pause, #world-panel, #world-req, .screen)
+  :is(button, a[href], summary, input:is([type="button"], [type="submit"], [type="reset"]), [role="button"], [role="tab"]):not(#story-box, .rf25-feature-mode),
+html body.rf5530.rf5527.rf5525.rf5521 #ui #scr-title .portal-modes > :is(.mode-tile, #btn-ranked.mode-tile):not(.rf25-feature-mode),
+html body.rf5530.rf5527.rf5525.rf5521 :is(#pause, #rift-utility, #rf557-mobile-nav, #chat-panel, #world-panel, #world-req,
+  #gaizorg-adventure-ui, #rf552-infinite-board, #rf552-event-coop, #arkeia-stage-loading, #arkeia-model-error,
+  .rf552-choice-backdrop, dialog, [role="dialog"], [role="alertdialog"])
+  :is(button, a[href], summary, input:is([type="button"], [type="submit"], [type="reset"]), [role="button"], [role="tab"]):not(.rf45-editor-control),
+html body.rf5530.rf5527.rf5525.rf5521 :is(#rift-floating-back, #chat-btn, #ui #btn-world) {
+  background-image: var(--rf32-wash), var(--rf32-image) !important;
+  background-size: cover, cover !important;
+  background-position: center, var(--rf32-position) !important;
+  background-repeat: no-repeat !important;
+  background-clip: padding-box !important;
+}
+
+html body.rf5530 #scr-title .portal-topnav > :is([aria-current], .rf558-nav-selected, :hover, :focus-visible),
+html body.rf5530 #rf557-mobile-nav button[aria-current] {
+  --rf32-wash: linear-gradient(108deg, #284a6bf2, #254564d6);
+}
+
+/* The four feature cards already have clipped art layers; soften those in place. */
+html body.rf5530.rf5527.rf5525.rf5521 #ui #scr-title #btn-ranked.rf25-feature-mode {
+  --rf25-tile-image: var(--rf32-arena);
+}
+
+html body.rf5530.rf5527.rf5525.rf5521 #ui #scr-title .portal-modes > :is(.rf25-feature-mode, #btn-ranked.rf25-feature-mode)::before {
+  border-radius: inherit;
+  opacity: .54 !important;
+  background-size: cover !important;
+  background-repeat: no-repeat !important;
+}
+
+html body.rf5530.rf5527.rf5525.rf5521 #ui #scr-title .portal-modes > :is(.rf25-feature-mode, #btn-ranked.rf25-feature-mode)::after {
+  border-radius: inherit;
+  background:
+    linear-gradient(0deg, #0b1b2cf9 4%, #10233ade 28%, #10213960 63%, #14243827 100%),
+    linear-gradient(95deg, color-mix(in srgb, var(--rf30-pigment) 38%, transparent), transparent 80%) !important;
+}
+
+@media (max-width: 560px) {
+  html body.rf5530 #scr-title :is(.portal-topnav button, .portal-topnav a[href], .portal-account button),
+  html body.rf5530 #rf557-mobile-nav button {
+    --rf32-position: center;
+  }
+}

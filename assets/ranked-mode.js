@@ -229,7 +229,7 @@ function createView(THREE,battle,match) {
 }
 
 export function createRankedMode({
-  THREE,FIGHTERS,api,apiEnabled,code,name,roleToken,show,goTitle,options,chooseFighter,loadFighter,makeBattle,endBattle,buildHud,playTrack
+  THREE,FIGHTERS,api,apiEnabled,code,name,roleToken,show,goTitle,options,chooseFighter,loadFighter,makeBattle,endBattle,buildHud,playTrack,onKoReward
 }) {
   const el=Object.fromEntries([
     'screen','back','sync','choose','fighter','portrait','join','setup','queue','cancel','status','wait',
@@ -417,7 +417,9 @@ export function createRankedMode({
     const oldTier=tierNameAt(recentBoard?.tiers,result.before[me]);
     const newTier=tierNameAt(recentBoard?.tiers,points);
     const change=oldTier&&newTier&&oldTier!==newTier?' ／ '+newTier+(diff>0?'へ昇格':'へ降格'):'';
+    const koShards=result.reason==='ko'&&result.winner===me&&Number.isSafeInteger(result.koShards)?result.koShards:0;
     setText(el.reason,(reasonLabels[result.reason]||'試合終了')+
+      (koShards>0?' ／ 撃破報酬 +'+fmt(koShards)+' 灯晶':'')+
       (result.botLimit?' ／ 本日のボット戦ポイント上限に到達':change));
     const voted=message.votes[me];
     el.retry.disabled=!!voted||retryWanted||finishing;
@@ -464,6 +466,8 @@ export function createRankedMode({
         lobby();
         void refreshBoard(true);
       }
+      if((prior?.phase!=='result'||prior.round!==message.round)&&message.result?.reason==='ko'&&
+          message.result.winner===match.seat&&message.result.koShards>0)void onKoReward?.(message.result.koWalletVersion);
       renderResult(message);
     }
     ui();

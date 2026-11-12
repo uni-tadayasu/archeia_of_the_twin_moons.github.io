@@ -3,7 +3,7 @@
 // RF54_FIX_20261111
 // Riftfall Castle Realm V50 - browser UI, all rules enforced by Cloudflare Worker.
 import {api,apiEnabled} from './api.js';
-export function initCastleRealm({save,persist,FIGHTERS,canUse,show,goTitle,state,playerName,syncCodeNow,setCastleMusic,roleToken,roleKind,syncBefore,markSynced,syncVer,startBattle,endBattle}){
+export function initCastleRealm({save,persist,FIGHTERS,canUse,show,goTitle,state,playerName,syncCodeNow,setCastleMusic,roleToken,roleKind,syncBefore,markSynced,syncVer,startBattle,endBattle,onKoReward}){
 const ui=document.getElementById('castle-content'),enter=document.getElementById('btn-castle');
 if(!ui||!enter)return;
 const S={castle:null,list:[],raid:null,fighter:'',target:null,busy:false,pendingLoot:0,notice:'',bossFloor:1};
@@ -41,7 +41,7 @@ return b;}
 function heading(text){return node('h3','cr-title',text);}
 function note(text){S.notice=text;const n=document.getElementById('castle-notice');if(n)n.textContent=text;}
 function allowEdit(){return !S.busy}
-const errorMap={invalid_floor:'階層は1〜10階から選択してください。',castle_publish_pending:'保存しました。一覧への反映は再読み込みで確認できます。',sync:'未同期のセーブデータがあるため処理を停止しました。旅支度から同期後、もう一度お試しください。',castle_not_ready:'サーバーの拠点機能が利用できません。Cloudflare Workerの再デプロイとDurable Objectsの設定を確認してください。',already_exists:'拠点はすでに建設されています。再読込してください。',no_castle:'まだ拠点がありません。',not_found:'対象の拠点または攻城戦が見つかりません。',nosync:'旅支度から同期コードを設定し、セーブを同期してください。',shield:'この城は現在、襲撃保護中です。',new_castle:'新しい城は一定時間保護されています。',cooldown:'この城へは24時間以内に再襲撃できません。',under_attack:'ほかのプレイヤーが攻略中です。',already_active:'先に進行中のダンジョンを終えてください。',shards:'灯晶が不足しています。',fighter_locked:'選択した領主・戦士は使用できません。',level_max:'城は最大レベルです。',invalid_castle_name:'拠点名は1〜20文字の文字・数字・空白・中点・長音・ハイフンで入力してください。',invalid_count:'一括強化のレベル数が正しくありません。',too_fast:'攻撃間隔を空けてください。',not_ready:'奥義ゲージが不足しています。',mail_retry:'報酬処理中です。「受け取りを再試行」を押してください。'};
+const errorMap={invalid_floor:'階層は1〜10階から選択してください。',castle_publish_pending:'保存しました。一覧への反映は再読み込みで確認できます。',sync:'未同期のセーブデータがあるため処理を停止しました。旅支度から同期後、もう一度お試しください。',castle_not_ready:'サーバーの拠点機能が利用できません。Cloudflare Workerの再デプロイとDurable Objectsの設定を確認してください。',already_exists:'拠点はすでに建設されています。再読込してください。',no_castle:'まだ拠点がありません。',not_found:'対象の拠点または攻城戦が見つかりません。',nosync:'旅支度から同期コードを設定し、セーブを同期してください。',shield:'この城は現在、襲撃保護中です。',new_castle:'新しい城は一定時間保護されています。',cooldown:'この城へは24時間以内に再襲撃できません。',under_attack:'ほかのプレイヤーが攻略中です。',already_active:'先に進行中のダンジョンを終えてください。',shards:'灯晶が不足しています。',fighter_locked:'選択した領主・戦士は使用できません。',level_max:'城は最大レベルです。',invalid_castle_name:'拠点名は1〜20文字の文字・数字・空白・中点・長音・ハイフンで入力してください。',invalid_count:'一括強化のレベル数が正しくありません。',too_fast:'攻撃間隔を空けてください。',not_ready:'奥義ゲージが不足しています。',mail_retry:'報酬処理中です。「受け取りを再試行」を押してください。',ko_reward_retry:'防衛ボスの撃破報酬を確定できませんでした。受け取りを再試行してください。'};
 async function request(name,body={}){
 if(!apiEnabled())throw Error('拠点機能にはCloudflare Workersとの通信が必要です。');
 const code=syncCodeNow();
@@ -51,13 +51,16 @@ let release=null;
 try{
  if(!['list','raid/current','raid/act','raid/leave','boss'].includes(name))release=await syncBefore?.();
  const out=await api('/castle/'+name,{code,name:playerName(),token:roleToken?.()||'',...body});
+ const receipt=out.result||out;
+ if(out.ok&&typeof receipt.data==='string'&&Number.isSafeInteger(receipt.ver)&&Number.isSafeInteger(receipt.shards)){
+  updateBalance(receipt.shards,receipt.ver,receipt.data);
+ }
+ if(out.koReward?.credited>0)void onKoReward?.(out.koReward.ver);
  if(!out.ok){
   const update=out.status===404&&out.error==='not_found'&&name==='boss';
   const error=Error(errorMap[out.error]||(update?'Cloudflare WorkerをV55.20へ更新してください。':'通信エラー：'+(out.error||'server')));
   error.detail=out;throw error;
  }
- const receipt=out.result||out;
- if(typeof receipt.data==='string'&&Number.isSafeInteger(receipt.ver)&&Number.isSafeInteger(receipt.shards))updateBalance(receipt.shards,receipt.ver,receipt.data);
  return out;
 }finally{release?.()}
 }
@@ -252,12 +255,15 @@ function returnFromFight(){
 }
 function accept(reply,session){
  if(!reply?.raid||(session&&encounter!==session))return;
- S.raid=reply.raid;
+ const previous=S.raid?.id===reply.raid.id?S.raid:null;
+ S.raid={...reply.raid,
+  koShards:reply.koReward?.credited??previous?.koShards??0,
+  koPending:!!reply.koRewardPending||(!reply.koReward&&!!previous?.koPending)};
  if(session)session.raid=S.raid;
  if(reply.result){
-  updateBalance(reply.result.shards,reply.result.ver,reply.result.data);
   S.raid.paid=true;S.notice='勝利！ 灯晶 '+fmt(reply.result.amount)+' を獲得しました。';
  }else if(reply.settlementPending)S.notice='戦利品の確定を再試行してください。';
+ else if(reply.koReward?.added>0)S.notice='防衛ボス撃破！ 灯晶 +'+fmt(reply.koReward.added);
  if(S.raid.status!=='active')setCastleMusic?.(false);
  if(session&&(S.raid.status!=='active'||S.raid.floor!==session.floor))returnFromFight();
 }
@@ -304,6 +310,8 @@ function renderRaid(){
  ui.append(heading('防衛ダンジョン　第'+r.floor+'/'+r.floors+'階'),
   line('防衛ボス　'+r.enemyName+'　／　城Lv '+r.castleLevel),
   meter('あなたのHP',r.attackerHp,r.maxHp),meter('防衛側のHP',r.enemyHp,r.maxEnemyHp),node('div','cr-log',r.lastLog||''));
+ if(r.koShards>0)ui.append(line('防衛ボス撃破報酬　灯晶 +'+fmt(r.koShards)));
+ if(r.koPending)ui.append(button('撃破報酬を再確認',()=>run(async()=>accept(await request('raid/current',{raidId:r.id})))));
  if(r.status==='active'){
   if(r.combat==='action'){
    const enter=button('第'+r.floor+'階の闘技場へ',()=>run(launch),'cr-accent');
@@ -323,7 +331,9 @@ function renderRaid(){
  if(r.status==='won'){
   ui.append(heading('攻城戦勝利'));
   if(!r.paid)ui.append(button('戦利品を受け取る／再試行',()=>run(async()=>{
-   const t=await request('raid/claim',{raidId:r.id});updateBalance(t.shards,t.ver,t.data);
+   const t=await request('raid/claim',{raidId:r.id});
+   r.koShards=t.koReward?.credited??r.koShards;
+   r.koPending=!!t.koRewardPending;
    r.paid=true;S.notice='灯晶 '+fmt(t.amount)+' を獲得しました。';
   }),'cr-accent'));
  }else ui.append(heading(r.status==='lost'?'攻城戦敗退':'攻城戦終了'));
@@ -333,8 +343,9 @@ async function refresh(){
  const me=await request('self');S.castle=me.castle;S.pendingLoot=me.pendingLoot||0;
  if(Number.isFinite(me.shards))updateBalance(me.shards,me.ver,me.data);
  S.list=(await request('list')).castles||[];
- const r=(await request('raid/current').catch(()=>null))?.raid;
- S.raid=r&&['active','won'].includes(r.status)?r:null;
+ const current=await request('raid/current').catch(()=>null);
+ if(current?.raid&&['active','won'].includes(current.raid.status))accept(current);
+ else S.raid=null;
  S.target=S.raid?S.list.find(c=>c.pid===S.raid.targetPid)||null:null;
  setCastleMusic?.(S.raid?.status==='active');
 }
