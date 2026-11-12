@@ -2713,7 +2713,7 @@ export class Battle {
 
   update(rawDt, playerInput) {
     this.slowmo -= rawDt;
-    if (this.intro > 0) this.intro -= rawDt; // 開戦の合図までは誰も動かない
+    if (this.intro > 0 && !this.introCountdown) this.intro -= rawDt;
     const dt = rawDt * (this.slowmo > 0 ? 0.4 : 1);
     for (const L of this.fxLights) {
       const u = L.userData;

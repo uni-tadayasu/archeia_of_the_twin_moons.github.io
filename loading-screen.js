@@ -2,7 +2,7 @@
 (function(){
   'use strict';
   if(window.RiftfallLoading)return;
-  const tasks=new Map();let seq=0,el=null,parts={},hideTimer=0;
+  const tasks=new Map();let seq=0,el=null,parts={},hideTimer=0,visibleTask=null;
   function mount(){
     if(el||!document.body)return;
     el=document.createElement('div');el.id='rf-loading-screen';el.hidden=true;el.className='rf-vanish';
@@ -10,7 +10,12 @@
     el.innerHTML='<section class="rf-load-panel"><div class="rf-load-emblem" aria-hidden="true"></div><h2 class="rf-load-description" id="rf-load-description">出撃の準備をしています</h2><div class="rf-load-bar-shell rf-indeterminate" id="rf-load-shell" role="progressbar" aria-label="読み込みの進捗" aria-valuemin="0" aria-valuemax="100"><div class="rf-load-bar-fill" id="rf-load-fill"></div></div><div class="rf-load-meta"><span class="rf-load-filename" id="rf-load-file"></span><span class="rf-load-percent" id="rf-load-percent">準備中</span></div><button type="button" class="rf-load-dismiss" id="rf-load-dismiss">閉じる</button></section>';
     document.body.append(el);
     parts={desc:el.querySelector('#rf-load-description'),shell:el.querySelector('#rf-load-shell'),fill:el.querySelector('#rf-load-fill'),file:el.querySelector('#rf-load-file'),percent:el.querySelector('#rf-load-percent'),dismiss:el.querySelector('#rf-load-dismiss')};
-    parts.dismiss.addEventListener('click',()=>{tasks.clear();conceal();});
+    parts.dismiss.addEventListener('click',()=>{
+      const task=current();
+      if(!task || (!task.error && !task.onCancel))return;
+      cancel(task.id);
+      if(!task.error)task.onCancel();
+    });
     refresh();
   }
   function current(){return [...tasks.values()].at(-1)||null;}
@@ -19,6 +24,11 @@
     const t=current();if(!t){conceal();return;}
     clearTimeout(hideTimer);el.hidden=false;el.classList.remove('rf-vanish');
     el.classList.toggle('rf-load-error-state',!!t.error);
+    const dismissWasHidden=parts.dismiss.hidden;
+    parts.dismiss.hidden=!t.error && !t.onCancel;
+    parts.dismiss.textContent=t.error?'閉じる':'出撃を取り消す';
+    if((t!==visibleTask || dismissWasHidden) && !parts.dismiss.hidden)parts.dismiss.focus({preventScroll:true});
+    visibleTask=t;
     parts.desc.textContent=t.title||'読み込み中…';
     parts.file.textContent=t.error||t.note||'冒険の準備をしています…';
     const determinate=Number.isFinite(t.total)&&t.total>0;
@@ -31,13 +41,15 @@
   }
   function conceal(){
     if(!el)return;
+    if(el.contains(document.activeElement))document.activeElement.blur();
+    visibleTask=null;
     el.classList.add('rf-vanish');clearTimeout(hideTimer);
     hideTimer=setTimeout(()=>{if(!tasks.size && el)el.hidden=true;},360);
   }
   function begin(title,options){
     const opt=options||{};
     const token=opt.token||'job-'+(++seq);
-    const task={id:token,title:title||'読み込み中…',total:Number.isFinite(opt.total)&&opt.total>0?opt.total:null,completed:0,note:opt.note||'',error:null};
+    const task={id:token,title:title||'読み込み中…',total:Number.isFinite(opt.total)&&opt.total>0?opt.total:null,completed:0,note:opt.note||'',error:null,onCancel:typeof opt.onCancel==='function'?opt.onCancel:null};
     tasks.delete(token);tasks.set(token,task);
     const delay=Number.isFinite(opt.delay)?Math.max(0,opt.delay):(token==='boot'?0:160);
     if(delay===0)refresh();else setTimeout(()=>{if(tasks.has(token))refresh();},delay);
@@ -60,11 +72,15 @@
     t.title='読み込みを完了できませんでした';t.error=String(message||'モデルの場所と通信を確認してください');
     refresh();
   }
+  function cancel(token){
+    if(!tasks.delete(token))return;
+    if(tasks.size)refresh();else conceal();
+  }
   function transition(title,callback){
     const token=begin(title||'次の舞台を準備しています');
     return Promise.resolve().then(callback).then(v=>{end(token);return v;},e=>{error(token,e?.message||String(e));throw e;});
   }
-  const api={begin,progress,end,error,transition,manual:begin};
+  const api={begin,progress,end,error,cancel,transition,manual:begin};
   Object.defineProperty(window,'RiftfallLoading',{value:api,configurable:false});
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',mount,{once:true});else mount();
   window.addEventListener('pagehide',()=>clearTimeout(hideTimer));

@@ -66,7 +66,7 @@
 .rf-load-filename { min-width: 0; overflow-wrap: anywhere; }
 .rf-load-percent { flex-shrink: 0; color: #b2dfc6; font-variant-numeric: tabular-nums; }
 .rf-load-dismiss {
-  display: none;
+  display: inline-block;
   min-height: 44px;
   margin-top: 14px;
   padding: 5px 16px;
@@ -77,7 +77,7 @@
   font: 700 14px system-ui, sans-serif;
   cursor: pointer;
 }
-.rf-load-error-state .rf-load-dismiss { display: inline-block; }
+.rf-load-dismiss[hidden] { display: none; }
 .rf-load-error-state .rf-load-filename { color: #ffcebc; }
 .rf-load-dismiss:focus-visible { outline: 2px solid #f3c489; outline-offset: 3px; }
 @media (prefers-reduced-motion: reduce) {

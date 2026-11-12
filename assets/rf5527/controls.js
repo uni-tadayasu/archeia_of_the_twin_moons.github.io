@@ -9,6 +9,52 @@ export function activeInputModal(doc) {
   return null;
 }
 
+export function gamepadMenuItems(root) {
+  if (!root) return [];
+  const items = root.querySelectorAll('button, a[href], input, textarea, select, summary, #story-box');
+  return [...items].filter(item => {
+    if (item.tabIndex < 0 || item.matches(':disabled') || item.closest('[hidden], [inert]') || !item.getClientRects().length) return false;
+    const disclosure = item.closest('details:not([open])');
+    return !disclosure || (item === disclosure.querySelector(':scope > summary') && !disclosure.parentElement?.closest('details:not([open])'));
+  });
+}
+
+export function adjustGamepadValue(control, direction) {
+  if (!control || control.matches(':disabled')) return false;
+  const before = control.value;
+  if (control.matches('input[type="range"]')) {
+    if (control.step === 'any') {
+      const min = Number(control.min || 0);
+      const max = Number(control.max || 100);
+      control.valueAsNumber += direction * (max - min) / 20;
+    } else {
+      control.stepUp(direction);
+    }
+  } else if (control.matches('select:not([multiple])')) {
+    const options = control.options;
+    for (let index = control.selectedIndex + direction; index >= 0 && index < options.length; index += direction) {
+      if (!options[index].matches(':disabled') && !options[index].closest('[hidden]')) {
+        control.selectedIndex = index;
+        break;
+      }
+    }
+  } else {
+    return false;
+  }
+  if (control.value !== before) {
+    const Event = control.ownerDocument.defaultView.Event;
+    control.dispatchEvent(new Event('input', { bubbles: true }));
+    control.dispatchEvent(new Event('change', { bubbles: true }));
+  }
+  return true;
+}
+
+export function activateGamepadControl(control) {
+  const Event = control.ownerDocument.defaultView.Event;
+  const activate = new Event('riftfall-controller-activate', { bubbles: true, cancelable: true });
+  if (control.dispatchEvent(activate)) control.click();
+}
+
 const HOLD_ACTIONS = new Set(['guard', 'skill', 'skill2']);
 const ACTIVATE_KEYS = new Set(['Enter', 'Space']);
 

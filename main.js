@@ -48,8 +48,9 @@ import { createEventCoopV552 } from './rf-event-coop-v552.js?v=rf553-chief-cpu-2
 import { createInfiniteDungeonV552 } from './rf-infinite-dungeon-v552.js?v=55.20';
 import { apiEnabled, api, verifyToken } from './api.js';
 import { createOrbitControls } from './assets/rf-camera-v5520.js?v=55.21';
-import { activeInputModal, bindTouchControls, EDITABLE_CONTROL } from './assets/rf5527/controls.js?v=55.27';
+import { activeInputModal, activateGamepadControl, adjustGamepadValue, bindTouchControls, EDITABLE_CONTROL, gamepadMenuItems } from './assets/rf5527/controls.js?v=55.28';
 import { createContactShadows, createRenderBudget, createStageReflections } from './assets/rf5526/graphics.js?v=55.26';
+import { createBattleCountdown } from './assets/rf5528/battle-countdown.js?v=55.28';
 
 const $ = (s) => document.querySelector(s);
 // RF_MAOU_INSTALL_V6
@@ -254,7 +255,7 @@ function modelErrorDialog(failedUrls = [...modelErrors.keys()]) {
   source.style.cssText = 'display:inline-block;margin:8px 12px 0 0;color:#ffd28a;text-decoration:underline';
   panel.replaceChildren(caption, detail, note, source, retry);
 }
-async function ensureAllModelsReady(requiredKeys = null) {
+async function ensureAllModelsReady(requiredKeys = null, { signal, onCancel } = {}) {
   state.battleLoading = true;
   window.__rfMarkBattlePhase?.('loading', '戦闘に必要なモデルを準備中');
   // 1 vs 1 doesn't depend on all 20 fighters. Never block it on unused GLBs.
@@ -272,18 +273,27 @@ async function ensureAllModelsReady(requiredKeys = null) {
   const missing = requested.filter(url => !byUrl[url]);
   if (!missing.length) return true;
   const loadToken=window.RiftfallLoading?.begin('戦闘に必要な3Dモデルを読み込み中',{
-    total:missing.length,note:'0 / '+missing.length+' 体 — 必要なモデルのみ順番に準備しています'
+    total:missing.length,note:'0 / '+missing.length+' 体 — 必要なモデルのみ順番に準備しています',onCancel
   });
+  const cancelProgress = () => window.RiftfallLoading?.cancel?.(loadToken);
+  signal?.addEventListener('abort', cancelProgress, { once: true });
   let completedModels=0;
-  for (const url of missing) {
-    try { await retrieveModel(url); }
-    finally {
+  try {
+    for (const url of missing) {
+      if (signal?.aborted) return false;
+      await retrieveModel(url);
+      if (signal?.aborted) return false;
       completedModels++;
       window.RiftfallLoading?.progress(loadToken,completedModels,missing.length,
         completedModels+' / '+missing.length+' 体：'+url.split('/').pop());
+      // Avoid concurrent expensive GLB decoding on low-memory phones.
+      if (completedModels < missing.length) await new Promise(resolve=>setTimeout(resolve,0));
     }
-    // Avoid concurrent expensive GLB decoding on low-memory phones.
-    if (completedModels < missing.length) await new Promise(resolve=>setTimeout(resolve,0));
+  } catch (error) {
+    cancelProgress();
+    throw error;
+  } finally {
+    signal?.removeEventListener('abort', cancelProgress);
   }
   const failed = requested.filter((url) => !byUrl[url]);
   if (failed.length) {
@@ -1330,6 +1340,8 @@ const KEYMAP = { KeyJ: 'attack', KeyZ: 'attack', KeyK: 'skill', KeyX: 'skill', K
 const MOVE_KEYS = new Set(['KeyA','KeyD','KeyW','KeyS','ArrowLeft','ArrowRight','ArrowUp','ArrowDown','ShiftLeft','ShiftRight','KeyI']);
 const activeModal = () => activeInputModal(document);
 function activeGameOverlay() {
+  const loading = $('#rf-loading-screen:not([hidden]):not(.rf-vanish)');
+  if (loading?.querySelector('#rf-load-dismiss:not([hidden])')) return loading;
   const chat = document.getElementById('chat-panel');
   if (chat && !chat.hidden) return chat;
   const world = document.getElementById('world-panel');
@@ -1444,6 +1456,19 @@ function setupTouch() {
 
 // ---------- Screens ----------
 const state = { mode: null, returnFromBattle: null, myKey: null, oppKey: null, chapter: 0, battle: null, paused: false, net: null, online: null, dialogue: null, lastWin: false };
+let offlineLaunch = null;
+function cancelOfflineLaunch() {
+  if (!offlineLaunch) return;
+  const pending = offlineLaunch;
+  offlineLaunch = null;
+  state.battleLoading = false;
+  pending.abort();
+  window.__rfMarkBattlePhase?.('select', '出撃の準備に戻る');
+}
+const battleCountdown = createBattleCountdown($('#countdown'), (cue) => {
+  sfx(cue);
+  if (cue === 'burst') ui.flash();
+});
 const orbitControls = createOrbitControls($('#rf5520-orbit'),renderer.domElement,camera,() =>
   (state.mode==='story'||state.mode==='infinite')&&acceptsCombatInput()&&!!(state.field||state.battle));
 const musicAttempts = new WeakMap();
@@ -1463,6 +1488,7 @@ function isScreen(id) {
   return $('#' + id)?.classList.contains('on');
 }
 function show(id) {
+  cancelOfflineLaunch();
   resetInput();
   const target = id ? document.getElementById(id) : null;
   if (target && state.paused) setPaused(false);
@@ -1491,7 +1517,8 @@ function show(id) {
 function goBackCurrent() {
   const overlay = activeGameOverlay();
   if (overlay) {
-    $(overlay.id === 'chat-panel' ? '#chat-btn' : '#world-close')?.click();
+    const close = overlay.id === 'rf-loading-screen' ? '#rf-load-dismiss' : overlay.id === 'chat-panel' ? '#chat-btn' : '#world-close';
+    $(close)?.click();
     return;
   }
   if (!$('#pause').hidden) {
@@ -2153,9 +2180,11 @@ function openStageSelect(crumb, onBack) {
     const description = document.createElement('small');
     description.textContent = st.id === 'random' ? '舞台をランダムに決める' : '半径13mの円形闘技場'; 
     card.append(image, title, description);
-    card.addEventListener('mouseenter', () => st.sky && setStage(st));
-    card.addEventListener('focus', () => st.sky && setStage(st));
+    const preview = () => { if (!state.battleLoading && st.sky) setStage(st); };
+    card.addEventListener('mouseenter', preview);
+    card.addEventListener('focus', preview);
     card.addEventListener('click', () => {
+      if (state.battleLoading) return;
       sfx('ui');
       state.stage = st.id === 'random' ? STAGES[Math.floor(Math.random() * STAGES.length)] : st;
       startOffline();
@@ -2316,6 +2345,7 @@ function makeBattle(net) {
   return state.battle;
 }
 function endBattle() {
+  battleCountdown.clear();
   stopVoices();
   if (state.battle) {
     // 覚醒の蓄積ダメージは次の戦いへ持ち越す（覚醒中に終わったらリセット）
@@ -2406,62 +2436,71 @@ function rfBattleStartError(error) {
 
 async function startOffline() {
   if (state.battleLoading) return;
-  const evRun = state.mode === 'event' ? (state.eventRun ||= activeEvent()) : null;
-  const choose = a => a[Math.floor(Math.random() * a.length)];
+  const { mode, myKey, oppKey, stage } = state;
+  const evRun = mode === 'event' ? (state.eventRun ||= activeEvent()) : null;
+  const choose = pool => pool[Math.floor(Math.random() * pool.length)];
   const ev = evRun?.ev;
-  const preparedEventAllies = ev ? Array.from({length:ev.ally||0},()=>choose(ROSTER)) : [];
-  const preparedEventFoes = [];
-  if (ev) for (const [kind,n] of ev.foes) for (let i=0;i<n;i++) {
-    preparedEventFoes.push(kind==='mob'?choose(ENEMY_ROSTER):kind==='boss'?choose(BOSS_ROSTER):kind==='roster'?choose(ROSTER):kind==='mirror'?state.myKey:kind);
+  const eventAllies = ev ? Array.from({ length: ev.ally || 0 }, () => choose(ROSTER)) : [];
+  const eventFoes = [];
+  if (ev) for (const [kind, count] of ev.foes) for (let i = 0; i < count; i++) {
+    eventFoes.push(kind === 'mob' ? choose(ENEMY_ROSTER) : kind === 'boss' ? choose(BOSS_ROSTER) :
+      kind === 'roster' ? choose(ROSTER) : kind === 'mirror' ? myKey : kind);
   }
-  const preparedDuoAlly = state.mode==='duo' ? choose(ROSTER) : null;
-  const preparedDuoFoes = state.mode==='duo' ? Array.from({length:2},()=>Math.random()<.5?choose(ENEMY_ROSTER):choose(ROSTER)) : [];
-  const required = [state.myKey, ...(state.mode==='cpu'?[state.oppKey]:[]), ...preparedEventAllies, ...preparedEventFoes,
-    preparedDuoAlly, ...preparedDuoFoes].filter(k=>FIGHTERS[k]);
-  if (!(await ensureAllModelsReady(required))) return;
-  setStage(evRun ? STAGES[evRun.ev.stage % STAGES.length] : state.stage || STAGES[0]);
+  const duoAlly = mode === 'duo' ? choose(ROSTER) : null;
+  const duoFoes = mode === 'duo' ? Array.from({ length: 2 }, () => choose(Math.random() < .5 ? ENEMY_ROSTER : ROSTER)) : [];
+  const required = [myKey, ...(mode === 'cpu' ? [oppKey] : []), ...eventAllies, ...eventFoes, duoAlly, ...duoFoes]
+    .filter(key => FIGHTERS[key]);
+  const launch = new AbortController();
+  offlineLaunch = launch;
+  const returnFocus = document.activeElement;
   try {
-  const b = makeBattle(null);
-  b.add(state.myKey, { team: 0, player: true, awk: save.awk, pos: [-4, 3], name: FIGHTERS[state.myKey].name + '（あなた）', upg: upgFor(state.myKey), gear: gearFor(state.myKey) });
-  if (evRun) {
-    // ---- 週替わりイベント ----
-    const ev = evRun.ev;
-    const L = EV_LV(evRun.lv || 1);
-    const rnd = (a) => a[Math.floor(Math.random() * a.length)];
-    for (let i = 0; i < ev.ally; i++) {
-      const ak = preparedEventAllies[i];
-      b.add(ak, { team: 0, cpu: 0.75, pos: [-6, -1 - i * 3], name: FIGHTERS[ak].name + '（相棒）' });
-    }
-    const list = [];
-    for (const [kind, n] of ev.foes) {
-      for (let i = 0; i < n; i++) {
-        list.push(preparedEventFoes[list.length]);
-      }
-    }
-    list.forEach((k, i) => {
-      const a = (i / list.length) * Math.PI * 2;
-      b.add(k, {
-        team: 1, cpu: foeCpu(0.8), hpMul: foeHp(ev.hp * L.hp), atkMul: ev.atk * L.atk, scale: ev.scale || 1, facing: Math.PI,
-        pos: list.length === 1 ? [4, -3] : [4 + Math.cos(a) * 3, -2 + Math.sin(a) * 3],
-        name: k === state.myKey ? FIGHTERS[k].name + '（写し）' : FIGHTERS[k].name
-      });
+    const ready = await ensureAllModelsReady(required, {
+      signal: launch.signal,
+      onCancel: () => {
+        if (offlineLaunch !== launch) return;
+        cancelOfflineLaunch();
+        if (returnFocus?.isConnected) returnFocus.focus({ preventScroll: true });
+      },
     });
-    beginBattle(false);
-    ui.banner({ name: `— 週替わりイベント 第${evRun.lv || 1}段階 —` }, ev.name);
-    return;
+    if (launch.signal.aborted) return;
+    offlineLaunch = null;
+    if (!ready) return;
+
+    setStage(ev ? STAGES[ev.stage % STAGES.length] : stage || STAGES[0]);
+    const battle = makeBattle(null);
+    battle.add(myKey, { team: 0, player: true, awk: save.awk, pos: [-4, 3], name: FIGHTERS[myKey].name + '（あなた）', upg: upgFor(myKey), gear: gearFor(myKey) });
+    if (evRun) {
+      const level = EV_LV(evRun.lv || 1);
+      eventAllies.forEach((key, i) => {
+        battle.add(key, { team: 0, cpu: 0.75, pos: [-6, -1 - i * 3], name: FIGHTERS[key].name + '（相棒）' });
+      });
+      eventFoes.forEach((key, i) => {
+        const angle = i / eventFoes.length * Math.PI * 2;
+        battle.add(key, {
+          team: 1, cpu: foeCpu(0.8), hpMul: foeHp(ev.hp * level.hp), atkMul: ev.atk * level.atk,
+          scale: ev.scale || 1, facing: Math.PI,
+          pos: eventFoes.length === 1 ? [4, -3] : [4 + Math.cos(angle) * 3, -2 + Math.sin(angle) * 3],
+          name: key === myKey ? FIGHTERS[key].name + '（写し）' : FIGHTERS[key].name
+        });
+      });
+      beginBattle(false);
+      ui.banner({ name: `— 週替わりイベント 第${evRun.lv || 1}段階 —` }, ev.name);
+      return;
+    }
+    if (mode === 'cpu') {
+      battle.add(oppKey, { team: 1, cpu: foeCpu(0.8), hpMul: foeHp(1), pos: [4, -3], facing: Math.PI });
+    } else {
+      battle.add(duoAlly, { team: 0, cpu: 0.75, pos: [-6, -1], name: FIGHTERS[duoAlly].name + '（相棒）' });
+      battle.add(duoFoes[0], { team: 1, cpu: foeCpu(0.7), hpMul: foeHp(1), pos: [5, -4], facing: Math.PI });
+      battle.add(duoFoes[1], { team: 1, cpu: foeCpu(0.7), hpMul: foeHp(1), pos: [6, 1], facing: Math.PI });
+    }
+    beginBattle(battle.fighters.some(fighter => fighter.key === 'seraphel'));
+  } catch (error) {
+    if (launch.signal.aborted) return;
+    launch.abort();
+    offlineLaunch = null;
+    rfBattleStartError(error);
   }
-  if (state.mode === 'cpu') {
-    b.add(state.oppKey, { team: 1, cpu: foeCpu(0.8), hpMul: foeHp(1), pos: [4, -3], facing: Math.PI });
-  } else {
-    const pick = () => ROSTER[Math.floor(Math.random() * ROSTER.length)];
-    const ally = preparedDuoAlly;
-    b.add(ally, { team: 0, cpu: 0.75, pos: [-6, -1], name: FIGHTERS[ally].name + '（相棒）' });
-    const foe = () => (Math.random() < 0.5 ? ENEMY_ROSTER[Math.floor(Math.random() * ENEMY_ROSTER.length)] : pick());
-    b.add(preparedDuoFoes[0], { team: 1, cpu: foeCpu(0.7), hpMul: foeHp(1), pos: [5, -4], facing: Math.PI });
-    b.add(preparedDuoFoes[1], { team: 1, cpu: foeCpu(0.7), hpMul: foeHp(1), pos: [6, 1], facing: Math.PI });
-  }
-  beginBattle(b.fighters.some((f) => f.key === 'seraphel'));
-  } catch (error) { rfBattleStartError(error); }
 }
 
 function beginBattle(boss) {
@@ -2499,30 +2538,7 @@ function beginBattle(boss) {
     banner = ['— ♪ 藤原信頼 専用BGM —', '専用BGM：オン'];
   }
   if (banner) ui.banner({ name: banner[0] }, banner[1]);
-  // 開戦の合図：構え → 3・2・1 → 戦闘開始！（その間は誰も動かない）
-  const b = state.battle;
-  b.intro = 4.3;
-  const cd = $('#countdown');
-  clearTimeout(cd._t);
-  const seq = [[1200, '構え……', 'ui'], [900, '3', 'ui'], [900, '2', 'ui'], [900, '1', 'ui'], [900, '戦闘開始！', 'burst']];
-  let i = 0;
-  const step = () => {
-    if (state.battle !== b || i >= seq.length) {
-      cd.hidden = true;
-      return;
-    }
-    const [ms, txt, s] = seq[i++];
-    cd.hidden = false;
-    cd.textContent = txt;
-    cd.classList.toggle('fight', i === seq.length);
-    cd.classList.remove('go');
-    void cd.offsetWidth;
-    cd.classList.add('go');
-    sfx(s);
-    if (i === seq.length) ui.flash();
-    cd._t = setTimeout(step, ms);
-  };
-  cd._t = setTimeout(step, 600);
+  battleCountdown.begin(state.battle);
 }
 
 function buildHud() {
@@ -4645,16 +4661,18 @@ function pollPad(dt) {
     if (down(9)) togglePause();
   } else {
     const root = dialog || overlay || (state.paused ? $('#pause') : document.querySelector('.screen.on'));
-    const items = root ? [...root.querySelectorAll('button:not([disabled]), a[href], input:not([disabled]), select:not([disabled]), #story-box')]
-      .filter(el => el.tabIndex >= 0 && !el.closest('[hidden], [inert]') && el.getClientRects().length) : [];
+    const items = gamepadMenuItems(root);
     pad.navT -= dt;
     if (items.length && pad.navT <= 0 && (Math.abs(mx) > 0.5 || Math.abs(mz) > 0.5)) {
       pad.navT = 0.18;
       const current = items.indexOf(document.activeElement);
-      const step = mz > .5 || mx > .5 ? 1 : -1;
-      const i = current < 0 ? (step > 0 ? 0 : items.length - 1) : (current + step + items.length) % items.length;
-      items[i].focus();
-      items[i].scrollIntoView({ block: 'nearest' });
+      const horizontal = Math.abs(mx) > Math.abs(mz);
+      const step = (horizontal ? mx : mz) > 0 ? 1 : -1;
+      if (!horizontal || !adjustGamepadValue(items[current], step)) {
+        const i = current < 0 ? (step > 0 ? 0 : items.length - 1) : (current + step + items.length) % items.length;
+        items[i].focus();
+        items[i].scrollIntoView({ block: 'nearest' });
+      }
     }
     if (down(0)) {
       unlockAudio();
@@ -4662,7 +4680,7 @@ function pollPad(dt) {
       if (!dialog && !overlay && isScreen('scr-story') && (!el || el === document.body || el.id === 'story-box')) {
         advanceDialogue();
       } else if (el && items.includes(el)) {
-        el.click();
+        activateGamepadControl(el);
       } else if (items[0]) {
         items[0].focus();
       }
@@ -4748,6 +4766,7 @@ const castleRealm=initCastleRealm({startBattle:startCastleBattle,endBattle,save,
 // ---------- Loop ----------
 setupTouch();
 const timer = new THREE.Timer();
+timer.connect(document);
 let rfV12HudClock = 0;
 renderer.setAnimationLoop((time) => {
   timer.update(time);
@@ -4765,6 +4784,7 @@ renderer.setAnimationLoop((time) => {
     if(rfV12HudClock>=.09){rfV12HudClock=0;updateHud();}
   } else if (state.battle && (!state.paused || isLive())) {
     try {
+      if (!document.hidden) battleCountdown.tick(state.battle, rawDt);
       state.battle.update(dt, allowInput ? readInput() : { mx: 0, mz: 0 });
       netTick(dt);
       rfV12HudClock += rawDt;

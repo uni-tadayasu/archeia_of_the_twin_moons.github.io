@@ -2,6 +2,7 @@ import { API_BASE } from '../config.js';
 import { playMotion, animateStatic } from './riftfall-motion-v5521.js';
 
 const protocol='riftfall-ranked-v1';
+const reconnectText='サーバーに再接続しています…';
 const formats=new Intl.NumberFormat('ja-JP');
 const fmt=n=>formats.format(n||0);
 const tiers={bronze:'ブロンズ',silver:'シルバー',gold:'ゴールド',platinum:'プラチナ',master:'マスター'};
@@ -154,8 +155,8 @@ export function createRankedMode({
     'result','heading','delta','reason','retry','leave','vote','live','timer','connection','opponents'
   ].map(key=>[key,key==='screen'?$('scr-ranked'):$('ranked-'+key)]));
   let active=false, generation=0, session=null, selected='', queue=false, busy=false, cancelling=false;
-  let request=null, timer=0, reconnect=0, socket=null, match=null, last=null, view=null, loadStarted=false, battleMounted=false;
-  let sendClock=0, seq=0, edges=0, saidReady=false, pendingLeave=false, retireFromFight=false, finishing=false, retryWanted=false, disconnectAt=0;
+  let request=null, timer=0, reconnect=0, connectionDeadline=0, socket=null, match=null, last=null, view=null, loadStarted=false, battleMounted=false;
+  let sendClock=0, seq=0, edges=0, saidReady=false, pendingLeave=false, retireFromFight=false, finishing=false, retryWanted=false;
   let recentBoard=null, boardGeneration=0;
   const notice=text=>setText(el.status,text);
   function lobby() {
@@ -370,6 +371,12 @@ export function createRankedMode({
     }
     ui();
   }
+  function waitForSocketState(offer) {
+    if(connectionDeadline)return;
+    connectionDeadline=setTimeout(()=>{
+      if(active&&match===offer)returnToLobby(last?'対戦への再接続ができませんでした。':'対戦に接続できませんでした。');
+    },27000);
+  }
   function startSocket() {
     if (!active||!match) return;
     const current=match;
@@ -379,23 +386,28 @@ export function createRankedMode({
     socket=ws;
     ws.addEventListener('open',()=>{
       if(socket!==ws)return;
-      disconnectAt=0;saidReady=false;retryWanted=false;seq=0;edges=0;
-      setText(el.connection,'');
+      saidReady=false;retryWanted=false;seq=0;edges=0;
     });
     ws.addEventListener('message',event=>{
       if(socket!==ws||!active||match!==current)return;
       let message;
       try { message=JSON.parse(event.data); } catch {return;}
-      if(message?.type==='state')applyMessage(message);
+      if(message?.type!=='state')return;
+      if(connectionDeadline){
+        clearTimeout(connectionDeadline);connectionDeadline=0;
+        setText(el.connection,'');
+        if(el.status.textContent===reconnectText)notice('');
+      }
+      applyMessage(message);
     });
     ws.addEventListener('close',event=>{
       if(socket!==ws||!active||match!==current)return;
-      socket=null;finishing=false;disconnectAt ||= Date.now();
+      socket=null;finishing=false;
       if(event.code===4001)return returnToLobby('この対戦は別のタブまたは端末で開かれました。');
-      if(Date.now()-disconnectAt>27000)return returnToLobby('対戦への再接続ができませんでした。');
       if(last?.phase==='result')el.retry.disabled=true;
-      setText(el.connection,'サーバーに再接続しています…');
-      notice('サーバーに再接続しています…');
+      setText(el.connection,reconnectText);
+      notice(reconnectText);
+      waitForSocketState(current);
       clearTimeout(reconnect);reconnect=setTimeout(startSocket,850);
     });
   }
@@ -405,6 +417,7 @@ export function createRankedMode({
     setText(el.opponents,offer.players.map(p=>p.name+(p.bot?' ［BOT］':'')).join(' ／ '));
     notice(pendingLeave?'対戦準備を取り消しています…':'対戦相手が見つかりました。');
     lobby();ui();
+    waitForSocketState(offer);
     try {startSocket();} catch {returnToLobby('対戦接続を開始できませんでした。');return;}
     if (!pendingLeave&&!loadStarted) void prepareMatch(offer);
   }
@@ -434,14 +447,15 @@ export function createRankedMode({
     }
   }
   function resetMatch() {
-    clearTimeout(reconnect);clearTimeout(timer);
+    clearTimeout(reconnect);clearTimeout(connectionDeadline);clearTimeout(timer);
+    connectionDeadline=0;
     const old=socket;
     socket=null;match=null;last=null;
     if(old&&old.readyState<=WebSocket.OPEN)old.close();
     view?.dispose();
     if(battleMounted)endBattle();
     battleMounted=false;view=null;loadStarted=false;saidReady=false;pendingLeave=false;retireFromFight=false;retryWanted=false;finishing=false;
-    sendClock=0;seq=0;edges=0;disconnectAt=0;queue=false;
+    sendClock=0;seq=0;edges=0;queue=false;
     setText(el.opponents,'');setText(el.connection,'');
   }
   function returnToLobby(message) {

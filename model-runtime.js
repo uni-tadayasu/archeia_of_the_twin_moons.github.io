@@ -272,11 +272,11 @@ export function instantiateModel(gltf, height, tint = null) {
   }
   const model = SkeletonUtils.clone(gltf.scene);
   model.updateMatrixWorld(true);
-  model.traverse((o) => { if (o.isSkinnedMesh) o.skeleton?.update(); });
   const size = box.getSize(new THREE.Vector3());
   if (!Number.isFinite(size.y) || size.y <= 0.000001) throw new ModelLoadError(gltf.userData?.arkeiaSource || 'model.glb', 'モデルの高さが不正です');
   const wrapper = new THREE.Group();
   const materials = new Set();
+  const skeletons = new Set();
   const rfLocalMaterialCache = new Map();
   const tintColor = tint == null ? null : new THREE.Color(tint);
   const preserveSourceMaterial = /(?:^|\/)(?:iron-warlord(?:-f2)?|operator-gigantes|gaizorg-boss|valdarion|chief-empress|maou-lord|nepterion-chief|crimson-swordsman|kraid-lightweight|udaijin-original|udaijin-exact-v21|kinosaki-sanmi-original|fujiwara-nobuyori-original|uninomiya-tadayasu-rigged|minamoto-yoritomo|tenshi)\.glb(?:[?#]|$)/i.test(gltf.userData?.arkeiaSource || '');
@@ -284,7 +284,14 @@ export function instantiateModel(gltf, height, tint = null) {
     if (!o.isMesh) return;
     // Shadows are disabled by the render policy. Preserve skinning and animations.
     o.castShadow = false;
-    if (o.isSkinnedMesh) o.frustumCulled = false;
+    if (o.isSkinnedMesh) {
+      o.frustumCulled = false;
+      if (o.skeleton) {
+        // SkeletonUtils creates a separate skeleton, including its eventual GPU bone texture.
+        skeletons.add(o.skeleton);
+        o.skeleton.update();
+      }
+    }
     const materialFor = (source) => {
       if (!source) return source;
       const standard = source.isMeshStandardMaterial || source.isMeshPhysicalMaterial;
@@ -320,16 +327,15 @@ export function instantiateModel(gltf, height, tint = null) {
   wrapper.position.set(-(box.min.x + box.max.x) * 0.5 * scale, -box.min.y * scale, -(box.min.z + box.max.z) * 0.5 * scale);
   wrapper.userData.arkeiaModel = true;
   wrapper.userData.arkeiaMaterials = materials;
-  return { wrapper, model, materials, runtimeRig:gltf.userData?.arkeiaRig };
+  return { wrapper, model, materials, skeletons, runtimeRig:gltf.userData?.arkeiaRig };
 }
 export function disposeModel(instance, mixer) {
   if (!instance) return;
   mixer?.stopAllAction();
   if (mixer && instance.model) mixer.uncacheRoot(instance.model);
   for (const material of instance.materials || []) material.dispose();
-  if (instance.runtimeRig==='tenshi') instance.model.traverse(node=>{
-    if (node.isSkinnedMesh) node.skeleton?.dispose();
-  });
+  for (const skeleton of instance.skeletons || []) skeleton.dispose();
+  instance.skeletons?.clear();
   instance.wrapper?.removeFromParent();
-  // Geometry and textures belong to the shared GLB cache, not to one fighter.
+  // Mesh geometry and material maps are shared with the cached GLB.
 }

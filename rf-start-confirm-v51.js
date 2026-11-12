@@ -113,6 +113,21 @@ function riskyButton(button){
  return null;
 }
 const bypass=new WeakSet();
+function confirmRiskyButton(btn,risk){
+ void window.rf51Confirm(risk.title,risk.message,'実行する').then(ok=>{
+  if(!ok||!btn.isConnected)return;
+  bypass.add(btn);
+  try{btn.click();}finally{bypass.delete(btn);}
+ });
+}
+document.addEventListener('riftfall-controller-activate',ev=>{
+ const btn=ev.target;
+ if(!(btn instanceof HTMLElement)||!btn.matches('button,input[type=submit],[role=button]')||btn.matches(':disabled')||btn.closest('[hidden],[inert]'))return;
+ const risk=riskyButton(btn);
+ if(!risk)return;
+ ev.preventDefault();
+ confirmRiskyButton(btn,risk);
+});
 document.addEventListener('click',ev=>{
  const btn=ev.target.closest?.('button,input[type=submit],[role=button]');
  if(!btn||bypass.has(btn))return;
@@ -125,10 +140,6 @@ document.addEventListener('click',ev=>{
  const risk=riskyButton(btn);
  if(!risk)return;
  ev.preventDefault();ev.stopImmediatePropagation();
- void window.rf51Confirm(risk.title,risk.message,'実行する').then(ok=>{
-  if(!ok||!btn.isConnected)return;
-  bypass.add(btn);
-  try{btn.click();}finally{bypass.delete(btn);}
- });
+ confirmRiskyButton(btn,risk);
 },true);
 })();
