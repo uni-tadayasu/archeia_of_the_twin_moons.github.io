@@ -1,3 +1,4 @@
+import { TENSHI_KEY, DIVINE_ELEMENT, tenshiDefinition } from './assets/tenshi-data.js?v=55.23';
 // RF_GRAND_FOUR_20261108 data.js
 // 戦士データ。skills[0]=技A（立ち）, [1]=技A（移動中）, [2]=技B（立ち）, [3]=技B（移動中）
 export const FIGHTERS = {
@@ -1407,3 +1408,8 @@ FIGHTERS.minamoto_yoritomo={
  over:{name:'征夷水神陣・蒼海制圧',kind:'judgment',visual:'pillar',finalVisual:'nova',count:16,spread:5.6,radius:2.3,dmg:650,delay:.55,interval:.08,finalDmg:2800,finalRadius:10.4,cost:0,castTime:2,elem:7,color:0x65eaff,vivid:true},
  hi:{name:'秘奥義・大海龍王断',kind:'judgment',visual:'pillar',finalVisual:'bigsword',count:22,spread:7,radius:2.7,dmg:810,delay:.58,interval:.07,finalDmg:5200,finalRadius:13.2,cost:0,castTime:2.7,elem:7,color:0xb5faff,vivid:true,hi:true}
 };
+
+// Separate from the procedural roster: no CPU-only copy or automatic unlock.
+FIGHTERS[TENSHI_KEY]=tenshiDefinition();
+SPECIAL_KEYS.push(TENSHI_KEY);
+ELEMS[DIVINE_ELEMENT]={n:'神',c:0xf4d694,p:'orb',st:null,sn:'',sc:0xf4d694};

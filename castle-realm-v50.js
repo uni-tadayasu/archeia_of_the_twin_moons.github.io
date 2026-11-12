@@ -63,7 +63,7 @@ try{
 }
 async function run(fn){if(S.busy)return;S.busy=true;render();try{await fn();}catch(e){S.notice=e?.message||String(e);}finally{S.busy=false;render();}}
 // RF55_CASTLE_CHARACTER_SEARCH_20261111 — show every visible character in search, without granting locked assets.
-const RF55_CHIEF_ONLY=new Set(['valgard','gaizorg','valdarion','valgard2','maou','maou_shade','uninomiya_tadayasu','fujiwara_nobuyori','udaijin','kinosaki_sanmi','nepterion']);
+const RF55_CHIEF_ONLY=new Set(['valgard','gaizorg','valdarion','valgard2','maou','maou_shade','uninomiya_tadayasu','fujiwara_nobuyori','udaijin','kinosaki_sanmi','nepterion','tenshi']);
 function rf55DisabledReason(key,d){
  if(d.enemy)return '敵専用';
  if(key==='maou_shade')return '敵専用';

@@ -303,7 +303,7 @@
       };
     }
     function paintedTexture(elem, slot) {
-      const e = ((elem | 0) % 10 + 10) % 10, s = ((slot | 0) % 10 + 10) % 10;
+      const e = elem===10?5:((elem | 0) % 10 + 10) % 10, s = ((slot | 0) % 10 + 10) % 10;
       const key = e * 10 + s;
       if (cache.has(key)) return cache.get(key);
       const canvas = document.createElement('canvas');

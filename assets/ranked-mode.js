@@ -5,6 +5,13 @@ const protocol='riftfall-ranked-v1';
 const formats=new Intl.NumberFormat('ja-JP');
 const fmt=n=>formats.format(n||0);
 const tiers={bronze:'ブロンズ',silver:'シルバー',gold:'ゴールド',platinum:'プラチナ',master:'マスター'};
+const tierNameAt=(definitions,points)=>{
+  for(let index=(definitions?.length||0)-1;index>=0;index--){
+    const [,name,threshold]=definitions[index];
+    if(points>=threshold)return name;
+  }
+  return '';
+};
 const reasonLabels={ko:'KO',time:'時間切れ',retire:'リタイア',disconnect:'接続時間切れ',no_contest:'無効試合'};
 const errorLabels={
   nosync:'旅支度でこの端末のセーブを同期してください。',
@@ -63,7 +70,10 @@ function createView(THREE,battle,match) {
       battle.spark(point,e.guard?0xa5d8ef:0xffd2a2,e.guard ? .7 : 1.15);
       battle.ui.popup(a.pos,e.guard?'防 '+e.damage:String(e.damage),e.guard?'#ace5fb':'#ffe2a5');
       battle.ui.sfx(e.guard?'guard':'hit');
-      if (!e.guard) a.hitFlash=.10;
+      if (!e.guard) {
+        a.hitFlash=.10;
+        if (!poses[e.seat] || poses[e.seat].end<now) poses[e.seat]={name:'hit',end:now+300,duration:.30};
+      }
     } else if (e.kind==='heal') {
       battle.grandFx(a.pos,3,0x94e8bb,.7);
       battle.ui.popup(a.pos,'+'+e.healed,'#9cf0b1');
@@ -135,7 +145,7 @@ function createView(THREE,battle,match) {
 }
 
 export function createRankedMode({
-  THREE,FIGHTERS,api,apiEnabled,code,name,show,goTitle,options,chooseFighter,loadFighter,makeBattle,endBattle,buildHud,playTrack
+  THREE,FIGHTERS,api,apiEnabled,code,name,roleToken,show,goTitle,options,chooseFighter,loadFighter,makeBattle,endBattle,buildHud,playTrack
 }) {
   const el=Object.fromEntries([
     'screen','back','sync','choose','fighter','portrait','join','setup','queue','cancel','status','wait',
@@ -171,13 +181,13 @@ export function createRankedMode({
   }
   async function authorize() {
     if (!apiEnabled()) throw Error('rank_unavailable');
-    const syncCode=code(), nickname=name();
+    const syncCode=code(), nickname=name(), role=roleToken?.()||'';
     if (syncCode.length!==12) throw Error('nosync');
-    if (session?.code===syncCode&&session.name===nickname&&session.expires>Date.now()+60000) return session;
-    const r=await api('/rank/session',{code:syncCode,name:nickname});
+    if (session?.code===syncCode&&session.name===nickname&&session.role===role&&session.expires>Date.now()+60000) return session;
+    const r=await api('/rank/session',{code:syncCode,name:nickname,role});
     if (!r.ok) throw Error(r.error||'rank_session');
     const fighters=r.fighters.filter(key=>FIGHTERS[key]?.model);
-    session={code:syncCode,name:nickname,token:r.token,expires:r.expires,fighters};
+    session={code:syncCode,name:nickname,role,token:r.token,expires:r.expires,fighters};
     if (!fighters.includes(selected)) selected=fighters[0]||'';
     return session;
   }
@@ -297,8 +307,8 @@ export function createRankedMode({
     const points=result.points[me];
     setText(el.delta,(diff>0?'+':'')+diff+' pt ／ 現在 '+fmt(points)+' pt');
     el.delta.dataset.change=diff>0?'up':diff<0?'down':'even';
-    const oldTier=recentBoard?.tiers?.findLast(t=>result.before[me]>=t[2])?.[1];
-    const newTier=recentBoard?.tiers?.findLast(t=>points>=t[2])?.[1];
+    const oldTier=tierNameAt(recentBoard?.tiers,result.before[me]);
+    const newTier=tierNameAt(recentBoard?.tiers,points);
     const change=oldTier&&newTier&&oldTier!==newTier?' ／ '+newTier+(diff>0?'へ昇格':'へ降格'):'';
     setText(el.reason,(reasonLabels[result.reason]||'試合終了')+
       (result.botLimit?' ／ 本日のボット戦ポイント上限に到達':change));

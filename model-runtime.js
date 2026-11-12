@@ -1,3 +1,4 @@
+import { attachTenshiRig } from './assets/tenshi-motion.js?v=55.23';
 // RF_NEPT_V14_MODEL
 // RF_ULTRA_V12_MODEL
 // RF_GRAND_FOUR_20261108 model-runtime.js
@@ -241,6 +242,7 @@ export function loadModel(url) {
       // painted WebP textures have been restored successfully.
       result.userData ||= {};
       result.userData.arkeiaSource = key;
+      if (new URL(key).pathname.endsWith('/tenshi.glb')) attachTenshiRig(result);
       cache.set(key, result);
       errors.delete(key);
       notify();
@@ -265,7 +267,7 @@ export function instantiateModel(gltf, height, tint = null) {
   let box = rfV12Bounds.get(gltf.scene);
   if (!box) {
     gltf.scene.updateMatrixWorld(true);
-    box = new THREE.Box3().setFromObject(gltf.scene, true);
+    box = gltf.userData?.arkeiaOriginalBounds || new THREE.Box3().setFromObject(gltf.scene, true);
     rfV12Bounds.set(gltf.scene, box);
   }
   const model = SkeletonUtils.clone(gltf.scene);
@@ -277,7 +279,7 @@ export function instantiateModel(gltf, height, tint = null) {
   const materials = new Set();
   const rfLocalMaterialCache = new Map();
   const tintColor = tint == null ? null : new THREE.Color(tint);
-  const preserveSourceMaterial = /(?:^|\/)(?:iron-warlord(?:-f2)?|operator-gigantes|gaizorg-boss|valdarion|chief-empress|maou-lord|nepterion-chief|crimson-swordsman|kraid-lightweight|udaijin-original|udaijin-exact-v21|kinosaki-sanmi-original|fujiwara-nobuyori-original|uninomiya-tadayasu-rigged|minamoto-yoritomo)\.glb(?:[?#]|$)/i.test(gltf.userData?.arkeiaSource || '');
+  const preserveSourceMaterial = /(?:^|\/)(?:iron-warlord(?:-f2)?|operator-gigantes|gaizorg-boss|valdarion|chief-empress|maou-lord|nepterion-chief|crimson-swordsman|kraid-lightweight|udaijin-original|udaijin-exact-v21|kinosaki-sanmi-original|fujiwara-nobuyori-original|uninomiya-tadayasu-rigged|minamoto-yoritomo|tenshi)\.glb(?:[?#]|$)/i.test(gltf.userData?.arkeiaSource || '');
   model.traverse((o) => {
     if (!o.isMesh) return;
     // Shadows are disabled by the render policy. Preserve skinning and animations.
@@ -318,13 +320,16 @@ export function instantiateModel(gltf, height, tint = null) {
   wrapper.position.set(-(box.min.x + box.max.x) * 0.5 * scale, -box.min.y * scale, -(box.min.z + box.max.z) * 0.5 * scale);
   wrapper.userData.arkeiaModel = true;
   wrapper.userData.arkeiaMaterials = materials;
-  return { wrapper, model, materials };
+  return { wrapper, model, materials, runtimeRig:gltf.userData?.arkeiaRig };
 }
 export function disposeModel(instance, mixer) {
   if (!instance) return;
   mixer?.stopAllAction();
   if (mixer && instance.model) mixer.uncacheRoot(instance.model);
   for (const material of instance.materials || []) material.dispose();
+  if (instance.runtimeRig==='tenshi') instance.model.traverse(node=>{
+    if (node.isSkinnedMesh) node.skeleton?.dispose();
+  });
   instance.wrapper?.removeFromParent();
   // Geometry and textures belong to the shared GLB cache, not to one fighter.
 }

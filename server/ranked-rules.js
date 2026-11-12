@@ -25,7 +25,11 @@ const clamp = (value, min, max) => Math.min(max, Math.max(min,value));
 const number = value => typeof value === 'number' && Number.isFinite(value) ? value : 0;
 
 export function rankTier(points) {
-  return RANK_TIERS.findLast(tier => points >= tier[2])[0];
+  for (let index = RANK_TIERS.length - 1; index > 0; index -= 1) {
+    const tier = RANK_TIERS[index];
+    if (points >= tier[2]) return tier[0];
+  }
+  return RANK_TIERS[0][0];
 }
 export function pointsFor(players, winner, reason, earnedBotWins) {
   if (winner === null || reason === 'cancelled' || reason === 'no_contest') return [0,0];

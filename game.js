@@ -1,3 +1,4 @@
+import { tenshiTexture, divinePalette, tenshiImpact } from './assets/tenshi-effects.js?v=55.23';
 import { presentationFor } from './assets/riftfall-effects-v5521.js';
 import { collectMotionClips, playMotion, fighterMotion, animateStatic } from './assets/riftfall-motion-v5521.js';
 import { disposeCharacterVariant } from './character-variants.js';
@@ -109,7 +110,7 @@ const ST_INFO = {
   burn: { dur: 4, dot: 22 }, freeze: { dur: 1.2 }, para: { dur: 3 }, slow: { dur: 3.5 }, petrify: { dur: 1.5 },
   blind: { dur: 4 }, curse: { dur: 5 }, silence: { dur: 3.5 }, poison: { dur: 6, dot: 14 }, bleed: { dur: 3, dot: 32 }
 };
-const ST_ELEM = Object.fromEntries(ELEMS.map((e, i) => [e.st, i]));
+const ST_ELEM = Object.fromEntries(ELEMS.flatMap((e,i)=>e.st?[[e.st,i]]:[]));
 
 export const ARENA_R = 13;
 
@@ -225,7 +226,10 @@ function beginChantCircle(b,f,spec,duration,stamp) {
       blending:THREE.AdditiveBlending,depthWrite:false,depthTest:false,side:THREE.DoubleSide,fog:false});
     mats.push(m); return m;
   };
-  const disk=new THREE.Mesh(art.flat,mat(art.symbols,.0));
+  const divine=spec?.divine?divinePalette(spec.divine):null;
+  const discArt=divine?tenshiTexture('tenshi-seal-'+divine):art.symbols;
+  const lightArt=divine?tenshiTexture('tenshi-beam-'+divine):art.aura;
+  const disk=new THREE.Mesh(art.flat,mat(discArt,.0));
   disk.rotation.x=-Math.PI/2;disk.scale.set(5.0,5.0,1);disk.position.y=.067;disk.renderOrder=12;
   root.add(disk);nodes.push(disk);
   const rim=new THREE.Mesh(art.flat,mat(art.rim,0));
@@ -237,7 +241,7 @@ function beginChantCircle(b,f,spec,duration,stamp) {
   const columns=[];
   const maxCols=(typeof matchMedia==='function' && matchMedia('(pointer:coarse)').matches)?2:4;
   for(let i=0;i<maxCols;i++){
-    const sprite=new THREE.Sprite(new THREE.SpriteMaterial({map:art.aura,color:c,transparent:true,opacity:0,
+    const sprite=new THREE.Sprite(new THREE.SpriteMaterial({map:lightArt,color:c,transparent:true,opacity:0,
       blending:THREE.AdditiveBlending,depthWrite:false,depthTest:false,fog:false}));
     mats.push(sprite.material);sprite.position.set(Math.cos(i*2*Math.PI/maxCols)*.84,1.45,Math.sin(i*2*Math.PI/maxCols)*.84);
     sprite.scale.set(1.8,3.4,1);sprite.renderOrder=15;root.add(sprite);columns.push(sprite);
@@ -480,9 +484,10 @@ const FX_NAMES = ['fire', 'ice', 'thunder', 'wind', 'earth', 'light', 'dark', 'w
 const texLoader = new THREE.TextureLoader();
 const FX_TEX = {};
 function fxTex(elem, slot) {
-  const key = (elem % 10) * 10 + slot;
+  const imageElem=elem===10?5:elem%10;
+  const key = imageElem * 10 + slot;
   if (!FX_TEX[key]) {
-    const t = texLoader.load(`assets/fx-${FX_NAMES[elem % 10]}-${slot}.webp`);
+    const t = texLoader.load(`assets/fx-${FX_NAMES[imageElem]}-${slot}.webp`);
     t.colorSpace = THREE.SRGBColorSpace;
     FX_TEX[key] = t;
   }
@@ -1480,7 +1485,7 @@ export class Battle {
       return null;
     }
     const chance = spec === att.def.over || spec.hi ? 0.4 : 0.25;
-    return Math.random() < chance ? ELEMS[spec.elem].st : null;
+    return Math.random()<chance ? ELEMS[spec.elem]?.st||null : null;
   }
 
   applyHit(att, tgt, dmg, stun, kb, from, spec) {
@@ -1770,6 +1775,25 @@ export class Battle {
           this.projectile(f, spec, ang);
         }
       }
+    } else if (spec.kind === 'tenshi_seal') {
+      const point=new THREE.Vector3(tx,.09,tz);
+      if (!Number.isFinite(point.x)||!Number.isFinite(point.z)) point.copy(f.pos);
+      const offset=point.clone().sub(f.pos).setY(0);
+      offset.clampLength(0,spec.reach||9);
+      point.copy(f.pos).add(offset).setY(.091);
+      const presentation=presentationFor(this);
+      presentation.emit('tenshi-seal-'+divinePalette(spec.divine),point,0xffffff,spec.radius*1.64,
+        spec.delay+.16,{opacity:.67,spin:.18});
+      let delay=spec.delay,pulse=0;
+      this.addEffect(dt=>{
+        if (this.ended) return false;
+        delay-=dt;
+        if(delay>0)return true;
+        tenshiImpact(presentation,point,spec.divine,spec.radius);
+        this.strikeAt(f,point.x,point.z,spec.radius,pulse?spec.echo:spec.dmg,pulse?.26:.36,pulse?2:3,spec);
+        if(!pulse++&&spec.echo){delay=.43;return true;}
+        return false;
+      });
     } else if (spec.kind === 'implode') {
       this.implode(f, spec, tx, tz);
     } else if (spec.kind === 'shockwave') {

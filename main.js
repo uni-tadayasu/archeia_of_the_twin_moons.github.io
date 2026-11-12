@@ -1,3 +1,4 @@
+import { TENSHI_KEY } from './assets/tenshi-data.js?v=55.23';
 import { createRankedMode } from './assets/ranked-mode.js?v=55.22';
 // RF552_main.js_PATCHED_20261111
 // RF55_EVENT_BGM_20261111
@@ -574,7 +575,7 @@ async function autoPush({ forSpend = false, reload = true } = {}) {
     if (reload && merged && !state.battle && !state.battleLoading) location.reload();
   };
   try {
-    const pending = getPends().findLast((p) => p.code === code && typeof p.payload === 'string' && p.snapshot?.pid === save.pid);
+    const pending = getPends().reverse().find((p) => p.code === code && typeof p.payload === 'string' && p.snapshot?.pid === save.pid);
     if (pending) {
       snap = pending.snapshot;
       preferenceBase = pending.preferenceBase || snap;
@@ -1685,6 +1686,7 @@ const peerVerified = (id, k) => {
 // 相手キャラの決定：サーバー運用時、使用権の要るキャラは検証済みの時だけ出す（それ以外は標準キャラ）
 function peerKeyOf(id, fk) {
   const k = FIGHTERS[fk] ? fk : 'rowen';
+  if (k===TENSHI_KEY) return apiEnabled()&&peerVerified(id,k)?k:'rowen';
   if (!apiEnabled() || !restrictedKey(k) || peerVerified(id, k)) return k;
   return 'rowen';
 }
@@ -1747,6 +1749,7 @@ setInterval(()=>{if(!document.hidden&&!cpuServer.busy)void rf553CpuFetch();},600
 document.addEventListener('visibilitychange',()=>{if(!document.hidden)void rf553CpuFetch();});
 // その戦士を使えるか（運営専用・ショップ解放）
 function canUse(k) {
+  if (k === TENSHI_KEY) return chiefUnlocked();
   if (k === 'minamoto_yoritomo') return save.gemChars.includes(k);
 if (k === 'uninomiya_tadayasu') return chiefUnlocked();
   if (k === 'fujiwara_nobuyori') return chiefUnlocked();
@@ -1766,7 +1769,7 @@ if (k === 'uninomiya_tadayasu') return chiefUnlocked();
   if (d.locked) return operatorUnlocked();
   return true;
 }
-const SELECT_KEYS = () => [...ROSTER, 'seraphel', 'chief', 'sovereign', 'bloodfiend', 'valgard', 'gaizorg', 'operator_gigantes', 'valdarion', 'crimson', 'maou', 'nepterion', 'udaijin', 'kinosaki_sanmi', 'fujiwara_nobuyori', 'uninomiya_tadayasu', 'minamoto_yoritomo'];
+const SELECT_KEYS = () => [...ROSTER, 'seraphel', 'chief', 'sovereign', 'bloodfiend', 'valgard', 'gaizorg', 'operator_gigantes', 'valdarion', 'crimson', 'maou', 'nepterion', 'udaijin', 'kinosaki_sanmi', 'fujiwara_nobuyori', 'uninomiya_tadayasu', 'minamoto_yoritomo', TENSHI_KEY];
 function refreshTitle() {
   $('#btn-invade').hidden = !operatorUnlocked();
   if ($('#btn-evmaker')) $('#btn-evmaker').hidden = !chiefUnlocked();
@@ -1894,7 +1897,7 @@ function openSelect(label, crumb, cb, { allowLocked = false, onBack = goTitle, k
   grid.replaceChildren();
   for (const k of (keys || SELECT_KEYS())) {
     const d = FIGHTERS[k];
-    const locked = !canUse(k) && !allowLocked;
+    const locked = !canUse(k) && (!allowLocked || k===TENSHI_KEY);
     const card = document.createElement('button');
     card.className = 'card' + (locked ? ' locked' : '');
     card.dataset.specialKey = k;
@@ -2161,6 +2164,8 @@ function stageIllustration(st, index) {
     else if (st.pshape === 'spire') category = 'ember';
   }
   const suffix = index > 0 && index % 2 ? '-alt' : '';
+  if (!suffix && category==='moon' && id!=='random') return 'assets/rf5523/moon-court.webp';
+  if (!suffix && category==='bamboo') return 'assets/rf5523/river-path.webp';
   return 'assets/stage-illustrations/' + category + suffix + '.webp';
 }
 function openStageSelect(crumb, onBack) {
@@ -2634,7 +2639,7 @@ const infiniteDungeon=createInfiniteDungeonV552({
 });
 document.getElementById('rf552-infinite-rank')?.addEventListener('click',()=>infiniteDungeon.openLeaderboard());
 const ranked=createRankedMode({
-  THREE,FIGHTERS,api,apiEnabled,code:syncCodeNow,name:myName,show,goTitle,
+  THREE,FIGHTERS,api,apiEnabled,code:syncCodeNow,name:myName,roleToken:()=>roleState.tok,show,goTitle,
   options:()=>{
     state.mode=null;
     playTrack('title');
@@ -3358,7 +3363,25 @@ function openLobby() {
   show('scr-lobby');
 }
 
+async function verifyTenshiOnline() {
+  if (state.myKey!==TENSHI_KEY) return true;
+  const button=$('#btn-join'), status=$('#lobby-status');
+  if(!apiEnabled()||!chiefUnlocked()||syncCodeNow().length!==12){
+    status.textContent='天子でオンラインに参加するには、運営長認証と「旅支度・設定」でのセーブ同期が必要です。';
+    return false;
+  }
+  const mode=state.mode;
+  button.disabled=true;
+  status.textContent='天子の使用権を確認しています…';
+  await refreshProfile(TENSHI_KEY);
+  if(state.myKey!==TENSHI_KEY||state.mode!==mode||!isScreen('scr-lobby'))return false;
+  button.disabled=false;
+  if(profState.key===TENSHI_KEY&&await verifyToken(profState.tok,'prof'))return true;
+  status.textContent='天子の使用権を確認できません。セーブ同期とWorkerの更新を確認してください。';
+  return false;
+}
 $('#btn-join').addEventListener('click', async () => {
+  if (state.myKey===TENSHI_KEY && !await verifyTenshiOnline()) return;
   if(state.mode==='event-coop'){await eventCoop.join();return;}
   const room = $('#lobby-room').value.replace(/[^a-z0-9]/gi, '').slice(0, 12);
   const name = $('#lobby-name').value.replace(/[<>&"']/g, '').trim().slice(0, 12) || '旅人';
@@ -3728,7 +3751,7 @@ function refreshFieldRemotes() {
   if (!f || !w) return;
   const list = Object.values(state.worldPeers || {})
     .filter((p) => p.role === 'field' && p.id !== w.myId && p.pid !== save.pid)
-    .map((p) => ({ id: p.id, name: [...p.name].slice(0, 10).join(''), fk: FIGHTERS[p.fk] ? p.fk : 'rowen', x: p.fx, z: p.fz, ry: p.ry, mv: p.mv, friend: isFriend(p.pid), gw: p.gw || '', ga: p.ga || '' }));
+    .map((p) => ({ id: p.id, name: [...p.name].slice(0, 10).join(''), fk: p.fk===TENSHI_KEY ? peerKeyOf(p.id,p.fk) : FIGHTERS[p.fk] ? p.fk : 'rowen', x: p.fx, z: p.fz, ry: p.ry, mv: p.mv, friend: isFriend(p.pid), gw: p.gw || '', ga: p.ga || '' }));
   f.setRemotes(list);
 }
 function peerStatus(p) {

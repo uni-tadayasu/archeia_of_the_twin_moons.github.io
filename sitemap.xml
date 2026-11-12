@@ -1,5 +1,49 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
-  <url><loc>https://www.kasai-solutions-inc.com/</loc></url>
-  <url><loc>https://www.kasai-solutions-inc.com/play-guide.html</loc></url>
+<?xml version='1.0' encoding='UTF-8'?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:image="http://www.google.com/schemas/sitemap-image/1.1">
+  <url>
+    <loc>https://www.kasai-solutions-inc.com/</loc>
+    <lastmod>2026-11-12</lastmod>
+    <image:image>
+      <image:loc>https://www.kasai-solutions-inc.com/assets/rf5523/sky-observatory-1600.webp</image:loc>
+    </image:image>
+    <image:image>
+      <image:loc>https://www.kasai-solutions-inc.com/assets/rf5523/moon-court.webp</image:loc>
+    </image:image>
+    <image:image>
+      <image:loc>https://www.kasai-solutions-inc.com/assets/rf5523/river-path.webp</image:loc>
+    </image:image>
+  </url>
+  <url>
+    <loc>https://www.kasai-solutions-inc.com/play-guide.html</loc>
+    <lastmod>2026-11-12</lastmod>
+    <image:image>
+      <image:loc>https://www.kasai-solutions-inc.com/assets/rf5523/sky-observatory-1600.webp</image:loc>
+    </image:image>
+  </url>
+  <url>
+    <loc>https://www.kasai-solutions-inc.com/world-guide.html</loc>
+    <lastmod>2026-11-12</lastmod>
+    <image:image>
+      <image:loc>https://www.kasai-solutions-inc.com/assets/rf5523/sky-observatory-1600.webp</image:loc>
+    </image:image>
+    <image:image>
+      <image:loc>https://www.kasai-solutions-inc.com/assets/rf5523/moon-court.webp</image:loc>
+    </image:image>
+    <image:image>
+      <image:loc>https://www.kasai-solutions-inc.com/assets/rf562/japanese-palace.webp</image:loc>
+    </image:image>
+    <image:image>
+      <image:loc>https://www.kasai-solutions-inc.com/assets/rf5523/river-path.webp</image:loc>
+    </image:image>
+  </url>
+  <url>
+    <loc>https://www.kasai-solutions-inc.com/tenshi.html</loc>
+    <lastmod>2026-11-12</lastmod>
+    <image:image>
+      <image:loc>https://www.kasai-solutions-inc.com/assets/rf5523/tenshi-standing.webp</image:loc>
+    </image:image>
+    <image:image>
+      <image:loc>https://www.kasai-solutions-inc.com/assets/rf5523/tenshi-share.jpg</image:loc>
+    </image:image>
+  </url>
 </urlset>

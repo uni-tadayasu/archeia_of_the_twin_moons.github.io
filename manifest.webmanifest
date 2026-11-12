@@ -1,14 +1,14 @@
 {
   "name": "双月のアルケイア",
   "short_name": "双月のアルケイア",
-  "description": "双つの月の下を旅する無料3DアクションRPG。ストーリー、無限天守、拠点攻城戦、世界ランクマッチをPCとスマホのブラウザで楽しめます。",
+  "description": "双つの月の下を旅する和風3DアクションRPG。物語、無限天守、拠点攻城戦、世界ランクマッチをPC・スマホで無料プレイ。神属性の天子と舞台の情報も掲載。",
   "lang": "ja",
   "start_url": "./",
   "scope": "./",
   "display": "fullscreen",
   "orientation": "any",
-  "background_color": "#101a27",
-  "theme_color": "#101a27",
+  "background_color": "#101c29",
+  "theme_color": "#101c29",
   "icons": [
     {
       "src": "assets/site-icon-192.png",

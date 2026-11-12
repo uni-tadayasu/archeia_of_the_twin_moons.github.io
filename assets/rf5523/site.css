@@ -1,0 +1,189 @@
+/* Celestial observatory, stone white, river jade and vermilion lacquer. */
+body.rf5523 { --ink:#101c29; --paper:#fff4e5; --brass:#f4c697; --quiet:#d3deea; }
+html body.rf5523 #ui #scr-title .portal-wrap { width:min(100%,1492px) !important; }
+html body.rf5523 #ui #scr-title .portal-header {
+  border-bottom:1px solid #8b9daf66 !important;
+  padding-top:max(7px,env(safe-area-inset-top)) !important;
+}
+html body.rf5523 #ui #scr-title .portal-hero {
+  border-color:#ad8d756e !important;
+  min-height:clamp(420px,46vw,690px) !important;
+}
+html body.rf5523 #ui #scr-title .portal-hero::before,
+html body.rf5523 #ui #scr-press .portal-intro::before {
+  background:linear-gradient(90deg,#0a1827ed 0%,#102134d5 23%,#0e1c2b62 49%,transparent 76%) !important;
+}
+html body.rf5523 #ui #scr-title .rf5520-hero-title,
+html body.rf5523 #ui #scr-press .intro-content h1 {
+  font-size:clamp(37px,5.9vw,92px) !important;
+  text-shadow:0 3px 18px #06111ef0 !important;
+}
+html body.rf5523 #ui :is(#scr-title,#scr-press) .action-primary {
+  background:#f4c898 !important;
+  border-color:#fff0cd !important;
+  box-shadow:4px 4px #873e37 !important;
+}
+html body.rf5523 #ui #scr-title .portal-modes { gap:10px !important; }
+html body.rf5523 #ui #scr-title .mode-tile[data-go="story"]::before { background-image:url('./river-path.webp') !important; opacity:.79 !important; }
+html body.rf5523 #ui #scr-title .mode-tile[data-go="infinite"]::before { opacity:.75 !important; }
+html body.rf5523 #ui #scr-title #btn-ranked::before { background-image:url('./moon-court.webp') !important; opacity:.62 !important; }
+html body.rf5523 #ui #scr-title .mode-tile::after { background:linear-gradient(0deg,#0d1928 5%,#101b2fa0 60%,#14192b24) !important; }
+html body.rf5523 #ui #scr-title .mode-tile:is(:hover,:focus-visible) { border-color:var(--brass) !important; }
+
+html body.rf5523 #ui #scr-title .portal-overview { grid-template-columns:1.05fr 1fr 1fr !important; }
+html body.rf5523 #ui #scr-title .overview-panel.intro-news { background:#234344 !important; border-color:#789b93 !important; }
+html body.rf5523 #ui #scr-title .overview-panel.featured-event { background:#4c343c !important; border-color:#a47483 !important; }
+html body.rf5523 #ui #scr-title .overview-panel.rf5523-fighter-feature {
+  padding:0 !important;
+  background:#2f3b55 !important;
+  border-color:#a9a2c1 !important;
+  overflow:hidden;
+}
+.rf5523-fighter-link {
+  display:grid;
+  grid-template-columns:minmax(104px,.88fr) minmax(0,1fr);
+  align-items:end;
+  min-height:184px;
+  height:100%;
+  color:var(--paper);
+  text-decoration:none;
+  background:radial-gradient(ellipse at 26% 66%,#59748285,transparent 75%),linear-gradient(145deg,#233742,#313750);
+}
+.rf5523-fighter-link img {
+  display:block;
+  width:100%;
+  height:100% !important;
+  max-height:225px;
+  object-fit:cover;
+  object-position:53% 11%;
+}
+.rf5523-fighter-link div { padding:12px clamp(8px,2vw,22px) 18px 3px; }
+.rf5523-fighter-link p { margin:0; color:#f4d9b6; font-weight:650; }
+.rf5523-fighter-link h2 { margin:2px 0 10px; font:800 clamp(27px,4vw,49px)/1.14 var(--display); }
+.rf5523-fighter-link div > span { color:#f4d7bb; font-size:13px; text-underline-offset:4px; }
+.rf5523-fighter-link:hover div > span { text-decoration:underline; }
+
+html body.rf5523 #ui #scr-title .rf5523-gallery {
+  display:grid;
+  grid-template-columns:1.23fr 1fr 1fr;
+  gap:10px;
+}
+.rf5523-gallery a {
+  display:block;
+  position:relative;
+  min-width:0;
+  overflow:hidden;
+  color:var(--paper);
+  border:1px solid #9faeaa7a;
+  border-radius:3px;
+  background:#263b4b;
+  text-decoration:none;
+}
+.rf5523-gallery a:hover { border-color:#ffd7a0; }
+html body.rf5523 #ui #scr-title .rf5523-gallery img {
+  display:block;
+  width:100%;
+  height:auto !important;
+  aspect-ratio:16/9;
+  object-fit:cover;
+  filter:none;
+}
+html body.rf5523 #ui #scr-title .rf5523-gallery span {
+  display:grid;
+  gap:2px;
+  padding:10px 11px;
+  font:800 clamp(16px,2.1vw,23px)/1.35 var(--display) !important;
+  white-space:normal !important;
+  overflow-wrap:anywhere;
+}
+html body.rf5523 #ui #scr-title .rf5523-gallery small { color:#c9e0e6 !important; font:500 12px/1.4 system-ui,sans-serif !important; }
+.rf5523 .portal-footer nav { display:flex; flex-wrap:wrap; gap:4px 16px; }
+.rf5523 .portal-footer nav a { color:#eed0af; text-underline-offset:4px; }
+.rf5523 .portal-footer { align-items:center; flex-wrap:wrap; }
+.rf5523 :is(#ranked-top,#ranked-history) th { font-weight:750; }
+
+html body.rf5523 #ui :is(#scr-select,#scr-options,#scr-ranked,#scr-forge,#scr-lobby,#scr-castle) .inner {
+  min-inline-size:0;
+  max-inline-size:min(100%,1230px) !important;
+  overflow-wrap:anywhere;
+}
+html body.rf5523 #ui #select-grid {
+  grid-template-columns:repeat(auto-fill,minmax(min(100%,158px),1fr)) !important;
+}
+html body.rf5523 #ui #select-grid .card :is(b,em,small) { min-width:0; overflow-wrap:anywhere; }
+html body.rf5523 #ui #select-grid .card[data-special-key="tenshi"]:not(.locked) {
+  border-color:#dcba83 !important;
+  background:linear-gradient(155deg,#364963,#302f41) !important;
+}
+html body.rf5523 #ui #select-grid .card[data-special-key="tenshi"] .face {
+  background:radial-gradient(ellipse at 50% 55%,#607f8b99,transparent 76%);
+  object-fit:contain !important;
+  object-position:center top;
+}
+html body.rf5523 #ui :is(#scr-options,#scr-forge,#scr-lobby,#scr-castle,#scr-ranked) .topbar { gap:7px; }
+html body.rf5523 #ui .screen :is(.btn,.back,.chip,.cr-button) { line-height:1.35; }
+html body.rf5523 #ui .screen input:not([type="range"]) { scroll-margin:10px; }
+html body.rf5523 #ui #hud .plate b { overflow-wrap:anywhere; }
+
+.rf5523-world .guide-cover { min-height:clamp(240px,38vw,445px); }
+.rf5523-related { display:flex; gap:9px 20px; flex-wrap:wrap; }
+.rf5523-related a { padding-block:5px; }
+.rf5523-places { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:13px; }
+.rf5523-place {
+  min-width:0;
+  overflow:hidden;
+  background:#203347;
+  border:1px solid #5b7488;
+  border-radius:3px;
+}
+.rf5523-place:first-child { grid-column:1/-1; display:grid; grid-template-columns:minmax(0,1.3fr) minmax(0,1fr); }
+.rf5523-place img { display:block; width:100%; height:100%; max-height:322px; aspect-ratio:16/9; object-fit:cover; }
+.rf5523-place > div { padding:14px; align-self:center; }
+.rf5523-place h2 { font-size:clamp(21px,3vw,29px); }
+.rf5523-place p { margin:0; }
+.rf5523-character-hero {
+  display:grid;
+  grid-template-columns:minmax(0,1fr) minmax(160px,.75fr);
+  gap:16px;
+  align-items:center;
+  margin-top:18px;
+  background:radial-gradient(ellipse at 78% 60%,#425668,transparent 61%),#24354a;
+  border:1px solid #7c8c9e;
+  border-left:4px solid #d5b682;
+}
+.rf5523-character-hero > div { padding:clamp(16px,4vw,38px); }
+.rf5523-character-hero h1 { font:800 clamp(46px,8vw,104px)/1 var(--display); margin:6px 0 10px; color:#fff1d9; }
+.rf5523-character-hero img { width:100%; max-height:485px; object-fit:contain; display:block; }
+.rf5523-character-hero .rf5523-attribute { color:#f4d297; font-weight:750; }
+.rf5523-skill-table td:nth-child(1) { width:8rem; }
+.rf5523-skill-table td:nth-child(2) { width:14rem; }
+
+@media(max-width:720px) {
+  html body.rf5523 #ui #scr-title .portal-hero { min-height:clamp(354px,103vw,570px) !important; }
+  html body.rf5523 #ui #scr-title .portal-hero::before,
+  html body.rf5523 #ui #scr-press .portal-intro::before {
+    background:linear-gradient(0deg,#101c29ff 4%,#102135e6 32%,#1021351a 75%) !important;
+  }
+  html body.rf5523 #ui #scr-title .rf5520-hero-title,
+  html body.rf5523 #ui #scr-press .intro-content h1 { font-size:clamp(30px,9.1vw,58px) !important; }
+  html body.rf5523 #ui #scr-title .portal-overview { grid-template-columns:1fr !important; }
+  html body.rf5523 #ui #scr-title .rf5523-gallery { grid-template-columns:repeat(2,minmax(0,1fr)); }
+  html body.rf5523 #ui #scr-title .rf5523-gallery a:first-child { grid-column:1/-1; }
+  html body.rf5523 #ui #scr-title .rf5523-gallery a:first-child img { aspect-ratio:2/1; }
+  html body.rf5523 #ui #select-grid { grid-template-columns:repeat(auto-fill,minmax(min(100%,132px),1fr)) !important; }
+  html body.rf5523 #ui :is(#scr-castle,#scr-shop,#scr-ranked,#scr-options) .inner { padding-inline:clamp(8px,3vw,18px) !important; }
+  .rf5523-places { grid-template-columns:1fr; }
+  .rf5523-place:first-child { display:block; }
+  .rf5523-skill-table td:nth-child(1),.rf5523-skill-table td:nth-child(2) { width:auto; }
+}
+@media(max-width:390px) {
+  .rf5523-character-hero { grid-template-columns:minmax(0,1fr) minmax(104px,.74fr); gap:0; }
+  .rf5523-character-hero > div { padding:12px; }
+  .rf5523-fighter-link { min-height:157px; }
+  html body.rf5523 #ui #scr-title .portal-topnav :is(a,button) { font-size:11px !important; min-height:44px; padding-inline:3px !important; }
+}
+@media(max-height:530px) and (orientation:landscape) {
+  html body.rf5523 #ui #scr-press .portal-intro::before {
+    background:linear-gradient(90deg,#0f1b2aea,#0f1b2abb 36%,#0f1b2a08 75%) !important;
+  }
+}

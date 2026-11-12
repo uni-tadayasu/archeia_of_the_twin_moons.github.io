@@ -728,6 +728,36 @@ const { callRankHub, openRankSocket, RankHub, RankDuel } = (() => {
 })();
 export { RankHub, RankDuel };
 
+// 神属性の天子はクライアントと同じ定義で扱う。
+const { TENSHI_KEY, DIVINE_ELEMENT, tenshiDefinition } = (()=>{
+// Shared between the game and Worker permission checks.
+const TENSHI_KEY = 'tenshi';
+const DIVINE_ELEMENT = 10;
+const art = (name, kind, divine, properties) => ({
+  name, kind, divine, elem:DIVINE_ELEMENT, vivid:true, ...properties
+});
+function tenshiDefinition() {
+  return {
+    name:'天子', title:'双月の天儀を司る者',
+    model:'assets/models/tenshi.glb', face:'assets/portraits/tenshi.webp',
+    attribute:'神', element:DIVINE_ELEMENT, tint:null, color:0xf4d694,
+    height:1.79, hp:1180, speed:6.15, power:1.03, armor:.94,
+    overGain:1.08, fluxMul:1.06, locked:true, special:'chief', fixedSlots:true,
+    light:{name:'日輪連掌',range:2.28,dmg:43,color:0xffd490,elem:DIVINE_ELEMENT},
+    skills:[
+      art('暁光の矢','projectile','arrow',{cost:17,castTime:.42,dmg:68,count:1,speed:25,radius:.57,visual:'orb',color:0xffd398}),
+      art('星踏み','dash','step',{cost:20,castTime:.37,dmg:99,speed:19,dur:.29,color:0xc7e8ff}),
+      art('神紋・星環','tenshi_seal','seal',{cost:25,castTime:.74,dmg:124,radius:3.3,reach:9,delay:.49,color:0xe8c8fb}),
+      art('月弧の返し','projectile','moon',{cost:27,castTime:.55,dmg:51,count:3,spreadAng:.13,speed:19,radius:.65,visual:'crescent',color:0xb9e0ff}),
+      art('晨光の祈り','heal','mercy',{cost:32,castTime:.75,heal:135,radius:4.5,color:0xb9e9c9})
+    ],
+    over:art('皇天・暁界','tenshi_seal','dawn',{cost:0,castTime:1.23,dmg:252,radius:5.25,reach:9.3,delay:.62,color:0xffd891}),
+    hi:art('双月神楽・天照','tenshi_seal','eclipse',{cost:0,castTime:1.62,dmg:209,echo:136,radius:5.65,reach:9.3,delay:.64,color:0xd4e4ff,hi:true})
+  };
+}
+return {TENSHI_KEY,DIVINE_ELEMENT,tenshiDefinition};
+})();
+
 // 外見の設計値。描画ライブラリ・DOMに依存しないのでサーバーからも読み込める。
 // 同じ素体を使っていた二人目以降だけに、体形・髪・頭飾り・衣装・得物を割り当てる。
 const PALETTES = [
@@ -2145,7 +2175,7 @@ FIGHTERS.maou_shade = {
   over:{name:'影光閃',kind:'shockwave',elem:5,color:0x7bff9f,dmg:130,radius:3,cost:0}
 };
 
-const CHIEF_ONLY = new Set(['valgard', 'gaizorg', 'valdarion', 'valgard2', 'maou', 'maou_shade']);
+const CHIEF_ONLY = new Set([TENSHI_KEY,'valgard', 'gaizorg', 'valdarion', 'valgard2', 'maou', 'maou_shade']);
 
 // ---------- ルート ----------
 export default {
@@ -2166,7 +2196,7 @@ export default {
           ok: true,
           service: 'riftfall-arena-api',
           check: 'worker-runtime',
-          version: '55.22'
+          version: '55.23'
         });
       }
       if (url.pathname.startsWith('/rank/socket/')) return await openRankSocket(req,env,url.pathname.slice('/rank/socket/'.length));
@@ -2262,7 +2292,7 @@ const RF_CHARACTER_MAX_SLOTS = 24;
 const RF_CHARACTER_SKILL_NUM = Object.freeze({
   dmg:[0,100000],cost:[0,100],radius:[0,100],castTime:[0,30],
   speed:[1,150],dur:[0.05,10],count:[1,24],spread:[0,40],spreadAng:[0,3.14],
-  delay:[0,10],interval:[0.01,3],heal:[0,100000],finalDmg:[0,100000],finalRadius:[0.1,100], elem:[0,9],color:[0,16777215],shape:[0,99],stun:[0,5],kb:[0,30],chain:[0,1],trail:[0.01,1]
+  delay:[0,10],interval:[0.01,3],heal:[0,100000],finalDmg:[0,100000],finalRadius:[0.1,100], elem:[0,DIVINE_ELEMENT],color:[0,16777215],shape:[0,99],stun:[0,5],kb:[0,30],chain:[0,1],trail:[0.01,1]
 });
 function rfCharPlain(v){return v && typeof v==='object' && !Array.isArray(v);}
 function rfCharParseSkill(v,actual){
@@ -2630,15 +2660,19 @@ async function rankedRoute(req,env,H,body,action) {
     const me=await whoAmI(env,body.code,body.name);
     if (!me) return json(H,{error:'nosync'},403);
     const name=me.name.replace(/\p{Cf}/gu,'').trim() || '旅人';
-    const expires=Date.now()+4*3600000;
-    return json(H,{token:await sign(env,{t:'rank',p:me.pid,n:name,exp:expires}),expires,fighters:[...rankedPool().keys()]});
+    const chief=await verify(env,body.role,'role');
+    const divine=chief?.r==='chief';
+    const expires=Math.min(Date.now()+4*3600000,divine?chief.exp:Infinity);
+    const fighters=[...rankedPool().keys(),...(divine?[TENSHI_KEY]:[])];
+    return json(H,{token:await sign(env,{t:'rank',p:me.pid,n:name,chief:divine,exp:expires}),expires,fighters});
   }
   const credential=body.token ? await verify(env,body.token,'rank') : null;
   const pid=credential && PID_RE.test(credential.p) ? credential.p : null;
   if ((!pid && action!=='board') || (body.token && !pid)) return json(H,{error:'rank_session'},401);
   const data={pid};
   if (action==='join') {
-    const profile=rankedPool().get(body.fighter);
+    const profile=body.fighter===TENSHI_KEY&&credential.chief ?
+      {fighter:TENSHI_KEY,speed:6.15,reach:2.28} : rankedPool().get(body.fighter);
     if (!profile) return json(H,{error:'rank_fighter'},400);
     data.player={...profile,name:credential.n};
   }
@@ -4101,3 +4135,5 @@ async function rf50Route(req,env,H,body,action){
  }
  return json(H,{error:'not_found'},404);
 }
+
+FIGHTERS[TENSHI_KEY]=tenshiDefinition();

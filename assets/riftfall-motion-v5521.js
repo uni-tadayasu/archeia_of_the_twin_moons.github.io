@@ -6,6 +6,9 @@ const names={
  walk:['Walk','Walk_Formal_Loop'],
  run:['Run','Sprint_Loop','Walk'],
  jump:['Jump','Jump_Loop','NinjaJump_Idle_Loop','Jump_Start'],
+ takeoff:['Jump_Start'],
+ land:['Jump_Land'],
+ win:['Victory'],
  guard:['Guard','Idle_Shield_Loop','Sword_Block'],
  light:['LightAttack','Attack','Sword_Regular_A','Sword_Attack'],
  light2:['Sword_Regular_B','Attack','LightAttack','Sword_Regular_A'],
@@ -108,6 +111,18 @@ export function fighterMotion(f,requested){
  if(action?.type==='chant')return ['chant',action.dur,action];
  if(action?.type==='cast')return [action.motion||'cast',action.dur,action];
  if(f.guard&&f.clips.guard)return ['guard'];
+ if(f.key==='tenshi'){
+  const now=performance.now();
+  if(f.battle?.ended&&f.clips.win&&f.battle.fighters.every(other=>other.team===f.team||other.dead))return ['win',1.4];
+  if(requested==='jump'){
+   if(!f.tenshiAirborne)f.tenshiJumpAt=now;
+   f.tenshiAirborne=true;
+   if(now-f.tenshiJumpAt<170&&f.clips.takeoff)return ['takeoff',.17];
+  }else{
+   if(f.tenshiAirborne){f.tenshiAirborne=false;f.tenshiLandUntil=now+200;}
+   if(now<f.tenshiLandUntil&&f.clips.land)return ['land',.20];
+  }
+ }
  if(requested==='run'&&f.clips.walk&&f.vel.lengthSq()<Math.pow((f.def.speed||5)*.61,2))return ['walk'];
  return [requested];
 }
