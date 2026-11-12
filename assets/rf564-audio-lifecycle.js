@@ -1,4 +1,4 @@
-/* Riftfall Arena V55.14 — mobile background-audio safety.
+/* Riftfall Arena V55.18 — mobile background-audio safety + uninterrupted foreground UI.
  * Installed BEFORE the game's main module. Intercepts every HTML media play
  * and tracks AudioContext instances to prevent music continuing after tab/app hides.
  * Never changes sound selection, volume, save keys, role keys or sync state.
@@ -98,7 +98,7 @@
   }
   function wake(){
     if(closed || document.hidden || document.visibilityState==='hidden')return;
-    if(typeof document.hasFocus==='function' && !document.hasFocus())return;
+    // Visible UI focus changes do not count as app backgrounding.
     blocked=false;
     document.documentElement.dataset.rf564Audio='ready';
     // The game already restores the selected BGM on visibility/focus.
@@ -113,7 +113,13 @@
   document.addEventListener('visibilitychange',()=>document.hidden?halt('visibility-hidden'):wake(),{capture:true});
   window.addEventListener('pagehide',()=>{closed=true;halt('pagehide');},{capture:true});
   window.addEventListener('pageshow',()=>{closed=false;if(document.hidden)halt('pageshow-hidden');else wake();},{capture:true});
-  window.addEventListener('blur',()=>halt('window-blur'),{capture:true});
+  // Clicking controls, opening native UI and focus moving between widgets can
+  // transiently dispatch blur even while the game is fully visible. Pausing
+  // every Audio element here caused a silent gap for almost every menu action.
+  // Real backgrounding is handled by visibilitychange/pagehide/freeze instead.
+  window.addEventListener('blur',()=>{
+    if(document.hidden || document.visibilityState==='hidden')halt('window-hidden');
+  },{capture:true});
   window.addEventListener('focus',wake,{capture:true});
   document.addEventListener('freeze',()=>halt('freeze'),{capture:true});
   document.addEventListener('resume',wake,{capture:true});
@@ -121,7 +127,7 @@
   // this also handles delayed play() calls and tab discard suspensions.
   window.addEventListener('beforeunload',()=>{closed=true;halt('beforeunload')},{capture:true});
   document.addEventListener('pointerdown',()=>{if(!document.hidden)wake();},{capture:true,passive:true});
-  window.__rf564AudioLifecycle={version:'55.14',halt,wake,
+  window.__rf564AudioLifecycle={version:'55.18',halt,wake,
     get paused(){return isBlocked()},get registeredMedia(){return media.size},
     get registeredContexts(){return contexts.size},get preventedPlays(){return prevented}};
   if(isBlocked())halt('initial-hidden');

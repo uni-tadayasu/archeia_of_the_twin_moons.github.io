@@ -3147,7 +3147,7 @@
         const key = cardId(card);
         if (!cardOrder.has(card)) cardOrder.set(card, ++orderCounter);
         const star = $('.rift-card-favorite', card);
-        if (star) { star.setAttribute('aria-pressed', favorites.has(key) ? 'true' : 'false'); star.textContent = favorites.has(key) ? '★' : '☆'; }
+        if (star) { const pressed = favorites.has(key) ? 'true' : 'false'; const glyph = pressed === 'true' ? '★' : '☆'; if (star.getAttribute('aria-pressed') !== pressed) star.setAttribute('aria-pressed', pressed); if (star.textContent !== glyph) star.textContent = glyph; }
         const allowed = filterMode === 'favorites' ? favorites.has(key) : filterMode === 'recent' ? recents.includes(key) : true;
         const text = `${card.dataset.search || ''} ${card.textContent || ''}`.toLocaleLowerCase();
         const matched = !searchValue || text.includes(searchValue);

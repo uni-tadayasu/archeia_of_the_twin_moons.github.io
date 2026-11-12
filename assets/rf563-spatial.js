@@ -26,7 +26,10 @@ if (!window.__rf563Spatial) {
   document.addEventListener('click',(event)=>{
     const node=event.target?.closest?.('[data-go]');
     if(node){const mode=node.getAttribute('data-go');requestedMode=mode==='infinite'?'infinite':mode||'';}
+    // Adventure uses a dedicated button instead of data-go.
+    if(event.target?.closest?.('#btn-adventure-mode'))requestedMode='adventure';
   },true);
+  const traditionalArena=()=>['story','event','event-coop','adventure'].includes(requestedMode);
   const floorText = () => (document.getElementById('rf552-endless-hud')?.textContent || '');
   const floorNo = () => Number((floorText().replaceAll(',','').match(/第\s*(\d+)\s*層/) || [])[1] || 1);
   function inInfinite() { const e = document.getElementById('rf552-endless-hud'); return !!e && !e.hidden && e.textContent.includes('無限天守'); }
@@ -60,7 +63,9 @@ if (!window.__rf563Spatial) {
     return {mat,add,own};
   }
   function createBattleRoom(battle) {
-    if (battle.__rf563Room || !battle.scene || !battle.fx) return;
+    // Traditional arena combat is deliberately kept for story, event and adventure.
+    // Only infinite mode receives the new maze-world geometry.
+    if (battle.rf568Maze || traditionalArena() || battle.__rf563Room || !battle.scene || !battle.fx) return;
     const {kind,floor}=stageTheme();
     const isEast = kind==='japanese';
     const woody = isEast;

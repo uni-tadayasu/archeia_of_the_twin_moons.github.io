@@ -1,4 +1,4 @@
-/* Riftfall Arena V55.16 — best-effort autoplay for all BGM transitions.
+/* Riftfall Arena V55.18 — best-effort autoplay and seamless warm buffering for BGM transitions.
  * Browsers may block sound without a user gesture; do not bypass restrictions.
  * Captures the *same* title Audio instance that main.js owns. No duplicate track.
  * Once the user genuinely interacts, main.js unlockAudio() handles every BGM.
@@ -10,6 +10,19 @@
  const Native=window.Audio;
  if(typeof Native!=='function')return;
  let titleAudio=null,attempted=false,playing=false,blocked=false;
+ const soundtracks=new Set();let warmed=false;
+ function warmBuffer(){
+  if(warmed||document.hidden)return;warmed=true;
+  // Only warm paused BGM on a genuine gesture; do not .load() an active track
+  // (that would reset playback) or create duplicate Audio instances.
+  const mobile=/Android|iPhone|iPad/i.test(navigator.userAgent||'')||(navigator.deviceMemory||8)<=4;
+  let count=0;
+  for(const audio of soundtracks){
+   if(!audio||!audio.paused||audio.readyState>=2)continue;
+   if(mobile&&count>=4)break; // bound memory / network on phones
+   try{audio.preload='auto';audio.load();count++;}catch{}
+  }
+ }
  const safeAutoplay=()=>{
    if(!titleAudio || !document.body || document.hidden || document.visibilityState==='hidden')return;
    if(!document.querySelector('#scr-press.on,#scr-title.on'))return;
@@ -35,6 +48,7 @@
  function AudioV566(...args){
    const element=new Native(...args);
    const src=String(args[0]||'') || element.currentSrc || element.src || '';
+   if(/(?:^|\/)assets\/audio\/.+\.mp3(?:[?#]|$)/i.test(src)) soundtracks.add(element);
    if(/(?:^|\/)(?:title-theme|aishiteirukara)\.mp3(?:[?#]|$)/i.test(src)){
      titleAudio=element;
      if(document.readyState!=='loading')queueMicrotask(safeAutoplay);
@@ -49,7 +63,7 @@
  window.addEventListener('arkeia-boot-ready',safeAutoplay,{once:true});
  // A *real* user gesture unlocks every BGM in the main engine, not this wrapper.
  // Do not synthesize an input event (that would be blocked by mobile browsers).
- const onGesture=()=>{hideHint();blocked=false;};
+ const onGesture=()=>{hideHint();blocked=false;queueMicrotask(warmBuffer);};
  window.addEventListener('pointerdown',onGesture,{capture:true,passive:true});
  window.addEventListener('keydown',onGesture,{capture:true,passive:true});
  document.addEventListener('visibilitychange',()=>{

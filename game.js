@@ -935,6 +935,8 @@ export class Fighter {
         this.startOver();
       }
     }
+    // RF568: remember previous world position for swept collision against castle walls.
+    const rf568Before = this.battle.rf568Maze ? this.pos.clone() : null;
     this.pos.addScaledVector(this.vel, dt);
     if (!moving && !(this.action && this.action.keepVel)) {
       this.vel.multiplyScalar(Math.exp(-9 * dt));
@@ -944,9 +946,12 @@ export class Fighter {
     if (this.y === 0) {
       this.vy = Math.max(0, this.vy);
     }
-    const r = Math.hypot(this.pos.x, this.pos.z);
-    if (r > ARENA_R) {
-      this.pos.multiplyScalar(ARENA_R / r);
+    if (this.battle.rf568Maze) {
+      this.battle.rf568Maze.resolve(this.pos, this.radius, rf568Before);
+    } else {
+      // All non-infinite modes retain their original circular combat bounds.
+      const r = Math.hypot(this.pos.x, this.pos.z);
+      if (r > ARENA_R) this.pos.multiplyScalar(ARENA_R / r);
     }
     this.moving = moving;
     this.anim(this.y > 0.05 ? 'jump' : moving ? 'run' : 'idle');

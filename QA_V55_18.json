@@ -1,0 +1,33 @@
+{
+  "version": "V55.18",
+  "build_date": "2026-11-12",
+  "scope": "infinite maze + BGM continuity + favorite star + colosseum preservation",
+  "mode_coverage": {
+    "infinite": "procedural full-ceiling castle maze with live action combat and manual stairs",
+    "story": "original arena",
+    "event": "original arena",
+    "event-coop": "original arena",
+    "adventure": "original arena"
+  },
+  "tests": {
+    "maze_generation": "42 sequential floors, 169 connected cells per floor, all exits reachable, symmetric walls",
+    "walls": "solid closed passages, clear open doorways, swept collision, attacks through blocked walls suppressed",
+    "progression": "all enemy groups defeated -> stair opens -> next floor ONLY when reached",
+    "persistence": "same Battle, same protagonist object, carry-over HP, new maze on next floor",
+    "bgm": "visible window blur does not halt music; hidden visibility does halt",
+    "favorites": "static star glyph with animation disabled and DOM updates only when state actually changes"
+  },
+  "browser_real_device_test": "Not yet performed; browser autoplay policy still applies to initial sound without user interaction.",
+  "changed_files": [
+    "index.html",
+    "game.js",
+    "rf-infinite-dungeon-v552.js",
+    "arkeia-ui.js",
+    "assets/rf568-castle-maze.js",
+    "assets/rf568-infinite-maze.css",
+    "assets/rf563-spatial.js",
+    "assets/rf564-battle-stage.js",
+    "assets/rf564-audio-lifecycle.js",
+    "assets/rf566-audio-start.js"
+  ]
+}

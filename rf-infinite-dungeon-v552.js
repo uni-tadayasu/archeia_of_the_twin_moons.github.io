@@ -1,5 +1,5 @@
-// Riftfall Arena V55.17 — 無限天守: battle stays alive across floors, no arena re-entry.
-import * as THREE from 'three';
+// Riftfall Arena V55.18 — 無限天守: full enclosed 3D castle maze, action combat, stairs to next floor only after total annihilation.
+import { CastleMazeWorld, installCastleBattleNavigation } from './assets/rf568-castle-maze.js?v=20261112-v5518';
 // No upper floor count. Only a living player's remaining HP carries to the next floor.
 const NOW=()=>Date.now();
 const RNG=seed=>()=>{seed^=seed<<13;seed^=seed>>>17;seed^=seed<<5;return (seed>>>0)/4294967296};
@@ -30,7 +30,7 @@ export function createInfiniteDungeonV552(c){
   node.hidden=false;
   const hp=state.battle?.fighters.find(f=>f.isPlayer)?.hp;
   const w=state.battle?.rf566EndlessWave;
-  const crowd=run.transition?'  │  上階への階段 開放':w?`  │  敵兵 ${w.spawned}/${w.total}`:'';
+  const crowd=run.transition?'  │  全敵撃破！階段へ':w?`  │  残敵 ${w.remaining}/${w.total}`:'';
   node.textContent=`無限天守  第${run.floor.toLocaleString('ja-JP')}層  │  ${RANK(run.cleared+1)}級  │  HP ${Math.round(hp??run.hp??0)}${crowd}  │  ${endlessElapsedText(elapsed())}`;
  }
  function record(){
@@ -75,41 +75,22 @@ export function createInfiniteDungeonV552(c){
   const fallback=FIGHTERS.rowen?'rowen':Object.keys(FIGHTERS)[0];
   return Array.from({length:count},()=>pool[Math.floor(rand()*pool.length)]||fallback);
  }
- // Painted sprite staircase marker. This is a traversal cue, NOT another battle arena.
+ // A physical staircase lives inside the castle's farthest reachable chamber.
  function removeStairs(cur){
-  if(!cur?.stairs)return;
-  try{cur.stairs.sprite.removeFromParent();cur.stairs.material.dispose();cur.stairs.texture.dispose();}catch{}
-  cur.stairs.hint?.remove();
+  if(!cur)return;
+  cur.battle?.rf568Maze?.setStair(false);
   cur.stairs=null;
+  document.getElementById('rf568-endless-stair-hint')?.remove();
  }
  function showStairs(cur,b,player){
   removeStairs(cur);
-  const x0=player.pos.x,z0=player.pos.z;
-  const length=Math.hypot(x0,z0),dx=length>9?-x0/length:0,dz=length>9?-z0/length:1;
-  let x=x0+dx*7,z=z0+dz*7;
-  const r=Math.hypot(x,z);if(r>40){x*=40/r;z*=40/r;}
-  const canvas=document.createElement('canvas');canvas.width=256;canvas.height=256;
-  const g=canvas.getContext('2d');
-  if(g){
-   const halo=g.createRadialGradient(128,120,5,128,120,121);
-   halo.addColorStop(0,'rgba(255,249,205,.95)');halo.addColorStop(.26,'rgba(255,210,103,.76)');
-   halo.addColorStop(.65,'rgba(189,99,250,.27)');halo.addColorStop(1,'rgba(115,68,206,0)');
-   g.fillStyle=halo;g.fillRect(0,0,256,256);
-   g.lineCap='round';g.lineJoin='round';g.strokeStyle='#fff0c4';g.shadowColor='#ffc85a';g.shadowBlur=17;g.lineWidth=7;
-   g.beginPath();g.moveTo(49,171);g.lineTo(207,171);g.moveTo(64,154);g.lineTo(192,154);
-   g.moveTo(80,137);g.lineTo(176,137);g.moveTo(98,120);g.lineTo(159,120);g.stroke();
-   g.beginPath();g.moveTo(128,102);g.lineTo(128,45);g.moveTo(104,68);g.lineTo(128,43);g.lineTo(151,68);g.stroke();
-   g.font='bold 19px serif';g.textAlign='center';g.shadowBlur=7;g.fillStyle='#ffffff';g.fillText('上層へ',128,210);
-  }
-  const texture=new THREE.CanvasTexture(canvas);texture.colorSpace=THREE.SRGBColorSpace;
-  const material=new THREE.SpriteMaterial({map:texture,transparent:true,depthWrite:false,opacity:.94});
-  const sprite=new THREE.Sprite(material);sprite.scale.set(5.4,5.4,1);sprite.position.set(x,3,z);
-  b.scene.add(sprite);
-  const hint=document.createElement('div');hint.id='rf567-endless-stair-hint';
-  hint.style.cssText='position:fixed;left:50%;bottom:max(100px,13vh);transform:translateX(-50%);z-index:37;max-width:90vw;padding:9px 16px;border:1px solid #d8b36e;border-radius:12px;background:rgba(11,10,28,.85);box-shadow:0 0 22px #c9a56e44;color:#fff5dc;font:600 14px/1.5 system-ui,sans-serif;text-align:center;pointer-events:none;';
-  hint.textContent=`第${cur.cleared}層踏破！ 階段に近づくと第${cur.floor}層へ（自動進行も可能）`;
+  const maze=b.rf568Maze;
+  const target=maze?.setStair(true);
+  if(!target)throw Error('城内の階段を設置できませんでした。');
+  cur.stairs={x:target.x,z:target.z};
+  const hint=document.createElement('div');hint.id='rf568-endless-stair-hint';
+  hint.textContent=`全区画の敵を殲滅！ 城内図の金色の階段まで進むと第${cur.floor}層へ`;
   document.body.append(hint);
-  cur.stairs={x,z,sprite,texture,material,hint};
  }
  function addHudPlate(f){
   if(f.hudPlate)return;
@@ -138,8 +119,6 @@ export function createInfiniteDungeonV552(c){
   record();checkpoint(cur.cleared);
   cur.floor+=1;
   cur.transition=true;
-  const wave=b.rf566EndlessWave;
-  if(wave){wave.waiting=true;wave.waitSeconds=0;}
   showStairs(cur,b,me);
   ui.banner({name:`— 第${cur.cleared.toLocaleString('ja-JP')}層 踏破！ —`},
     `HP ${cur.hp} 維持 / 上階への階段が開放 / 次は第${cur.floor}層`);
@@ -152,107 +131,114 @@ export function createInfiniteDungeonV552(c){
    const floor=cur.floor;
    const enemies=foeKeys(floor,cur.seed);
    const rng=RNG(((cur.seed>>>0)+Math.imul(floor,2246822519))>>>0);
-   const minionPool=ENEMY_ROSTER.filter(k=>FIGHTERS[k]&&!FIGHTERS[k].hidden);
-   const minions=[];
-   for(let i=0;i<Math.min(3,minionPool.length);i++)minions.push(minionPool[Math.floor(rng()*minionPool.length)]);
+   const enemyPool=ENEMY_ROSTER.filter(k=>FIGHTERS[k]&&!FIGHTERS[k].hidden);
+   const minions=Array.from({length:Math.min(4,enemyPool.length)},()=>enemyPool[Math.floor(rng()*enemyPool.length)]);
    const pool=[...new Set([...enemies,...minions])];
    if(!(await ensureAllModelsReady([cur.key,...pool])))throw Error('階層のモデルを準備できませんでした。');
    if(cur!==run||state.mode!=='infinite')return;
    let b=cur.battle;
    if(!b){
-    // Enter the castle ONCE. All following floors reuse this battle, scene and camera.
+    // The original circular arena is exclusively for story/event/adventure battles.
     const stage=STAGES.find(s=>/天守|城|castle|和風|palace/i.test(`${s.name} ${s.id}`))||STAGES[0];
-    setStage(stage);
-    b=makeBattle(null);cur.battle=b;
-    const me=b.add(cur.key,{team:0,player:true,awk:save.awk,netId:'endless-self',pos:[-4,3],
-     name:FIGHTERS[cur.key].name+'（挑戦者）',upg:upgFor(cur.key),gear:gearFor(cur.key)});
+    setStage(stage);b=makeBattle(null);cur.battle=b;
+    installCastleBattleNavigation(b.constructor);
+    b.rf568Maze=new CastleMazeWorld(b,{floor,seed:cur.seed});
+    const p=b.rf568Maze.startPoint();
+    const me=b.add(cur.key,{team:0,player:true,awk:save.awk,netId:'endless-self',pos:[p.x,p.z],
+      name:FIGHTERS[cur.key].name+'（挑戦者）',upg:upgFor(cur.key),gear:gearFor(cur.key)});
     if(cur.hp!==null)me.hp=Math.max(1,Math.min(me.maxHp,Math.floor(cur.hp)));
-   }else if(b!==state.battle){return;}
-   removeStairs(cur);
-   removeDead(b,10); // No dead enemy clones accumulate across limitless floors.
+   }else{
+    if(b!==state.battle)return;
+    removeStairs(cur);
+    b.rf568Maze.build(floor,cur.seed); // Same Battle / Fighter, a NEW enclosed maze floor.
+    const me=b.fighters.find(f=>f.isPlayer&&!f.dead);
+    if(!me)throw Error('挑戦者の戦闘状態を引き継げませんでした。');
+    const p=b.rf568Maze.startPoint();
+    me.pos.set(p.x,0,p.z);me.vel?.set?.(0,0,0);me.sync?.();
+    b.camCenter?.copy?.(me.pos); // no lengthy camera pan through walls after ascending
+   }
+   removeDead(b,10);
    if(b.fighters.some(f=>f.team===1&&!f.dead))throw Error('前の階層の敵が残っています。');
    const me=b.fighters.find(f=>f.isPlayer&&!f.dead);
-   if(!me)throw Error('挑戦者の戦闘状態を引き継げませんでした。');
-   cur.hp=me.hp; // HP and other player state stay on the SAME Fighter instance.
+   if(!me)throw Error('挑戦者のデータがありません。');
+   cur.hp=me.hp;
+   const maze=b.rf568Maze;
    const hpScale=Math.min(5000,1+(floor-1)*.22),atkScale=Math.min(100,1+(floor-1)*.035);
    const isBoss=floor%10===0;
-   const mobile=/Android|iPhone|iPad/i.test(navigator.userAgent||'') || (navigator.deviceMemory||8)<=4;
-   const limit=mobile?5:9;
-   const total=mobile?Math.min(18,11+Math.floor(floor/12)):Math.min(32,18+Math.floor(floor/5));
-   const initial=isBoss?Math.min(3,limit):Math.min(mobile?4:5,limit);
-   let created=0,elapsedSince=0,previous={x:me.pos.x,z:me.pos.z},distanceSince=0;
-   const addEnemies=(count,first=false)=>{
-    const player=b.fighters.find(f=>f.isPlayer&&!f.dead);
-    const origin=player?.pos||{x:-4,z:3};
-    const n=Math.min(Math.max(0,count),total-created);
-    for(let i=0;i<n;i++){
-     const bossFighter=isBoss&&created===0;
-     const key=bossFighter?enemies[0]:(pool[Math.floor(rng()*pool.length)]||enemies[0]);
-     const ang=(created*2.399963+floor*.18+rng()*.9);
-     const d=first?9+rng()*5:10+rng()*10;
-     let x=origin.x+Math.cos(ang)*d,z=origin.z+Math.sin(ang)*d;
-     const radius=Math.hypot(x,z);if(radius>43){x*=43/radius;z*=43/radius;}
-     const fighter=b.add(key,{team:1,cpu:foeCpu(Math.min(1,.56+floor*.006)),
-       hpMul:foeHp(hpScale*(bossFighter?2.0:.53)),atkMul:atkScale*(bossFighter?1:.72),
-       pos:[x,z],facing:Math.atan2(origin.x-x,origin.z-z),
-       name:bossFighter?`第${floor}層・守護者 ${FIGHTERS[key].name}`:`第${floor}層・敵兵 ${FIGHTERS[key].name}`});
-     if(cur.startedBattle)addHudPlate(fighter);
-     created++;
-    }
-    if(!first&&n)ui.banner({name:`— 第${floor}層　増援部隊 —`},`${n}体が進軍！ 残り ${total-created}体`);
+   const mobile=/Android|iPhone|iPad/i.test(navigator.userAgent||'')||(navigator.deviceMemory||8)<=4;
+   const maxActive=mobile?5:8;
+   const total=mobile?Math.min(30,20+Math.floor(floor/13)):Math.min(48,28+Math.floor(floor/9));
+   const positions=[...maze.layout.enemyCells];
+   const central=6*13+6;
+   if(isBoss){const ix=positions.indexOf(central);if(ix>=0)positions.splice(ix,1);positions.unshift(central);}
+   // A full-floor roster exists at once, even though models load only as approached.
+   // No enemy teleports back into a colosseum; all locations are fixed maze cells.
+   const pending=Array.from({length:total},(_,i)=>{
+    const cell=positions[i%positions.length]??central;
+    const point=maze.layout.centerOf(cell);
+    const key=(isBoss&&i===0)?enemies[0]:(pool[Math.floor(rng()*pool.length)]||enemies[0]);
+    return {cell,point,key,boss:isBoss&&i===0};
+   });
+   const created={value:0},defeated={value:0};
+   const spawn=(unit)=>{
+    const p=unit.point;
+    const f=b.add(unit.key,{team:1,cpu:foeCpu(Math.min(1,.56+floor*.006)),
+      hpMul:foeHp(hpScale*(unit.boss?2.2:.55)),atkMul:atkScale*(unit.boss?1:.74),
+      pos:[p.x,p.z],facing:Math.atan2(me.pos.x-p.x,me.pos.z-p.z),
+      name:unit.boss?`第${floor}層・守護者 ${FIGHTERS[unit.key].name}`:`第${floor}層・敵兵 ${FIGHTERS[unit.key].name}`});
+    if(cur.startedBattle)addHudPlate(f);
+    created.value++;
    };
-   addEnemies(initial,true);
+   let progressClock=0;
    const wave={
-    holdVictory:true,floor,total,get spawned(){return created;},waiting:false,waitSeconds:0,
+    holdVictory:true,floor,total,get spawned(){return created.value;},get remaining(){return pending.length+b.fighters.filter(f=>f.team===1&&!f.dead).length;},
     tick(dt){
      if(cur!==run||b.ended||!Number.isFinite(dt)||dt<=0)return;
-     const player=b.fighters.find(f=>f.isPlayer&&!f.dead);
-     if(!player)return;
+     const player=b.fighters.find(f=>f.isPlayer&&!f.dead);if(!player)return;
      removeDead(b,Math.min(.25,dt));
      if(cur.transition){
-      if(this.waiting){
-       this.waitSeconds+=Math.min(.25,dt);
-       const step=cur.stairs;
-       const reached=step&&Math.hypot(player.pos.x-step.x,player.pos.z-step.z)<=3.1;
-       if(reached||this.waitSeconds>=4.0){
-        this.waiting=false; // prevents repeated async starts
-        void startFloor();
-       }
+      if(cur.stairs && Math.hypot(player.pos.x-cur.stairs.x,player.pos.z-cur.stairs.z)<2.25){
+       // Only crossing the unlocked stairs advances; never auto-progress by timeout.
+       if(!cur.loading)void startFloor();
       }
+      maze.updateMap(player.pos,b.fighters.filter(f=>f.team===1&&!f.dead).map(f=>f.pos),false);
       return;
      }
-     elapsedSince+=Math.min(.25,dt);
-     distanceSince+=Math.min(6,Math.hypot(player.pos.x-previous.x,player.pos.z-previous.z));
-     previous={x:player.pos.x,z:player.pos.z};
-     const alive=b.fighters.filter(f=>f.team===1&&!f.dead).length;
-     const remaining=total-created;
-     if(!remaining){if(alive===0)completeFloor(cur,b);return;}
-     const travelReady=distanceSince>=11&&elapsedSince>=2.6;
-     const enemyCleared=alive<=1;
-     const sparse=alive<Math.min(3,limit)&&elapsedSince>=5;
-     if(!travelReady&&!enemyCleared&&!sparse)return;
-     if(alive>=limit)return;
-     addEnemies(Math.min(remaining,limit-alive,mobile?3:4));
-     elapsedSince=0;distanceSince=0;
+     progressClock+=Math.min(.25,dt);
+     // Populate rooms and corridors as the player explores. Enemies in distant
+     // rooms remain assigned to those rooms until approached.
+     if(progressClock>=.28){
+      progressClock=0;
+      let alive=b.fighters.filter(f=>f.team===1&&!f.dead).length;
+      for(let i=pending.length-1;i>=0&&alive<maxActive;i--){
+       const u=pending[i];const d=Math.hypot(player.pos.x-u.point.x,player.pos.z-u.point.z);
+       if(d>(u.boss?23:19))continue;
+       pending.splice(i,1);spawn(u);alive++;
+      }
+     }
+     const live=b.fighters.filter(f=>f.team===1&&!f.dead);
+     const marks=[...pending.map(u=>u.point),...live.map(f=>f.pos)];
+     maze.updateMap(player.pos,marks);
+     if(!pending.length&&!live.length)completeFloor(cur,b);
     }
    };
    b.rf566EndlessWave=wave;
-   if(!cur.startedBattle){
-    beginBattle(isBoss);cur.startedBattle=true;
-   }else{
-    // No beginBattle(), makeBattle(), endBattle(), screen swap or new arena here.
-    b.ended=false;b.intro=.35;
+   // Before the battle starts, put only nearby enemies into the current room.
+   let initially=0;
+   for(let i=pending.length-1;i>=0&&initially<maxActive;i--){
+    const u=pending[i];if(Math.hypot(me.pos.x-u.point.x,me.pos.z-u.point.z)>19)continue;
+    pending.splice(i,1);spawn(u);initially++;
    }
+   if(!cur.startedBattle){beginBattle(false);cur.startedBattle=true;}
+   else{b.ended=false;b.intro=.5;} // No result screen or new arena.
    cur.transition=false;
    ui.banner({name:`— 無限天守　第${floor.toLocaleString('ja-JP')}層 —`},
-     isBoss?'上層の守護者が待ち受ける':`新たな敵軍が出現 / 前階からHP ${Math.round(me.hp)} を引継ぎ`);
+     isBoss?'城の奥に守護者が潜む。全領域の敵を倒して階段を探せ。':'部屋と廊下を探索し、全区画の敵を倒して階段へ');
+   maze.updateMap(me.pos,[...pending.map(u=>u.point),...b.fighters.filter(f=>f.team===1&&!f.dead).map(f=>f.pos)],true);
    uiTick();
   }catch(e){
-   console.error('[V55.17 無限天守]',e);
-   if(cur===run){
-    finish(false,'階層の生成に失敗しました。到達記録は保存されます。');
-    rfBattleStartError(e);
-   }
+   console.error('[V55.18 無限天守]',e);
+   if(cur===run){finish(false,'城内迷路の生成に失敗しました。到達記録は保存されます。');rfBattleStartError(e);}
   }finally{cur.loading=false;}
  }
  async function launch(key){
@@ -270,7 +256,9 @@ export function createInfiniteDungeonV552(c){
   if(!run)return;
   const local=run;
   if(state.battle){const me=state.battle.fighters.find(f=>f.isPlayer);if(me)local.hp=Math.max(0,Math.floor(me.hp));}
-  record();remoteFinish(local);removeStairs(local);stopTimers();run=null;state.endlessRun=null;
+  record();remoteFinish(local);removeStairs(local);
+  local.battle?.rf568Maze?.destroy?.();if(local.battle)local.battle.rf568Maze=null;
+  endBattle();stopTimers();run=null;state.endlessRun=null;
   const note=reason||(won?'まだ先へ続くはずの回廊を踏破しました。':'体力が尽き、無限天守の探索が終了しました。');
   showResult(`無限天守  第${local.cleared.toLocaleString('ja-JP')}層踏破`,
     `${note}\n到達階層: ${local.floor.toLocaleString('ja-JP')}層 ／ ランク: ${RANK(local.cleared+1)} ／ 記録: ${endlessElapsedText(NOW()-local.startedAt)}`,
@@ -291,6 +279,7 @@ export function createInfiniteDungeonV552(c){
   if(!run){stopTimers();uiTick();return;}
   if(submit){record();remoteFinish(run);}
   removeStairs(run);
+  run.battle?.rf568Maze?.destroy?.();if(run.battle)run.battle.rf568Maze=null;
   run=null;state.endlessRun=null;stopTimers();uiTick();
  }
  function openLeaderboard(){

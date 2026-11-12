@@ -41,7 +41,7 @@ if(!window.__rf564BattleStage){
    return hidden;
  }
  function build(battle){
-   if(battle.__rf564Arena)return;
+   if(battle.rf568Maze || battle.__rf564Arena)return;
    const room=battle.__rf563Room;
    if(!room)return;
    const kind=determine(),colors=opt[kind],scene=new THREE.Group();
