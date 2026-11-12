@@ -73,16 +73,16 @@ function position(actor) {
   const dist = Math.hypot(actor.x,actor.z);
   if (dist > RANK_RADIUS) { actor.x *= RANK_RADIUS/dist; actor.z *= RANK_RADIUS/dist; }
 }
-function hit(fight, seat, base, piercing=false) {
+function hit(fight, seat, base, move) {
   const a = fight.fighters[seat], b = fight.fighters[1-seat];
   const defended = b.guard && b.energy >= 8;
-  const damage = Math.min(b.hp, Math.round(base * (defended ? (piercing ? .57 : .28) : 1)));
+  const damage = Math.min(b.hp, Math.round(base * (defended ? (move === 'over' ? .57 : .28) : 1)));
   if (defended) b.energy = Math.max(0,b.energy-8);
   b.hp -= damage;
   a.over = Math.min(100,a.over + damage * .11 + 7);
   b.over = Math.min(100,b.over + damage * .14 + 5);
   if (!defended && base >= 105 && b.busyUntil <= fight.combatClock) b.stunUntil = fight.combatClock + 180;
-  event(fight,'hit',1-seat,{damage,guard:defended});
+  event(fight,'hit',1-seat,{damage,guard:defended,move});
 }
 function startMove(fight, seat, kind, now) {
   const a = fight.fighters[seat], b = fight.fighters[1-seat], move = MOVES[kind];
@@ -123,7 +123,7 @@ function resolveMove(fight, seat, action, profiles) {
   const reach = move.range ?? profiles[seat].reach;
   if (dist <= reach && (aligned || action.kind === 'over') && (b.y < .85 || action.kind === 'over')) {
     const damage = move.damage + (action.kind === 'light' ? action.step * 11 : 0);
-    hit(fight,seat,damage,action.kind === 'over');
+    hit(fight,seat,damage,action.kind);
   }
 }
 function advanceBolts(fight, dt, now) {
@@ -134,7 +134,7 @@ function advanceBolts(fight, dt, now) {
     const denom=dx*dx+dz*dz;
     const t=denom ? clamp(((target.x-bolt.x)*dx+(target.z-bolt.z)*dz)/denom,0,1) : 0;
     if (target.y < 1.02 && Math.hypot(target.x-bolt.x-dx*t,target.z-bolt.z-dz*t)<.82) {
-      hit(fight,bolt.seat,MOVES.bolt.damage); return false;
+      hit(fight,bolt.seat,MOVES.bolt.damage,'bolt'); return false;
     }
     bolt.x+=dx;bolt.z+=dz;
     return Math.hypot(bolt.x,bolt.z) <= RANK_RADIUS+1;

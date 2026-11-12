@@ -504,7 +504,9 @@
       multi(this,pos,e,power);
       if(size>1)this.flashLight?.(pos,color,power,.25);
     };
+    const originalAfterimage=Battle.prototype.afterimage;
     Battle.prototype.afterimage=function(f,color){
+      if(f.key==='fujiwara_nobuyori')return originalAfterimage?.call(this,f,color);
       multi(this,f.pos.clone().setY(1+f.y),element(f.def?.skills?.[0]),.68,'slash');
     };
     // Flying projectile collision/hit logic remains the original implementation.
@@ -1766,7 +1768,7 @@
       const selectedLast=!!f && f.key==='valgard' && slot==='over' && f.def?.over?.kind==='last_vanisher_painted';
       const selectedBlue=!!f && f.key==='valgard' && slot==='hi' && f.def?.hi?.kind==='blue_earth_painted';
       const outcome=previous.call(this,f,slot,net);
-      if(f && !f.remoteAuth && !this.net && (slot==='over'||slot==='hi'||/^[sf]\d+$/.test(slot))){
+      if(f && f.key!=='fujiwara_nobuyori' && !f.remoteAuth && !this.net && (slot==='over'||slot==='hi'||/^[sf]\d+$/.test(slot))){
         showCastingCircle(this,f,slot);
         if(/^f\d+$/.test(slot)) performEvolvedFollowVisual(this,f,slot,net);
       }

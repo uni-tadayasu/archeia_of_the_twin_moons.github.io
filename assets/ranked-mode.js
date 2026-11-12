@@ -1,5 +1,7 @@
 import { API_BASE } from '../config.js';
 import { playMotion, animateStatic } from './riftfall-motion-v5521.js';
+import { FUJIWARA_KEY, fujiwaraSprite, showFujiwaraSkull, clearFujiwaraSkull } from './rf5529/fujiwara-cg.js?v=55.29';
+import { createFujiwaraJudgmentCG, JUDGMENT_IMPACT, JUDGMENT_END } from './rf5529/fujiwara-judgment.js?v=55.29';
 
 const protocol='riftfall-ranked-v1';
 const reconnectText='サーバーに再接続しています…';
@@ -36,6 +38,11 @@ const row=(values,heading=false)=>{
   return tr;
 };
 const moves={light:['light','light2','heavy'],dash:['dash'],bolt:['cast'],over:['over'],heal:['cast']};
+const fujiwaraMoveArt={
+  light:['glow',1.35,.82,.21], dash:['orbs',2.55,2.55,.48], bolt:['beam',2.55,1.12,.35],
+  heal:['seal',3.5,1.8,.52]
+};
+const rankedOverWindup=.69;
 let projectileTexture=null;
 
 function createView(THREE,battle,match) {
@@ -44,6 +51,10 @@ function createView(THREE,battle,match) {
   group.name='Ranked projectiles';
   battle.scene.add(group);
   const bolts=new Map();
+  const marks=new Map();
+  const guardSprites=new Map();
+  const judgments=new Map();
+  const art=[];
   const poses=[null,null];
   for (const [i,player] of match.players.entries()) {
     const local=i===match.seat;
@@ -54,6 +65,24 @@ function createView(THREE,battle,match) {
     actors.push(actor);
   }
   let snapshot=null,round=0;
+  function pulse(actor,key,width,height,life,now,color) {
+    if(document.hidden||art.length>=8)return;
+    const sprite=fujiwaraSprite(key,width,height,.80);
+    sprite.name='Fujiwara ranked '+key;
+    sprite.position.copy(actor.pos).setY(actor.y+(key==='seal'?.42:Math.max(.95,actor.def.height*.43)));
+    if(color!=null)sprite.material.color.set(color);
+    group.add(sprite);
+    art.push({sprite,width,height,life,now});
+  }
+  function clearArt() {
+    for(const actor of marks.keys())clearFujiwaraSkull(actor);
+    marks.clear();
+    for(const {sprite} of art){sprite.removeFromParent();sprite.material.dispose();}
+    art.length=0;
+    for(const {sequence} of judgments.values())sequence.dispose();
+    judgments.clear();
+    for(const sprite of guardSprites.values())sprite.visible=false;
+  }
   function effect(e,now) {
     const a=actors[e.seat];
     if (!a) return;
@@ -61,7 +90,17 @@ function createView(THREE,battle,match) {
       const names=moves[e.move];
       const name=names[e.move==='light'?Math.min(2,e.step||0):0];
       poses[e.seat]={name,end:now+e.duration,duration:e.duration/1000};
-      if (e.move==='light') battle.swingFx(a);
+      if (a.key===FUJIWARA_KEY) {
+        if(e.move==='over'){
+          if(!document.hidden){
+            judgments.get(a)?.sequence.dispose();
+            judgments.set(a,{sequence:createFujiwaraJudgmentCG(battle,actors[1-e.seat]),start:now});
+          }
+        }else{
+          const [key,width,height,life]=fujiwaraMoveArt[e.move];
+          pulse(a,key,width,height,life,now);
+        }
+      } else if (e.move==='light') battle.swingFx(a);
       else {
         const spec=e.move==='over'?a.def.over:e.move==='bolt'?a.def.skills[2]:a.def.skills[0];
         battle.castFx(a,spec?.color??a.def.color,spec);
@@ -69,7 +108,10 @@ function createView(THREE,battle,match) {
       battle.ui.sfx(e.move==='light'?'swing':e.move==='over'?'burst':'ui');
     } else if (e.kind==='hit') {
       const point=a.pos.clone().setY(1+a.y);
-      battle.spark(point,e.guard?0xa5d8ef:0xffd2a2,e.guard ? .7 : 1.15);
+      if (actors[1-e.seat]?.key===FUJIWARA_KEY) {
+        if(e.move==='light'&&e.damage>0&&showFujiwaraSkull(a))marks.set(a,now+5000);
+        else pulse(a,'glow',1.5,1.5,.22,now,e.guard?0xa5d8ef:0xddb5ff);
+      } else battle.spark(point,e.guard?0xa5d8ef:0xffd2a2,e.guard ? .7 : 1.15);
       battle.ui.popup(a.pos,e.guard?'防 '+e.damage:String(e.damage),e.guard?'#ace5fb':'#ffe2a5');
       battle.ui.sfx(e.guard?'guard':'hit');
       if (!e.guard) {
@@ -77,7 +119,8 @@ function createView(THREE,battle,match) {
         if (!poses[e.seat] || poses[e.seat].end<now) poses[e.seat]={name:'hit',end:now+300,duration:.30};
       }
     } else if (e.kind==='heal') {
-      battle.grandFx(a.pos,3,0x94e8bb,.7);
+      if(a.key===FUJIWARA_KEY)pulse(a,'seal',3.65,1.92,.52,now,0xb9ffe1);
+      else battle.grandFx(a.pos,3,0x94e8bb,.7);
       battle.ui.popup(a.pos,'+'+e.healed,'#9cf0b1');
     }
   }
@@ -86,6 +129,7 @@ function createView(THREE,battle,match) {
     if (round!==message.round) {
       round=message.round;
       poses.fill(null);
+      clearArt();
       message.fighters.forEach((f,i)=>{
         actors[i].pos.set(f.x,0,f.z);actors[i].y=f.y;actors[i].facing=f.facing;
         actors[i].motionPlaying=null;actors[i].mixer?.stopAllAction();
@@ -97,12 +141,18 @@ function createView(THREE,battle,match) {
     for (const state of message.bolts) {
       current.add(state.id);
       if (!bolts.has(state.id)) {
-        projectileTexture ||= new THREE.TextureLoader().load('assets/rf558/luminous-flare.webp');
-        projectileTexture.colorSpace=THREE.SRGBColorSpace;
-        const color=actors[state.seat].def.color;
-        const sprite=new THREE.Sprite(new THREE.SpriteMaterial({map:projectileTexture,color,
-          transparent:true,depthWrite:false,blending:THREE.AdditiveBlending,toneMapped:false}));
-        sprite.scale.set(1.95,1.45,1);
+        const caster=actors[state.seat];
+        let sprite;
+        if(caster.key===FUJIWARA_KEY){
+          sprite=fujiwaraSprite('beam',2.05,.95,.9);
+          sprite.name='Fujiwara ranked projectile';
+        }else{
+          projectileTexture ||= new THREE.TextureLoader().load('assets/rf558/luminous-flare.webp');
+          projectileTexture.colorSpace=THREE.SRGBColorSpace;
+          sprite=new THREE.Sprite(new THREE.SpriteMaterial({map:projectileTexture,color:caster.def.color,
+            transparent:true,depthWrite:false,blending:THREE.AdditiveBlending,toneMapped:false}));
+          sprite.scale.set(1.95,1.45,1);
+        }
         sprite.position.set(state.x,1.05,state.z);
         group.add(sprite);
         bolts.set(state.id,{sprite,x:state.x,z:state.z});
@@ -131,15 +181,47 @@ function createView(THREE,battle,match) {
       a.mixer?.update(dt);
       a.motionDt=dt;
       a.sync();
+      if(a.key===FUJIWARA_KEY){
+        if(a.guardMesh)a.guardMesh.visible=false;
+        let seal=guardSprites.get(a);
+        if(f.guard&&!a.dead&&!seal){
+          seal=fujiwaraSprite('seal',3.8,1.75,.77);
+          seal.name='Fujiwara ranked guard';
+          seal.position.y=.23;
+          a.root.add(seal);guardSprites.set(a,seal);
+        }
+        if(seal)seal.visible=f.guard&&!a.dead;
+      }
       animateStatic(a,dt,{moving:f.moving,fast:true,guard:f.guard});
     });
     for (const {sprite,x,z} of bolts.values()) {
       sprite.position.x+=(x-sprite.position.x)*mix;sprite.position.z+=(z-sprite.position.z)*mix;
     }
+    for(const [actor,until] of marks){
+      if(!actor.dead&&now<until)continue;
+      clearFujiwaraSkull(actor);marks.delete(actor);
+    }
+    for(let i=art.length-1;i>=0;i--){
+      const {sprite,width,height,life,now:start}=art[i];
+      const progress=(now-start)/(life*1000);
+      if(progress>=1){sprite.removeFromParent();sprite.material.dispose();art.splice(i,1);continue;}
+      const growth=1+.35*progress;
+      sprite.scale.set(width*growth,height*growth,1);
+      sprite.material.opacity=.8*(1-progress);
+    }
+    for(const [actor,{sequence,start}] of judgments){
+      const elapsed=(now-start)/1000;
+      const time=elapsed<rankedOverWindup ? JUDGMENT_IMPACT*elapsed/rankedOverWindup : JUDGMENT_IMPACT+(elapsed-rankedOverWindup);
+      if(time>=JUDGMENT_END){sequence.dispose();judgments.delete(actor);}
+      else sequence.update(time);
+    }
     battle.presentation?.tick(dt);
     battle.updateCamera(dt);
   }
   function dispose() {
+    clearArt();
+    for(const sprite of guardSprites.values()){sprite.removeFromParent();sprite.material.dispose();}
+    guardSprites.clear();
     for (const {sprite} of bolts.values()) sprite.material.dispose();
     bolts.clear();group.clear();group.removeFromParent();
   }

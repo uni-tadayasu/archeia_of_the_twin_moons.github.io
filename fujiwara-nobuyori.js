@@ -2,90 +2,17 @@
 // Exact source geometry, materials and textures; procedural remeshing disabled.
 import * as THREE from 'three';
 import { createNobleMotion } from './noble-motion.js?v=rf-noble-motion-v35';
-const KEY='fujiwara_nobuyori', CURSE_TIME=30, CURSE_RADIUS=5.65;
-const PURPLE=0xaf5dff, C=0xbc72ff;
+import { FUJIWARA_KEY as KEY, fujiwaraSprite, showFujiwaraSkull, clearFujiwaraSkull } from './assets/rf5529/fujiwara-cg.js?v=55.29';
+import { createFujiwaraJudgmentCG, JUDGMENT_IMPACT, JUDGMENT_END } from './assets/rf5529/fujiwara-judgment.js?v=55.29';
+const CURSE_TIME=30, CURSE_RADIUS=5.65;
+const C=0xbc72ff;
 const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
 const v3=(x=0,y=0,z=0)=>new THREE.Vector3(x,y,z);
 const specFor=(name)=>({name,kind:'curse',elem:6,color:C,vivid:true});
 const statusMark=specFor('呪印');
 const statusBurn=specFor('鬼火');
-const animationNames={walk:/walk|walking|move|locomotion|歩行/i,run:/run|running|sprint|dash|jog|走行/i,attack:/attack|atk|hit|punch|swing|slash|strike|combat|攻撃/i,cast:/cast|spell|magic|chant|skill|詠唱/i};
-
-function magicTexture(){
-  const canvas=document.createElement('canvas');canvas.width=canvas.height=768;
-  const c=canvas.getContext('2d'),mid=384,R=365;
-  c.clearRect(0,0,768,768);c.translate(mid,mid);
-  const light=c.createRadialGradient(0,0,12,0,0,380);
-  light.addColorStop(0,'rgba(233,189,255,.20)');light.addColorStop(.55,'rgba(130,40,255,.12)');light.addColorStop(.95,'rgba(63,10,124,.04)');light.addColorStop(1,'transparent');
-  c.fillStyle=light;c.beginPath();c.arc(0,0,R,0,Math.PI*2);c.fill();
-  const ring=(r,width,opacity=1)=>{c.beginPath();c.arc(0,0,r,0,Math.PI*2);c.lineWidth=width;c.strokeStyle=`rgba(217,145,255,${opacity})`;c.shadowColor='#7d0dff';c.shadowBlur=14;c.stroke();c.shadowBlur=0;};
-  [[345,6,.9],[328,1.5,.95],[305,3,.76],[268,2,.8],[245,1,.75],[208,4,.8],[176,2,.6],[125,3,.72],[80,2,.56]].forEach(x=>ring(...x));
-  c.lineCap='round';
-  const trace=(pts,width,alpha)=>{c.beginPath();pts.forEach(([x,y],i)=>i?c.lineTo(x,y):c.moveTo(x,y));c.closePath();c.strokeStyle=`rgba(218,174,255,${alpha})`;c.lineWidth=width;c.shadowBlur=10;c.shadowColor='#6f17ec';c.stroke();c.shadowBlur=0;};
-  for(const n of [5,8,10]){
-    const pts=Array.from({length:n},(_,i)=>{const a=(i*Math.PI*2/n)-Math.PI/2;return [Math.cos(a)*(n===5?270:n===8?310:182),Math.sin(a)*(n===5?270:n===8?310:182)];});
-    trace(pts,2,n===8?.5:.78);
-  }
-  for(let i=0;i<12;i++){
-    const angle=i*Math.PI/6;c.save();c.rotate(angle);
-    c.strokeStyle='rgba(236,185,255,.94)';c.lineWidth=2.2;c.shadowColor='#b85bff';c.shadowBlur=11;
-    c.beginPath();c.moveTo(0,-355);c.lineTo(-14,-317);c.lineTo(0,-282);c.lineTo(14,-317);c.closePath();c.stroke();
-    c.beginPath();c.moveTo(0,-303);c.lineTo(0,-215);c.stroke();
-    c.lineWidth=1.4;c.beginPath();c.arc(0,-237,13,0,Math.PI*2);c.stroke();
-    c.restore();
-  }
-  c.shadowBlur=0;
-  for(let i=0;i<8;i++){
-    c.save();c.rotate(i*Math.PI/4);c.strokeStyle='rgba(239,219,255,.68)';c.lineWidth=2;
-    c.beginPath();c.moveTo(-14,-118);c.lineTo(0,-152);c.lineTo(14,-118);c.lineTo(0,-95);c.closePath();c.stroke();
-    c.restore();
-  }
-  for(let i=0;i<5;i++){
-    c.save();c.rotate(i*Math.PI*2/5);c.beginPath();c.moveTo(0,-184);c.quadraticCurveTo(-100,-80,0,0);c.quadraticCurveTo(100,-80,0,-184);
-    c.lineWidth=1.6;c.strokeStyle='rgba(214,133,255,.66)';c.stroke();c.restore();
-  }
-  c.fillStyle='rgba(245,212,255,.94)';c.shadowColor='#9b2dff';c.shadowBlur=30;
-  c.beginPath();c.moveTo(0,-51);c.lineTo(17,-17);c.lineTo(51,0);c.lineTo(17,17);c.lineTo(0,51);c.lineTo(-17,17);c.lineTo(-51,0);c.lineTo(-17,-17);c.closePath();c.fill();
-  c.shadowBlur=0;
-  const tex=new THREE.CanvasTexture(canvas);tex.colorSpace=THREE.SRGBColorSpace;tex.anisotropy=2;return tex;
-}
-function chainTexture(){
-  const can=document.createElement('canvas');can.width=can.height=512;const c=can.getContext('2d');
-  const gradient=c.createRadialGradient(256,256,20,256,256,230);gradient.addColorStop(0,'rgba(100,18,148,.3)');gradient.addColorStop(1,'rgba(0,0,0,0)');c.fillStyle=gradient;c.fillRect(0,0,512,512);
-  for(const sign of [-1,1]){
-    c.save();c.translate(256,256);c.rotate(sign*Math.PI/4);
-    c.shadowBlur=11;c.shadowColor='#a652ff';
-    for(let i=-6;i<=6;i++){
-      const x=i*40;c.beginPath();c.ellipse(x,0,19,12,0,0,Math.PI*2);
-      c.lineWidth=6;c.strokeStyle=i%2?'#9e78c6':'#dfc8fa';c.stroke();
-      c.beginPath();c.ellipse(x,0,16,9,0,0,Math.PI*2);c.lineWidth=2;c.strokeStyle='#4b1e81';c.stroke();
-    }c.restore();
-  }
-  const tex=new THREE.CanvasTexture(can);tex.colorSpace=THREE.SRGBColorSpace;return tex;
-}
-let common=null;
-const FJ_CG={seal:'uda-seal-v26.webp',chains:'uda-chains-v26.webp',orbs:'uda-onibi-v26.webp',beam:'uda-eyebeam-v26.webp'};
-const fujTextures=new Map();
-function fujTex(k){if(fujTextures.has(k))return fujTextures.get(k);
-  const tex=new THREE.TextureLoader().load(new URL('./assets/fx/'+FJ_CG[k],import.meta.url).href,undefined,undefined,
-    e=>console.warn('[藤原信頼 CG]',k,'素材が読めません',e));
-  tex.colorSpace=THREE.SRGBColorSpace;tex.anisotropy=2;fujTextures.set(k,tex);return tex;
-}
-function commonAssets(){
-  if(!common)common={seal:fujTex('seal'),chains:fujTex('chains'),orbs:fujTex('orbs'),beam:fujTex('beam')};
-  return common;
-}
-function fujSprite(map,size=1,alpha=.9){
-  const mat=new THREE.SpriteMaterial({map,transparent:true,opacity:alpha,depthWrite:false,depthTest:true,
-    blending:THREE.AdditiveBlending,toneMapped:false});
-  const spr=new THREE.Sprite(mat);spr.scale.setScalar(size);spr.renderOrder=16;return spr;
-}
-function markCG(target){if(target._fujMarkCG||!target.root)return;
-  const s=fujSprite(commonAssets().seal,2.4,.78);s.position.set(0,(target.def?.height||1.8)*.62,0);
-  target.root.add(s);target._fujMarkCG=s;
-}
 function burnCG(target){if(target._fujBurnCG||!target.root)return;
-  const s=fujSprite(commonAssets().orbs,2.2,.68);s.position.set(0,(target.def?.height||1.8)*.80,0);
+  const s=fujiwaraSprite('orbs',2.2,2.2,.68);s.position.set(0,(target.def?.height||1.8)*.80,0);
   target.root.add(s);target._fujBurnCG=s;
 }
 function removeCharacterCG(target,field){const s=target[field];if(!s)return;s.material.dispose();s.removeFromParent();target[field]=null;}
@@ -94,22 +21,26 @@ function sealOn(caster){
   const b=caster.battle;
   let x=caster._fujSeal;
   if(!x){
-    const mat=new THREE.MeshBasicMaterial({map:commonAssets().seal,transparent:true,opacity:.87,depthWrite:false,side:THREE.DoubleSide,blending:THREE.AdditiveBlending});
-    const quad=new THREE.Mesh(new THREE.PlaneGeometry(CURSE_RADIUS*2,CURSE_RADIUS*2),mat);
-    quad.rotation.x=-Math.PI/2;quad.renderOrder=5;b.fx.add(quad);
-    x={quad,mat,expires:0,collided:new Set()};caster._fujSeal=x;
+    const sprite = fujiwaraSprite('seal', CURSE_RADIUS * 2, CURSE_RADIUS, .68);
+    sprite.name = 'Fujiwara curse seal';
+    sprite.material.depthTest = false;
+    sprite.renderOrder = 4;
+    sprite.position.set(caster.pos.x, .075, caster.pos.z);
+    b.scene.add(sprite);
+    x = caster._fujSeal = { sprite, expires: 0 };
   }
   x.expires=performance.now()/1000+CURSE_TIME;
-  x.quad.visible=true;
+  x.sprite.visible=true;
   caster.battle.ui?.popup?.(caster.pos,'呪い《行動封絶》 30秒','#d5a2ff');
   caster.battle.ui?.sfx?.('skill');
   if(!caster.remoteAuth && caster.netId && b.net) b.net.cast?.({id:caster.netId,slot:'seal',tx:caster.pos.x,tz:caster.pos.z,ry:caster.facing});
 }
 function bindChains(tgt){
   if(tgt._fujCross)return;
-  const mat=new THREE.SpriteMaterial({map:commonAssets().chains,transparent:true,depthWrite:false,opacity:1});
-  const spr=new THREE.Sprite(mat);spr.scale.set(3.7,3.7,1);spr.position.set(0,Math.max(1.25,(tgt.def?.height||2)*.62),0);
-  tgt.root.add(spr);tgt._fujCross={spr,mat};
+  const spr = fujiwaraSprite('chains', 3.7, 3.7, 1, false);
+  spr.position.y = Math.max(1.25, (tgt.def?.height || 2) * .62);
+  tgt.root.add(spr);
+  tgt._fujCross = { spr, mat: spr.material };
 }
 function releaseStasis(tgt,attacked=false){
   const old=tgt._fujStasis;if(!old)return;
@@ -131,11 +62,20 @@ function applyStasis(owner,tgt,now){
 function updateSeal(f,dt){
   const seal=f._fujSeal;if(!seal)return;
   const now=performance.now()/1000;
-  if(!seal.quad)return;
-  if(f.dead || f.battle?.ended || now>seal.expires){seal.quad.removeFromParent();seal.mat.dispose();seal.quad.geometry.dispose();f._fujSeal=null;return;}
-  seal.quad.position.set(f.pos.x,.048,f.pos.z);
-  seal.quad.rotation.z+=dt*.15;
-  seal.quad.material.opacity=.64+.18*Math.sin(now*4);
+  if(f.dead || f.battle?.ended || now>seal.expires){
+    seal.sprite.removeFromParent();
+    seal.sprite.material.dispose();
+    f._fujSeal=null;
+    return;
+  }
+  seal.sprite.position.set(f.pos.x,.075,f.pos.z);
+  const camera = f.battle.camera?.position;
+  if (camera) {
+    const distance = camera.distanceTo(seal.sprite.position);
+    const tilt = clamp((camera.y - seal.sprite.position.y) / Math.max(1, distance), .2, .65);
+    seal.sprite.scale.y = CURSE_RADIUS * 2 * tilt;
+  }
+  seal.sprite.material.opacity=.62+.13*Math.sin(now*4);
   for(const t of f.battle.enemiesOf(f)){
     if(!t || t.dead)continue;
     const r=Math.hypot(t.pos.x-f.pos.x,t.pos.z-f.pos.z);
@@ -149,13 +89,13 @@ function applyMark(f,target,visualOnly=false){
   const now=performance.now()/1000;
   if(!target._fujMark || target._fujMark.until<=now){target._fujMark={caster:f,until:now+5,next:now+1,ticks:0};}
   if(!visualOnly){f.battle?.ui?.popup?.(target.pos,'呪印　HP10%×5秒','#cc85ff');}
-  markCG(target);
+  showFujiwaraSkull(target);
   if(target._fujStasis)releaseStasis(target,true);
   if(!visualOnly && !f.remoteAuth && f.netId && f.battle.net)f.battle.net.cast?.({id:f.netId,slot:'mark',tx:target.pos.x,tz:target.pos.z,ry:f.facing});
 }
 function tickMark(t){
   const now=performance.now()/1000,mark=t._fujMark;if(!mark)return;
-  if(t.dead||now>mark.until+.25||mark.ticks>=5){t._fujMark=null;removeCharacterCG(t,"_fujMarkCG");return;}
+  if(t.dead||now>mark.until+.25||mark.ticks>=5){t._fujMark=null;clearFujiwaraSkull(t);return;}
   if(now<mark.next)return;
   mark.next+=1;mark.ticks++;
   if(mark.caster?.dead || mark.caster?.battle!==t.battle || mark.caster.remoteAuth)return;
@@ -184,9 +124,9 @@ function startOrbs(b,f){
   const target=b.nearestEnemy?.(f);if(!target)return;
   const orbs=[];
   for(let i=0;i<2;i++){
-    const m=fujSprite(commonAssets().orbs,1.75,.9);b.fx.add(m);
+    const m=fujiwaraSprite('orbs',1.75);b.fx.add(m);
     const trails=[];
-    for(let j=0;j<3;j++){const sp=fujSprite(commonAssets().orbs,.75-j*.14,.25-j*.05);b.fx.add(sp);trails.push(sp);}
+    for(let j=0;j<3;j++){const sp=fujiwaraSprite('orbs',.75-j*.14,.75-j*.14,.25-j*.05);b.fx.add(sp);trails.push(sp);}
     orbs.push({m,trails,a:i*Math.PI,hist:[]});
   }
   let t=0,done=false;
@@ -217,36 +157,45 @@ function startOrbs(b,f){
     return true;
   });
 }
-// CGI illustrated twin-eye purple laser: two crossed textured light planes per ray.
+// Project the beam direction into the camera plane; the hit sweep still uses world coordinates.
 function eyeLaser(b,f){
   const root=new THREE.Group();b.fx.add(root);
-  const beamMat=commonAssets().beam,beams=[];
-  for(let i=0;i<2;i++){
-    const mat=new THREE.MeshBasicMaterial({map:beamMat,transparent:true,opacity:.93,depthWrite:false,
-      side:THREE.DoubleSide,blending:THREE.AdditiveBlending,toneMapped:false});
-    const m=new THREE.Mesh(new THREE.PlaneGeometry(2.7,17),mat);
-    m.rotation.x=-Math.PI/2;m.position.set((i?1:-1)*.34,-.10,8.3);root.add(m);beams.push(m);
-    const glowMat=mat.clone();glowMat.opacity=.52;
-    const v=new THREE.Mesh(new THREE.PlaneGeometry(17,2.5),glowMat);
-    v.rotation.y=Math.PI/2;v.position.set((i?1:-1)*.34,0,8.3);root.add(v);beams.push(v);
-  }
-  let t=0;const visited=new Set();
+  const beams=[fujiwaraSprite('beam',17,2.25,.9),fujiwaraSprite('beam',17,2.25,.9)];
+  root.add(...beams);
+  const direction=v3(), imageDirection=v3();
+  let t=0;
+  const visited=new Set();
   b.addEffect(dt=>{
-    t+=Math.min(.07,Math.max(0,dt));const k=clamp(t/1.1,0,1),sweep=-.9+k*1.8;
-    root.position.copy(f.pos).add(v3(0,Math.max(1.3,(f.def.height||2)*.74),0));
-    root.rotation.set(0,f.facing+sweep,0);
+    if(b.ended||f.dead){rf43Dispose(root);return false;}
+    t+=Math.min(.07,Math.max(0,dt));
+    const k=clamp(t/1.1,0,1),sweep=-.9+k*1.8;
+    const yaw=f.facing+sweep;
+    direction.set(Math.sin(yaw),0,Math.cos(yaw));
+    imageDirection.copy(direction);
+    if (b.camera?.matrixWorldInverse) imageDirection.transformDirection(b.camera.matrixWorldInverse);
+    const width = 17 * Math.max(.08, Math.hypot(imageDirection.x,imageDirection.y));
+    const rotation = Math.atan2(imageDirection.y,imageDirection.x);
+    for (const [i,beam] of beams.entries()) {
+      const side = i===0?-.34:.34;
+      beam.position.set(f.pos.x + direction.x*8.5 + direction.z*side,
+        f.y + Math.max(1.3,(f.def.height||2)*.74), f.pos.z + direction.z*8.5 - direction.x*side);
+      beam.scale.x = width;
+      beam.material.rotation = rotation;
+      beam.material.opacity = .86 * (1-k);
+    }
     for(const e of b.enemiesOf(f)){
       if(e.dead||visited.has(e))continue;
       const dx=e.pos.x-f.pos.x,dz=e.pos.z-f.pos.z,r=Math.hypot(dx,dz),a=Math.atan2(dx,dz);
-      const diff=Math.atan2(Math.sin(a-(f.facing+sweep)),Math.cos(a-(f.facing+sweep)));
+      const diff=Math.atan2(Math.sin(a-yaw),Math.cos(a-yaw));
       if(r<17&&r>.1&&Math.abs(diff)<.16+(e.radius||.8)/Math.max(4,r)){
-        visited.add(e);if(!f.remoteAuth)b.applyHit(f,e,Math.max(1650,Math.round(e.maxHp*.18)),.26,3,f.pos,specFor('呪いの光'));
+        visited.add(e);
+        if(!f.remoteAuth)b.applyHit(f,e,Math.max(1650,Math.round(e.maxHp*.18)),.26,3,f.pos,specFor('呪いの光'));
         b.ui?.popup?.(e.pos,'呪光命中','#c276ff');
       }
     }
-    for(const m of beams)m.material.opacity=Math.max(0,.86*(1-k));
     if(k<1)return true;
-    for(const m of beams){m.geometry.dispose();m.material.dispose();}root.removeFromParent();return false;
+    rf43Dispose(root);
+    return false;
   });
 }
 // 20-bone automatic runtime rig. Does not alter or re-export the user's GLB.
@@ -382,9 +331,9 @@ export function attachFujiwaraRestMotion(model,clips=[]){
   }:null;
 }
 function cleanup(f){
-  if(f._fujSeal){f._fujSeal.quad.removeFromParent();f._fujSeal.quad.geometry.dispose();f._fujSeal.mat.dispose();f._fujSeal=null;}
+  if(f._fujSeal){f._fujSeal.sprite.removeFromParent();f._fujSeal.sprite.material.dispose();f._fujSeal=null;}
   if(f._fujCross){f._fujCross.spr.removeFromParent();f._fujCross.mat.dispose();f._fujCross=null;}
-  removeCharacterCG(f,'_fujMarkCG');removeCharacterCG(f,'_fujBurnCG');
+  clearFujiwaraSkull(f);removeCharacterCG(f,'_fujBurnCG');
   const rig=f._fujRig;try{rig?.dispose?.();}catch(e){console.warn("[藤原信頼 Motion cleanup]",e);} 
   f._fujRig=null;f._fujMark=null;f._fujBurn=null;f._fujStasis=null;f._rf43PendingLeech=null;
 }
@@ -396,38 +345,41 @@ function updateTouchUI(f){
   const labels={guard:['呪い','構'],attack:['印','斬'],skill:['鬼火','技A'],skill2:['光','技B']};
   for(const [act,text] of Object.entries(labels)){const el=b.querySelector(`[data-act="${act}"]`);if(el)el.textContent=active?text[0]:text[1];}
 }
-// RF_FUJIWARA_V43_ULTIMATE: Custom arts layered above the intact original GLB.
-// All visual assets are procedurally painted CG sprites and smooth bevelled geometry.
-// Nothing in these effects edits a character's mesh, skin, texture, or animations.
-let rf43SoftTexture = null;
-function rf43GlowTexture(){
-  if(rf43SoftTexture) return rf43SoftTexture;
-  const c=document.createElement('canvas');c.width=c.height=192;
-  const ctx=c.getContext('2d');
-  const grad=ctx.createRadialGradient(96,96,3,96,96,94);
-  grad.addColorStop(0,'rgba(255,255,255,1)');
-  grad.addColorStop(.13,'rgba(255,255,255,.96)');
-  grad.addColorStop(.37,'rgba(255,255,255,.46)');
-  grad.addColorStop(.72,'rgba(255,255,255,.09)');
-  grad.addColorStop(1,'rgba(255,255,255,0)');
-  ctx.fillStyle=grad;ctx.fillRect(0,0,192,192);
-  rf43SoftTexture=new THREE.CanvasTexture(c);
-  rf43SoftTexture.colorSpace=THREE.SRGBColorSpace;
-  return rf43SoftTexture;
-}
-function rf43Glow(scale,color,opacity=.85){
-  const m=new THREE.SpriteMaterial({map:rf43GlowTexture(),color,transparent:true,opacity,
-    blending:THREE.AdditiveBlending,depthWrite:false,depthTest:true,toneMapped:false});
-  const s=new THREE.Sprite(m);s.scale.set(scale,scale,1);return s;
+// The special effects use painted images. Shared sprite geometry and textures stay cached.
+function rf43Glow(size,color,opacity=.85){
+  const sprite = fujiwaraSprite('glow',size,size,opacity);
+  sprite.material.color.setHex(color);
+  return sprite;
 }
 function rf43Dispose(root){
-  if(!root)return;
-  root.traverse(o=>{
-    if(o.geometry)o.geometry.dispose();
-    const list=Array.isArray(o.material)?o.material:[o.material];
-    for(const mat of list)if(mat)mat.dispose();
-  });
+  root.traverse(object => { if (object.isSprite) object.material.dispose(); });
   root.removeFromParent();
+}
+function paintedImpact(b, position, color, size) {
+  const root = new THREE.Group();
+  root.position.copy(position);
+  const flare = rf43Glow(size,color,.83);
+  const halo = rf43Glow(size*1.9,color,.28);
+  const sparks = Array.from({length:5}, (_,index) => rf43Glow(size*.16,index%2?color:0xffedc7,.72));
+  root.add(halo,flare,...sparks);
+  b.fx.add(root);
+  let time = 0;
+  b.addEffect(dt=>{
+    time += Math.max(0,dt);
+    const t = clamp(time/.54,0,1);
+    flare.scale.setScalar(size*(.75+t*.65));
+    flare.material.opacity = .83*(1-t)**2;
+    halo.scale.setScalar(size*(1.35+t*1.8));
+    halo.material.opacity = .28*(1-t);
+    for (const [index,spark] of sparks.entries()) {
+      const angle = index*2.4;
+      spark.position.set(Math.cos(angle)*size*t*.64,t*(.5+index*.22),Math.sin(angle)*size*t*.64);
+      spark.material.opacity = .72*(1-t);
+    }
+    if(t<1&&!b.ended)return true;
+    rf43Dispose(root);
+    return false;
+  });
 }
 // Resolve a stable percentage of the target's MAXIMUM HP after the defender's
 // normal damage modifiers. Guard/invincibility can still reduce or prevent a hit.
@@ -470,7 +422,7 @@ function rf43Heal(caster,amount,b){
   if(healed<=0)return;
   caster.hp+=healed;
   b.ui?.popup?.(caster.pos,'吸収 +'+healed,'#9effcf');
-  b.spark?.(caster.pos.clone().setY(1.6),0x75fff0,.8);
+  paintedImpact(b,caster.pos.clone().setY(1.6),0x75fff0,1.35);
 }
 function rf43PendingLifesteal(caster,b){
   const q=caster?._rf43PendingLeech;
@@ -482,89 +434,42 @@ function rf43PendingLifesteal(caster,b){
     caster._rf43PendingLeech=null;
   }
 }
-// 奥義「怪しい光」: a luminous rainbow projectile bending in three dimensions
-// around the moving target. All particles use one shared painted texture.
-function rf43RainbowUltimate(b,caster){
-  const target=b.nearestEnemy?.(caster);if(!target||target.dead)return;
-  const g=new THREE.Group();b.fx.add(g);
-  const orb=rf43Glow(2.55,0xffffff,1),halo=rf43Glow(4.5,0x80cfff,.55),core=rf43Glow(1.1,0xffffff,1);
-  g.add(halo,orb,core);
-  const trails=[];
-  for(let i=0;i<20;i++){
-    const s=rf43Glow(1.3-i*.044,0xffffff,.72-i*.026);
-    g.add(s);trails.push(s);
-  }
-  const origin=caster.pos.clone().add(v3(0,Math.max(1.35,caster.def.height*.57),0));
-  const last=[];let elapsed=0;
-  b.ui?.popup?.(caster.pos,'奥義・怪しい光','#cafffa');
-  const finish=()=>rf43Dispose(g);
+// The artwork runs on the existing ultimate's impact clock. Only the impact deals damage.
+function curseSwordUltimate(b,caster){
+  const target=b.nearestEnemy?.(caster);
+  if(!target || target.dead)return;
+  const artwork=createFujiwaraJudgmentCG(b,target);
+  const cleanups=b._fujJudgmentCleanups ||= new Set();
+  const finish=()=>{
+    cleanups.delete(finish);
+    artwork.dispose();
+  };
+  cleanups.add(finish);
+  let elapsed=0, hit=false;
   b.addEffect(dt=>{
-    if(b.ended||target.dead){finish();return false;}
+    if(!hit&&(b.ended||target.dead||caster.dead)){finish();return false;}
     elapsed+=clamp(dt,0,.075);
-    const t=clamp(elapsed/1.62,0,1),ease=t*t*(3-2*t);
-    const aim=target.pos.clone().add(v3(0,Math.max(1.2,(target.def.height||2)*.6),0));
-    const direction=aim.clone().sub(origin).setY(0);
-    const len=Math.max(.01,direction.length());
-    const side=v3(-direction.z/len,0,direction.x/len);
-    const swirl=(1-ease)*(Math.sin(t*Math.PI*7.6)*1.5+Math.sin(t*Math.PI*18)*.18);
-    const position=origin.clone().lerp(aim,ease)
-      .addScaledVector(side,swirl)
-      .add(v3(0,(1-ease)*Math.sin(t*Math.PI*11)*.65,0));
-    orb.position.copy(position);halo.position.copy(position);core.position.copy(position);
-    orb.material.color.setHSL((t*2.8+elapsed*.7)%1,1,.66);
-    halo.material.color.setHSL((t*2.8+elapsed*.7+.28)%1,1,.5);
-    orb.scale.setScalar(2.3+.6*Math.sin(elapsed*16));
-    halo.scale.setScalar(3.8+.6*Math.sin(elapsed*11));
-    last.unshift(position.clone());if(last.length>42)last.pop();
-    for(let i=0;i<trails.length;i++){
-      const s=trails[i],pt=last[Math.min(last.length-1,(i+1)*2)];
-      if(pt)s.position.copy(pt);
-      s.material.color.setHSL(((elapsed*.68-i*.063)%1+1)%1,1,.60);
-      s.material.opacity=Math.max(0,.63*(1-i/trails.length));
+    artwork.update(elapsed);
+    if(!hit&&elapsed>=JUDGMENT_IMPACT){
+      hit=true;
+      const name='呪いの剣';
+      const dealt=rf43PercentHit(b,caster,target,.5,name);
+      rf43Heal(caster,dealt,b);
+      b.ui?.popup?.(target.pos,'呪いの剣・生命吸収','#d3d8ff');
+      b.ui?.sfx?.('burst');
     }
-    if(elapsed<1.62)return true;
-    // One hit only. Recover exactly the HP actually lost, capped at the caster's maxHP.
-    const dealt=rf43PercentHit(b,caster,target,.5,'怪しい光');
-    rf43Heal(caster,dealt,b);
-    const point=target.pos.clone().setY(Math.max(1.2,target.def.height*.65));
-    b.flashLight?.(point,0xffffff,1.7,.4);
-    for(let j=0;j<7;j++){
-      b.fxPop?.(point.clone().add(v3(Math.sin(j*2.4)*.7,Math.cos(j*2.4)*.4,Math.cos(j*3)*.7)),j%2?5:6,8,1.3,.4,{grow:2,op:.7});
-    }
-    b.ui?.popup?.(target.pos,'怪しい光・生命吸収','#b6f9ff');
-    finish();return false;
+    if(elapsed<JUDGMENT_END)return true;
+    finish();
+    return false;
   });
-}
-function rf43SwordGeometry(){
-  // Cross-section/extrusion with smooth bevels: a proper 3D silhouette,
-  // not a low-poly cone or a flat billboard.
-  const shape=new THREE.Shape();
-  shape.moveTo(0,-5.8);shape.lineTo(-.65,-4.8);shape.lineTo(-.78,1.4);
-  shape.lineTo(-.48,2.05);shape.lineTo(0,2.4);
-  shape.lineTo(.48,2.05);shape.lineTo(.78,1.4);
-  shape.lineTo(.65,-4.8);shape.closePath();
-  const geom=new THREE.ExtrudeGeometry(shape,{depth:.45,steps:1,bevelEnabled:true,bevelThickness:.15,
-    bevelSize:.12,bevelSegments:5,curveSegments:16});
-  geom.translate(0,0,-.225);geom.computeVertexNormals();return geom;
 }
 function rf43TotsukaSword(b,caster){
   const target=b.nearestEnemy?.(caster);if(!target||target.dead)return;
   const g=new THREE.Group();b.fx.add(g);
-  const bladeMat=new THREE.MeshStandardMaterial({color:0xffad34,metalness:.65,roughness:.20,
-    emissive:0xff5c10,emissiveIntensity:1.6,side:THREE.DoubleSide});
-  const blade=new THREE.Mesh(rf43SwordGeometry(),bladeMat);g.add(blade);
-  // Metallic crossguard, grip and pearl of incandescent orange light.
-  const gold=new THREE.MeshStandardMaterial({color:0xffd578,metalness:.85,roughness:.25,emissive:0xff700f,emissiveIntensity:.6});
-  const gripMat=new THREE.MeshStandardMaterial({color:0x4a1408,metalness:.4,roughness:.42,emissive:0xaf2605,emissiveIntensity:.2});
-  const cross=new THREE.Mesh(new THREE.CylinderGeometry(.28,.29,3.2,20),gold);
-  cross.rotation.z=Math.PI/2;cross.position.y=2.5;g.add(cross);
-  const grip=new THREE.Mesh(new THREE.CylinderGeometry(.25,.27,2.25,20),gripMat);
-  grip.position.y=3.75;g.add(grip);
-  const pommel=new THREE.Mesh(new THREE.SphereGeometry(.42,24,16),gold);
-  pommel.position.y=5.08;g.add(pommel);
-  const gem=new THREE.Mesh(new THREE.IcosahedronGeometry(.28,3),new THREE.MeshStandardMaterial({
-    color:0xfff2b0,metalness:.30,roughness:.15,emissive:0xffa020,emissiveIntensity:2.3}));
-  gem.position.set(0,2.50,.4);g.add(gem);
+  const blade=fujiwaraSprite('sword',5.8,11.6,1,false);
+  blade.name='Fujiwara Totsuka CG';
+  blade.renderOrder=19;
+  g.add(blade);
   const flare=rf43Glow(9.5,0xff7a1c,.48);flare.position.y=-1.2;g.add(flare);
   const hot=rf43Glow(5,0xffdda0,.65);hot.position.y=-3.8;g.add(hot);
   const trail=[];for(let i=0;i<11;i++){const s=rf43Glow(2.8+i*.18,i%2?0xffa020:0xff4207,.32);b.fx.add(s);trail.push(s);}
@@ -578,7 +483,7 @@ function rf43TotsukaSword(b,caster){
     const accel=fall*fall*(3-2*fall);
     const x=target.pos.x,z=target.pos.z;
     g.position.set(x,24.4-(24.4-5.84)*accel,z);
-    g.rotation.set(.055*Math.sin(elapsed*6),.1*Math.sin(elapsed*5),.035*Math.sin(elapsed*4));
+    blade.material.rotation=.035*Math.sin(elapsed*4);
     flare.material.opacity=Math.max(.14,.38+(1-fall)*.2);
     hot.material.opacity=.55+.25*Math.sin(elapsed*17);
     for(let i=0;i<trail.length;i++){
@@ -590,11 +495,7 @@ function rf43TotsukaSword(b,caster){
       hit=true;
       rf43PercentHit(b,caster,target,.75,'十拳剣');
       const impact=target.pos.clone().setY(.8);
-      b.flashLight?.(impact,0xffaa35,2.3,.6);
-      b.grandFx?.(target.pos.clone(),6,0xff7a14,1.9);
-      b.burst?.(impact,0xff8b24,2.7,{elem:6,color:0xff8b24});
-      b.fxPop?.(impact,6,8,8,.72,{grow:2.4,op:.9});
-      b.fxPop?.(target.pos.clone().setY(.1),6,4,9,.8,{flat:true,grow:3.2,op:.9});
+      paintedImpact(b,impact,0xffa02f,5.5);
       b.ui?.popup?.(target.pos,'十拳剣・天降の一撃','#ffb048');
       b.ui?.flash?.();b.shake=Math.max(b.shake,.9);
     }
@@ -660,8 +561,7 @@ export function installFujiwaraCombat({Fighter,Battle,state}){
       rf43PendingLifesteal(this,this.battle);
     }
     tickMark(this);tickBurn(this);
-    if(this._fujMarkCG){this._fujMarkCG.material.rotation+=dt*.7;
-      this._fujMarkCG.material.opacity=.72+.15*Math.sin(performance.now()*.005);}
+    if(this._fujMarkCG)this._fujMarkCG.material.opacity=.94+.04*Math.sin(t*5);
     if(this._fujBurnCG){this._fujBurnCG.material.rotation-=dt*.9;
       this._fujBurnCG.material.opacity=.55+.22*Math.sin(performance.now()*.008);}
     return out;
@@ -696,14 +596,14 @@ export function installFujiwaraCombat({Fighter,Battle,state}){
     };
     const baseExecute=proto.executeCast;
     proto.executeCast=function(f,slot,net){
-      // Signed remote cast windows are needed for the bounded online HP-ratio hit check.
-      if(f?.key===KEY && f.remoteAuth && net && (slot==='over'||slot==='hi')){
-        f._rf43UltimateWindow={slot,at:performance.now()/1000,used:false};
-      }
       const result=baseExecute.call(this,f,slot,net);
-      if(f?.key===KEY){
+      if(f?.key===KEY && result===true){
+        // Only an accepted remote cast opens the existing hit/lifesteal window.
+        if(f.remoteAuth && net && (slot==='over'||slot==='hi')){
+          f._rf43UltimateWindow={slot,at:performance.now()/1000,used:false};
+        }
         f._fujCastPulse=0.75;
-        if(slot==='over') rf43RainbowUltimate(this,f);
+        if(slot==='over') curseSwordUltimate(this,f);
         else if(slot==='hi') rf43TotsukaSword(this,f);
         else if(typeof slot==='string' && /^[sf][0-9]+$/.test(slot)){
           const index=Number(slot.slice(1));
@@ -713,8 +613,18 @@ export function installFujiwaraCombat({Fighter,Battle,state}){
       }
       return result;
     };
+    const baseRetire=proto.retireFighter;
+    proto.retireFighter=function(f,...args){
+      const retired=baseRetire.call(this,f,...args);
+      if(retired)cleanup(f);
+      return retired;
+    };
     const baseDispose=proto.dispose;
-    proto.dispose=function(...args){for(const f of this.fighters||[])cleanup(f);return baseDispose.apply(this,args);};
+    proto.dispose=function(...args){
+      for(const clean of this._fujJudgmentCleanups||[])clean();
+      for(const f of this.fighters||[])cleanup(f);
+      return baseDispose.apply(this,args);
+    };
   }
   if(typeof window!=='undefined'){
     window.__rfAttachFujiwaraRestMotion=attachFujiwaraRestMotion;

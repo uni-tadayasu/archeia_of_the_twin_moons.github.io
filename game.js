@@ -1,5 +1,6 @@
 import { tenshiTexture, divinePalette, tenshiImpact } from './assets/tenshi-effects.js?v=55.23';
 import { presentationFor } from './assets/rf5527/combat-effects.js?v=55.27';
+import { FUJIWARA_KEY, fujiwaraSprite } from './assets/rf5529/fujiwara-cg.js?v=55.29';
 import { collectMotionClips, playMotion, fighterMotion, animateStatic } from './assets/riftfall-motion-v5521.js';
 import { disposeCharacterVariant } from './character-variants.js';
 // RF53_SMOOTH_EFFECTS — smoother shading without changing model assets.
@@ -275,6 +276,32 @@ function beginChantCircle(b,f,spec,duration,stamp) {
     return true;
   });
   return clean;
+}
+
+function beginFujiwaraChant(battle, fighter, duration, stamp) {
+  if (document.hidden) return;
+  const seal = fujiwaraSprite('seal', 4.8, 2.2, 0);
+  seal.position.y = .22;
+  fighter.root.add(seal);
+  const cleanups = (battle.__chantArtCleanups ||= new Set());
+  const finish = () => {
+    if (!cleanups.delete(finish)) return;
+    seal.removeFromParent();
+    seal.material.dispose();
+  };
+  cleanups.add(finish);
+  let elapsed = 0;
+  battle.addEffect(dt => {
+    if (fighter.chantToken !== stamp || fighter.dead || battle.ended || fighter.action?.type !== 'chant') {
+      finish();
+      return false;
+    }
+    elapsed += dt;
+    const width = 4.8 + .75 * Math.min(1, elapsed / duration);
+    seal.scale.set(width, width * .46, 1);
+    seal.material.opacity = .73 * Math.min(1, elapsed / .21);
+    return true;
+  });
 }
 
 
@@ -1459,8 +1486,11 @@ export class Battle {
     dir.normalize().multiplyScalar(kb);
     dmg *= att.atkMul * (att.status.blind ? 0.6 : 1);
     att.over = Math.min(100, att.over + dmg * 0.12 * att.og);
-    this.spark(tgt.pos.clone().setY(1.1), spec ? spec.color : att.def.light.color ?? att.def.color, 0.7);
-    this.fxPop(tgt.pos.clone().setY(1.1), elOf(spec, elOf(att.def.skills[0])), 1, 1.4, 0.22, { grow: 1.8, spin: 6 });
+    const fujiwara = att.key === FUJIWARA_KEY;
+    if (!fujiwara) {
+      this.spark(tgt.pos.clone().setY(1.1), spec ? spec.color : att.def.light.color ?? att.def.color, 0.7);
+      this.fxPop(tgt.pos.clone().setY(1.1), elOf(spec, elOf(att.def.skills[0])), 1, 1.4, 0.22, { grow: 1.8, spin: 6 });
+    }
     this.ui.sfx('hit');
     const st = this.rollStatus(att, spec);
     if (tgt.remoteAuth) {
@@ -1482,6 +1512,7 @@ export class Battle {
       return;
     }
     const real = tgt.receive(dmg, stun, dir.x, dir.z);
+    if (fujiwara && real > 0) this.fujiwaraPulse('glow', tgt.pos.clone().setY(1.1 + tgt.y), 1.65, .24, .67);
     if (st && real > 0) {
       tgt.applyStatus(st);
     }
@@ -1504,7 +1535,7 @@ export class Battle {
       // RF43: One signed, recently cast 藤原信頼 over/hi per target.
       // All other fighters remain subject to the original hit cap.
       const art=a._rf43UltimateWindow;
-      const special= a.key==='fujiwara_nobuyori' && a.verified === true && art &&
+      const special= a.key===FUJIWARA_KEY && a.verified === true && art &&
         !art.used && (art.slot==='over'||art.slot==='hi') &&
         now-art.at>=0 && now-art.at<=3.4;
       const ratio=art?.slot==='hi' ? .75 : .5;
@@ -1534,6 +1565,7 @@ export class Battle {
       let real;
       try{real=t.receive(dmg,e.stun,e.kx,e.kz);}
       finally{if(special && !(originalDef>0))t.defMul=originalDef;}
+      if (a.key === FUJIWARA_KEY && real > 0) this.fujiwaraPulse('glow', t.pos.clone().setY(1.1 + t.y), 1.65, .24, .67);
       this.ui.popup(t.pos, real, '#ff8f7a');
       if (e.st) t.applyStatus(e.st);
       this.ui.sfx('hit');
@@ -1581,8 +1613,9 @@ export class Battle {
     }
     this.ui.callout?.(f, `詠唱 ${duration.toFixed(1)}秒：${spec.name}`);
     this.ui.chant?.(f, spec, duration, duration);
-    // Begin the player's volumetric painted magic circle at CHANT START, not after the spell fires.
-    beginChantCircle(this, f, spec, duration, stamp);
+    const fujiwara = f.key === FUJIWARA_KEY;
+    if (fujiwara) beginFujiwaraChant(this, f, duration, stamp);
+    else beginChantCircle(this, f, spec, duration, stamp);
     let remain = duration;
     let flare = 0;
     this.addEffect((dt) => {
@@ -1600,7 +1633,7 @@ export class Battle {
       flare -= dt;
       this.ui.chant?.(f, spec, Math.max(0, remain), duration);
       if (remain > 0) {
-        if (flare <= 0) {
+        if (!fujiwara && flare <= 0) {
           flare = 0.23;
           this.spark?.(f.pos.clone().setY(f.y + 1.05), spec.color || 0xc9a65a, 0.33);
         }
@@ -1621,6 +1654,7 @@ export class Battle {
         : slot[0] === 'f' ? followSpec(f.def, idx) || f.def.skills[0]
           : f.def.skills[idx] || f.def.skills[0];
     const isOver = slot === 'over' || slot === 'hi';
+    const fujiwara = f.key === FUJIWARA_KEY;
     // 通信相手の技：クールダウン（技0.35秒・奥義3秒）より速い連発は無視
     if (net && f.remoteAuth) {
       const nowS = performance.now() / 1000;
@@ -1660,7 +1694,7 @@ export class Battle {
       this.ui.sfx('burst');
       this.ui.sfx('skill', spec);
       const el = elOf(spec);
-      for (let i = 0; i < 4; i++) {
+      for (let i = 0; !fujiwara && i < 4; i++) {
         let d = 0.1 + i * 0.22;
         this.addEffect((dt) => {
           d -= dt;
@@ -1691,8 +1725,8 @@ export class Battle {
         f.vel.set(0, 0, 0);
       }
     }
-    this.castFx(f, spec.color, spec, isOver);
-    if (spec.evolvedFollow) {
+    if (!fujiwara) this.castFx(f, spec.color, spec, isOver);
+    if (!fujiwara && spec.evolvedFollow) {
       // Elegant alternate variant (painted textures via current fxPop override), not more polygon geometry.
       const p = new THREE.Vector3(f.pos.x, .09, f.pos.z);
       const el = elOf(spec, 5);
@@ -1701,7 +1735,7 @@ export class Battle {
       this.flashLight?.(p.clone().setY(1), spec.color || 0xbddfff, .65, .23);
     }
     // 技の具現化：狙った地点にも属性の立体エフェクトと閃光を出す
-    {
+    if (!fujiwara) {
       const tp = new THREE.Vector3(tx, 0.6, tz);
       const el = elOf(spec);
       let d = spec.kind === 'dash' ? 0.15 : 0.28;
@@ -1789,6 +1823,7 @@ export class Battle {
         }
       }
     }
+    return true;
   }
 
   // 固有派生技：キャラクターごとに異なるエフェクト・判定・追撃・状態異常。
@@ -1802,14 +1837,23 @@ export class Battle {
     const variant=Number(spec.followStyle)||0;
     const seed=variant+spec.followIndex*7;
     const center=new THREE.Vector3(Number.isFinite(tx)?tx:f.pos.x,0,Number.isFinite(tz)?tz:f.pos.z);
+    const fujiwara = f.key === FUJIWARA_KEY;
     const currentTarget=()=>this.nearestEnemy(f);
     const foePos=()=>currentTarget()?.pos?.clone?.().setY(0)||center.clone();
     const point=(r,angle,p=foePos())=>p.clone().add(new THREE.Vector3(Math.cos(angle)*r,0,Math.sin(angle)*r));
     const magic=(p,sz=2.6,slot=4,flat=true)=>{
       const at=p.clone();at.y=flat?.09:1.2;
+      if (fujiwara) {
+        this.fujiwaraPulse('seal', at, sz, .44, .75, flat ? .48 : 1);
+        return;
+      }
       this.fxPop(at,elem,slot,sz,.44,{grow:1.3+variant*.055,spin:(variant%2?-2.6:2.6),op:.79,flat});
     };
     const blast=(p,sz=2.5,slot=8)=>{
+      if (fujiwara) {
+        this.fujiwaraPulse('glow', p.clone().setY(1.1), sz, .30, .72);
+        return;
+      }
       this.fxPop(p.clone().setY(1.1),elem,slot,sz,.3,{grow:1.65+variant*.03,op:.83,spin:variant%2?2:-2});
       if(sz>2.8)this.flashLight?.(p.clone().setY(.75),color,.72,.18);
     };
@@ -2051,10 +2095,42 @@ export class Battle {
   }
 
   castFx(f, color, spec, strong) {
+    if (f.key === FUJIWARA_KEY) return;
     presentationFor(this).cast(f, color, spec, strong);
   }
 
+  fujiwaraPulse(key, position, size, life, opacity, aspect = 1) {
+    if (document.hidden) return;
+    const pulses = (this.fujiwaraPulses ||= new Set());
+    const limit = Math.min(12, window.RF45Performance?.maxThreeDEffects?.() ?? 6);
+    if (pulses.size >= limit) return;
+    const sprite = fujiwaraSprite(key, size, size * aspect, opacity);
+    sprite.position.copy(position);
+    this.fx.add(sprite);
+    pulses.add(sprite);
+    let age = 0;
+    this.addEffect(dt => {
+      age += dt;
+      if (age >= life || this.ended) {
+        if (pulses.delete(sprite)) {
+          sprite.removeFromParent();
+          sprite.material.dispose();
+        }
+        return false;
+      }
+      const progress = age / life;
+      const width = size * (1 + progress * .42);
+      sprite.scale.set(width, width * aspect, 1);
+      sprite.material.opacity = opacity * (1 - progress);
+      return true;
+    });
+  }
+
   afterimage(f, color) {
+    if (f.key === FUJIWARA_KEY) {
+      this.fujiwaraPulse('glow', f.pos.clone().setY(1 + f.y), 1.8, .30, .52, .6);
+      return;
+    }
     const m = new THREE.Mesh(SG.slash, glow(color, 0.6));
     m.position.set(f.pos.x, 1 + f.y, f.pos.z);
     m.rotation.y = f.facing - Math.PI / 2;
@@ -2305,6 +2381,7 @@ export class Battle {
   }
 
   swingFx(f) {
+    if (f.key === FUJIWARA_KEY) return;
     presentationFor(this).swing(f);
   }
   spark(pos, color, size) {
@@ -2312,48 +2389,57 @@ export class Battle {
   }
 
   projectile(f, spec, ang) {
-    const m = makeShape(spec.visual || 'orb', spec.color, Math.max(0.8, spec.radius * 1.7));
-    const deco = spec.shape != null ? decorate(m, spec, 1) : null;
-    const inner = new THREE.Group();
-    const spin = m.userData.spin;
-    inner.add(m);
-    const el = elOf(spec, 9);
-    const core = fxSprite(el, spec.visual === 'laser' ? 2 : 0, Math.max(1.2, spec.radius * 3.2), 0.95);
-    inner.add(core);
     const p = f.pos.clone().setY(1.1);
     const v = new THREE.Vector3(Math.sin(ang), 0, Math.cos(ang)).multiplyScalar(spec.speed);
-    inner.position.copy(p);
-    inner.rotation.y = ang;
-    this.fx.add(inner);
+    // Fujiwara's bespoke cast supplies all visible artwork. The original
+    // projectile still advances so its contact/status behavior stays the same.
+    const fujiwara = f.key === FUJIWARA_KEY;
+    let inner, m, deco, core;
+    const el = elOf(spec, 9);
+    if (!fujiwara) {
+      m = makeShape(spec.visual || 'orb', spec.color, Math.max(0.8, spec.radius * 1.7));
+      deco = spec.shape != null ? decorate(m, spec, 1) : null;
+      core = fxSprite(el, spec.visual === 'laser' ? 2 : 0, Math.max(1.2, spec.radius * 3.2), 0.95);
+      inner = new THREE.Group();
+      inner.add(m, core);
+      inner.position.copy(p);
+      inner.rotation.y = ang;
+      this.fx.add(inner);
+    }
     let t = 0;
     let trail = 0;
     const done = () => {
-      kill(this.fx, inner);
+      if (inner) kill(this.fx, inner);
       return false;
     };
     this.addEffect((dt) => {
       t += dt;
       p.addScaledVector(v, dt);
-      inner.position.copy(p);
-      if (spin === 'x') m.rotation.x += dt * 22;
-      if (spin === 'y') m.rotation.y += dt * 8;
-      if (spin === 'z') m.rotation.z += dt * 14;
-      if (deco) {
-        deco.rotation.z += dt * 7;
-        deco.rotation.x += dt * 3;
+      if (inner) {
+        inner.position.copy(p);
+        const spin = m.userData.spin;
+        if (spin === 'x') m.rotation.x += dt * 22;
+        if (spin === 'y') m.rotation.y += dt * 8;
+        if (spin === 'z') m.rotation.z += dt * 14;
+        if (deco) {
+          deco.rotation.z += dt * 7;
+          deco.rotation.x += dt * 3;
+        }
+        trail -= dt;
+        if (trail <= 0) {
+          trail = spec.trail ?? 0.04;
+          this.puff(p.clone(), spec.color, 0.22 * Math.max(1, spec.radius * 1.5));
+          this.fxPop(p.clone(), el, Math.random() < 0.5 ? 9 : 3, Math.max(0.8, spec.radius * 2.2), 0.3, { grow: 1.5, op: 0.6 });
+        }
+        if (spec.visual !== 'laser') core.material.rotation += dt * 6;
       }
-      trail -= dt;
-      if (trail <= 0) {
-        trail = spec.trail ?? 0.04;
-        this.puff(p.clone(), spec.color, 0.22 * Math.max(1, spec.radius * 1.5));
-        this.fxPop(p.clone(), el, Math.random() < 0.5 ? 9 : 3, Math.max(0.8, spec.radius * 2.2), 0.3, { grow: 1.5, op: 0.6 });
-      }
-      if (spec.visual !== 'laser') core.material.rotation += dt * 6;
       for (const e of this.enemiesOf(f)) {
         if (Math.hypot(e.pos.x - p.x, e.pos.z - p.z) < spec.radius + e.radius) {
           this.applyHit(f, e, spec.dmg, spec.stun ?? 0.4, spec.kb ?? 5, f.pos, spec);
-          if (spec.noBurst) this.spark(p.clone(), spec.color, 0.5);
-          else this.burst(p.clone(), spec.color, 1.2, spec);
+          if (inner) {
+            if (spec.noBurst) this.spark(p.clone(), spec.color, 0.5);
+            else this.burst(p.clone(), spec.color, 1.2, spec);
+          }
           return done();
         }
       }
@@ -2874,6 +2960,11 @@ export class Battle {
     this.presentation = null;
     for (const clean of [...(this.__chantArtCleanups||[])]) clean();
     this.__chantArtCleanups?.clear();
+    for (const sprite of this.fujiwaraPulses || []) {
+      sprite.removeFromParent();
+      sprite.material.dispose();
+    }
+    this.fujiwaraPulses?.clear();
     for (const f of this.fighters) {
       this.scene.remove(f.root);
       disposeFighterMarkers(f);
