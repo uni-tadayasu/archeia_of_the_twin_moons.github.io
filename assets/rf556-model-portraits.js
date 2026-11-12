@@ -2,8 +2,14 @@
    Nothing is recolored or impersonated; this photographs the existing model.
    Lazy, one GPU renderer, persistent small WebP cache with failure fallbacks. */
 import * as THREE from 'three';
-import {FIGHTERS} from '../data.js?v=rf-minamoto-v48-20261111';
+import {FIGHTERS,ROSTER} from '../data.js?v=rf-minamoto-v48-20261111';
 import {loadModel,instantiateModel,disposeModel} from '../model-runtime.js?v=rf-minamoto-v48-20261111';
+import {assignUniqueAppearances} from '../appearance-data.js';
+import {applyCharacterVariant,disposeCharacterVariant} from '../character-variants.js';
+if(!window.__rf561PortraitAppearanceApplied){
+  if(!window.__rf561AppearanceReady) assignUniqueAppearances(Object.fromEntries(ROSTER.filter(key=>FIGHTERS[key]).map(key=>[key,FIGHTERS[key]])));
+  window.__rf561PortraitAppearanceApplied=true;
+}
 if(!window.__rf556Portraits){
  window.__rf556Portraits=true;
  const DB='rf556-model-portraits';
@@ -12,7 +18,7 @@ if(!window.__rf556Portraits){
  // V55.7: higher definition real-GLB captures on desktop; preserve mobile budget and old cache.
  const W=(mobile||lowMemory)?240:384,H=(mobile||lowMemory)?320:512;
  // RF558_TEXTURE_COLOR_REPAIR — discard stale GLB captures generated with inverted atlas UVs.
- const CACHE_VER=(mobile||lowMemory)?'rf558-color-correct-mobile-20261112':'rf558-color-correct-desktop-20261112';
+ const CACHE_VER=(mobile||lowMemory)?'rf561-unique-model-mobile-20261112':'rf561-unique-model-desktop-20261112';
  const completed=new Map(),busyKeys=new Map();
  let renderer=null,locked=false,queue=[],observer=null,paused=false;
  let lastFailure='',dbPromise=null;
@@ -58,6 +64,7 @@ if(!window.__rf556Portraits){
   const scene=new THREE.Scene();let instance=null;
   try{
    instance=instantiateModel(gltf,3.8,null);
+   if(def.appearance)applyCharacterVariant(instance.model,def);
    scene.add(instance.wrapper);
    instance.wrapper.updateMatrixWorld(true);
    const bb=new THREE.Box3().setFromObject(instance.wrapper);
@@ -77,7 +84,7 @@ if(!window.__rf556Portraits){
    if(blob.size<500)throw Error('空白の画像が出力されました');
    return blob;
   }finally{
-   if(instance)disposeModel(instance);
+   if(instance){disposeCharacterVariant(instance.model);disposeModel(instance);}
   }
  }
  function paint(card,key,url){
@@ -98,7 +105,7 @@ if(!window.__rf556Portraits){
   if(busyKeys.has(key))return busyKeys.get(key);
   const model=FIGHTERS[key]?.model;
   if(!model)throw Error('3Dモデル未設定');
-  const cacheKey=CACHE_VER+':'+model;
+  const cacheKey=CACHE_VER+':'+key+':'+(FIGHTERS[key]?.appearance?.id||model);
   const work=(async()=>{
     let blob=await getBlob(cacheKey);
     if(!blob){blob=await renderGLB(key);await putBlob(cacheKey,blob);}

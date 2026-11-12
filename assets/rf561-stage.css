@@ -1,0 +1,35 @@
+/* V55.11: CG-styled immersive castle / dungeon backgrounds, no gameplay changes */
+#game-container{position:relative;isolation:isolate}
+#rf561-scene-backdrop{position:absolute;inset:0;pointer-events:none;z-index:0;opacity:0;overflow:hidden;transition:opacity .4s ease;background:#091222}
+#rf561-scene-backdrop .rf561-bg{position:absolute;inset:-2%;background-position:50% 50%;background-size:cover;background-repeat:no-repeat;opacity:0;transform:scale(1.035);transition:opacity .5s ease,transform 1.2s ease;filter:saturate(1.06) contrast(1.06) brightness(.93)}
+#rf561-scene-backdrop .rf561-bg.japanese{background-image:url('./rf561/castle-japanese.webp')}
+#rf561-scene-backdrop .rf561-bg.western{background-image:url('./rf561/castle-western.webp')}
+#rf561-scene-backdrop .rf561-bg.cave{background-image:url('./rf561/dungeon-cave.webp')}
+#rf561-scene-backdrop .rf561-bg.ruins{background-image:url('./rf561/dungeon-ruins.webp')}
+#rf561-scene-backdrop::before{content:"";position:absolute;inset:0;z-index:3;background:linear-gradient(180deg,rgba(5,9,19,.14),rgba(6,9,19,.12) 42%,rgba(5,8,17,.48)),radial-gradient(ellipse at 50% 54%,transparent 12%,rgba(0,0,0,.22) 100%)}
+#rf561-scene-backdrop::after{content:"";position:absolute;inset:-8%;z-index:2;opacity:.5;background:radial-gradient(ellipse 65% 30% at 50% 75%,rgba(220,238,255,.20),transparent 80%);filter:blur(35px);animation:rf561-mist-drift 14s ease-in-out infinite alternate}
+@keyframes rf561-mist-drift{from{transform:translateX(-2%) scale(1)}to{transform:translateX(2%) scale(1.035)}}
+body.rf561-scene-on #rf561-scene-backdrop{opacity:1}
+body.rf561-scene-japanese #rf561-scene-backdrop .japanese,body.rf561-scene-western #rf561-scene-backdrop .western,body.rf561-scene-cave #rf561-scene-backdrop .cave,body.rf561-scene-ruins #rf561-scene-backdrop .ruins{opacity:1;transform:scale(1)}
+#game-container>canvas{position:relative;z-index:1;background:transparent!important}
+body.rf561-scene-on #game-container{background:transparent!important}
+/* Original campaign and ranking logic are unchanged; only infinite scenery is selectable. */
+#rf561-infinite-theme{width:min(100%,850px);margin:12px auto 2px;padding:11px 14px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;background:linear-gradient(145deg,rgba(10,20,35,.88),rgba(32,28,55,.82));border:1px solid rgba(176,211,255,.22);border-radius:13px;box-shadow:0 12px 28px #02061756;color:#edf6ff}
+#rf561-infinite-theme b{font-size:13px;letter-spacing:.06em}
+#rf561-infinite-theme .rf561-buttons{display:flex;gap:7px}
+#rf561-infinite-theme button{cursor:pointer;border:1px solid rgba(168,202,240,.36);background:rgba(62,88,122,.2);color:#edf6ff;border-radius:9px;min-height:38px;padding:6px 13px;font:600 13px/1.3 system-ui,sans-serif}
+#rf561-infinite-theme button[aria-pressed="true"]{color:#111c2d;background:linear-gradient(135deg,#e5f4ff,#a5d4ff);border-color:#ccecff}
+#rf561-infinite-theme small{color:#b7cde4;font-size:11px;line-height:1.4}
+/* The castle raid is turn based. Show an actual room illustration on each floor. */
+#castle-content .rf561-raid-scene{width:100%;position:relative;min-height:clamp(178px,33vw,420px);aspect-ratio:16/9;background-position:center;background-size:cover;overflow:hidden;border-radius:17px;border:1px solid rgba(198,225,255,.42);box-shadow:0 18px 40px rgba(0,0,0,.35),inset 0 0 42px rgba(0,0,0,.18)}
+#castle-content .rf561-raid-scene.wa{background-image:url('./rf561/castle-japanese.webp')}
+#castle-content .rf561-raid-scene.west{background-image:url('./rf561/castle-western.webp')}
+#castle-content .rf561-raid-scene::before{content:"";position:absolute;inset:0;background:linear-gradient(180deg,rgba(8,12,23,.08) 32%,rgba(8,10,23,.63) 100%)}
+#castle-content .rf561-raid-scene figcaption{position:absolute;inset:auto 10px 11px;z-index:1;color:#fff;text-shadow:0 2px 14px #000;letter-spacing:.06em;display:flex;gap:8px;align-items:center;justify-content:space-between}
+#castle-content .rf561-raid-scene figcaption b{font-size:clamp(13px,2vw,19px)}
+#castle-content .rf561-raid-scene figcaption span{font-size:clamp(10px,1.5vw,13px);background:rgba(10,18,35,.65);padding:6px 10px;border-radius:7px;backdrop-filter:blur(7px)}
+#castle-content .cr-castle-scene.cr-wa{background-image:linear-gradient(0deg,#080d20ad,#080d2070),url('./rf561/castle-japanese.webp');background-size:cover;background-position:center}
+#castle-content .cr-castle-scene.cr-west{background-image:linear-gradient(0deg,#080d20ad,#080d2070),url('./rf561/castle-western.webp');background-size:cover;background-position:center}
+#castle-content .cr-castle-scene .cr-tower,#castle-content .cr-castle-scene .cr-walls{display:none}
+@media(max-width:600px){#rf561-infinite-theme{padding:9px 10px}#rf561-infinite-theme small{flex-basis:100%}#castle-content .rf561-raid-scene{min-height:155px;border-radius:12px}}
+@media(prefers-reduced-motion:reduce){#rf561-scene-backdrop,#rf561-scene-backdrop .rf561-bg{transition:none}#rf561-scene-backdrop::after{animation:none}}

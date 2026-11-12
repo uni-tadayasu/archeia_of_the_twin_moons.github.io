@@ -1,0 +1,26 @@
+{
+  "release": "V55.11",
+  "tests": {
+    "JavaScript syntax": "PASS (3 files)",
+    "CSS parse": "PASS",
+    "ZIP assets": "PASS (4 CG WebP artworks)",
+    "HTML integration": "PASS",
+    "headless Chromium viewport": "PASS 390×844 and 1280×800 (infinite backdrop Japanese/Western, castle Western, cave and ruins)",
+    "general roster identities": "PASS (100 general fighters, 14 base GLBs, 86 unique procedural appearances)"
+  },
+  "not_tested": [
+    "actual 3D rendering of every GLB",
+    "production Cloudflare Workers",
+    "online 4-player and real iPhone/Android",
+    "GitHub Pages deployment"
+  ],
+  "github_connector": "Write denied: 403 Resource not accessible by integration",
+  "files": [
+    "index.html",
+    "assets/rf561-stage.css",
+    "assets/rf561-stage.js",
+    "assets/rf561-appearance.js",
+    "assets/rf556-model-portraits.js",
+    "assets/rf561/*.webp"
+  ]
+}
