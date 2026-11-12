@@ -60,3 +60,15 @@ new_sqlite_classes = ["PidBind", "GuildLock", "GuildBoard", "Store"]
 [[migrations]]
 tag = "v4-mail"
 new_sqlite_classes = ["MailStore"]
+
+[[durable_objects.bindings]]
+name = "RANK_HUB"
+class_name = "RankHub"
+
+[[durable_objects.bindings]]
+name = "RANK_DUEL"
+class_name = "RankDuel"
+
+[[migrations]]
+tag = "v5-ranked"
+new_sqlite_classes = ["RankHub", "RankDuel"]

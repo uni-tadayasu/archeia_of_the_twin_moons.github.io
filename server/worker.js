@@ -3,10 +3,11 @@
 // RF54_FIX_20261111
 // RF_GRAND_FOUR_20261108 server/worker.js
 // Riftfall Arena Cloudflare Worker — runtime/preview guard update (2026-11-06).
-// Single-file ES module for the existing Worker.
-// Preserves 8 Durable Object classes including MailStore and existing POST APIs.
-// Adds GET / and /health as startup checks; no new bindings or migrations.
+// Worker entry point. Ranked rooms use dedicated Durable Object namespaces.
 // Original sources: appearance-data.js, data.js, server/worker.js
+
+import { callRankHub, openRankSocket } from './ranked.js';
+export { RankHub, RankDuel } from './ranked.js';
 
 // 外見の設計値。描画ライブラリ・DOMに依存しないのでサーバーからも読み込める。
 // 同じ素体を使っていた二人目以降だけに、体形・髪・頭飾り・衣装・得物を割り当てる。
@@ -37,7 +38,7 @@ function hash(s) {
 const fraction = (seed, offset) => ((seed >>> offset) & 255) / 255;
 
 /** Gives duplicate-derived fighters their own stable, geometry-changing identity. */
-export function assignUniqueAppearances(fighters) {
+function assignUniqueAppearances(fighters) {
   const firstByModel = new Map();
   const counts = new Map();
   const originals = [];
@@ -85,7 +86,7 @@ export function assignUniqueAppearances(fighters) {
 
 
 // 戦士データ。skills[0]=技A（立ち）, [1]=技A（移動中）, [2]=技B（立ち）, [3]=技B（移動中）
-export const FIGHTERS = {
+const FIGHTERS = {
   rowen: {
     name: 'ロウエン', title: '灰燼の渡り剣士', model: 'assets/models/hero-swordsman.glb',
     color: 0xffb347, height: 1.8, hp: 1000, speed: 6.2, overGain: 1, light: { dmg: 38, range: 2.1 },
@@ -242,7 +243,7 @@ export const FIGHTERS = {
   }
 };
 
-export const ROSTER = ['rowen', 'minase', 'garou', 'tsubaki', 'harlan', 'pip', 'velka', 'osric', 'noa', 'kurouga', 'rinfa', 'igna', 'petra'];
+const ROSTER = ['rowen', 'minase', 'garou', 'tsubaki', 'harlan', 'pip', 'velka', 'osric', 'noa', 'kurouga', 'rinfa', 'igna', 'petra'];
 const BASE_KEYS = ROSTER.slice();
 for (const k of [...BASE_KEYS, 'seraphel']) FIGHTERS[k].face = `assets/face-${k}.webp`;
 FIGHTERS.uninomiya = {
@@ -347,7 +348,7 @@ FIGHTERS.valgard = {
   over: { name: '終極氷皇術《エターナル・ゼロ》', castTime: 2.45, kind: 'judgment', visual: 'crystal', finalVisual: 'pillar', count: 16, spread: 7.2, radius: 2.5, dmg: 108, delay: 0.7, interval: 0.08, finalDmg: 520, finalRadius: 9.1, elem: 1, color: 0x70ddff, vivid: true }
 };
 // 運営長だけが灯晶で購入できる特別キャラ：血魔ザルグレイヴ（血属性）
-export const BLOODFIEND_PRICE = 50000;
+const BLOODFIEND_PRICE = 50000;
 FIGHTERS.bloodfiend = {
   name: 'ザルグレイヴ', title: '紅翼の血魔（運営長・灯晶限定）', model: 'assets/models/blood-fiend-v2.glb', face: 'assets/face-bloodfiend-v2.webp',
   color: 0xc8102e, height: 1.95, hp: 1500, speed: 6.6, overGain: 1.5, locked: true, special: 'chief', shardPrice: BLOODFIEND_PRICE,
@@ -361,7 +362,7 @@ FIGHTERS.bloodfiend = {
   over: { name: '紅月葬送・血華の宴', kind: 'judgment', visual: 'pillar', finalVisual: 'bigsword', count: 18, spread: 7, radius: 2.6, dmg: 100, delay: 0.7, interval: 0.06, finalDmg: 480, finalRadius: 9.5, elem: 9, color: 0xe0103c, vivid: true }
 };
 // 通常プレイヤーがパーティーに入れられない特別枠
-export const SPECIAL_KEYS = ['seraphel', 'chief', 'crimson', 'sovereign', 'bloodfiend', 'operator_gigantes', 'maou'];
+const SPECIAL_KEYS = ['seraphel', 'chief', 'crimson', 'sovereign', 'bloodfiend', 'operator_gigantes', 'maou'];
 
 // ---------- 決定的な乱数（毎回同じ内容を生成する） ----------
 function rng(seed) {
@@ -398,7 +399,7 @@ function shiftHex(hex, dh, ds = 0, dl = 0) {
 
 // ---------- 技の書：100種 ----------
 // 属性：st=状態異常キー, sn=表示名, sc=表示色
-export const ELEMS = [
+const ELEMS = [
   { n: '炎', c: 0xff4a12, p: 'flame', st: 'burn', sn: '火傷' },
   { n: '氷', c: 0x30d0ff, p: 'ice', st: 'freeze', sn: '凍結' },
   { n: '雷', c: 0xffe010, p: 'orb', st: 'para', sn: '麻痺' },
@@ -444,7 +445,7 @@ const FORMS = [
     ? { name: e.n + '癒結', cost: 28, kind: 'heal', heal: 150, radius: 5 }
     : { name: e.n + '晶棘', cost: 24, kind: 'rain', visual: 'crystal', count: 4, spread: 2, radius: 1.4, dmg: 58, delay: 0.4, interval: 0.1 }
 ];
-export const SKILLS = [];
+const SKILLS = [];
 ELEMS.forEach((e, ei) => FORMS.forEach((fm, fi) => {
   const s = { ...fm(e), color: shiftHex(e.c, (fi - 4.5) * 0.022, 0, ((fi % 3) - 1) * 0.07), elem: ei, shape: ei * 10 + fi, snd: ei * 10 + fi, vivid: true };
   if (s.kind === 'heal') s.color = 0x30ff70;
@@ -516,7 +517,7 @@ function genFighter(r, bi, extra) {
 // ---------- 敵キャラ：100体（選択不可、物語と共闘戦に登場） ----------
 const FOE_PRE = ['朽ちた', '狂える', '影の', '砂喰いの', '氷棺の', '錆鉄の', '夜啼きの', '偽りの', '呪われし', '黄昏の'];
 const FOE_KIND = ['亡霊剣士', '魔女', '鬼', '刺客', '黒騎士', '小鬼', '狩人', '傀儡兵', '堕ちた巫女', '人狼', '破戒僧', '竜騎兵', 'からくり'];
-export const ENEMY_ROSTER = [];
+const ENEMY_ROSTER = [];
 {
   const r = rng(666);
   for (let i = 0; i < 100; i++) {
@@ -534,7 +535,7 @@ export const ENEMY_ROSTER = [];
 }
 
 // seg=床の多角形の辺数, pshape=柱の形, cshape=浮遊石の形
-export const STAGES = [
+const STAGES = [
   { id: 'moon', name: '双月の闘技場', sky: 'assets/twin-moon-sky.webp', floor: 0xffffff, seg: 64, rim: 0xc9a65a, pillar: 0x8c8aa0, pshape: 'cyl', crystal: 0x9fe8ff, cshape: 'oct', fog: 0x2a2850, hemi: 0xcfd8ff, sun: 0xfff0d8 },
   { id: 'desert', name: '砂塵の古円', sky: 'assets/desert-dusk-sky.webp', floor: 0xf2c88a, seg: 8, rim: 0xb07a3a, pillar: 0xb08050, pshape: 'box', crystal: 0xffa040, cshape: 'ico', fog: 0x9a5a3a, hemi: 0xffd8b0, sun: 0xffb070 },
   { id: 'frost', name: '霜の書架', sky: 'assets/frost-aurora-sky.webp', floor: 0xbfe6ff, seg: 6, rim: 0xe0f4ff, pillar: 0xdff4ff, pshape: 'spire', crystal: 0x8fe0ff, cshape: 'oct', fog: 0x4a6a8a, hemi: 0xc8f0ff, sun: 0xd8f0ff },
@@ -547,13 +548,13 @@ export const STAGES = [
 // ---------- 音楽：100曲（Web Audioで生成） ----------
 const BGM_A = ['暁', '黄昏', '月影', '嵐', '星屑', '灯火', '雪解け', '砂塵', '深淵', '凱旋'];
 const BGM_B = ['の行進', 'の舞曲', 'の円舞', 'の鼓動', 'の追想', 'の戦歌', 'の祈り', 'の疾走', 'の残響', 'の序曲'];
-export const BGM = [];
+const BGM = [];
 for (let i = 0; i < 100; i++) {
   // テンポは136〜175で散らし、10曲に3曲は壮大編成（金管・聖歌隊）に
   BGM.push({ name: BGM_A[i % 10] + BGM_B[Math.floor(i / 10)], seed: 1000 + i * 7919, bpm: 136 + ((i * 17) % 40), epic: i % 10 < 3 });
 }
 // 頂上決戦の専用曲（1=運営長ルミナリアの乱入、2=ヴェスペラ戦）
-export const APEX_BGM = {
+const APEX_BGM = {
   1: { name: '裁定の双月 — 天穹を裂く者', seed: 777001, bpm: 176, apex: 1 },
   2: { name: '冥紫の深淵后 — 緋き終焉', seed: 777777, bpm: 168, apex: 2 }
 };
@@ -583,7 +584,7 @@ export const APEX_BGM = {
 }
 
 // ---------- 強化：100種（各5段） ----------
-export const MAX_LV = 5;
+const MAX_LV = 5;
 const UPG_STATS = [
   { id: 'hp', noun: '器', what: '体力の上限', per: 8, sign: '+' },
   { id: 'atk', noun: '刃', what: '与える傷', per: 6, sign: '+' },
@@ -593,7 +594,7 @@ const UPG_STATS = [
 ];
 const UPG_PRE = ['若葉の', '鉄の', '銀の', '金の', '星の', '月の', '竜の', '古の', '祈りの', '嵐の', '焔の', '氷の', '雷の', '風の', '大地の', '深海の', '天空の', '夜明けの', '黄昏の', '永劫の'];
 const FIRST_LABEL = { hp: '生命の器', atk: '刃の冴え', def: '鎧の芯', flux: '灯の巡り', over: '昂りの火' };
-export const UPGRADES = [];
+const UPGRADES = [];
 UPG_PRE.forEach((pre, pi) => UPG_STATS.forEach((s) => {
   const w = pi === 0 ? 1 : 0.25;
   const pct = +(s.per * w).toFixed(2);
@@ -603,16 +604,16 @@ UPG_PRE.forEach((pre, pi) => UPG_STATS.forEach((s) => {
 // 旧セーブに cast がなくても0段として扱うため、既存の進行を壊さない。
 UPGRADES.push({ id: 'cast', stat: 'cast', w: 1, pct: 3, what: '技・奥義・秘奥義の詠唱時間', sign: '−', label: '詠唱の研鑽', name: '詠唱の研鑽', desc: '1段につき詠唱を3％短縮（最大45％）' });
 // ---------- 限界突破：全強化を極めると解放。上限段+5、各強化の効果+20%（1回ごと） ----------
-export const LB_MAX = 10;
-export const LB_STEP = 5;
-export const lbMaxLv = (lb) => MAX_LV + LB_STEP * lb;
-export const lbMul = (lb) => 1 + 0.2 * lb;
-export const lbCost = (lb) => 5000 * (lb + 1);
+const LB_MAX = 10;
+const LB_STEP = 5;
+const lbMaxLv = (lb) => MAX_LV + LB_STEP * lb;
+const lbMul = (lb) => 1 + 0.2 * lb;
+const lbCost = (lb) => 5000 * (lb + 1);
 // ---------- 武器・装備：100種 ----------
 const WEP_TYPES = ['剣', '杖', '大斧', '双刃', '槍', '弓', '錬金瓶', '拳甲', '聖鈴', '雅扇'];
 const WEP_TIER = ['木の', '鉄の', '鋼の', '銀の', '霊銀の', '竜骨の', '月光の', '天星の', '灯脈の', '双月の'];
 const WEP_FOCUS = [['atk'], ['flux', 'over'], ['atk', 'hp'], ['atk', 'over'], ['atk', 'def'], ['atk', 'flux'], ['flux', 'hp'], ['atk', 'def'], ['hp', 'def'], ['over', 'flux']];
-export const WEAPONS = [];
+const WEAPONS = [];
 WEP_TIER.forEach((tier, ti) => WEP_TYPES.forEach((type, yi) => {
   const pow = 1 + ti * 1.1;
   const bonus = {};
@@ -622,7 +623,7 @@ WEP_TIER.forEach((tier, ti) => WEP_TYPES.forEach((type, yi) => {
 // ---------- 防具：100種（装備すると戦闘・ワールドで見た目に反映） ----------
 const ARM_TYPES = ['軽鎧', '重鎧', '法衣', '外套', '胸当て', '肩鎧', '竜鱗鎧', '聖衣', '影装束', '王冠鎧'];
 const ARM_FOCUS = [['def', 'hp'], ['def'], ['flux', 'def'], ['hp', 'over'], ['def', 'atk'], ['def', 'hp'], ['hp', 'def'], ['over', 'flux'], ['atk', 'over'], ['def', 'over']];
-export const ARMORS = [];
+const ARMORS = [];
 WEP_TIER.forEach((tier, ti) => ARM_TYPES.forEach((type, yi) => {
   const pow = 0.8 + ti * 1.0;
   const bonus = {};
@@ -634,14 +635,14 @@ WEAPONS.push({ id: 'w100', name: '草薙の剣', bonus: { atk: 16, over: 9, flux
 ARMORS.push({ id: 'a100', name: '草薙の盾', bonus: { def: 16, hp: 12, over: 5 }, price: 150000, relic: true, desc: '紅玉と黄金で鍛えられた、災いを退ける神盾' });
 // ---------- 召喚獣（運営長・ザルグレイヴ専用。通常攻撃の代わりに発動） ----------
 // HPは使い手の最大HPの60%。倒されるまで使い手の前方に居続け、前からの攻撃を受け止める（倒されると15秒後に再召喚可）
-export const SUMMONS = [
+const SUMMONS = [
   { id: 's0', name: 'ヤマタノオロチ', fighter: 'bloodfiend', chief: true, price: 300000, desc: '八つ首の災竜。前方に居座り、通常攻撃の代わりに一斉に噛みつく。前からの攻撃を受け止める' },
   { id: 's1', name: 'スサノオ', fighter: 'crimson', price: 200000, desc: '翠雷をまとう鎧の荒神。前方に立ちはだかり、通常攻撃の代わりに剛腕で薙ぎ払う。前からの攻撃を受け止める' }
 ];
-export const STAT_LABEL = { hp: '体力', atk: '攻撃', def: '守り', flux: '灯力', over: '奥義' };
+const STAT_LABEL = { hp: '体力', atk: '攻撃', def: '守り', flux: '灯力', over: '奥義' };
 
 // 強化の合計上限（段換算）
-export const UPG_CAP = { hp: 25, atk: 25, def: 14, flux: 25, over: 20, cast: 15 };
+const UPG_CAP = { hp: 25, atk: 25, def: 14, flux: 25, over: 20, cast: 15 };
 
 const STORY_BASE = [
   {
@@ -815,7 +816,7 @@ const ARCS = [
 ];
 // ---------- ボス：全25体（各部の主＋中ボス15体＋ラスボス・セラフェル） ----------
 // 専用の戦士データを作り、属性ごとに固有の技と奥義を持たせる
-export const BOSS_ROSTER = [];
+const BOSS_ROSTER = [];
 function makeBoss(spec, i) {
   const base = FIGHTERS[spec.k];
   const r = rng(9000 + i * 17);
@@ -898,7 +899,7 @@ const chapNo = (n) => {
   const t = Math.floor(n / 10), o = n % 10;
   return n === 100 ? '百' : (t > 1 ? KANJI[t] : '') + (t ? '十' : '') + KANJI[o];
 };
-export const STORY = [];
+const STORY = [];
 {
   const r = rng(4242);
   ARCS.forEach((arc, ai) => {
@@ -1016,7 +1017,7 @@ export const STORY = [];
 
 // ---- 週替わりイベント（ボーナスステージ）：日本時間の月曜0時に切り替わる ----
 // foes: 'mob'=魔物 / 'boss'=ボス / 'roster'=戦士 / 'mirror'=自分の写し / キー名
-export const EVENTS = [
+const EVENTS = [
   { name: '魔物の大行進', desc: '弱めの魔物が6体押し寄せる。まとめて薙ぎ払え！', foes: [['mob', 6]], hp: 0.45, atk: 0.7, ally: 0, first: 600, reward: 120, stage: 2 },
   { name: '巨影の襲来', desc: '巨大化したボスが1体。体力3倍の大物を討て！', foes: [['boss', 1]], hp: 3, atk: 1, scale: 1.6, ally: 1, first: 800, reward: 150, stage: 4 },
   { name: '灯晶の雨', desc: '相棒と二人で魔物3体に挑む。報酬がいつもの3倍！', foes: [['mob', 3]], hp: 0.8, atk: 0.8, ally: 1, first: 500, reward: 180, stage: 1 },
@@ -1028,13 +1029,13 @@ export const EVENTS = [
 ];
 const WEEK_MS = 7 * 24 * 3600 * 1000;
 // 1970-01-05(月) 0:00 JST を起点にした週番号
-export function eventWeek(now = Date.now()) {
+function eventWeek(now = Date.now()) {
   return Math.floor((now + 9 * 3600 * 1000 - 4 * 24 * 3600 * 1000) / WEEK_MS);
 }
 // ---- 運営長が作る特別イベント（受信データもここで検証） ----
-export const EV_FOE_KINDS = { mob: '魔物', boss: 'ボス', roster: '戦士', mirror: '自分の写し' };
+const EV_FOE_KINDS = { mob: '魔物', boss: 'ボス', roster: '戦士', mirror: '自分の写し' };
 const evNum = (v, lo, hi, d) => { const n = Number(v); return Number.isFinite(n) ? Math.max(lo, Math.min(hi, n)) : d; };
-export function sanitizeEvent(e, fighters) {
+function sanitizeEvent(e, fighters) {
   if (!e || typeof e !== 'object') return null;
   const t = (v, n) => String(v ?? '').replace(/[\u0000-\u001f<>]/g, '').trim().slice(0, n);
   const name = t(e.name, 24);
@@ -1052,14 +1053,14 @@ export function sanitizeEvent(e, fighters) {
     reward: Math.round(evNum(e.reward, 0, 5000, 100)), stage: Math.round(evNum(e.stage, 0, 20, 0)), at, ends
   };
 }
-export function currentEvent(now = Date.now()) {
+function currentEvent(now = Date.now()) {
   const w = eventWeek(now);
   const ends = (w + 1) * WEEK_MS - 9 * 3600 * 1000 + 4 * 24 * 3600 * 1000;
   return { week: w, ev: EVENTS[((w % EVENTS.length) + EVENTS.length) % EVENTS.length], ends };
 }
 
 // ---- 全戦士共通の回復技（skills[4]。H キー／「癒」ボタン） ----
-export const HEAL_SLOT = 4;
+const HEAL_SLOT = 4;
 // 各戦士の技を共通の形で扱い、技ごとの差分から巨大な共用体型を作らない。
 // name・kindは必須。他の技パラメーターは実際の値をそのまま保持する。
 /** @type {Array<[string, {hp: number, skills: Array<{name: string, kind: string, [field: string]: unknown}>}]>} */
@@ -1101,7 +1102,7 @@ for (const [k, f] of healTargets) {
 }
 
 // 元から固有だった20人は維持。素体・顔絵を使い回していた209人だけを固有化。
-export const CHARACTER_APPEARANCES = assignUniqueAppearances(FIGHTERS);
+const CHARACTER_APPEARANCES = assignUniqueAppearances(FIGHTERS);
 
 
 // 双月のアルケイア — 認証・検証サーバー（Cloudflare Workers）
@@ -1446,9 +1447,10 @@ export default {
           ok: true,
           service: 'riftfall-arena-api',
           check: 'worker-runtime',
-          version: '55.20'
+          version: '55.22'
         });
       }
+      if (url.pathname.startsWith('/rank/socket/')) return await openRankSocket(req,env,url.pathname.slice('/rank/socket/'.length));
       if (url.pathname === '/stripe/webhook') return await stripeWebhook(req, env);
       if (req.method !== 'POST') return json(H, { error: 'method' }, 405);
       const raw = await req.text();
@@ -1457,6 +1459,11 @@ export default {
       try { body = raw ? JSON.parse(raw) : {}; } catch { return json(H, { error: 'bad' }, 400); }
       if (!body || typeof body !== 'object' || Array.isArray(body)) return json(H, { error: 'bad' }, 400);
       switch (url.pathname) {
+        case '/rank/session': return await rankedRoute(req,env,H,body,'session');
+        case '/rank/board': return await rankedRoute(req,env,H,body,'board');
+        case '/rank/join': return await rankedRoute(req,env,H,body,'join');
+        case '/rank/status': return await rankedRoute(req,env,H,body,'status');
+        case '/rank/cancel': return await rankedRoute(req,env,H,body,'cancel');
         case '/auth/key': return await authKey(req, env, H, body);
         case '/invite/issue': return await inviteIssue(req, env, H, body);
         case '/invite/redeem': return await inviteRedeem(req, env, H, body);
@@ -1885,6 +1892,42 @@ async function whoAmI(env, code, name) {
   if (!PID_RE.test(pid) || !(await bindPid(env, pid, h))) return null;
   return { pid, h, name: cleanTxt(name, 12) || '旅人' };
 }
+// Ranked points belong to the verified sync player and are independent of save edits.
+let rankedFighters;
+function rankedPool() {
+  return rankedFighters ||= new Map([...new Set(ROSTER)].flatMap(fighter=>{
+    const def=ownValue(FIGHTERS,fighter);
+    if (!def || !def.model || def.special || def.locked || def.hidden || def.enemy || def.shop || def.shardPrice) return [];
+    return [[fighter,{fighter,speed:Math.max(5.35,Math.min(6.35,Number(def.speed)||5.9)),
+      reach:Math.max(1.9,Math.min(2.65,Number(def.light?.range)||2.1))}]];
+  }));
+}
+async function rankedRoute(req,env,H,body,action) {
+  if (!env.RANK_HUB || !env.RANK_DUEL || !env.LIMITER) return json(H,{error:'rank_unavailable'},503);
+  const rate=action==='session'?30:action==='status'?420:100;
+  if (await limited(env,req,'rank:'+action,rate,60000)) return json(H,{error:'limit'},429);
+  if (action==='session') {
+    if (!env.SYNC_LOCK || !env.PID_BIND || !env.PEPPER || !env.SIGN_PRIVATE_JWK) return json(H,{error:'rank_unavailable'},503);
+    const me=await whoAmI(env,body.code,body.name);
+    if (!me) return json(H,{error:'nosync'},403);
+    const name=me.name.replace(/\p{Cf}/gu,'').trim() || '旅人';
+    const expires=Date.now()+4*3600000;
+    return json(H,{token:await sign(env,{t:'rank',p:me.pid,n:name,exp:expires}),expires,fighters:[...rankedPool().keys()]});
+  }
+  const credential=body.token ? await verify(env,body.token,'rank') : null;
+  const pid=credential && PID_RE.test(credential.p) ? credential.p : null;
+  if ((!pid && action!=='board') || (body.token && !pid)) return json(H,{error:'rank_session'},401);
+  const data={pid};
+  if (action==='join') {
+    const profile=rankedPool().get(body.fighter);
+    if (!profile) return json(H,{error:'rank_fighter'},400);
+    data.player={...profile,name:credential.n};
+  }
+  if (action==='join' || action==='status') data.bots=[...rankedPool().values()].slice(0,13);
+  const response=await callRankHub(env,action,data);
+  return json(H,await response.json(),response.status);
+}
+
 const guildStub = (env, gid) => env.GUILD.get(env.GUILD.idFromName('g:' + gid));
 const boardStub = (env) => env.GUILD_BOARD.get(env.GUILD_BOARD.idFromName('board'));
 async function doCall(stub, body) {

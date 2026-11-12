@@ -1,3 +1,4 @@
+import { createRankedMode } from './assets/ranked-mode.js?v=55.22';
 // RF552_main.js_PATCHED_20261111
 // RF55_EVENT_BGM_20261111
 // RF55_CASTLE_MAIN_CACHE
@@ -844,7 +845,8 @@ const MUSIC_FILES = {
   boss: 'event-theme.mp3',  // ボス戦は実在するイベント音源を使用
   zarugureibu: 'zarugureibu-theme.mp3',
   valgard: 'valgard-theme.mp3',
-  adventure: 'adventure-theme.mp3'
+  adventure: 'adventure-theme.mp3',
+  ranked: 'ranked-hear-your-voice.mp3'
 };
 for (const [name, file] of Object.entries(MUSIC_FILES)) {
   // RF_BGM_EXCLUSIVE_V10: avoid two Audio players for the same physical MP3.
@@ -938,7 +940,7 @@ function playTrack(name) {
 }
 // RF_BGM_EXCLUSIVE_V10 — Atomic single-track BGM switch; no crossfade races.
 function syncMusicTrack(fromGesture=false){
-  const key=shouldForceFujiwara()?'fujiwara':state.mode==='adventure'?'adventure':shouldForceValgard()?'valgard':musicKey(audio.wanted);
+  const key=state.mode==='ranked'?'ranked':shouldForceFujiwara()?'fujiwara':state.mode==='adventure'?'adventure':shouldForceValgard()?'valgard':musicKey(audio.wanted);
   const next=audio.tracks[key];
   if(!next)return;
   const previous=selectedBgm;
@@ -1879,7 +1881,7 @@ function openEventPlayChoiceV552(){
   document.body.append(layer);
 }
 
-function openSelect(label, crumb, cb, { allowLocked = false, onBack = goTitle } = {}) {
+function openSelect(label, crumb, cb, { allowLocked = false, onBack = goTitle, keys = null } = {}) {
   if ($('#select-search')) $('#select-search').value = '';
   $('#select-label').textContent = label;
   $('#select-crumb').textContent = crumb;
@@ -1890,7 +1892,7 @@ function openSelect(label, crumb, cb, { allowLocked = false, onBack = goTitle } 
   $('#party-bar').hidden = true;
   const grid = $('#select-grid');
   grid.replaceChildren();
-  for (const k of SELECT_KEYS()) {
+  for (const k of (keys || SELECT_KEYS())) {
     const d = FIGHTERS[k];
     const locked = !canUse(k) && !allowLocked;
     const card = document.createElement('button');
@@ -2209,6 +2211,7 @@ function goTitle() {
   gaizorgAdventure?.close();
   infiniteDungeon.stop();
   eventCoop.close();
+  ranked.close();
   endBattle();
   leaveField();
   setStage(STAGES[0]);
@@ -2358,7 +2361,7 @@ function endBattle() {
   if (state.battle) {
     // 覚醒の蓄積ダメージは次の戦いへ持ち越す（覚醒中に終わったらリセット）
     const me = state.battle.fighters.find((f) => f.isPlayer && !f.remoteAuth);
-    if (me && !state.battle.siege) {
+    if (me && !state.battle.siege && !state.battle.ranked) {
       save.awk = me.awakened > 0 ? 0 : Math.max(0, Math.min(99, Math.round(me.awk)));
       persist();
     }
@@ -2630,6 +2633,41 @@ const infiniteDungeon=createInfiniteDungeonV552({
   ui,syncCodeNow,apiEnabled,api,myName,getArena:()=>arena
 });
 document.getElementById('rf552-infinite-rank')?.addEventListener('click',()=>infiniteDungeon.openLeaderboard());
+const ranked=createRankedMode({
+  THREE,FIGHTERS,api,apiEnabled,code:syncCodeNow,name:myName,show,goTitle,
+  options:()=>{
+    state.mode=null;
+    playTrack('title');
+    $('#btn-options').click();
+    $('#sync-push').focus();
+  },
+  chooseFighter:(keys,choose,onBack)=>openSelect('ランク戦の戦士を選ぶ','ランクマッチ',choose,{keys,onBack}),
+  loadFighter:key=>assets[key] ? Promise.resolve(true) : retrieveModel(FIGHTERS[key].model),
+  makeBattle:()=>{
+    setStage(stageById('moon'));
+    const battle=makeBattle(null);
+    battle.ranked=true;
+    document.body.classList.add('rf-ranked-playing');
+    $('#btn-pause').textContent='退出';
+    $('#btn-pause').setAttribute('aria-label','ランク戦から退出');
+    window.__rfMarkBattlePhase?.('battle','ランク戦');
+    return battle;
+  },
+  endBattle:()=>{
+    endBattle();
+    document.body.classList.remove('rf-ranked-playing');
+    $('#btn-pause').textContent='‖ 休む';
+    $('#btn-pause').setAttribute('aria-label','休む');
+    window.__rfMarkBattlePhase?.('ranked-lobby','ランク戦の決着');
+  },
+  buildHud,playTrack
+});
+$('#btn-ranked').addEventListener('click',()=>{
+  state.mode='ranked';
+  unlockAudio(true);
+  sfx('ui');
+  void ranked.open();
+});
 const REWARD = { cpu: 30, duo: 40, story: 60, 'online-vs': 50, 'online-coop': 60 };
 function grant(n) {
   save.shards += n;
@@ -3891,6 +3929,7 @@ $('#world-req-no').addEventListener('click', () => answerReq(false));
 
 // ---------- Pause ----------
 function togglePause() {
+  if (state.mode==='ranked' && state.battle?.ranked) { void ranked.askRetire(); return; }
   if ((!state.battle && !state.field && !state.adventureRest) || document.querySelector('.screen.on')) {
     return;
   }
@@ -4726,7 +4765,11 @@ renderer.setAnimationLoop((time) => {
     c.rotation.y += dt;
   });
   worldTick(dt);
-  if (state.battle && (!state.paused || isLive())) {
+  if (state.battle?.ranked) {
+    ranked.tick(dt,acceptsCombatInput()?readInput():null);
+    rfV12HudClock+=rawDt;
+    if(rfV12HudClock>=.09){rfV12HudClock=0;updateHud();}
+  } else if (state.battle && (!state.paused || isLive())) {
     try {
       state.battle.update(dt, state.paused ? { mx: 0, mz: 0 } : readInput());
       netTick(dt);
