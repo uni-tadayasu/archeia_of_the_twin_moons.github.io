@@ -1,0 +1,45 @@
+
+/* Riftfall Arena V55.19 — varied UI palettes, stronger favorite-star stability, and CG-illustration accents. */
+:root{
+  --rf569-amber:#d8b06c;
+  --rf569-indigo:#3f4f8f;
+  --rf569-crimson:#8b3346;
+  --rf569-emerald:#2d6b5b;
+  --rf569-violet:#61448a;
+}
+body{
+  --rf569-panel:linear-gradient(180deg,rgba(13,18,31,.92),rgba(24,20,39,.92));
+}
+#scr-title .portal-wrap{background:radial-gradient(circle at 15% 18%,rgba(210,143,84,.14),transparent 34%),radial-gradient(circle at 84% 18%,rgba(77,122,209,.16),transparent 32%),linear-gradient(180deg,rgba(7,10,18,.96),rgba(19,16,30,.98));}
+#scr-options .inner{background:linear-gradient(180deg,rgba(16,27,34,.96),rgba(18,27,42,.97));box-shadow:0 16px 54px rgba(0,0,0,.36)}
+#scr-forge .inner{background:linear-gradient(180deg,rgba(35,23,17,.96),rgba(53,35,23,.98));box-shadow:0 16px 54px rgba(0,0,0,.36)}
+#scr-shop .inner{background:linear-gradient(180deg,rgba(20,31,24,.96),rgba(26,42,34,.98));box-shadow:0 16px 54px rgba(0,0,0,.36)}
+#scr-invade .inner{background:linear-gradient(180deg,rgba(32,18,28,.96),rgba(45,23,40,.98));box-shadow:0 16px 54px rgba(0,0,0,.36)}
+#scr-select .inner{background:linear-gradient(180deg,rgba(19,24,37,.96),rgba(25,30,53,.985));box-shadow:0 16px 54px rgba(0,0,0,.36)}
+#scr-lobby .inner{background:linear-gradient(180deg,rgba(18,28,39,.96),rgba(20,39,50,.985));box-shadow:0 16px 54px rgba(0,0,0,.36)}
+#scr-story .inner{background:linear-gradient(180deg,rgba(22,18,33,.72),rgba(11,8,17,.26));}
+#scr-result .inner{background:linear-gradient(180deg,rgba(31,22,15,.96),rgba(18,14,27,.98));box-shadow:0 16px 54px rgba(0,0,0,.36)}
+#scr-castle .inner{background:linear-gradient(180deg,rgba(28,22,15,.96),rgba(37,31,19,.98));box-shadow:0 16px 54px rgba(0,0,0,.36)}
+#ui .screen .topbar, #ui .screen .label, #ui .screen .crumb{letter-spacing:.04em}
+#scr-options .btn,#scr-options .menu button{border-color:rgba(123,196,214,.58)!important;box-shadow:0 0 0 1px rgba(89,157,189,.18) inset,0 7px 22px rgba(0,0,0,.28)}
+#scr-forge .btn,#scr-forge .menu button{border-color:rgba(212,174,103,.62)!important;box-shadow:0 0 0 1px rgba(179,119,58,.18) inset,0 7px 22px rgba(0,0,0,.28)}
+#scr-shop .btn,#scr-shop .menu button{border-color:rgba(108,200,155,.58)!important;box-shadow:0 0 0 1px rgba(88,179,127,.18) inset,0 7px 22px rgba(0,0,0,.28)}
+#scr-invade .btn,#scr-invade .menu button{border-color:rgba(208,120,154,.58)!important;box-shadow:0 0 0 1px rgba(179,75,112,.18) inset,0 7px 22px rgba(0,0,0,.28)}
+#scr-select .btn,#scr-select .menu button{border-color:rgba(120,138,214,.58)!important;box-shadow:0 0 0 1px rgba(95,110,190,.18) inset,0 7px 22px rgba(0,0,0,.28)}
+#scr-lobby .btn,#scr-lobby .menu button{border-color:rgba(117,194,210,.58)!important;box-shadow:0 0 0 1px rgba(82,161,177,.18) inset,0 7px 22px rgba(0,0,0,.28)}
+#scr-result .btn,#scr-result .menu button{border-color:rgba(214,177,110,.58)!important;box-shadow:0 0 0 1px rgba(164,118,60,.18) inset,0 7px 22px rgba(0,0,0,.28)}
+#scr-castle .btn,#scr-castle .menu button{border-color:rgba(194,161,105,.62)!important;box-shadow:0 0 0 1px rgba(164,118,60,.18) inset,0 7px 22px rgba(0,0,0,.28)}
+#select-grid .card{background:linear-gradient(180deg,rgba(17,22,37,.93),rgba(28,36,58,.96))!important;border-color:rgba(145,157,221,.48)!important}
+#select-grid .card .rift-card-favorite,
+#select-grid .card .rift-card-favorite::before,
+#select-grid .card .rift-card-favorite::after,
+#select-grid .card .rift-card-favorite *{animation:none!important;transition:color .12s ease,background-color .12s ease,border-color .12s ease!important;opacity:1!important;filter:none!important;transform:none!important;visibility:visible!important}
+#select-grid .card .rift-card-favorite{backface-visibility:hidden;will-change:auto;isolation:isolate;contain:paint layout style;text-shadow:none!important;outline:none!important}
+#select-grid .card .rift-card-favorite[aria-pressed="false"]{color:#e6edf9!important;background:rgba(26,35,57,.96)!important;border:1px solid rgba(168,182,230,.45)!important}
+#select-grid .card .rift-card-favorite[aria-pressed="true"]{color:#ffd469!important;background:linear-gradient(180deg,rgba(43,59,95,.98),rgba(26,35,57,.98))!important;border:1px solid rgba(255,212,105,.55)!important;box-shadow:0 0 0 1px rgba(255,212,105,.18) inset,0 3px 8px rgba(0,0,0,.24)!important}
+#rf568-maze-map{background:rgba(15,11,18,.88)!important;border-color:#d1aa71!important;backdrop-filter:blur(3px)}
+#rf568-maze-map .rf568-map-title{color:#f5dfb9}
+body.rf568-infinite-maze #game-container{background:radial-gradient(circle at 50% 15%,rgba(198,148,87,.15),transparent 34%),linear-gradient(180deg,#201715,#141015)!important}
+@media (max-width:680px){
+  #scr-options .inner,#scr-forge .inner,#scr-shop .inner,#scr-invade .inner,#scr-select .inner,#scr-lobby .inner,#scr-result .inner,#scr-castle .inner{box-shadow:none}
+}

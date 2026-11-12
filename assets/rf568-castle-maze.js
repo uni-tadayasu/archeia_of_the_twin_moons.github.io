@@ -1,6 +1,6 @@
-/* Riftfall Arena V55.18 — dedicated infinite-castle maze.
- * Actual maze floor, enclosed corridors and ceilings, AABB collision, navigation,
- * floor-local enemies and stairs. This module does NOT affect normal battles.
+/* Riftfall Arena V55.19 — Sengoku-style wooden tenshu interior for Infinite Castle.
+ * Real indoor castle floors, timber halls and ceilings, lighter sight-lines, AABB collision,
+ * navigation, floor-local enemies and stairs. This module does NOT affect normal battles.
  */
 import * as THREE from 'three';
 const N=13, CELL=5.8, HALF=N*CELL/2;
@@ -23,15 +23,36 @@ export function generateCastleLayout(floor,seed){
   tiles[i]&=~v.wall;tiles[j]&=~v.op;seen[j]=1;stack.push(j);
  }
  // Connected maze with shortcuts, side rooms and wide intersection chambers.
- const shortcuts=0.075+Math.min(.095,floor*.00075);
+ const shortcuts=0.18+Math.min(.13,floor*.0011);
  for(let r=1;r<N-1;r++)for(let c=1;c<N-1;c++)for(const v of cellsAround(r,c)){
   if(v.d!==1&&v.d!==2)continue;
   if(random()<shortcuts){tiles[at(r,c)]&=~v.wall;tiles[at(v.r,v.c)]&=~v.op;}
  }
- // Open a 3x3 central castle chamber, while preserving maze connectivity.
- for(let r=5;r<=7;r++)for(let c=5;c<=7;c++)for(const v of cellsAround(r,c)){
-  if(v.r<5||v.r>7||v.c<5||v.c>7)continue;
+ // Open a broad castle keep: central great hall, cross corridors and side halls.
+ for(let r=4;r<=8;r++)for(let c=4;c<=8;c++)for(const v of cellsAround(r,c)){
+  if(v.r<4||v.r>8||v.c<4||v.c>8)continue;
   tiles[at(r,c)]&=~v.wall;tiles[at(v.r,v.c)]&=~v.op;
+ }
+ // Main north-south and east-west interior corridors like a real wooden keep.
+ for(let r=1;r<N-1;r++){
+  const i=at(r,6);
+  if(r<N-1){ tiles[i]&=~4; if(r+1<N) tiles[at(r+1,6)]&=~1; }
+ }
+ for(let c=1;c<N-1;c++){
+  const i=at(6,c);
+  if(c<N-1){ tiles[i]&=~2; if(c+1<N) tiles[at(6,c+1)]&=~8; }
+ }
+ // Side halls and audience rooms to reduce wall density and widen visibility.
+ for(const [r0,r1,c0,c1] of [[2,4,8,10],[8,10,2,4],[2,4,2,4],[8,10,8,10]]){
+  for(let r=r0;r<=r1;r++)for(let c=c0;c<=c1;c++)for(const v of cellsAround(r,c)){
+   if(v.r<r0||v.r>r1||v.c<c0||v.c>c1)continue;
+   tiles[at(r,c)]&=~v.wall;tiles[at(v.r,v.c)]&=~v.op;
+  }
+ }
+ // Viewing lanes through the keep: partly open partitions around the main hall.
+ for(const [a,b] of [[at(3,6),at(4,6)],[at(8,6),at(9,6)],[at(6,3),at(6,4)],[at(6,8),at(6,9)]]){
+  const ar=Math.floor(a/N),ac=a%N, br=Math.floor(b/N),bc=b%N;
+  for(const v of cellsAround(ar,ac)) if(v.r===br&&v.c===bc){ tiles[a]&=~v.wall; tiles[b]&=~v.op; }
  }
  const start=at(1,1);
  function route(startIndex,endIndex){
@@ -116,8 +137,9 @@ export class CastleMazeWorld {
   }),N*1.5,N*1.5));
   const matFloor=own(makeMaterial(0xf5f0de,{map:floorTex,side:THREE.DoubleSide}));
   const matCeil=own(makeMaterial(0xd7bf96,{map:roofTex,side:THREE.DoubleSide}));
-  const matWall=own(makeMaterial(floor%5===0?0xb7ad9f:0xb4a68b,{side:THREE.DoubleSide}));
-  const matWood=own(makeMaterial(floor%10===0?0x432b3e:0x472b22,{roughness:.72}));
+  const matWall=own(makeMaterial(floor%5===0?0xbcb1a3:0xb9ad92,{side:THREE.DoubleSide}));
+  const matWood=own(makeMaterial(floor%10===0?0x503640:0x5d3926,{roughness:.72}));
+  const matPlaster=own(makeMaterial(0xece0cc,{roughness:.95}));
   this.woodMaterial=matWood;
   const matGold=own(makeMaterial(0xb88b4a,{metalness:.45,roughness:.4}));
   const matLamp=own(makeMaterial(0xffd38b,{emissive:0xffa63d,emissiveIntensity:2.4}));
@@ -133,26 +155,34 @@ export class CastleMazeWorld {
     dummy.position.set(x,y,z);dummy.scale.set(sx,sy,sz);dummy.updateMatrix();m.setMatrixAt(i,dummy.matrix);
    });m.instanceMatrix.needsUpdate=true;m.frustumCulled=false;group.add(m);return m;
   };
-  const panels=[],frame=[],beams=[],caps=[];
-  const wallH=15.1,wallD=.55;
-  const pushWall=(x,z,w,d)=>{
+  const outerPanels=[],innerPanels=[],frame=[],beams=[],caps=[],lattice=[];
+  const outerH=15.1,innerH=6.6,wallD=.55;
+  const pushWall=(x,z,w,d,outer=false)=>{
    const wall={x,z,w,d};this.walls.push(wall);
-   panels.push([x,wallH/2,z,w,wallH,d]);
-   frame.push([x,.65,z,w,.34,d+.05],[x,wallH-.58,z,w,.42,d+.06]);
+   const h=outer?outerH:innerH;
+   (outer?outerPanels:innerPanels).push([x,h/2,z,w,h,d]);
+   frame.push([x,.65,z,w,.34,d+.05]);
+   frame.push([x,h-.22,z,w,.28,d+.06]);
    // Continuous carved timber columns at each panel end.
-   if(w>d){frame.push([x-w/2,wallH/2,z,.31,wallH,d+.08],[x+w/2,wallH/2,z,.31,wallH,d+.08]);}
-   else{frame.push([x,wallH/2,z-d/2,w+.08,wallH,.31],[x,wallH/2,z+d/2,w+.08,wallH,.31]);}
+   if(w>d){frame.push([x-w/2,h/2,z,.31,h,d+.08],[x+w/2,h/2,z,.31,h,d+.08]);}
+   else{frame.push([x,h/2,z-d/2,w+.08,h,.31],[x,h/2,z+d/2,w+.08,h,.31]);}
+   if(!outer){
+    lattice.push([x,h+.46,z,w,.12,d+.02]);
+    lattice.push([x,h+1.0,z,w,.10,d+.02]);
+   }
   };
-  // Boundary walls + every real closed passage; visually open links are physically passable.
+  // Boundary walls + every real closed passage; interior partitions stay lower so the player can see.
   for(let r=0;r<N;r++)for(let c=0;c<N;c++){
    const v=l.tiles[at(r,c)],p=l.centerOf(at(r,c));
-   if(v&2)pushWall(p.x+CELL/2,p.z,wallD,CELL+.04);
-   if(v&4)pushWall(p.x,p.z+CELL/2,CELL+.04,wallD);
-   if(c===0&&(v&8))pushWall(p.x-CELL/2,p.z,wallD,CELL+.04);
-   if(r===0&&(v&1))pushWall(p.x,p.z-CELL/2,CELL+.04,wallD);
+   if(v&2)pushWall(p.x+CELL/2,p.z,wallD,CELL+.04,c===N-1);
+   if(v&4)pushWall(p.x,p.z+CELL/2,CELL+.04,wallD,r===N-1);
+   if(c===0&&(v&8))pushWall(p.x-CELL/2,p.z,wallD,CELL+.04,true);
+   if(r===0&&(v&1))pushWall(p.x,p.z-CELL/2,CELL+.04,wallD,true);
   }
-  addInstanced(new THREE.BoxGeometry(1,1,1),matWall,panels);
+  addInstanced(new THREE.BoxGeometry(1,1,1),matWall,outerPanels);
+  addInstanced(new THREE.BoxGeometry(1,1,1),matPlaster,innerPanels);
   addInstanced(new THREE.BoxGeometry(1,1,1),matWood,frame);
+  addInstanced(new THREE.BoxGeometry(1,1,1),matWood,lattice);
   for(let r=0;r<=N;r+=2){const z=r*CELL-HALF;beams.push([0,15.2,z,whole,.55,.35]);}
   for(let c=0;c<=N;c+=2){const x=c*CELL-HALF;beams.push([x,15.2,0,.35,.55,whole]);}
   addInstanced(new THREE.BoxGeometry(1,1,1),matWood,beams);
@@ -169,8 +199,9 @@ export class CastleMazeWorld {
   }
   addInstanced(new THREE.BoxGeometry(1,1,1),matGold,lampBases);
   addInstanced(new THREE.SphereGeometry(.5,low?8:12,low?6:10),matLamp,flames);
-  const ambient=new THREE.AmbientLight(0xc5ac85,.58);group.add(ambient);
-  const light=new THREE.PointLight(0xffcd89,low?.7:1.1,27,2);light.position.set(0,11,0);group.add(light);
+  const ambient=new THREE.AmbientLight(0xcfb289,.72);group.add(ambient);
+  const light=new THREE.PointLight(0xffcd89,low?.8:1.25,27,2);light.position.set(0,11,0);group.add(light);
+  const hallLight=new THREE.PointLight(0xffdfad,low?.55:.9,36,2);hallLight.position.set(0,12.2,0);group.add(hallLight);
   // Room visibility is scoped to infinite mode; restore every hidden arena on leave.
   if(!this.hidden.length){for(const obj of this.scene.children){
    if(obj===group||!obj.isGroup||obj.visible===false)continue;
@@ -321,10 +352,27 @@ export function installCastleBattleNavigation(Battle){
   if(!me)return oldCamera.call(this,dt);
   const center=this.camCenter;center.lerp(me.pos,1-Math.exp(-5*Math.min(.2,Math.max(0,dt))));
   const p=this.camera.position;
-  const height=10.8;const backward=this.camera.aspect<1?9.2:12.8;
+  const maze=this.rf568Maze;
+  const probe=(dx,dz)=>maze.collision(center.x+dx,center.z+dz,.25);
+  const wallCount=[probe(0,3),probe(3,0),probe(0,-3),probe(-3,0),probe(2.4,2.4),probe(-2.4,2.4),probe(2.4,-2.4),probe(-2.4,-2.4)].filter(Boolean).length;
+  const nearby=this.fighters.filter(f=>f.team===1&&!f.dead&&Math.hypot(f.pos.x-center.x,f.pos.z-center.z)<6.5).length;
+  const vel=(me.vel&&Number.isFinite(me.vel.x)&&Number.isFinite(me.vel.z))?me.vel:new THREE.Vector3(0,0,0);
+  const move=Math.hypot(vel.x||0,vel.z||0);
+  if(!this._rf568Facing)this._rf568Facing=new THREE.Vector3(0,0,1);
+  if(move>.08){
+   const wantFacing=new THREE.Vector3(vel.x||0,0,vel.z||0).normalize();
+   this._rf568Facing.lerp(wantFacing,1-Math.exp(-6*Math.max(0,dt)));
+  }
+  let height=11.8,backward=this.camera.aspect<1?8.8:12.2,lookY=1.4,side=0;
+  if(wallCount>=5){ height=15.6; backward=this.camera.aspect<1?5.8:7.2; lookY=1.1; }
+  else if(nearby>=2){ height=10.1; backward=this.camera.aspect<1?7.6:10.6; side=1.7; lookY=1.5; }
+  else if(move>.2){ height=12.8; backward=this.camera.aspect<1?7.6:10.9; lookY=1.3; }
+  const face=this._rf568Facing;
+  const sx=side*face.z, sz=-side*face.x;
+  const tx=center.x-face.x*backward+sx, tz=center.z-face.z*backward+sz;
   const target=this._rf568Camera||(this._rf568Camera=new THREE.Vector3());
-  target.set(center.x, height, center.z+backward);
-  p.lerp(target,1-Math.exp(-5*Math.max(0,dt)));
-  this.camera.lookAt(center.x,1,center.z);
+  target.set(tx,height,tz);
+  p.lerp(target,1-Math.exp(-4.6*Math.max(0,dt)));
+  this.camera.lookAt(center.x,lookY,center.z);
  };
 }

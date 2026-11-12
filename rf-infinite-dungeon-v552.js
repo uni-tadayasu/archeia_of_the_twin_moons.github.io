@@ -1,5 +1,5 @@
 // Riftfall Arena V55.18 — 無限天守: full enclosed 3D castle maze, action combat, stairs to next floor only after total annihilation.
-import { CastleMazeWorld, installCastleBattleNavigation } from './assets/rf568-castle-maze.js?v=20261112-v5518';
+import { CastleMazeWorld, installCastleBattleNavigation } from './assets/rf568-castle-maze.js?v=20261112-v5519';
 // No upper floor count. Only a living player's remaining HP carries to the next floor.
 const NOW=()=>Date.now();
 const RNG=seed=>()=>{seed^=seed<<13;seed^=seed>>>17;seed^=seed<<5;return (seed>>>0)/4294967296};
