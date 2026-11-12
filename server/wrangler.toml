@@ -6,7 +6,7 @@ compatibility_flags = ["nodejs_compat"]
 [vars]
 # ゲームを公開しているURL（カンマ区切り）
 # GitHub Pages（https://uni-tadayasu.github.io/archeia_of_the_twin_moons.github.io/）のオリジン。パスは含めない
-ALLOWED_ORIGINS = "https://uni-tadayasu.github.io"
+ALLOWED_ORIGINS = "https://www.kasai-solutions-inc.com,https://uni-tadayasu.github.io"
 # Stripeの支払いリンクID → 解放するキャラ
 STRIPE_LINKS = '{"plink_XXXXXXXX":"crimson"}'
 
