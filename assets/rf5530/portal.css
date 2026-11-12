@@ -1,0 +1,614 @@
+/* Riftfall Arena — indigo lacquer, colored pigments and gilded edges. */
+body.rf5530 {
+  --rf30-night: #0a1422;
+  --rf30-ivory: #fff4e3;
+  --rf30-muted: #d1dfed;
+  --rf30-azure: #9bd6ff;
+  --rf30-azure-deep: #143a5b;
+  --rf30-vermilion: #ffac96;
+  --rf30-vermilion-deep: #4d2634;
+  --rf30-jade: #a3e2c9;
+  --rf30-jade-deep: #18443e;
+  --rf30-violet: #dac3fb;
+  --rf30-violet-deep: #392d56;
+  --rf30-gold: #f9d796;
+  --rf30-gold-deep: #46352d;
+  --rf30-halo: #1d4361;
+}
+
+html[data-rift-theme="ember"] body.rf5530 { --rf30-halo: #543033; }
+html[data-rift-theme="royal"] body.rf5530 { --rf30-halo: #452f64; }
+
+html body.rf5530.rf5527.rf5525.rf5521 #ui :is(#scr-title, #scr-press) {
+  color: var(--rf30-ivory);
+  background:
+    radial-gradient(ellipse at 84% 0%, #3c2644 0, transparent 44%),
+    radial-gradient(ellipse at 7% 24%, var(--rf30-halo), transparent 54%),
+    var(--rf30-night) !important;
+  scrollbar-color: #93adbf #101d2e;
+}
+
+html body.rf5530.rf5527.rf5525.rf5521 #ui #scr-title {
+  padding-inline: 0 !important;
+}
+
+html body.rf5530.rf5527.rf5525.rf5521 #ui #scr-title .portal-wrap {
+  --rf30-page-gutter: clamp(12px, 3.1vw, 48px);
+  --rf30-section-gap: clamp(28px, 5vw, 68px);
+  width: min(100%, 1480px) !important;
+  padding-inline: max(var(--rf30-page-gutter), env(safe-area-inset-left)) max(var(--rf30-page-gutter), env(safe-area-inset-right)) !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+html body.rf5530.rf5527.rf5525.rf5521 #ui #scr-title .portal-header {
+  position: sticky !important;
+  top: calc(26px + env(safe-area-inset-top)) !important;
+  grid-template-columns: minmax(190px, .95fr) auto minmax(145px, 1fr) !important;
+  min-height: 74px !important;
+  padding: 8px clamp(10px, 2vw, 26px) !important;
+  border: 1px solid #7696ac !important;
+  border-top: 2px solid #dab477 !important;
+  border-radius: 0 0 11px 11px !important;
+  background: linear-gradient(110deg, #192f48, #102437 61%, #282637) !important;
+  box-shadow: 0 8px 24px #071121c9 !important;
+}
+
+html body.rf5530.rf5527.rf5525.rf5521 #ui #scr-title .brand-button { gap: 10px; }
+
+html body.rf5530.rf5527.rf5525.rf5521 #ui #scr-title .brand-seal {
+  width: 45px !important;
+  height: 45px !important;
+  min-width: 45px !important;
+  flex-basis: 45px !important;
+  border: 1px solid #e7bc7f !important;
+  box-shadow: 0 0 0 2px #111b2b, 0 0 0 3px #7795ab !important;
+}
+
+html body.rf5530.rf5527.rf5525.rf5521 #ui #scr-title .brand-type {
+  color: var(--rf30-ivory) !important;
+  letter-spacing: .025em !important;
+  text-shadow: none;
+}
+
+html body.rf5530.rf5527.rf5525.rf5521 #ui #scr-title .brand-type small {
+  color: var(--rf30-gold) !important;
+  letter-spacing: .16em !important;
+}
+
+html body.rf5530.rf5527.rf5525.rf5521 #ui #scr-title .portal-topnav :is(button, a) {
+  min-height: 44px !important;
+  padding-inline: clamp(5px, 1vw, 12px) !important;
+  color: #e8f2fb !important;
+  background: #152d4300 !important;
+  border: 1px solid transparent !important;
+  border-radius: 6px !important;
+}
+
+html body.rf5530.rf5527.rf5525.rf5521 #ui #scr-title .portal-topnav :is(button, a):is(:hover, :focus-visible, [aria-current], .rf558-nav-selected) {
+  color: #f4faff !important;
+  border-color: #82b4d9 !important;
+  background: #244968 !important;
+}
+
+html body.rf5530.rf5527.rf5525.rf5521 #ui #scr-title .portal-account {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 4px 6px;
+  width: 100%;
+  min-width: 0;
+}
+
+html body.rf5530.rf5527.rf5525.rf5521 #ui #scr-title #title-shards {
+  max-width: 100%;
+  color: #ffedbd !important;
+  background: #3c2b2d !important;
+  border: 1px solid #bd956e !important;
+  border-radius: 6px !important;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+
+html body.rf5530.rf5527.rf5525.rf5521 #ui #scr-title .portal-account button {
+  min-height: 44px;
+  max-width: 100%;
+  padding: 4px 7px;
+  overflow-wrap: anywhere;
+  color: var(--rf30-ivory) !important;
+  background: #253d55 !important;
+  border-color: #7898b3 !important;
+  white-space: normal !important;
+}
+
+/* The image, copy and main actions remain in the existing reading order. */
+html body.rf5530.rf5527.rf5525.rf5521 #ui #scr-title .portal-hero {
+  min-height: clamp(360px, 39vw, 574px) !important;
+  margin-top: clamp(12px, 2vw, 26px) !important;
+  border: 1px solid #bd946d !important;
+  border-radius: 13px !important;
+  background: #15263a !important;
+  box-shadow: 0 18px 38px #071121bb !important;
+}
+
+html body.rf5530.rf5527.rf5525.rf5521 #ui #scr-press .portal-intro {
+  background: #15263a !important;
+  border-radius: 0 !important;
+}
+
+html body.rf5530.rf5527.rf5525.rf5521 #ui :is(#scr-title .portal-hero, #scr-press .portal-intro)::before {
+  background:
+    linear-gradient(90deg, #0b192dfd 1%, #0c1d35ee 23%, #1023429e 44%, #14294920 66%, #151b3100 82%),
+    linear-gradient(0deg, #16243a8f, transparent 43%) !important;
+}
+
+html body.rf5530.rf5527.rf5525.rf5521 #ui :is(#scr-title .portal-hero, #scr-press .portal-intro)::after {
+  border: 1px solid #f8d49662 !important;
+  border-radius: 6px !important;
+  background:
+    linear-gradient(90deg, #fff0ba, #b47853) top left / 64px 2px no-repeat,
+    linear-gradient(180deg, #fff0ba, #b47853) top left / 2px 36px no-repeat,
+    linear-gradient(270deg, #fff0ba, #b47853) bottom right / 64px 2px no-repeat,
+    linear-gradient(0deg, #fff0ba, #b47853) bottom right / 2px 36px no-repeat !important;
+}
+
+html body.rf5530.rf5527.rf5525.rf5521 #ui #scr-title .portal-hero .rf5521-cover img { object-position: 68% 20%; }
+html body.rf5530.rf5527.rf5525.rf5521 #ui #scr-press .portal-intro .rf5521-cover img { object-position: 69% 40%; }
+
+html body.rf5530.rf5527.rf5525.rf5521 #ui #scr-title .hero-center,
+html body.rf5530.rf5527.rf5525.rf5521 #ui #scr-press .intro-content {
+  width: min(900px, 77%) !important;
+  gap: clamp(10px, 1.4vw, 20px) !important;
+  padding: clamp(26px, 5vw, 74px) !important;
+}
+
+html body.rf5530.rf5527.rf5525.rf5521 #ui #scr-title .rf5520-hero-title,
+html body.rf5530.rf5527.rf5525.rf5521 #ui #scr-press .intro-content h1 {
+  font: 800 clamp(42px, 6.1vw, 92px)/1.08 var(--rf25-serif) !important;
+  letter-spacing: -.055em !important;
+  color: #fff5dc !important;
+  text-shadow: 0 2px #6e4244, 0 6px 22px #0b152a !important;
+}
+
+html body.rf5530.rf5527.rf5525.rf5521 #ui :is(#scr-title, #scr-press) .rf5520-imprint {
+  color: #ffdba0 !important;
+  gap: 8px;
+  font-size: clamp(13px, 1.3vw, 18px) !important;
+  letter-spacing: .24em !important;
+}
+
+html body.rf5530.rf5527.rf5525.rf5521 #ui #scr-title .hero-center > .rf5520-imprint::before,
+html body.rf5530.rf5527.rf5525.rf5521 #ui #scr-press .rf5520-imprint > span {
+  content: "";
+  width: 30px;
+  height: 18px;
+  flex: 0 0 30px;
+  background:
+    radial-gradient(circle at 9px 9px, #ffe0a2 0 6px, #ab724c 6px 6.8px, transparent 7px),
+    radial-gradient(circle at 23px 9px, #a7d9ff 0 4px, #587eae 4px 4.8px, transparent 5px);
+}
+
+html body.rf5530.rf5527.rf5525.rf5521 #ui :is(#scr-title, #scr-press) .action-primary {
+  min-height: 50px !important;
+  border: 1px solid #fff0c4 !important;
+  border-radius: 6px !important;
+  color: #2a1b23 !important;
+  background: linear-gradient(165deg, #fff1c6, #f0c37e 64%, #dfa376) !important;
+  box-shadow: 0 2px 0 #8e4a4c, 0 5px 18px #0c182d !important;
+}
+
+html body.rf5530.rf5527.rf5525.rf5521 #ui :is(#scr-title, #scr-press) .action-primary:not(:disabled):is(:hover, :focus-visible) {
+  color: #261927 !important;
+  background: #ffe3a5 !important;
+}
+
+html body.rf5530.rf5527.rf5525.rf5521 #ui #scr-title .hero-quick {
+  min-height: 50px;
+  color: #f1f8ff !important;
+  background: #21435c !important;
+  border: 1px solid #8fbcdd !important;
+  border-radius: 6px !important;
+}
+
+html body.rf5530.rf5527.rf5525.rf5521 #ui #scr-press .rf27-intro-guides a {
+  color: #edf7ff;
+  background: #1c344ef0;
+  border-color: #86a9c1;
+  border-radius: 5px;
+}
+
+/* Stable accents follow the activity rather than its grid position. */
+html body.rf5530 #scr-title :is(.mode-tile, .portal-services > button, .overview-panel, .rf5523-gallery > a, .section-heading) {
+  --rf30-accent: var(--rf30-azure);
+  --rf30-pigment: var(--rf30-azure-deep);
+}
+
+html body.rf5530 #scr-title :is([data-go="story"], [data-go="online-coop"], #btn-shop, .intro-news, .rf5523-gallery a[href$="#river"]) {
+  --rf30-accent: var(--rf30-jade);
+  --rf30-pigment: var(--rf30-jade-deep);
+}
+
+html body.rf5530 #scr-title :is([data-go="infinite"], #rf552-infinite-rank, #btn-forge, #portal-services .section-heading, .rf5523-gallery a[href$="#tenshu"]) {
+  --rf30-accent: var(--rf30-gold);
+  --rf30-pigment: var(--rf30-gold-deep);
+}
+
+html body.rf5530 #scr-title :is([data-go="cpu"], [data-go="event"], #btn-castle, #btn-invade, .featured-event) {
+  --rf30-accent: var(--rf30-vermilion);
+  --rf30-pigment: var(--rf30-vermilion-deep);
+}
+
+html body.rf5530 #scr-title :is(#btn-ranked, [data-go="online-vs"], #btn-adventure-mode, #btn-chief-mail, #btn-evmaker, .rf5523-fighter-feature) {
+  --rf30-accent: var(--rf30-violet);
+  --rf30-pigment: var(--rf30-violet-deep);
+}
+
+html body.rf5530 #scr-title #portal-world .section-heading {
+  --rf30-accent: var(--rf30-jade);
+  --rf30-pigment: var(--rf30-jade-deep);
+}
+
+html body.rf5530.rf5527.rf5525.rf5521 #ui #scr-title :is(.portal-section, .portal-overview) {
+  margin-block: var(--rf30-section-gap) !important;
+  scroll-margin-top: calc(112px + env(safe-area-inset-top));
+}
+
+html body.rf5530.rf5527.rf5525.rf5521 #ui #scr-title .section-heading {
+  padding: 0 0 10px !important;
+  margin-bottom: clamp(10px, 1.5vw, 18px) !important;
+  border-image: none !important;
+  border-bottom: 1px solid #617b91 !important;
+}
+
+html body.rf5530.rf5527.rf5525.rf5521 #ui #scr-title .section-heading::before {
+  top: auto;
+  bottom: -2px;
+  left: 0;
+  width: clamp(52px, 8vw, 116px);
+  height: 3px;
+  background: linear-gradient(90deg, var(--rf30-accent), var(--rf30-pigment));
+  border: 0;
+  box-shadow: none;
+}
+
+html body.rf5530.rf5527.rf5525.rf5521 #ui #scr-title .section-heading h2 {
+  color: var(--rf30-ivory) !important;
+  font: 800 clamp(25px, 3.15vw, 42px)/1.18 var(--rf25-serif) !important;
+  letter-spacing: -.018em !important;
+}
+
+html body.rf5530.rf5527.rf5525.rf5521 #ui #scr-title .section-heading :is(p, .rf5521-guide-link) { color: var(--rf30-muted) !important; }
+
+html body.rf5530.rf5527.rf5525.rf5521 #ui #scr-title .section-heading .rf5521-guide-link {
+  min-height: 44px;
+  padding-inline: 9px;
+  border: 1px solid #7795a9;
+  border-radius: 6px;
+  background: #1a3347;
+}
+
+html body.rf5530.rf5527.rf5525.rf5521 #ui #scr-title .portal-modes {
+  grid-template-columns: repeat(24, minmax(0, 1fr)) !important;
+  gap: clamp(8px, 1.1vw, 15px) !important;
+}
+
+html body.rf5530.rf5527.rf5525.rf5521 #ui #scr-title .portal-modes > :is(.mode-tile, #btn-ranked.mode-tile) {
+  grid-column: span 8 !important;
+  min-height: 86px !important;
+  border: 1px solid var(--rf30-accent) !important;
+  border-radius: 8px !important;
+  background: linear-gradient(112deg, var(--rf30-pigment), #132538 88%) !important;
+  box-shadow: inset 3px 0 var(--rf30-accent), 0 4px 16px #080f2280 !important;
+}
+
+html body.rf5530.rf5527.rf5525.rf5521 #ui #scr-title .portal-modes > :is(.rf25-feature-mode, #btn-ranked.rf25-feature-mode) {
+  grid-column: span 5 !important;
+  min-height: clamp(178px, 18vw, 255px) !important;
+  border-radius: 10px !important;
+  box-shadow: inset 0 -3px var(--rf30-accent), 0 7px 21px #080e20b0 !important;
+}
+
+html body.rf5530.rf5527.rf5525.rf5521 #ui #scr-title .portal-modes > :is(.rf25-feature-mode, #btn-ranked.rf25-feature-mode):is([data-go="story"], [data-go="story2"]) {
+  grid-column: span 7 !important;
+}
+
+html body.rf5530.rf5527.rf5525.rf5521 #ui #scr-title #btn-story2.rf25-feature-mode {
+  --rf30-accent: #ffc39d;
+  --rf30-pigment: #59365b;
+  --rf25-tile-image: url('../rf5523/moon-court.webp');
+}
+
+html body.rf5530.rf5527.rf5525.rf5521 #ui #scr-title .portal-modes > :is(.rf25-feature-mode, #btn-ranked.rf25-feature-mode)::before {
+  opacity: .96 !important;
+  background-position: center 45% !important;
+}
+
+html body.rf5530.rf5527.rf5525.rf5521 #ui #scr-title .portal-modes > :is(.rf25-feature-mode, #btn-ranked.rf25-feature-mode)::after {
+  background:
+    linear-gradient(0deg, #0b1b2cf9 3%, #10233ad9 32%, #1021395a 61%, transparent 88%),
+    linear-gradient(95deg, var(--rf30-pigment), transparent 77%) !important;
+}
+
+html body.rf5530.rf5527.rf5525.rf5521 #ui #scr-title .mode-tile .mode-main b { color: #fff6e9 !important; }
+html body.rf5530.rf5527.rf5525.rf5521 #ui #scr-title .mode-tile .mode-main small { color: #dce9f5 !important; }
+html body.rf5530.rf5527.rf5525.rf5521 #ui #scr-title .mode-tile .tile-arrow { color: var(--rf30-accent) !important; }
+
+html body.rf5530.rf5527.rf5525.rf5521 #ui #scr-title .portal-services {
+  gap: clamp(8px, 1.15vw, 15px) !important;
+}
+
+html body.rf5530.rf5527.rf5525.rf5521 #ui #scr-title .portal-services > button {
+  min-height: 88px !important;
+  padding-inline: clamp(10px, 1.35vw, 19px) !important;
+  color: var(--rf30-ivory) !important;
+  background: linear-gradient(106deg, var(--rf30-pigment), #16283b 83%) !important;
+  border: 1px solid #778da2 !important;
+  border-radius: 8px !important;
+  box-shadow: inset 3px 0 var(--rf30-accent), 0 3px 11px #080f227a !important;
+}
+
+html body.rf5530.rf5527.rf5525.rf5521 #ui #scr-title :is(.portal-modes, .portal-services) > :is(button, #btn-ranked):not(:disabled):is(:hover, :focus-visible) {
+  border-color: #fff0b8 !important;
+  box-shadow: inset 0 -3px var(--rf30-accent), 0 6px 20px #050c1cd1 !important;
+  transform: none !important;
+}
+
+html body.rf5530.rf5527.rf5525.rf5521 #ui #scr-title .portal-overview { gap: clamp(8px, 1.1vw, 15px) !important; }
+
+html body.rf5530.rf5527.rf5525.rf5521 #ui #scr-title .portal-overview > .overview-panel {
+  background: linear-gradient(135deg, var(--rf30-pigment), #172a40 88%) !important;
+  border: 1px solid #7e96ab !important;
+  border-top: 2px solid var(--rf30-accent) !important;
+  border-radius: 9px !important;
+  box-shadow: 0 5px 18px #08101f7a !important;
+}
+
+html body.rf5530.rf5527.rf5525.rf5521 #ui #scr-title .overview-panel .section-cap h2 { color: var(--rf30-ivory) !important; }
+html body.rf5530.rf5527.rf5525.rf5521 #ui #scr-title .overview-panel :is(p, .overview-meta) { color: #e0eaf4 !important; }
+
+html body.rf5530.rf5527.rf5525.rf5521 #ui #scr-title .overview-panel :is(.overview-link, .event-cta) {
+  color: var(--rf30-ivory) !important;
+  border-color: var(--rf30-accent) !important;
+  background: #172c40 !important;
+}
+
+html body.rf5530.rf5527.rf5525.rf5521 #ui #scr-title .overview-panel .rf5523-fighter-link {
+  min-height: 193px;
+  background: radial-gradient(ellipse at 22% 42%, #6d6ca785, transparent 65%), linear-gradient(140deg, #3b2d56, #1a2a45);
+}
+
+html body.rf5530.rf5527.rf5525.rf5521 #ui #scr-title .rf5523-fighter-link div > span { color: var(--rf30-violet); }
+
+html body.rf5530.rf5527.rf5525.rf5521 #ui #scr-title .rf5523-gallery {
+  gap: clamp(8px, 1.1vw, 15px) !important;
+}
+
+html body.rf5530.rf5527.rf5525.rf5521 #ui #scr-title .rf5523-gallery > a {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid #7d95aa !important;
+  border-radius: 9px;
+  color: var(--rf30-ivory);
+  background: linear-gradient(130deg, var(--rf30-pigment), #182a3e);
+  box-shadow: 0 5px 18px #08101f7a;
+}
+
+html body.rf5530.rf5527.rf5525.rf5521 #ui #scr-title .rf5523-gallery > a > span {
+  flex: 1;
+  align-content: center;
+  padding: clamp(8px, 1.4vw, 16px);
+  border-top: 2px solid var(--rf30-accent);
+}
+
+html body.rf5530.rf5527.rf5525.rf5521 #ui #scr-title .rf5523-gallery > a:is(:hover, :focus-visible) { border-color: var(--rf30-accent) !important; }
+
+html body.rf5530.rf5527.rf5525.rf5521 #ui #scr-title .portal-controls {
+  color: var(--rf30-ivory) !important;
+  border-color: #7f99af !important;
+  background: linear-gradient(115deg, #203b54, #1c293c 82%) !important;
+  border-radius: 8px !important;
+}
+
+html body.rf5530.rf5527.rf5525.rf5521 #ui #scr-title .portal-footer {
+  border-top-color: #7d9cb3 !important;
+  color: var(--rf30-muted) !important;
+}
+
+html body.rf5530.rf5527.rf5525.rf5521 #ui #scr-title .portal-footer a { color: #f6dca9; }
+
+/* Mode screens share the portal palette while preserving existing HUD colors. */
+html body.rf5530.rf5527.rf5525.rf5521 #ui {
+  --rf30-screen-accent: var(--rf30-azure);
+  --rf30-screen-panel: var(--rf30-azure-deep);
+}
+
+html body.rf5530.rf5527.rf5525.rf5521 #ui :is(#scr-options, #scr-shop) {
+  --rf30-screen-accent: var(--rf30-jade);
+  --rf30-screen-panel: var(--rf30-jade-deep);
+}
+
+html body.rf5530.rf5527.rf5525.rf5521 #ui :is(#scr-forge, #scr-castle) {
+  --rf30-screen-accent: var(--rf30-gold);
+  --rf30-screen-panel: var(--rf30-gold-deep);
+}
+
+html body.rf5530.rf5527.rf5525.rf5521 #ui :is(#scr-ranked, #scr-evmaker) {
+  --rf30-screen-accent: var(--rf30-violet);
+  --rf30-screen-panel: var(--rf30-violet-deep);
+}
+
+html body.rf5530.rf5527.rf5525.rf5521 #ui :is(#scr-result, #scr-invade) {
+  --rf30-screen-accent: var(--rf30-vermilion);
+  --rf30-screen-panel: var(--rf30-vermilion-deep);
+}
+
+html body.rf5530.rf5527.rf5525.rf5521 #ui .screen.on:not(#scr-press):not(#scr-title):not(#scr-story) {
+  background:
+    radial-gradient(ellipse at 12% 0%, var(--rf30-screen-panel), transparent 64%),
+    linear-gradient(145deg, #172b43f8, #0b1427f5), url('../rf5525/moonkeep-960.webp') center / cover no-repeat !important;
+  scrollbar-color: #99afc2 #122337;
+}
+
+html body.rf5530.rf5527.rf5525.rf5521 #ui .screen:not(#scr-press):not(#scr-title):not(#scr-story) > .inner {
+  border: 1px solid #8097ab !important;
+  border-top: 2px solid var(--rf30-screen-accent) !important;
+  border-radius: 10px !important;
+  background: linear-gradient(148deg, var(--rf30-screen-panel), #17293f 410px) !important;
+  color: var(--rf30-ivory);
+}
+
+html body.rf5530.rf5527.rf5525.rf5521 #ui .screen:not(#scr-press):not(#scr-title):not(#scr-story) .topbar {
+  background: #17293bf7 !important;
+  border-color: #7d9ab0 !important;
+  border-left: 3px solid var(--rf30-screen-accent) !important;
+}
+
+html body.rf5530.rf5527.rf5525.rf5521 #ui .screen:not(#scr-press):not(#scr-title):not(#scr-story) :is(.btn, .back, .chip, .cr-button):is(:hover, :focus-visible):not(:disabled) {
+  border-color: var(--rf30-screen-accent) !important;
+}
+
+html body.rf5530.rf5527.rf5525.rf5521 #ui :is(#scr-title, #scr-press) :is(a, button, summary):focus-visible {
+  outline: 2px solid #fff2b6 !important;
+  outline-offset: 3px;
+}
+
+@media (min-width: 701px) {
+  html body.rf5530.rf5527.rf5525.rf5521 #ui #scr-title .portal-modes > :is(.rf25-feature-mode, #btn-ranked.rf25-feature-mode) {
+    --rf25-glyph: clamp(42px, 4.45vw, 65px);
+  }
+  html body.rf5530.rf5527.rf5525.rf5521 #ui #scr-title .rf25-feature-mode .mode-main b {
+    font-size: clamp(17px, 1.8vw, 26px) !important;
+  }
+  html body.rf5530.rf5527.rf5525.rf5521 #ui #scr-title .rf25-feature-mode:is([data-go="story"], [data-go="story2"]) .mode-main b {
+    font-size: clamp(19px, 2.1vw, 29px) !important;
+  }
+}
+
+@media (max-width: 1090px) {
+  html body.rf5530.rf5527.rf5525.rf5521 #ui #scr-title .portal-modes > :is(.rf25-feature-mode, #btn-ranked.rf25-feature-mode),
+  html body.rf5530.rf5527.rf5525.rf5521 #ui #scr-title .portal-modes > :is(.rf25-feature-mode, #btn-ranked.rf25-feature-mode):is([data-go="story"], [data-go="story2"]) {
+    grid-column: span 6 !important;
+  }
+}
+
+@media (max-width: 900px) {
+  html body.rf5530.rf5527.rf5525.rf5521 #ui #scr-title .portal-modes > :is(.rf25-feature-mode, #btn-ranked.rf25-feature-mode),
+  html body.rf5530.rf5527.rf5525.rf5521 #ui #scr-title .portal-modes > :is(.rf25-feature-mode, #btn-ranked.rf25-feature-mode):is([data-go="story"], [data-go="story2"]) {
+    grid-column: span 12 !important;
+  }
+  html body.rf5530.rf5527.rf5525.rf5521 #ui #scr-title .portal-header {
+    grid-template-columns: minmax(0, 1.25fr) minmax(0, .85fr) !important;
+    grid-template-rows: auto auto;
+    gap: 5px 8px !important;
+  }
+  html body.rf5530.rf5527.rf5525.rf5521 #ui #scr-title .portal-account { grid-area: 1 / 2; justify-self: end; }
+  html body.rf5530.rf5527.rf5525.rf5521 #ui #scr-title .portal-topnav {
+    display: grid !important;
+    grid-row: 2;
+    grid-column: 1 / -1;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 4px !important;
+  }
+  html body.rf5530.rf5527.rf5525.rf5521 #ui #scr-title .portal-topnav :is(button, a) { justify-content: center; }
+  html body.rf5530.rf5527.rf5525.rf5521 #ui #scr-title :is(.portal-section, .portal-overview) {
+    scroll-margin-top: calc(150px + env(safe-area-inset-top));
+  }
+}
+
+@media (max-width: 700px) and (orientation: portrait) {
+  html body.rf5530.rf5527.rf5525.rf5521 #ui #scr-title .portal-hero { min-height: clamp(344px, 104vw, 520px) !important; }
+  html body.rf5530.rf5527.rf5525.rf5521 #ui :is(#scr-title .portal-hero, #scr-press .portal-intro)::before {
+    background: linear-gradient(0deg, #0d1a2dfd 6%, #12243bec 29%, #1329488c 52%, #142c4608 82%) !important;
+  }
+  html body.rf5530.rf5527.rf5525.rf5521 #ui #scr-title .portal-hero .rf5521-cover img,
+  html body.rf5530.rf5527.rf5525.rf5521 #ui #scr-press .portal-intro .rf5521-cover img { object-position: 80% 25%; }
+  html body.rf5530.rf5527.rf5525.rf5521 #ui #scr-title .hero-center,
+  html body.rf5530.rf5527.rf5525.rf5521 #ui #scr-press .intro-content {
+    width: 100% !important;
+    padding: 14px max(17px, env(safe-area-inset-right)) max(23px, env(safe-area-inset-bottom)) max(17px, env(safe-area-inset-left)) !important;
+  }
+  html body.rf5530.rf5527.rf5525.rf5521 #ui #scr-title .rf5520-hero-title,
+  html body.rf5530.rf5527.rf5525.rf5521 #ui #scr-press .intro-content h1 { font-size: clamp(29px, 8.6vw, 54px) !important; }
+  html body.rf5530.rf5527.rf5525.rf5521 #ui #scr-title .portal-modes { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
+  html body.rf5530.rf5527.rf5525.rf5521 #ui #scr-title .portal-modes > :is(.mode-tile, #btn-ranked.mode-tile),
+  html body.rf5530.rf5527.rf5525.rf5521 #ui #scr-title .portal-modes > :is(.rf25-feature-mode, #btn-ranked.rf25-feature-mode),
+  html body.rf5530.rf5527.rf5525.rf5521 #ui #scr-title .portal-modes > :is(.rf25-feature-mode, #btn-ranked.rf25-feature-mode):is([data-go="story"], [data-go="story2"]) { grid-column: span 1 !important; }
+  html body.rf5530.rf5527.rf5525.rf5521 #ui #scr-title .portal-modes > :is(.rf25-feature-mode, #btn-ranked.rf25-feature-mode) { min-height: clamp(140px, 38vw, 194px) !important; }
+  html body.rf5530.rf5527.rf5525.rf5521 #ui #scr-title .portal-modes > :is(.mode-tile, #btn-ranked.mode-tile),
+  html body.rf5530.rf5527.rf5525.rf5521 #ui #scr-title .portal-services > button {
+    --rf25-glyph: clamp(32px, 9vw, 43px);
+    padding: 8px !important;
+  }
+  html body.rf5530.rf5527.rf5525.rf5521 #ui #scr-title .portal-overview { gap: 9px !important; }
+  html body.rf5530.rf5527.rf5525.rf5521 #ui #scr-title .portal-overview > .overview-panel { min-height: 0; }
+}
+
+@media (max-width: 475px) {
+  html body.rf5530.rf5527.rf5525.rf5521 #ui #scr-title .portal-header { padding: 6px !important; }
+  html body.rf5530.rf5527.rf5525.rf5521 #ui #scr-title .brand-button { gap: 6px; }
+  html body.rf5530.rf5527.rf5525.rf5521 #ui #scr-title .brand-seal {
+    width: 33px !important;
+    height: 33px !important;
+    min-width: 33px !important;
+    flex-basis: 33px !important;
+  }
+  html body.rf5530.rf5527.rf5525.rf5521 #ui #scr-title .brand-type { font-size: clamp(12px, 3.65vw, 16px) !important; }
+  html body.rf5530.rf5527.rf5525.rf5521 #ui #scr-title #title-shards { padding: 4px 6px !important; font-size: 11px !important; }
+  html body.rf5530.rf5527.rf5525.rf5521 #ui #scr-title .portal-account button { padding: 4px !important; font-size: 11px !important; }
+  html body.rf5530.rf5527.rf5525.rf5521 #ui #scr-title .portal-topnav :is(button, a) { padding-inline: 2px !important; }
+  html body.rf5530.rf5527.rf5525.rf5521 #ui #scr-title :is(.portal-section, .portal-overview) {
+    scroll-margin-top: calc(158px + env(safe-area-inset-top));
+  }
+}
+
+@media (max-height: 470px) and (orientation: landscape) {
+  html body.rf5530.rf5527.rf5525.rf5521 #ui #scr-title .portal-header { position: relative !important; top: 0 !important; }
+  html body.rf5530.rf5527.rf5525.rf5521 #ui #scr-title :is(.portal-section, .portal-overview) {
+    scroll-margin-top: max(14px, env(safe-area-inset-top));
+  }
+  html body.rf5530.rf5527.rf5525.rf5521 #ui #scr-title .portal-hero { min-height: clamp(245px, 78dvh, 350px) !important; }
+  html body.rf5530.rf5527.rf5525.rf5521 #ui #scr-title .hero-center,
+  html body.rf5530.rf5527.rf5525.rf5521 #ui #scr-press .intro-content {
+    width: min(88%, 690px) !important;
+    padding: 15px clamp(20px, 4vw, 45px) !important;
+  }
+  html body.rf5530.rf5527.rf5525.rf5521 #ui #scr-title .rf5520-hero-title,
+  html body.rf5530.rf5527.rf5525.rf5521 #ui #scr-press .intro-content h1 { font-size: clamp(32px, 5.7vw, 55px) !important; }
+  html body.rf5530.rf5527.rf5525.rf5521 #ui #scr-title .portal-modes > :is(.rf25-feature-mode, #btn-ranked.rf25-feature-mode) { min-height: 155px !important; }
+}
+
+@media (max-width: 720px) {
+  html body.rf5530.rf5527.rf5525.rf5521 #rf557-mobile-nav:not([hidden]) {
+    background: linear-gradient(100deg, #182d45, #182338) !important;
+    border-top: 1px solid #85a9c4 !important;
+  }
+  html body.rf5530.rf5527.rf5525.rf5521 #rf557-mobile-nav .rf557-mobile-nav-button[aria-current] {
+    background: #2b4d68 !important;
+    color: #fff4d1 !important;
+  }
+}
+
+@media (forced-colors: active) {
+  html body.rf5530.rf5527.rf5525.rf5521 #ui :is(#scr-title, #scr-press) :is(a, button, summary):focus-visible {
+    outline: 3px solid Highlight !important;
+  }
+}
+
+/* The connection notice remains operable above the combat touch controls. */
+body.rf5530 #net-fail-note {
+  box-sizing: border-box;
+  width: min(520px, calc(100% - 24px));
+  flex-wrap: wrap;
+  justify-content: center;
+  text-align: center;
+  pointer-events: none !important;
+}
+body.rf5530 #net-fail-note button {
+  min-height: 44px;
+  pointer-events: auto;
+}
+body.rf5530:has(#hud:not([hidden])) #net-fail-note {
+  top: calc(env(safe-area-inset-top, 0px) + 58px) !important;
+  bottom: auto !important;
+}
