@@ -3122,7 +3122,10 @@ export class Battle {
         catch (error) { console.warn('[RF566 endless wave]', error); this.rf566EndlessWave = null; }
       }
       const alive = [0, 1].map((t) => this.fighters.some((f) => f.team === t && !f.dead));
-      if (!alive[0] || !alive[1]) {
+      // V55.17 continuous infinite castle: never end the current Battle when a
+      // floor is cleared. The wave controller opens the stairs / next floor.
+      // A defeated player still ends the challenge normally.
+      if (!alive[0] || (!alive[1] && !this.rf566EndlessWave?.holdVictory)) {
         this.ended = true;
         this.ui.end(alive[0] ? 0 : 1);
       }
@@ -3174,6 +3177,25 @@ export class Battle {
     this.camera.position.x += (Math.random() - 0.5) * s;
     this.camera.position.y += (Math.random() - 0.5) * s;
     this.camera.lookAt(this.camCenter.x, 1, this.camCenter.z);
+  }
+
+  // V55.17: safely retire dead enemy GLB instances during endless runs,
+  // while preserving the player's model, camera and persistent Battle scene.
+  retireFighter(f) {
+    if (!f || f.isPlayer || f.team === 0) return false;
+    const index = this.fighters.indexOf(f);
+    if (index < 0) return false;
+    this.fighters.splice(index, 1);
+    for (const summon of [...this.summons]) {
+      if (summon.f === f) this.removeSummon(summon);
+    }
+    f.hudPlate?.remove();
+    this.scene.remove(f.root);
+    if (f.redMats) f.endAwaken();
+    disposeNullGuardAura(f);
+    disposeModel(f.modelInstance, f.mixer);
+    f.modelInstance = null;
+    return true;
   }
 
   dispose() {

@@ -1,0 +1,18 @@
+{
+  "version": "V55.17",
+  "date": "2026-11-12",
+  "base_version": "V55.16",
+  "changed_files": [
+    "game.js",
+    "rf-infinite-dungeon-v552.js"
+  ],
+  "checks": {
+    "node_syntax": "passed",
+    "mock_10_floor_continuity": "passed",
+    "model_cleanup": "passed_mock",
+    "HP_continuity": "passed_mock",
+    "no_intermediate_arena_recreation": "passed_mock",
+    "boss_floor_10": "passed_mock"
+  },
+  "limits": "WebGL実機/公開サーバーとの統合は未実施"
+}
