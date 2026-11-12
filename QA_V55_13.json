@@ -1,0 +1,25 @@
+{
+  "version": "V55.13",
+  "verified": [
+    "exact current main index.html base matches GitHub blob SHA 6412753769738fa4ca6fb0ab4a644b82aa49cf81",
+    "canonical/og:url/twitter:url/OGP images use https://www.kasai-solutions-inc.com/",
+    "JavaScript syntax checked",
+    "isolated 3D-room + portal + lever + chest + exit test passed",
+    "existing V55.12 art paths present in GitHub repository"
+  ],
+  "not_verified": [
+    "full browser WebGL gameplay",
+    "online multiplayer network",
+    "iPhone/Android actual devices",
+    "live GitHub Pages deployment"
+  ],
+  "changed_files": [
+    "index.html",
+    "assets/rf563-spatial.js",
+    "assets/rf563-spatial.css"
+  ],
+  "core_gameplay_unchanged": true,
+  "castle_raid_rules_unchanged": true,
+  "endless_tower_rules_unchanged": true,
+  "existing_cname": "www.kasai-solutions-inc.com"
+}

@@ -1,0 +1,13 @@
+既存の index.html を保持して導入する場合
+
+HEADの最後（</head>の直前）に追加：
+<link id="rf563-spatial-css" rel="stylesheet" href="./assets/rf563-spatial.css?v=20261112-v563">
+
+main.js の module script より前に追加：
+<script type="module" src="./assets/rf563-spatial.js?v=20261112-v563"></script>
+
+古いURLを以下の正式URLへ置き換える（meta canonical / og:url / og:image / twitter:url / twitter:image / JSON-LD）：
+旧：https://uni-tadayasu.github.io/archeia_of_the_twin_moons.github.io/
+新：https://www.kasai-solutions-inc.com/
+
+※ CNAMEファイルは既に www.kasai-solutions-inc.com と設定済みのため変更しません。

@@ -1,0 +1,8 @@
+/* V55.13: compact heads-up guidance for real spatial rooms and 3D combat stage */
+#rf563-space-label{position:fixed;left:50%;top:max(85px,env(safe-area-inset-top));transform:translateX(-50%);z-index:2;pointer-events:none;color:#f6f0da;background:linear-gradient(100deg,#11192bbd,#223f5a9c,#12192dbd);border:1px solid #d9c69965;border-radius:999px;padding:6px 18px;font:700 clamp(11px,1.5vw,14px)/1.35 system-ui,"Yu Gothic",sans-serif;letter-spacing:.08em;white-space:nowrap;max-width:68vw;overflow:hidden;text-overflow:ellipsis;backdrop-filter:blur(7px);box-shadow:0 7px 24px #03080e80}
+body:not(.rf563-combat-space) #rf563-space-label{display:none}
+#rf563-interior-panel{position:fixed;left:50%;top:max(34px,calc(env(safe-area-inset-top) + 24px));transform:translateX(-50%);z-index:45;pointer-events:none;display:flex;flex-direction:column;align-items:center;gap:2px;width:min(560px,calc(100vw - 20px));padding:10px 16px;color:#fbf2df;text-align:center;border:1px solid #cfb77d80;border-radius:13px;background:linear-gradient(130deg,#0a1424e6,#18334ddd);backdrop-filter:blur(10px);box-shadow:0 8px 30px #070b1680;font-family:system-ui,"Yu Gothic",sans-serif}
+#rf563-interior-panel[hidden]{display:none!important}
+#rf563-interior-panel strong{font-size:clamp(13px,2.8vw,17px)}
+#rf563-interior-panel span{font-size:clamp(11px,2.2vw,13px);opacity:.9}
+@media(max-width:640px){#rf563-space-label{top:max(85px,env(safe-area-inset-top));max-width:54vw;font-size:10px;padding:5px 8px}#rf563-interior-panel{max-width:calc(100vw - 24px);top:max(43px,env(safe-area-inset-top));padding:7px 10px}}
