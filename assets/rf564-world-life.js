@@ -4,7 +4,7 @@
    multiplayer presence and server-backed item/account logic. */
 import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
-import { Field } from '../field.js?v=rf-v9-2-20261109';
+import { Field } from '../field.js?v=55.20';
 import { instantiateModel,disposeModel } from '../model-runtime.js?v=rf-minamoto-v48-20261111';
 
 if(!window.__rf564WorldLife){

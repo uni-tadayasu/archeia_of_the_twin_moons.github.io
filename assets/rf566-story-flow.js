@@ -3,7 +3,7 @@
  * each chapter. This layer only advances the existing result button and moves
  * the next chapter's start position from town to the next wilderness route.
  */
-import {Field} from '../field.js?v=rf-v9-2-20261109';
+import {Field} from '../field.js?v=55.20';
 
 if(!window.__rf566StoryFlow){
   window.__rf566StoryFlow=true;

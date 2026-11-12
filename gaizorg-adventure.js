@@ -384,5 +384,6 @@ if(key==='uninomiya_tadayasu'&&!chiefUnlocked()){goTitle();return;}
     }catch(e){console.error(e);goTitle();}
   }
   function close(){clearRest();document.body.classList.remove('gaizorg-adventure');busy=false;}
-  return {start,update,enterPortal,finish,close,STAGE_PLAN};
+  function back(){if(state.battle)return finish(false);close();rfChooseHero();}
+  return {start,update,enterPortal,finish,close,back,STAGE_PLAN};
 }

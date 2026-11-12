@@ -40,7 +40,7 @@
    });
  };
  function showHint(){
-   if(!blocked)return;
+   if(!blocked||!titleAudio?.paused||!document.querySelector('#scr-press.on,#scr-title.on'))return;
    let el=document.getElementById('rf566-audio-gesture');
    if(!el){el=document.createElement('div');el.id='rf566-audio-gesture';el.textContent='音楽を有効にするには画面をタップ';document.body?.append(el);}
  }
@@ -51,6 +51,7 @@
    if(/(?:^|\/)assets\/audio\/.+\.mp3(?:[?#]|$)/i.test(src)) soundtracks.add(element);
    if(/(?:^|\/)(?:title-theme|aishiteirukara)\.mp3(?:[?#]|$)/i.test(src)){
      titleAudio=element;
+     element.addEventListener("playing",()=>{playing=true;blocked=false;hideHint();});
      if(document.readyState!=='loading')queueMicrotask(safeAutoplay);
    }
    return element;

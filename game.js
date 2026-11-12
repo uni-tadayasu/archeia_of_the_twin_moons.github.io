@@ -1,3 +1,4 @@
+import { disposeCharacterVariant } from './character-variants.js';
 // RF53_SMOOTH_EFFECTS — smoother shading without changing model assets.
 // RF_ULTRA_V12_GAME
 // RF_BATCH_SCALE_STARTUP_V92
@@ -108,7 +109,7 @@ const ST_INFO = {
 };
 const ST_ELEM = Object.fromEntries(ELEMS.map((e, i) => [e.st, i]));
 
-export const ARENA_R = 48; // RF566 expansive playable battlefield; actual combat physics, not visual-only
+export const ARENA_R = 13;
 
 // --- Universal illustrated volumetric casting circle: transparent painted CG, no faceted meshes. ---
 // A few flat image layers create perceived depth; no tessellated crystals / spheres / physical polygons.
@@ -936,7 +937,7 @@ export class Fighter {
       }
     }
     // RF568: remember previous world position for swept collision against castle walls.
-    const rf568Before = this.battle.rf568Maze ? this.pos.clone() : null;
+    const rf568Before = this.battle.rf568Maze ? (this.castlePreviousPos ||= new THREE.Vector3()).copy(this.pos) : null;
     this.pos.addScaledVector(this.vel, dt);
     if (!moving && !(this.action && this.action.keepVel)) {
       this.vel.multiplyScalar(Math.exp(-9 * dt));
@@ -1266,6 +1267,7 @@ export class Fighter {
       }
       this.redMats = null;
     }
+    disposeCharacterVariant(this.modelInstance?.model);
     disposeModel(this.modelInstance, this.mixer);
     this.modelInstance = null;
     this.valgardMotion?.stop();
@@ -1604,6 +1606,14 @@ export class Battle {
       return;
     }
     if (this.summonBlock(tgt, from, dmg)) return;
+    if (this.siege) {
+      const guarded = tgt.guard && tgt.forward().dot(dir) < -.2 * dir.length();
+      const ultimate = att.action?.type === 'over' || (spec && (spec === att.def.over || spec === att.def.hi || spec.hi));
+      this.siege.contact(att, tgt, ultimate ? 'over' : spec && spec !== att.def.light ? 'skill' : 'attack', guarded);
+      tgt.hitFlash = .15;
+      tgt.inv = .12;
+      return;
+    }
     const real = tgt.receive(dmg, stun, dir.x, dir.z);
     if (st && real > 0) {
       tgt.applyStatus(st);
@@ -3080,13 +3090,15 @@ export class Battle {
         const min = a.radius + b.radius;
         if (d < min && d > 1e-4) {
           const push = (min - d) / 2;
-          if (!a.remoteAuth) {
-            a.pos.x -= (dx / d) * push;
-            a.pos.z -= (dz / d) * push;
-          }
-          if (!b.remoteAuth) {
-            b.pos.x += (dx / d) * push;
-            b.pos.z += (dz / d) * push;
+          for (const [fighter, direction] of [[a,-1],[b,1]]) {
+            if(fighter.remoteAuth)continue;
+            const x=fighter.pos.x+direction*dx/d*push,z=fighter.pos.z+direction*dz/d*push;
+            if(this.rf568Maze){
+              if(!this.rf568Maze.collision(x,z,Math.min(1.05,fighter.radius)))fighter.pos.set(x,0,z);
+            }else{
+              const scale=Math.min(1,ARENA_R/Math.max(.001,Math.hypot(x,z)));
+              fighter.pos.set(x*scale,0,z*scale);
+            }
           }
         }
       }
@@ -3118,6 +3130,7 @@ export class Battle {
         if (!this.fx.children[i].isLight) kill(this.fx, this.fx.children[i]);
       }
     }
+    this.siege?.update();
     this.updateCamera(rawDt);
     if (!this.ended) {
       // RF566: spawn the next advancing enemy unit before victory is judged.
@@ -3157,25 +3170,13 @@ export class Battle {
         spread = Math.max(spread, f.pos.distanceTo(c));
       }
     }
-    // RF566 wide areas: track the controlled character and nearest visible skirmish.
-    // Keeps models legible when reinforcements appear across a broad map.
-    const focus = this.fighters.find((f) => f.isPlayer && !f.dead);
-    if (focus && ARENA_R >= 30) {
-      c.copy(focus.pos);
-      let nearest = null, minDist = Infinity;
-      for (const f of this.fighters) if (!f.dead && f.team !== focus.team) {
-        const d = f.pos.distanceTo(focus.pos);
-        if (d < minDist) { nearest = f; minDist = d; }
-      }
-      if (nearest && minDist < 17) c.lerp(nearest.pos, 0.16);
-      spread = Math.min(16, Math.max(8, minDist < Infinity ? minDist * 0.46 : 9));
-    }
     this.camCenter.lerp(c, 1 - Math.exp(-5 * dt));
-    const portrait = this.camera.aspect < 1 ? 1.7 : 1;
-    const dist = ARENA_R >= 30 ? (11 + spread * 0.55) * portrait : (8 + spread * 0.9) * portrait;
+    const dist = (8 + spread * .9) * (this.camera.aspect < 1 ? 1.65 : 1);
+    const yaw = this.rfCameraView?.yaw ?? 0;
     const target = (this._rfCameraTarget ||= new THREE.Vector3()).copy(this.camCenter);
-    target.y += dist * 0.62 + 1;
-    target.z += dist;
+    target.y += dist * .62 + 1;
+    target.x += Math.sin(yaw) * dist;
+    target.z += Math.cos(yaw) * dist;
     this.camera.position.lerp(target, 1 - Math.exp(-4 * dt));
     this.shake = Math.max(0, this.shake - dt * 1.8);
     const s = this.shake * 0.35;
@@ -3198,6 +3199,7 @@ export class Battle {
     this.scene.remove(f.root);
     if (f.redMats) f.endAwaken();
     disposeNullGuardAura(f);
+    disposeCharacterVariant(f.modelInstance?.model);
     disposeModel(f.modelInstance, f.mixer);
     f.modelInstance = null;
     return true;
@@ -3210,6 +3212,7 @@ export class Battle {
       this.scene.remove(f.root);
       if (f.redMats) f.endAwaken();
       disposeNullGuardAura(f);
+      disposeCharacterVariant(f.modelInstance?.model);
       disposeModel(f.modelInstance, f.mixer);
       f.modelInstance = null;
     }

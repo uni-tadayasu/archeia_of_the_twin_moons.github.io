@@ -3,48 +3,15 @@
  * and persistence are not changed. Installed before main.js, on its shared modules.
  */
 import * as THREE from 'three';
-import { Battle, ARENA_R } from '../game.js?v=rf553-chief-cpu-20261111';
-import { Field } from '../field.js?v=rf-v9-2-20261109';
+import { Field } from '../field.js?v=55.20';
 
 if (!window.__rf563Spatial) {
   window.__rf563Spatial = true;
   const ROOT = 'assets/rf562/';
-  const CAVE = /洞|窟|坑|墓|cave|mine|地下/i;
-  const RUINS = /神殿|遺跡|聖堂|古城|社|祠|神宮|塔|temple|ruins|shrine/i;
-  const img = {
-    japanese: ['japanese-palace.webp', 'japanese-corridor.webp'],
-    western: ['western-throne.webp', 'western-cathedral.webp'],
-    cave: ['cave-crystals.webp', 'cave-embers.webp'],
-    ruins: ['ruins-sunlight.webp', 'ruins-moonlit.webp']
-  };
-  const MAX_R = Math.max(18,Math.min(48,Number(ARENA_R)||48));
-  const low = /Android|iPhone|iPad/i.test(navigator.userAgent) || (navigator.deviceMemory || 8) <= 4;
-  const loader = new THREE.TextureLoader();
-  const texCache = new Map();
-  const clamp = (a, b, n) => Math.max(a, Math.min(b, n));
-  let requestedMode = '';
-  document.addEventListener('click',(event)=>{
-    const node=event.target?.closest?.('[data-go]');
-    if(node){const mode=node.getAttribute('data-go');requestedMode=mode==='infinite'?'infinite':mode||'';}
-    // Adventure uses a dedicated button instead of data-go.
-    if(event.target?.closest?.('#btn-adventure-mode'))requestedMode='adventure';
-  },true);
-  const traditionalArena=()=>['story','event','event-coop','adventure'].includes(requestedMode);
-  const floorText = () => (document.getElementById('rf552-endless-hud')?.textContent || '');
-  const floorNo = () => Number((floorText().replaceAll(',','').match(/第\s*(\d+)\s*層/) || [])[1] || 1);
-  function inInfinite() { const e = document.getElementById('rf552-endless-hud'); return !!e && !e.hidden && e.textContent.includes('無限天守'); }
-  function stageTheme() {
-    if (inInfinite() || requestedMode==='infinite') {
-      let theme='japanese'; try { theme=localStorage.getItem('rf561-infinite-style') === 'western' ? 'western':'japanese'; } catch {}
-      return {kind: theme, floor: floorNo()};
-    }
-    const region=document.getElementById('field-region')?.textContent || '';
-    if (CAVE.test(region)) return {kind:'cave',floor:1};
-    if (RUINS.test(region)) return {kind:'ruins',floor:1};
-    const cur=document.body.dataset.rf562Stage || '';
-    for(const k of ['japanese','western','cave','ruins']) if(cur.startsWith(k)) return {kind:k,floor:1};
-    return {kind:'ruins',floor:1};
-  }
+  const low=/Android|iPhone|iPad/i.test(navigator.userAgent)||(navigator.deviceMemory||8)<=4;
+  const loader=new THREE.TextureLoader();
+  const texCache=new Map();
+  const clamp=(a,b,n)=>Math.max(a,Math.min(b,n));
   function texture(path) {
     if (!texCache.has(path)) {
       const t=loader.load(path); t.colorSpace=THREE.SRGBColorSpace;
@@ -62,87 +29,6 @@ if (!window.__rf563Spatial) {
     };
     return {mat,add,own};
   }
-  function createBattleRoom(battle) {
-    // Traditional arena combat is deliberately kept for story, event and adventure.
-    // Only infinite mode receives the new maze-world geometry.
-    if (battle.rf568Maze || traditionalArena() || battle.__rf563Room || !battle.scene || !battle.fx) return;
-    const {kind,floor}=stageTheme();
-    const isEast = kind==='japanese';
-    const woody = isEast;
-    const cave = kind==='cave';
-    const room = new THREE.Group(); room.name='RF563_CG_Spatial_Combat_Stage';
-    battle.scene.add(room); battle.__rf563Room=room;
-    const C=context(room); battle.__rf563Owned=C.own;
-    const stone=C.mat({ color: cave?0x515a6b:woody?0x6d4130:0x8895a9, metalness:0.08, roughness:0.75 });
-    const dark=C.mat({ color:woody?0x37251f:0x242d3c, roughness:0.82 });
-    const trim=C.mat({ color:woody?0xc7a25d:0xc9a56f, roughness:0.42, metalness:0.6 });
-    const floorMaterial=C.mat({ color:cave?0xa9acbb:woody?0xb49379:0xd1d3dc, map:texture(cave?'assets/tex-dungeon-floor.webp':woody?'assets/tex-house-wall.webp':'assets/tex-cobble.webp'), roughness:cave?0.9:0.62, metalness:0.08 });
-    floorMaterial.map.wrapS=floorMaterial.map.wrapT=THREE.RepeatWrapping;
-    // Square room floor hides the old arena ring without altering its collision radius.
-    const pad = MAX_R + 2.5;
-    // Repeat the real floor texture across a broad area rather than stretch one bitmap.
-    floorMaterial.map.wrapS=floorMaterial.map.wrapT=THREE.RepeatWrapping;
-    floorMaterial.map.repeat.set(16,16);
-    const floorMesh = C.add(new THREE.PlaneGeometry(2*pad,2*pad), floorMaterial,0,0.11,0);
-    floorMesh.rotation.x=-Math.PI/2;
-    const backgroundFile = img[kind][Math.floor((floor-1)/3) % img[kind].length] || img[kind][0];
-    const sky=C.add(new THREE.PlaneGeometry(2*pad+18,65),new THREE.MeshBasicMaterial({map:texture(ROOT+backgroundFile), side:THREE.DoubleSide, depthWrite:false, toneMapped:false}),0,26,-pad-6);
-    C.own.push(sky.material);
-    // Rendered room depth: columns, wall side sections, arch beams and lamps.
-    const wallH=10;
-    for (const side of [-1,1]) {
-      C.add(new THREE.BoxGeometry(0.8,wallH,2*pad+4),stone,side*(pad+.8),wallH/2,-.7);
-      for(let i=0;i<4;i++){
-        const z=-pad+4+i*(2*pad-8)/3;
-        C.add(new THREE.CylinderGeometry(woody?.55:.67,woody?.6:.78,wallH,low?9:18),stone,side*(pad-1.5),wallH/2,z);
-        C.add(new THREE.BoxGeometry(2.5,.4,1.5),trim,side*(pad-1.5),wallH-.5,z);
-        if(i%2===0) {
-          const flame=C.mat({ color:0xffcc8c, emissive:0xffa541, emissiveIntensity:1.9, roughness:.25 });
-          C.add(new THREE.SphereGeometry(.22,10,8),flame,side*(pad-1.7),3.4,z+.35);
-        }
-      }
-    }
-    // Wide central opening reveals the illustrated city/castle depth.
-    C.add(new THREE.BoxGeometry(pad*.58,wallH,.8),stone,-pad*.71,wallH/2,-pad-1);
-    C.add(new THREE.BoxGeometry(pad*.58,wallH,.8),stone,pad*.71,wallH/2,-pad-1);
-    for(let i=-2;i<=2;i++){
-      C.add(new THREE.BoxGeometry(.45,6,.75),dark,i*(pad/3),5,-pad+.1);
-      C.add(new THREE.BoxGeometry(3,.25,.8),trim,i*(pad/3),8,-pad+.1);
-    }
-    for(let i=-2;i<=2;i++) C.add(new THREE.BoxGeometry(2*pad+2,.32,.8),dark,0,wallH-(i%2)*.18, i*6);
-    const canopy = C.mat({ color:woody?0x49312b:0x596374,roughness:.86,side:THREE.BackSide,transparent:true,opacity:.48 });
-    const ceiling=C.add(new THREE.PlaneGeometry(2*pad+2,2*pad+2),canopy,0,wallH+1,0);ceiling.rotation.x=-Math.PI/2;
-    const rug=C.mat({color:woody?0x6b1e2b:0x34385d, roughness:.96, transparent:true,opacity:.55});
-    const strip=C.add(new THREE.PlaneGeometry(7,18),rug,0,.125,-2);strip.rotation.x=-Math.PI/2;
-    const torches=low?1:3;
-    for(let i=0;i<torches;i++){
-      const light=new THREE.PointLight(woody?0xffbb79:0x8bbfff, low?1.3:2.2, 14,2);
-      light.position.set((i-1)*8,4,-pad+3);
-      room.add(light);
-    }
-    const marker = document.createElement('div'); marker.id='rf563-space-label';
-    marker.textContent = kind==='japanese'?'城内・和風の広間':kind==='western'?'王城・洋風の広間':kind==='cave'?'洞窟・結晶深部':'遺跡・地下神殿';
-    document.body.append(marker);battle.__rf563Label=marker;
-    setTimeout(()=>{if(marker.isConnected)marker.remove();},5000);
-    document.body.classList.add('rf563-combat-space');
-  }
-  const prevAdd=Battle.prototype.add;
-  Battle.prototype.add=function(...args){
-    if(!this.__rf563Room) { try{createBattleRoom(this)}catch(e){console.warn('[RF563 stage]',e);} }
-    return prevAdd.apply(this,args);
-  };
-  const prevDispose=Battle.prototype.dispose;
-  Battle.prototype.dispose=function(...args){
-    try{
-      if(this.__rf563Room) this.__rf563Room.removeFromParent();
-      for(const res of this.__rf563Owned||[]) res?.dispose?.();
-      this.__rf563Label?.remove();
-      document.body.classList.remove('rf563-combat-space');
-    }catch(e){console.warn('[RF563 cleanup]',e);}
-    this.__rf563Room=null;this.__rf563Owned=[];
-    return prevDispose.apply(this,args);
-  };
-
   // Enterable story interiors. Room geometry is generated once per field;
   // the town/world group is only hidden while the player is inside.
   const oldTown=Field.prototype.buildTown;
@@ -325,5 +211,5 @@ if (!window.__rf563Spatial) {
     try{window.RF564Interiors?.onDispose?.(this)}catch(e){console.warn('[RF564 interior cleanup]',e)}
     return oldDisposeField.apply(this,args);
   };
-  window.RF563Spatial={active:true,version:'55.13',enterableBuildings:4,stageRadius:MAX_R};
+  window.RF563Spatial={active:true,version:'55.20',enterableBuildings:4};
 }

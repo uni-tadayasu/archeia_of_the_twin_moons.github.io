@@ -3,8 +3,8 @@
  * packets, actor GLB meshes, CPU difficulty, economy, player files, or rank rules.
  * V55.6/V55.7 effects remain authoritative and run before this module. */
 import * as THREE from 'three';
-import {Battle} from '../game.js?v=rf553-chief-cpu-20261111';
-import {Field} from '../field.js?v=rf-v9-2-20261109';
+import {Battle} from '../game.js?v=55.20';
+import {Field} from '../field.js?v=55.20';
 if(!window.__rf558CGRuntime){
  window.__rf558CGRuntime=true;
  const mobile=!!window.matchMedia?.('(pointer:coarse)').matches||/iPhone|iPad|Android/i.test(navigator.userAgent||'');

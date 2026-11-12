@@ -10,9 +10,22 @@ export function installCharacterLibrary({FIGHTERS,save,persist}){
  let pending=false,modal=null;
  const tag=(t,c,label)=>{const e=document.createElement(t);if(c)e.className=c;if(label!=null)e.textContent=label;return e};
  function set(k,delta){if(!FIGHTERS[k])return;const old=pref()[k]||{};const favorite=delta.favorite??old.favorite??false;
- pref()[k]={favorite,nick:favorite?safe(delta.nick??old.nick):'',at:Date.now()};persist();request();if(modal)draw();}
+ pref()[k]={favorite,nick:favorite?safe(delta.nick??old.nick):'',at:Date.now()};persist();request();document.dispatchEvent(new Event('riftfall-character-favorites'));if(modal)draw();}
  const api={favorite:fav,nickname:alias,displayName:textName,match,setFavorite:(k,on)=>set(k,{favorite:!!on}),setNickname:(k,n)=>set(k,{favorite:true,nick:n}),open:open,choose:choose,refresh:request};
  window.rf53Library=api;
+ try{
+  const stored=JSON.parse(localStorage.getItem('riftfall-ui-favorites-v1')||'[]');
+  if(Array.isArray(stored)){
+   const favorites=new Set(stored);
+   let migrated=false;
+   for(const [key,d] of Object.entries(FIGHTERS)){
+    if(!pref()[key]&&favorites.has('fighter:'+d.name+':'+(d.title||''))){
+     pref()[key]={favorite:true,nick:'',at:0};migrated=true;
+    }
+   }
+   if(migrated)queueMicrotask(()=>persist());
+  }
+ }catch{}
  function fighterOf(el){
   const key=el.dataset.rf53Key||el.dataset.specialKey||el.dataset.fighterId;if(FIGHTERS[key])return key;
   const label=el.querySelector('b,strong')?.textContent?.trim()||'';
@@ -25,10 +38,11 @@ export function installCharacterLibrary({FIGHTERS,save,persist}){
     let star=el.querySelector(':scope > .rf53-star');
     if(!star){star=tag('span','rf53-star');star.setAttribute('role','button');star.tabIndex=0;el.append(star);}
     star.dataset.rf53Favorite=k;const label=fav(k)?'★':'☆';if(star.textContent!==label)star.textContent=label;star.classList.toggle('is-fav',fav(k));
+    star.setAttribute('aria-pressed',String(fav(k)));
     star.setAttribute('aria-label',FIGHTERS[k].name+(fav(k)?'のお気に入りを解除':'をお気に入り登録'));
   }
   let nick=el.querySelector(':scope > .rf53-nick');
-  if(alias(k)){if(!nick){nick=tag('small','rf53-nick');el.append(nick)}nick.textContent='呼び名：'+alias(k)}
+  if(alias(k)){if(!nick){nick=tag('small','rf53-nick');el.append(nick)}if(nick.textContent!=='呼び名：'+alias(k))nick.textContent='呼び名：'+alias(k)}
   else nick?.remove();
  }
  const queryState=new Map();
@@ -49,23 +63,14 @@ export function installCharacterLibrary({FIGHTERS,save,persist}){
  }
  function selectList(){
   const el=document.getElementById('select-grid');if(!el)return;
-  const buttons=[...el.querySelectorAll(':scope > button.card')];
-  const stage=buttons.some(x=>x.classList.contains('stage-tile'));
-  let favOnly=document.getElementById('rf53-fav-only');
   const toolbar=document.querySelector('#scr-select .select-tools');
-  if(toolbar&&!favOnly){favOnly=tag('button','rf53-toggle','☆ お気に入りのみ');favOnly.id='rf53-fav-only';favOnly.type='button';favOnly.dataset.on='0';
-    const manager=tag('button','rf53-open','★ お気に入り管理');manager.type='button';manager.onclick=open;
-    toolbar.append(favOnly,manager);favOnly.onclick=()=>{favOnly.dataset.on=favOnly.dataset.on==='1'?'0':'1';favOnly.setAttribute('aria-pressed',String(favOnly.dataset.on==='1'));request()};}
-  if(favOnly)favOnly.hidden=stage;
-  const term=document.getElementById('select-search')?.value||'';
-  let count=0;for(const b of buttons){
-    const k=fighterOf(b);
-    if(k&&!stage)card(b,k);
-    const show=stage?norm(b.dataset.search||b.textContent).includes(norm(term)):k?match(k,term)&&(!favOnly||favOnly.dataset.on!=='1'||fav(k)):true;
-    if(b.hidden===show)b.hidden=!show;if(show)count++;
+  if(toolbar&&!document.getElementById('rf53-favorite-manager')){
+   const manager=tag('button','rf53-open','お気に入り管理');
+   manager.id='rf53-favorite-manager';manager.type='button';manager.onclick=open;toolbar.append(manager);
   }
-  const counter=document.getElementById('select-counter');if(counter&&counter.textContent!==count+' / '+buttons.length+'件')counter.textContent=count+' / '+buttons.length+'件';
-  const empty=document.getElementById('select-empty');if(empty)empty.hidden=count>0;
+  for(const button of el.querySelectorAll(':scope > button.card:not(.stage-tile)')){
+   const key=fighterOf(button);if(key)card(button,key);
+  }
  }
  // RF55_CASTLE_CHARACTER_SEARCH_20261111 — searchable full roster; original disabled permissions are retained.
  function castleSearch(){
@@ -73,7 +78,7 @@ export function installCharacterLibrary({FIGHTERS,save,persist}){
   for(const s of area.querySelectorAll('select.cr-select')){
    if(s.dataset.rf53Ready)continue;
    const orig=[...s.options].map(o=>({value:o.value,label:o.textContent,disabled:o.disabled}));
-   if(!orig.length||orig.some(o=>!FIGHTERS[o.value]))continue;
+   if(!orig.length||!orig.some(o=>FIGHTERS[o.value])||orig.some(o=>o.value&&!FIGHTERS[o.value]))continue;
    s.dataset.rf53Ready='1';
    const ui=tag('div','rf53-castle-search');
    const input=tag('input','rf53-search rf53-castle');input.type='search';
@@ -83,7 +88,7 @@ export function installCharacterLibrary({FIGHTERS,save,persist}){
    const count=tag('small','rf53-count');
    ui.append(input,count);s.before(ui);
    const repaint=()=>{
-    const old=s.value,selected=orig.filter(o=>match(o.value,input.value));
+    const old=s.value,selected=orig.filter(o=>!o.value||match(o.value,input.value));
     s.replaceChildren(...selected.map(o=>{
      const e=tag('option','',o.label);e.value=o.value;e.disabled=o.disabled;return e;
     }));
@@ -166,7 +171,6 @@ export function installCharacterLibrary({FIGHTERS,save,persist}){
  document.addEventListener('click',e=>{const s=e.target.closest?.('[data-rf53-favorite]');if(!s)return;
   e.preventDefault();e.stopImmediatePropagation();set(s.dataset.rf53Favorite,{favorite:!fav(s.dataset.rf53Favorite)});},true);
  document.addEventListener('keydown',e=>{const s=e.target.closest?.('[data-rf53-favorite]');if(!s||!['Enter',' '].includes(e.key))return;e.preventDefault();e.stopImmediatePropagation();set(s.dataset.rf53Favorite,{favorite:!fav(s.dataset.rf53Favorite)});},true);
- document.getElementById('select-search')?.addEventListener('input',request);
  document.getElementById('party-picker-search')?.addEventListener('input',request);
  const ui=document.getElementById('ui');if(ui)new MutationObserver(changes=>{if(changes.some(c=>c.type==='childList'))request()}).observe(ui,{childList:true,subtree:true});
  request();return api;

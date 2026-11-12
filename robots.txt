@@ -3,3 +3,4 @@ Allow: /
 Disallow: /rosie/
 Disallow: /server/
 Disallow: /*.md$
+Sitemap: https://www.kasai-solutions-inc.com/sitemap.xml

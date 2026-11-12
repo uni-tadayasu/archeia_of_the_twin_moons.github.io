@@ -114,7 +114,7 @@ function riskyButton(button){
  if(button.dataset.rf51Confirmed==='skip')return null;
  const id=button.id||'';
  const label=String(button.textContent||button.getAttribute('aria-label')||'').replace(/\s+/g,' ').trim().slice(0,100);
- if(id==='btn-quit')return {title:'戦闘から離脱しますか？',message:'戦闘を終了してメニューへ戻ります。'};
+ if(id==='btn-quit')return {title:'戦闘から離脱しますか？',message:'戦闘を終了して出撃前の画面へ戻ります。'};
  if(/^(?:[ぁ-ん]*)(?:購入(?:する)?|買う|一括強化|強化(?:する)?|限界突破|寄付(?:する)?|追放|退会|解散|売却|破棄|削除|初期化|リセット|送信(?:する)?|返金|キャンセル確定)/.test(label)&&!/(購入済|確認済|購入履歴)/.test(label))
   return {title:'この操作を実行しますか？',message:'「'+label+'」を実行します。灯晶・所持品・共有データに影響する場合があります。'};
  if(/(?:delete|remove|kick|disband|reset|refund|purchase|buy|donate|send-all)/i.test(id))

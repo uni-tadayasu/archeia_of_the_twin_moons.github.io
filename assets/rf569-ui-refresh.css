@@ -1,45 +1,205 @@
+/* Riftfall Arena 55.20. A printed castle illustration introduces the game. */
+body.rf5520 {
+ --ink:#182521;--ivory:#f4edda;--vermillion:#8e3329;
+ --display:'Shippori Mincho','Yu Mincho','Hiragino Mincho ProN',serif;
+}
+html body.rf5520 #ui :is(button,a,input,select,textarea,[role="button"]):focus-visible {outline:2px solid #f2c475!important;outline-offset:3px!important}
+html body.rf5520 #ui #scr-title {background:#182521!important;overscroll-behavior:contain}
+html body.rf5520 #ui #scr-title .portal-wrap {
+ box-sizing:border-box!important;width:min(100%,1320px)!important;max-width:100%;
+ margin-inline:auto!important;padding:0 clamp(12px,4vw,48px) max(44px,env(safe-area-inset-bottom))!important;
+ background:none!important;color:var(--ivory);
+}
+html body.rf5520 #ui #scr-title .portal-header {
+ min-width:0;min-height:66px!important;padding:7px 0!important;
+ background:#182521!important;border:0!important;border-bottom:1px solid #777a60!important;box-shadow:none!important;backdrop-filter:none!important;
+}
+html body.rf5520 #ui #scr-title .brand-button {min-width:0!important;max-width:100%;padding-inline:0!important;text-align:left;color:var(--ivory)!important}
+html body.rf5520 #ui #scr-title .brand-type {font:800 clamp(13px,2vw,21px)/1.35 var(--display)!important;overflow-wrap:anywhere}
+html body.rf5520 #ui #scr-title .brand-type small {font:500 10px/1.3 Georgia,serif!important;letter-spacing:.18em;color:#d7c6a5}
+html body.rf5520 #ui #scr-title .brand-seal {
+ width:35px!important;height:35px!important;flex:0 0 35px!important;border:0!important;border-radius:0!important;box-shadow:none!important;
+ background:#8e3329 url('./rf557/twin-moon-mark.svg') center / 69% no-repeat!important;
+}
+html body.rf5520 #ui #scr-title :is(.portal-topnav,.portal-account) {min-width:0}
+html body.rf5520 #ui #scr-title .portal-topnav button {background:transparent!important;border-color:transparent!important;color:#f1e7d4!important;border-radius:0!important}
+html body.rf5520 #ui #scr-title .portal-topnav button:hover {border-bottom-color:#d8ad68!important}
+html body.rf5520 #ui #scr-title .portal-account .shards {background:#293832!important;color:#f4dfb2!important;white-space:nowrap}
+html body.rf5520 #ui #scr-title .portal-hero,
+html body.rf5520 #ui #scr-press .portal-intro {
+ position:relative;display:grid!important;isolation:isolate;box-sizing:border-box;
+ grid-template-columns:minmax(0,1fr)!important;place-items:center start!important;
+ width:100%!important;max-width:100%!important;min-height:clamp(400px,51vw,570px)!important;
+ background:var(--ivory) url('./rf562/japanese-palace.webp') center right / cover no-repeat!important;
+ border:1px solid #92744e!important;border-radius:2px!important;overflow:hidden!important;box-shadow:none!important;
+}
+html body.rf5520 #ui #scr-press .portal-intro {width:min(1320px,100%)!important;min-height:100%!important;max-height:none!important;height:auto!important;margin:auto}
+html body.rf5520 #ui #scr-press.on {overflow:auto!important;background:#17211f!important;padding:0!important}
+html body.rf5520 #ui #scr-title .portal-hero::before,
+html body.rf5520 #ui #scr-press .portal-intro::before {
+ content:"";position:absolute;z-index:-1!important;inset:0!important;
+ background:linear-gradient(90deg,#f4edda 0%,#f4edda 30%,#f4eddaeb 39%,#f4edda00 68%)!important;
+ opacity:1!important;transform:none!important;filter:none!important;
+}
+html body.rf5520 #ui #scr-title .portal-hero::after,
+html body.rf5520 #ui #scr-press .portal-intro::after {
+ content:"";position:absolute;inset:clamp(7px,1.3vw,19px)!important;z-index:1;pointer-events:none;
+ background:none!important;border:1px solid #c2a478ab;box-shadow:none!important;
+}
+html body.rf5520 #ui #scr-title .hero-center,
+html body.rf5520 #ui #scr-press .intro-content {
+ z-index:2;position:relative!important;display:grid!important;justify-items:start!important;align-content:center;gap:clamp(10px,1.7vw,22px)!important;
+ box-sizing:border-box;width:min(750px,67%)!important;min-width:0!important;max-width:100%!important;
+ padding:clamp(28px,6vw,84px)!important;margin:0!important;text-align:left!important;transform:none!important;color:var(--ink)!important;
+ border:0!important;background:none!important;box-shadow:none!important;backdrop-filter:none!important;
+}
+html body.rf5520 #ui #scr-press .intro-content {width:min(860px,72%)!important}
+html body.rf5520 #ui #scr-title .portal-hero .hero-center > p,
+html body.rf5520 #ui #scr-press .portal-intro .intro-content > p {
+ color:#33493d!important;font-size:clamp(12px,1.55vw,17px);line-height:1.6;margin:0;text-shadow:none!important;
+}
+html body.rf5520 #ui #scr-title .portal-hero .hero-center > p.rf5520-imprint,
+html body.rf5520 #ui #scr-press .portal-intro .intro-content > p.rf5520-imprint {
+ display:flex;align-items:center;gap:12px;color:var(--vermillion)!important;
+ font:700 clamp(12px,1.7vw,17px)/1.4 var(--display)!important;letter-spacing:.1em;
+}
+.rf5520-imprint span {
+ display:inline-block;width:28px;height:18px;flex:0 0 28px;
+ background:radial-gradient(circle at 9px 9px,#8e3329 0 6px,transparent 6.5px),radial-gradient(circle at 19px 9px,#a18050 0 6px,transparent 6.5px);
+}
+html body.rf5520 #ui #scr-title .rf5520-hero-title,
+html body.rf5520 #ui #scr-press .intro-content h1 {
+ max-width:100%;margin:0!important;font:800 clamp(38px,5.3vw,78px)/1.07 var(--display)!important;letter-spacing:-.085em!important;
+ color:#1a2923!important;background:none!important;-webkit-text-fill-color:currentColor!important;filter:none!important;text-shadow:none!important;overflow-wrap:anywhere;
+}
+html body.rf5520 #ui :is(#scr-title,#scr-press) .action-primary {
+ justify-self:start;max-width:100%;min-height:46px!important;padding:10px 17px!important;color:#fff4df!important;background:#8e3329!important;
+ border:1px solid #6c2f24!important;border-radius:2px!important;box-shadow:3px 3px #c4ad84!important;text-shadow:none!important;overflow-wrap:anywhere;white-space:normal!important;
+}
+html body.rf5520 #ui #scr-title .portal-hero .hero-center > .hero-quick {
+ justify-self:start!important;margin:0!important;padding:4px 0!important;min-height:40px;color:#294438!important;background:transparent!important;
+ border:0!important;border-radius:0!important;box-shadow:none!important;font:700 clamp(12px,1.3vw,15px)/1.45 system-ui,sans-serif!important;
+ white-space:normal!important;text-align:left;text-decoration:underline;text-underline-offset:4px;text-shadow:none!important;
+}
+html body.rf5520 #ui #scr-title :is(.portal-section,.portal-overview) {padding-inline:0!important;margin-block:clamp(22px,3.7vw,48px)!important}
+html body.rf5520 #ui #scr-title .section-heading {padding-bottom:10px!important;border-bottom:1px solid #72765d;margin-bottom:12px}
+html body.rf5520 #ui #scr-title :is(.section-heading,.section-cap) h2 {font:800 clamp(19px,2.7vw,29px)/1.35 var(--display)!important;color:var(--ivory)!important;text-shadow:none!important}
+html body.rf5520 #ui #scr-title .portal-overview {display:grid!important;grid-template-columns:1.3fr 1fr 1fr!important;gap:1px!important;border:1px solid #8f7759;background:#8f7759!important}
+html body.rf5520 #ui #scr-title .overview-panel {min-width:0;padding:clamp(13px,2.6vw,29px)!important;border:0!important;border-radius:0!important;box-shadow:none!important;background:#31443b!important;color:var(--ivory)!important}
+html body.rf5520 #ui #scr-title .overview-panel.featured-event {background:#563730!important}
+html body.rf5520 #ui #scr-title .overview-panel.game-guide {background:#374253!important}
+html body.rf5520 #ui #scr-title .portal-modes {grid-template-columns:repeat(5,minmax(0,1fr))!important;gap:7px!important}
+html body.rf5520 #ui #scr-title .mode-tile {
+ --plate:#35474b;--line:#c2a677;display:grid!important;grid-template-columns:minmax(0,1fr) auto;align-items:end!important;
+ min-width:0!important;min-height:126px!important;padding:clamp(10px,1.55vw,18px)!important;overflow:hidden;color:#fff8e5!important;background:var(--plate)!important;
+ border:1px solid color-mix(in srgb,var(--line) 57%,var(--plate))!important;border-top:3px solid var(--line)!important;
+ border-radius:2px!important;box-shadow:none!important;text-align:left;animation:none!important;
+}
+html body.rf5520 #ui #scr-title .mode-tile::before {opacity:.35!important;transform:none!important}
+html body.rf5520 #ui #scr-title .mode-tile::after {background:linear-gradient(0deg,#142420e6,#14242000 87%)!important}
+html body.rf5520 #ui #scr-title .mode-tile[data-go="story"] {grid-column:span 2;--plate:#2d5145;--line:#a4bd94}
+html body.rf5520 #ui #scr-title .mode-tile[data-go="cpu"] {--plate:#683e34;--line:#d79b7a}
+html body.rf5520 #ui #scr-title .mode-tile[data-go="duo"] {--plate:#425035;--line:#bec27d}
+html body.rf5520 #ui #scr-title .mode-tile[data-go="online-vs"] {--plate:#3e4563;--line:#b5b9dc}
+html body.rf5520 #ui #scr-title .mode-tile[data-go="online-coop"] {--plate:#2e5359;--line:#91c1c4}
+html body.rf5520 #ui #scr-title .mode-tile[data-go="event"] {--plate:#623b49;--line:#e3acb2}
+html body.rf5520 #ui #scr-title .mode-tile[data-go="infinite"] {grid-column:span 2;--plate:#674936;--line:#e2bf81}
+html body.rf5520 #ui #scr-title .mode-tile#btn-adventure-mode {--plate:#48384c;--line:#c2adcd}
+html body.rf5520 #ui #scr-title .mode-tile .mode-main b {font:800 clamp(13px,1.65vw,20px)/1.35 var(--display)!important;white-space:normal!important;overflow-wrap:anywhere}
+html body.rf5520 #ui #scr-title .mode-tile .mode-main small {color:#f2e5cf!important;line-height:1.42!important;white-space:normal!important;overflow-wrap:anywhere}
+html body.rf5520 #ui #scr-title .mode-tile .tile-arrow {width:auto!important;color:#f2c989!important;background:none!important;border:0!important}
+html body.rf5520 #ui #scr-title .portal-services button {background:#293a35!important;border:1px solid #657265!important;border-radius:2px!important;box-shadow:none!important}
+html body.rf5520 #ui #scr-title .portal-services button:nth-of-type(3n+2) {background:#433b33!important}
+html body.rf5520 #ui #scr-title .portal-services button:nth-of-type(3n+3) {background:#384153!important}
+html body.rf5520 #ui #scr-title .portal-footer {color:#d6c7ab}
+body.rf5520:has(#scr-press.on) :is(#ticker,#chat-btn) {display:none!important}
+body.rf5520 #ticker {background:#1e302a!important}
+body.rf5520 #chat-btn {background:#2c4238!important}
 
-/* Riftfall Arena V55.19 — varied UI palettes, stronger favorite-star stability, and CG-illustration accents. */
-:root{
-  --rf569-amber:#d8b06c;
-  --rf569-indigo:#3f4f8f;
-  --rf569-crimson:#8b3346;
-  --rf569-emerald:#2d6b5b;
-  --rf569-violet:#61448a;
+html body.rf5520 #ui #scr-options {--panel:#213b37;--trim:#9dc8bb}
+html body.rf5520 #ui #scr-forge {--panel:#392b21;--trim:#c7a471}
+html body.rf5520 #ui #scr-shop {--panel:#263b29;--trim:#a4c3a3}
+html body.rf5520 #ui #scr-invade {--panel:#3b2938;--trim:#c3a0bd}
+html body.rf5520 #ui #scr-select {--panel:#242e3c;--trim:#9daec5}
+html body.rf5520 #ui #scr-lobby {--panel:#253947;--trim:#9cc2d4}
+html body.rf5520 #ui #scr-result {--panel:#3b2c2c;--trim:#d6b386}
+html body.rf5520 #ui #scr-castle {--panel:#3b2b23;--trim:#d5b487}
+html body.rf5520 #ui .screen:not(#scr-title):not(#scr-press):not(#scr-story) .inner {
+ min-width:0!important;max-width:min(100%,1200px)!important;color:var(--ivory);background:var(--panel,#253532)!important;
+ border:1px solid var(--trim,#9aa58d)!important;border-radius:3px!important;box-shadow:0 12px 32px #0b121086!important;
 }
-body{
-  --rf569-panel:linear-gradient(180deg,rgba(13,18,31,.92),rgba(24,20,39,.92));
+html body.rf5520 #ui .screen :is(.topbar,.select-tools,.rift-filter-tools,.cr-row,.cr-target,.cr-defense,.field) {min-width:0;max-width:100%;flex-wrap:wrap}
+html body.rf5520 #ui .screen :is(.label,.cr-heading,.cr-subhead) {font-family:var(--display)!important;letter-spacing:.03em!important;text-shadow:none!important;overflow-wrap:anywhere}
+html body.rf5520 #ui .screen :is(.btn,.back,.cr-button,.chip) {max-width:100%;border-radius:3px!important;white-space:normal!important;overflow-wrap:anywhere}
+html body.rf5520 #ui .screen :is(input:not([type="range"]),select,textarea) {min-width:0;max-width:100%;box-sizing:border-box}
+html body.rf5520 #ui #select-grid .card {background:#2b3647!important;border-color:#687b93!important;border-radius:3px!important;animation:none!important;filter:none!important;transform:none!important;transition:border-color .12s ease,background-color .12s ease!important}
+html body.rf5520 #ui #select-grid .card .face {border-radius:0!important}
+html body.rf5520 #ui #select-grid .card :is(.rift-card-favorite,.rf53-star) {
+ position:absolute;top:5px;right:5px;z-index:12;display:grid;place-items:center;width:36px;height:36px;
+ opacity:1!important;visibility:visible!important;animation:none!important;transform:none!important;filter:none!important;transition:none!important;
+ color:#fcf0d2!important;background:#242e3c!important;border:1px solid #8e9db2!important;text-shadow:none!important;
 }
-#scr-title .portal-wrap{background:radial-gradient(circle at 15% 18%,rgba(210,143,84,.14),transparent 34%),radial-gradient(circle at 84% 18%,rgba(77,122,209,.16),transparent 32%),linear-gradient(180deg,rgba(7,10,18,.96),rgba(19,16,30,.98));}
-#scr-options .inner{background:linear-gradient(180deg,rgba(16,27,34,.96),rgba(18,27,42,.97));box-shadow:0 16px 54px rgba(0,0,0,.36)}
-#scr-forge .inner{background:linear-gradient(180deg,rgba(35,23,17,.96),rgba(53,35,23,.98));box-shadow:0 16px 54px rgba(0,0,0,.36)}
-#scr-shop .inner{background:linear-gradient(180deg,rgba(20,31,24,.96),rgba(26,42,34,.98));box-shadow:0 16px 54px rgba(0,0,0,.36)}
-#scr-invade .inner{background:linear-gradient(180deg,rgba(32,18,28,.96),rgba(45,23,40,.98));box-shadow:0 16px 54px rgba(0,0,0,.36)}
-#scr-select .inner{background:linear-gradient(180deg,rgba(19,24,37,.96),rgba(25,30,53,.985));box-shadow:0 16px 54px rgba(0,0,0,.36)}
-#scr-lobby .inner{background:linear-gradient(180deg,rgba(18,28,39,.96),rgba(20,39,50,.985));box-shadow:0 16px 54px rgba(0,0,0,.36)}
-#scr-story .inner{background:linear-gradient(180deg,rgba(22,18,33,.72),rgba(11,8,17,.26));}
-#scr-result .inner{background:linear-gradient(180deg,rgba(31,22,15,.96),rgba(18,14,27,.98));box-shadow:0 16px 54px rgba(0,0,0,.36)}
-#scr-castle .inner{background:linear-gradient(180deg,rgba(28,22,15,.96),rgba(37,31,19,.98));box-shadow:0 16px 54px rgba(0,0,0,.36)}
-#ui .screen .topbar, #ui .screen .label, #ui .screen .crumb{letter-spacing:.04em}
-#scr-options .btn,#scr-options .menu button{border-color:rgba(123,196,214,.58)!important;box-shadow:0 0 0 1px rgba(89,157,189,.18) inset,0 7px 22px rgba(0,0,0,.28)}
-#scr-forge .btn,#scr-forge .menu button{border-color:rgba(212,174,103,.62)!important;box-shadow:0 0 0 1px rgba(179,119,58,.18) inset,0 7px 22px rgba(0,0,0,.28)}
-#scr-shop .btn,#scr-shop .menu button{border-color:rgba(108,200,155,.58)!important;box-shadow:0 0 0 1px rgba(88,179,127,.18) inset,0 7px 22px rgba(0,0,0,.28)}
-#scr-invade .btn,#scr-invade .menu button{border-color:rgba(208,120,154,.58)!important;box-shadow:0 0 0 1px rgba(179,75,112,.18) inset,0 7px 22px rgba(0,0,0,.28)}
-#scr-select .btn,#scr-select .menu button{border-color:rgba(120,138,214,.58)!important;box-shadow:0 0 0 1px rgba(95,110,190,.18) inset,0 7px 22px rgba(0,0,0,.28)}
-#scr-lobby .btn,#scr-lobby .menu button{border-color:rgba(117,194,210,.58)!important;box-shadow:0 0 0 1px rgba(82,161,177,.18) inset,0 7px 22px rgba(0,0,0,.28)}
-#scr-result .btn,#scr-result .menu button{border-color:rgba(214,177,110,.58)!important;box-shadow:0 0 0 1px rgba(164,118,60,.18) inset,0 7px 22px rgba(0,0,0,.28)}
-#scr-castle .btn,#scr-castle .menu button{border-color:rgba(194,161,105,.62)!important;box-shadow:0 0 0 1px rgba(164,118,60,.18) inset,0 7px 22px rgba(0,0,0,.28)}
-#select-grid .card{background:linear-gradient(180deg,rgba(17,22,37,.93),rgba(28,36,58,.96))!important;border-color:rgba(145,157,221,.48)!important}
-#select-grid .card .rift-card-favorite,
-#select-grid .card .rift-card-favorite::before,
-#select-grid .card .rift-card-favorite::after,
-#select-grid .card .rift-card-favorite *{animation:none!important;transition:color .12s ease,background-color .12s ease,border-color .12s ease!important;opacity:1!important;filter:none!important;transform:none!important;visibility:visible!important}
-#select-grid .card .rift-card-favorite{backface-visibility:hidden;will-change:auto;isolation:isolate;contain:paint layout style;text-shadow:none!important;outline:none!important}
-#select-grid .card .rift-card-favorite[aria-pressed="false"]{color:#e6edf9!important;background:rgba(26,35,57,.96)!important;border:1px solid rgba(168,182,230,.45)!important}
-#select-grid .card .rift-card-favorite[aria-pressed="true"]{color:#ffd469!important;background:linear-gradient(180deg,rgba(43,59,95,.98),rgba(26,35,57,.98))!important;border:1px solid rgba(255,212,105,.55)!important;box-shadow:0 0 0 1px rgba(255,212,105,.18) inset,0 3px 8px rgba(0,0,0,.24)!important}
-#rf568-maze-map{background:rgba(15,11,18,.88)!important;border-color:#d1aa71!important;backdrop-filter:blur(3px)}
-#rf568-maze-map .rf568-map-title{color:#f5dfb9}
-body.rf568-infinite-maze #game-container{background:radial-gradient(circle at 50% 15%,rgba(198,148,87,.15),transparent 34%),linear-gradient(180deg,#201715,#141015)!important}
-@media (max-width:680px){
-  #scr-options .inner,#scr-forge .inner,#scr-shop .inner,#scr-invade .inner,#scr-select .inner,#scr-lobby .inner,#scr-result .inner,#scr-castle .inner{box-shadow:none}
+html body.rf5520 #ui #select-grid .card [aria-pressed="true"]:is(.rift-card-favorite,.rf53-star) {color:#ffdf95!important;background:#59492c!important;border-color:#dabb7d!important}
+html body.rf5520 #ui #castle-content :is(.cr-select,.rf53-castle-search) {width:100%;max-width:100%}
+html body.rf5520 #ui #castle-content .cr-defense {display:grid;gap:7px;padding-block:13px;border-block:1px solid #a482585e}
+html body.rf5520 #ui #castle-content .cr-notice:not(:empty) {padding:8px 12px;background:#5c442d;border-left:3px solid #e2c182}
+
+#rf5520-orbit:not([hidden]) {
+ position:absolute;z-index:32;left:50%;bottom:max(16px,env(safe-area-inset-bottom));transform:translateX(-50%);
+ display:grid;grid-template-columns:auto minmax(70px,1fr) auto auto;align-items:center;gap:4px;width:max-content;
+ max-width:calc(100% - 18px - env(safe-area-inset-left) - env(safe-area-inset-right));padding:4px;
+ color:#f8eacc;background:#1b2626ed;border:1px solid #ad986d;border-radius:4px;font:600 12px/1.2 system-ui,sans-serif;
 }
+html body.rf5520 #ui #rf5520-orbit button {
+ display:grid;place-items:center;min-width:44px;min-height:44px;padding:3px 6px;color:#ffefd2;background:#333d34;
+ border:1px solid #9e8e67;border-radius:2px;white-space:nowrap;touch-action:manipulation;
+}
+#rf5520-orbit [aria-pressed="true"] {color:#241e19!important;background:#ddc28b!important}
+#rf5520-orbit button:is([data-view="left"],[data-view="right"]) {font-size:21px}
+.rf5520-orbit-drag {display:grid;place-items:center;gap:2px;pointer-events:auto;touch-action:none;cursor:ew-resize;user-select:none;padding:0 3px}
+.rf5520-orbit-drag small {color:#dac89e;font-size:9px}
+body.rf5520 #rf568-maze-map {background:#241e1ae8!important;border-color:#bba27c!important;backdrop-filter:none!important}
+body.rf5520 #rf568-endless-stair-hint {bottom:84px}
+body.rf5520 #game-container canvas {touch-action:none}
+body.rf5520 #rf557-mobile-nav:not([hidden]) {background:#243932!important;border-color:#8d8265!important;border-radius:4px!important}
+body.rf5520-touch #rf5520-orbit:not([hidden]) {bottom:calc(env(safe-area-inset-bottom) + clamp(145px,25dvh,220px))}
+body.rf5520-touch #rf568-endless-stair-hint {bottom:calc(env(safe-area-inset-bottom) + clamp(206px,33dvh,290px))}
+@media(max-width:1000px){
+ html body.rf5520 #ui #scr-title .portal-modes {grid-template-columns:repeat(4,minmax(0,1fr))!important}
+ html body.rf5520 #ui #scr-title .mode-tile {grid-column:auto!important}
+}
+@media(max-width:680px){
+ html body.rf5520 #ui #scr-title .portal-wrap {padding-bottom:calc(100px + env(safe-area-inset-bottom))!important}
+ html body.rf5520 #ui #scr-title .portal-header {min-height:52px!important}
+ html body.rf5520 #ui #scr-title .portal-hero,html body.rf5520 #ui #scr-press .portal-intro {
+  min-height:0!important;padding-top:clamp(126px,49vw,270px)!important;background-color:var(--ivory)!important;
+  background-position:center top!important;background-size:auto clamp(154px,56vw,315px)!important;align-items:end!important;
+ }
+ html body.rf5520 #ui #scr-press .portal-intro {min-height:100%!important;align-content:center}
+ html body.rf5520 #ui #scr-title .portal-hero::before,html body.rf5520 #ui #scr-press .portal-intro::before {background:linear-gradient(180deg,transparent 75px,#f4edda clamp(145px,53vw,300px))!important}
+ html body.rf5520 #ui #scr-title .hero-center,html body.rf5520 #ui #scr-press .intro-content {width:100%!important;padding:20px clamp(16px,5vw,36px) 27px!important;gap:8px!important}
+ html body.rf5520 #ui #scr-title .rf5520-hero-title,html body.rf5520 #ui #scr-press .intro-content h1 {font-size:clamp(28px,8.25vw,51px)!important}
+ html body.rf5520 #ui #scr-title .portal-overview {grid-template-columns:minmax(0,1fr)!important}
+ html body.rf5520 #ui #scr-title .portal-modes {grid-template-columns:repeat(2,minmax(0,1fr))!important}
+ html body.rf5520 #ui #scr-title .mode-tile {min-height:105px!important}
+ html body.rf5520 #ui .screen .topbar .back {min-height:44px!important}
+ html body.rf5520 #ui .screen :is(input:not([type="range"]):not([type="checkbox"]),textarea,select) {font-size:16px!important}
+ html body.rf5520 #ui #select-grid .card :is(.rift-card-favorite,.rf53-star) {width:44px;height:44px}
+ body.rf5520 #rf568-maze-map {width:clamp(73px,25vw,105px);top:calc(max(143px,20dvh) + env(safe-area-inset-top))}
+ body.rf5520 #rf552-endless-hud:not([hidden]) {left:max(8px,env(safe-area-inset-left))!important;top:calc(max(143px,20dvh) + env(safe-area-inset-top))!important;width:min(58vw,300px)!important;max-width:min(58vw,300px)!important;transform:none!important;text-align:left}
+}
+@media(orientation:landscape){
+ body.rf5520-touch #rf5520-orbit:not([hidden]) {bottom:max(7px,env(safe-area-inset-bottom))}
+ body.rf5520-touch #rf568-endless-stair-hint {bottom:67px}
+}
+@media(max-width:360px){
+ html body.rf5520 #ui #scr-title .portal-account .shards {font-size:10px!important}
+ html body.rf5520 #ui #scr-title .mode-tile .tile-arrow {display:none!important}
+ html body.rf5520 #ui #scr-title .mode-tile {grid-template-columns:minmax(0,1fr)}
+}
+@media(max-height:530px) and (orientation:landscape){
+ html body.rf5520 #ui #scr-press .portal-intro {padding-top:0!important;background-size:cover!important}
+ html body.rf5520 #ui #scr-press .portal-intro::before {background:linear-gradient(90deg,#f4edda,#f4edda 37%,#f4edda00 76%)!important}
+ html body.rf5520 #ui #scr-press .intro-content {width:min(540px,68%)!important}
+}
+@media(prefers-reduced-motion:reduce){body.rf5520 *,body.rf5520 *::before,body.rf5520 *::after {scroll-behavior:auto!important}}

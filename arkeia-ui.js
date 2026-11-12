@@ -31,32 +31,6 @@
   };
   setTimeout(bootRetry, 12000);
   window.addEventListener('arkeia-boot-ready', () => document.getElementById('arkeia-boot-retry')?.remove());
-  const input = document.getElementById('select-search');
-  const grid = document.getElementById('select-grid');
-  const count = document.getElementById('select-counter');
-  const empty = document.getElementById('select-empty');
-  if (input && grid && count && empty) {
-    let queued = false;
-    const filter = () => {
-      queued = false;
-      const q = input.value.trim().normalize('NFKC').toLocaleLowerCase('ja');
-      const cards = Array.from(grid.querySelectorAll('button.card'));
-      let shown = 0;
-      for (const card of cards) {
-        const cardText = (card.dataset.search || card.textContent || '').normalize('NFKC').toLocaleLowerCase('ja');
-        card.hidden = !!q && !cardText.includes(q);
-        shown += !card.hidden ? 1 : 0;
-      }
-      count.textContent = `${shown} / ${cards.length} 件`;
-      empty.hidden = shown > 0 || cards.length === 0;
-    };
-    const schedule = () => { if (!queued) { queued = true; queueMicrotask(filter); } };
-    input.addEventListener('input', schedule);
-    new MutationObserver(schedule).observe(grid, { childList: true, subtree: false });
-    document.getElementById('select-back')?.addEventListener('click', () => { input.value = ''; });
-    schedule();
-  }
-
   // RIFT UI: attractive, sticky navigation. A floating back button provides
   // reliable fallback when the sticky header is enclosed by a centered .inner.
   const scrollStyle = document.createElement('style');
@@ -290,8 +264,8 @@
   const VISUAL_VERSION = 'painted-cg-20261107a';
   Promise.all([
     import('three'),
-    import('./game.js?v=rf553-chief-cpu-20261111'),
-    import('./field.js?v=rf-v9-2-20261109')
+    import('./game.js?v=55.20'),
+    import('./field.js?v=55.20')
   ]).then(([THREE, battleModule, worldModule]) => {
     installPaintedEffects(THREE, battleModule.Battle);
     installPaintedWorld(THREE, worldModule.Field);
@@ -643,7 +617,7 @@
    */
   Promise.all([
     import('three'),
-    import('./game.js?v=rf553-chief-cpu-20261111'),
+    import('./game.js?v=55.20'),
     import('./data.js?v=rf-minamoto-v48-20261111')
   ]).then(([THREE,combat,data]) => {
     installAstralJudgment(THREE,combat.Battle,data.FIGHTERS);
@@ -1995,7 +1969,7 @@
    * It never changes the game's existing save format or battle network packets.
    */
   Promise.all([
-    import('./game.js?v=rf553-chief-cpu-20261111'),
+    import('./game.js?v=55.20'),
     import('./data.js?v=rf-minamoto-v48-20261111')
   ]).then(([combat, data]) => {
     installCharacterProgression(combat.Battle, data.FIGHTERS);
@@ -2327,7 +2301,7 @@
    * Echo is still an independent proxy, NEVER an extra core Fighter.
    * Ice seal / frozen enemies / 30s duration are unchanged.
    */
-  import('./game.js?v=rf553-chief-cpu-20261111').then(combat => {
+  import('./game.js?v=55.20').then(combat => {
     installValgardIceEcho(combat.Battle, combat.Fighter);
   }).catch(error => console.warn('[Arkeia] Valgard ice echo unavailable:', error));
 
@@ -3117,6 +3091,8 @@
     let filterMode = 'all';
     let sortMode = 'original';
     const cardOrder = new WeakMap();
+    const fighterKey = card => card.classList.contains('stage-tile') ? '' : card.dataset.rf53Key || card.dataset.specialKey || card.dataset.fighterId;
+    const isFavorite = card => fighterKey(card) && window.rf53Library ? window.rf53Library.favorite(fighterKey(card)) : favorites.has(cardId(card));
     let orderCounter = 0;
     const grid = $('#select-grid');
     const filterTools = document.createElement('div');
@@ -3141,26 +3117,27 @@
     function refreshFilters() {
       if (!grid) return;
       const cards = $$('.card', grid);
-      const searchValue = ($('#select-search')?.value || '').trim().toLocaleLowerCase();
+      const searchValue = ($('#select-search')?.value || '').trim().normalize('NFKC').toLocaleLowerCase('ja');
       let count = 0;
       cards.forEach((card, index) => {
         const key = cardId(card);
         if (!cardOrder.has(card)) cardOrder.set(card, ++orderCounter);
+        const favorite=isFavorite(card);
         const star = $('.rift-card-favorite', card);
-        if (star) { const pressed = favorites.has(key) ? 'true' : 'false'; const glyph = pressed === 'true' ? '★' : '☆'; if (star.getAttribute('aria-pressed') !== pressed) star.setAttribute('aria-pressed', pressed); if (star.textContent !== glyph) star.textContent = glyph; }
-        const allowed = filterMode === 'favorites' ? favorites.has(key) : filterMode === 'recent' ? recents.includes(key) : true;
+        if (star) { const pressed = String(favorite); const glyph = pressed === 'true' ? '★' : '☆'; if (star.getAttribute('aria-pressed') !== pressed) star.setAttribute('aria-pressed', pressed); if (star.textContent !== glyph) star.textContent = glyph; }
+        const allowed = filterMode === 'favorites' ? favorite : filterMode === 'recent' ? recents.includes(key) : true;
         const text = `${card.dataset.search || ''} ${card.textContent || ''}`.toLocaleLowerCase();
-        const matched = !searchValue || text.includes(searchValue);
+        const matched = !searchValue || text.normalize('NFKC').includes(searchValue) || (fighterKey(card) && window.rf53Library?.match(fighterKey(card),searchValue));
         card.classList.toggle('rift-is-filtered', !allowed || !matched);
         const baseOrder = cardOrder.get(card) || index;
-        card.style.order = String(sortMode === 'name' ? 10000 : sortMode === 'favorites' ? (favorites.has(key) ? 0 : 100000) + baseOrder : baseOrder);
+        card.style.order = String(sortMode === 'name' ? 10000 : sortMode === 'favorites' ? (favorite ? 0 : 100000) + baseOrder : baseOrder);
         if (!card.hidden && !card.classList.contains('rift-is-filtered')) count++;
       });
       if (sortMode === 'name') {
         const sorted = cards.slice().sort((a, b) => cardId(a).localeCompare(cardId(b), 'ja'));
         sorted.forEach((c, i) => { c.style.order = String(i); });
       }
-      const ctr = $('#select-counter'); if (ctr) ctr.textContent = `${count} / ${cards.length} 件`;
+      const ctr = $('#select-counter'); if (ctr&&ctr.textContent!==`${count} / ${cards.length} 件`) ctr.textContent = `${count} / ${cards.length} 件`;
       const empty = $('#select-empty'); if (empty) empty.hidden = !(cards.length && count === 0);
     }
     function attachCards() {
@@ -3169,22 +3146,24 @@
         if (card.dataset.riftEnhanced) continue;
         card.dataset.riftEnhanced = '1';
         const key = cardId(card);
-        const fav = document.createElement('span');
-        fav.className = 'rift-card-favorite'; fav.setAttribute('role', 'button'); fav.tabIndex = 0;
-        fav.setAttribute('aria-label', 'お気に入りに登録・解除');
-        fav.textContent = favorites.has(key) ? '★' : '☆';
-        fav.setAttribute('aria-pressed', favorites.has(key) ? 'true' : 'false');
-        function toggle(event) {
-          event.preventDefault(); event.stopPropagation();
-          if (favorites.has(key)) favorites.delete(key); else favorites.add(key);
-          saveFavorites(); refreshFilters();
-          toast(favorites.has(key) ? 'お気に入りに追加しました' : 'お気に入りを解除しました');
+        if(card.classList.contains('stage-tile')){
+          const fav = document.createElement('span');
+          fav.className = 'rift-card-favorite'; fav.setAttribute('role', 'button'); fav.tabIndex = 0;
+          fav.setAttribute('aria-label', 'お気に入りに登録・解除');
+          fav.textContent = favorites.has(key) ? '★' : '☆';
+          fav.setAttribute('aria-pressed', favorites.has(key) ? 'true' : 'false');
+          function toggle(event) {
+            event.preventDefault(); event.stopPropagation();
+            if (favorites.has(key)) favorites.delete(key); else favorites.add(key);
+            saveFavorites(); refreshFilters();
+            toast(favorites.has(key) ? 'お気に入りに追加しました' : 'お気に入りを解除しました');
+          }
+          fav.addEventListener('click', toggle);
+          fav.addEventListener('keydown', event => {
+            if (event.key === 'Enter' || event.key === ' ') toggle(event);
+          });
+          card.appendChild(fav);
         }
-        fav.addEventListener('click', toggle);
-        fav.addEventListener('keydown', event => {
-          if (event.key === 'Enter' || event.key === ' ') toggle(event);
-        });
-        card.appendChild(fav);
         card.addEventListener('click', event => {
           if (event.defaultPrevented || card.disabled) return;
           recents = [key, ...recents.filter(x => x !== key)].slice(0, 30);
@@ -3200,9 +3179,14 @@
       refreshFilters();
     });
     $('#rift-sort')?.addEventListener('change', event => { sortMode = event.target.value; refreshFilters(); });
-    $('#select-search')?.addEventListener('input', () => setTimeout(refreshFilters, 0));
+    $('#select-search')?.addEventListener('input', refreshFilters);
+    document.addEventListener('riftfall-character-favorites',refreshFilters);
     if (grid) {
-      new MutationObserver(() => { attachCards(); }).observe(grid, { childList: true });
+      new MutationObserver(() => {
+        filterMode='all';
+        $$('[data-filter]',filterTools).forEach(el=>el.setAttribute('aria-pressed',String(el.dataset.filter==='all')));
+        attachCards();
+      }).observe(grid, { childList: true });
       attachCards();
     }
 

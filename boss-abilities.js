@@ -7,7 +7,7 @@
 import * as THREE from 'three';
 import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js';
 import { FIGHTERS } from './data.js?v=rf-minamoto-v48-20261111';
-import { Fighter, Battle } from './game.js?v=rf553-chief-cpu-20261111';
+import { Fighter, Battle } from './game.js?v=55.20';
 
 const STAMP='boss-expansion-20261108-v5';
 const clamp=(v,min,max)=>Math.max(min,Math.min(max,Number(v)||0));

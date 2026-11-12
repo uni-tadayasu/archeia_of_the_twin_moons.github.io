@@ -3,8 +3,8 @@
    This module deliberately loads AFTER V55.6's existing engine extension. */
 import './rf556-cg-engine.js?v=20261112-v556';
 import * as THREE from 'three';
-import {Battle} from '../game.js?v=rf553-chief-cpu-20261111';
-import {Field} from '../field.js?v=rf-v9-2-20261109';
+import {Battle} from '../game.js?v=55.20';
+import {Field} from '../field.js?v=55.20';
 
 if (!window.__rf557CGEff) {
  window.__rf557CGEff = true;

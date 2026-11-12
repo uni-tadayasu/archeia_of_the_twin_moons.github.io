@@ -1,5 +1,5 @@
 // Riftfall Arena V55.18 — 無限天守: full enclosed 3D castle maze, action combat, stairs to next floor only after total annihilation.
-import { CastleMazeWorld, installCastleBattleNavigation } from './assets/rf568-castle-maze.js?v=20261112-v5519';
+import { CastleMazeWorld, installCastleBattleNavigation } from './assets/rf568-castle-maze.js?v=55.20';
 // No upper floor count. Only a living player's remaining HP carries to the next floor.
 const NOW=()=>Date.now();
 const RNG=seed=>()=>{seed^=seed<<13;seed^=seed>>>17;seed^=seed<<5;return (seed>>>0)/4294967296};
@@ -13,7 +13,7 @@ export const endlessSort=(a,b)=>b.floor-a.floor||a.timeMs-b.timeMs||a.at-b.at;
 export function createInfiniteDungeonV552(c){
  const {state,save,FIGHTERS,STAGES,ROSTER,ENEMY_ROSTER,BOSS_ROSTER,ensureAllModelsReady,
    setStage,makeBattle,endBattle,beginBattle,foeCpu,foeHp,upgFor,gearFor,showResult,
-   ui,syncCodeNow,apiEnabled,api,myName,rfBattleStartError}=c;
+   ui,syncCodeNow,apiEnabled,api,myName,getArena}=c;
  let run=null, interval=0, serverQueue=Promise.resolve(), pendingStart=null;
  const $=id=>document.getElementById(id);
  function best(){try{return JSON.parse(localStorage.getItem('rf552-infinite-best')||'null')}catch{return null}}
@@ -50,9 +50,9 @@ export function createInfiniteDungeonV552(c){
   serverQueue=pendingStart.catch(()=>null);
  }
  function checkpoint(floor){
-  const local=run;if(!local?.serverRun&&!pendingStart)return;
+  const local=run,starting=pendingStart;if(!local?.serverRun&&!starting)return;
   serverQueue=serverQueue.catch(()=>null).then(async()=>{
-    if(pendingStart)await pendingStart;
+    if(starting)await starting;
     if(!local.serverRun)return;
     try{await remoteUrl('/infinite/progress',{code:syncCodeNow(),name:myName(),runId:local.serverRun,floor});}
     catch(e){console.warn('[無限天守] 階層送信保留',e)}
@@ -60,8 +60,9 @@ export function createInfiniteDungeonV552(c){
  }
  function remoteFinish(local){
   if(!local)return;
+  const starting=pendingStart;
   serverQueue=serverQueue.catch(()=>null).then(async()=>{
-    if(pendingStart)await pendingStart;
+    if(starting)await starting;
     if(!local.serverRun)return;
     try{await remoteUrl('/infinite/finish',{code:syncCodeNow(),name:myName(),runId:local.serverRun});}
     catch(e){console.warn('[無限天守] ランキング反映失敗',e)}
@@ -87,7 +88,7 @@ export function createInfiniteDungeonV552(c){
   const maze=b.rf568Maze;
   const target=maze?.setStair(true);
   if(!target)throw Error('城内の階段を設置できませんでした。');
-  cur.stairs={x:target.x,z:target.z};
+  cur.stairs={x:target.x,z:target.z,ready:Math.hypot(player.pos.x-target.x,player.pos.z-target.z)>=2.25};
   const hint=document.createElement('div');hint.id='rf568-endless-stair-hint';
   hint.textContent=`全区画の敵を殲滅！ 城内図の金色の階段まで進むと第${cur.floor}層へ`;
   document.body.append(hint);
@@ -142,7 +143,7 @@ export function createInfiniteDungeonV552(c){
     const stage=STAGES.find(s=>/天守|城|castle|和風|palace/i.test(`${s.name} ${s.id}`))||STAGES[0];
     setStage(stage);b=makeBattle(null);cur.battle=b;
     installCastleBattleNavigation(b.constructor);
-    b.rf568Maze=new CastleMazeWorld(b,{floor,seed:cur.seed});
+    b.rf568Maze=new CastleMazeWorld(b,{floor,seed:cur.seed,arena:getArena()});
     const p=b.rf568Maze.startPoint();
     const me=b.add(cur.key,{team:0,player:true,awk:save.awk,netId:'endless-self',pos:[p.x,p.z],
       name:FIGHTERS[cur.key].name+'（挑戦者）',upg:upgFor(cur.key),gear:gearFor(cur.key)});
@@ -197,9 +198,10 @@ export function createInfiniteDungeonV552(c){
      const player=b.fighters.find(f=>f.isPlayer&&!f.dead);if(!player)return;
      removeDead(b,Math.min(.25,dt));
      if(cur.transition){
-      if(cur.stairs && Math.hypot(player.pos.x-cur.stairs.x,player.pos.z-cur.stairs.z)<2.25){
-       // Only crossing the unlocked stairs advances; never auto-progress by timeout.
-       if(!cur.loading)void startFloor();
+      if(cur.stairs){
+       const near=Math.hypot(player.pos.x-cur.stairs.x,player.pos.z-cur.stairs.z)<2.25;
+       if(!near)cur.stairs.ready=true;
+       if(near&&cur.stairs.ready&&!cur.loading)void startFloor();
       }
       maze.updateMap(player.pos,b.fighters.filter(f=>f.team===1&&!f.dead).map(f=>f.pos),false);
       return;
@@ -238,12 +240,13 @@ export function createInfiniteDungeonV552(c){
    uiTick();
   }catch(e){
    console.error('[V55.18 無限天守]',e);
-   if(cur===run){finish(false,'城内迷路の生成に失敗しました。到達記録は保存されます。');rfBattleStartError(e);}
-  }finally{cur.loading=false;}
+   if(cur===run)finish(false,'城内の生成に失敗しました。到達記録は保存されます。');
+  }finally{cur.loading=false;if(cur===run)state.battleLoading=false;}
  }
  async function launch(key){
   if(!FIGHTERS[key])throw Error('使用できないキャラクターです。');
   stop(false);
+  pendingStart=null;
   state.mode='infinite';state.myKey=key;
   run={key,floor:1,cleared:0,seed:crypto.getRandomValues(new Uint32Array(1))[0]||1,
     hp:null,startedAt:NOW(),transition:false,loading:false,startedBattle:false,stairs:null,battle:null,serverRun:null};
@@ -272,7 +275,8 @@ export function createInfiniteDungeonV552(c){
   if(!won||!me||me.dead||me.hp<=0){finish(false);return;}
   // Safety fallback for legacy battle-end callbacks; usually victory is handled
   // directly by the continuous-wave tick before the Battle victory checker.
-  if(b)b.ended=false;
+  if(b?.rf566EndlessWave?.remaining!==0){finish(false,'この階層の戦闘を続けられませんでした。');return;}
+  b.ended=false;
   if(!cur.transition)completeFloor(cur,b);
  }
  function stop(submit=true){

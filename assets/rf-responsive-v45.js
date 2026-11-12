@@ -73,12 +73,33 @@ export function initResponsiveV45({ isTouch=false }={}){
     const c=getComputedStyle(safeProbe), num=v=>Math.max(0,parseFloat(v)||0);
     return {top:num(c.paddingTop),right:num(c.paddingRight),bottom:num(c.paddingBottom),left:num(c.paddingLeft)};
   }
-  function applyPosition(element,p,size){
+  function applyPosition(element,p,size,occupied=null){
     if(!element||!p)return;
     const safe=safeInsets(),edge=size/2+6,w=Math.max(1,window.innerWidth),h=Math.max(1,window.innerHeight);
     const lx=Math.min(w/2,safe.left+edge),rx=Math.max(lx,w-safe.right-edge);
     const ty=Math.min(h/2,safe.top+edge),by=Math.max(ty,h-safe.bottom-edge);
-    const x=CLAMP(p[0]*w/100,lx,rx), y=CLAMP(p[1]*h/100,ty,by);
+    let x=CLAMP(p[0]*w/100,lx,rx), y=CLAMP(p[1]*h/100,ty,by);
+    if(occupied){
+      const blocked=(a,b)=>occupied.some(q=>{
+        const spacing=(size+q.size)/2+5;
+        return Math.abs(a-q.x)<spacing-.01&&Math.abs(b-q.y)<spacing-.01;
+      });
+      if(blocked(x,y)){
+        const xs=[x,lx,rx],ys=[y,ty,by];
+        for(const q of occupied){
+          const spacing=(size+q.size)/2+5;
+          xs.push(CLAMP(q.x-spacing,lx,rx),CLAMP(q.x+spacing,lx,rx));
+          ys.push(CLAMP(q.y-spacing,ty,by),CLAMP(q.y+spacing,ty,by));
+        }
+        let best=Infinity,next=null;
+        for(const a of xs)for(const b of ys){
+          const distance=(a-x)**2+(b-y)**2;
+          if(distance<best&&!blocked(a,b)){best=distance;next=[a,b];}
+        }
+        if(next)[x,y]=next;
+      }
+      occupied.push({x,y,size});
+    }
     element.style.setProperty('left',x+'px','important');
     element.style.setProperty('top',y+'px','important');
     element.style.setProperty('right','auto','important');
@@ -89,11 +110,12 @@ export function initResponsiveV45({ isTouch=false }={}){
     document.documentElement.style.setProperty('--rf45-button-size',actualButtonPx()+'px');
     document.documentElement.style.setProperty('--rf45-joy-size',actualJoyPx()+'px');
     document.body.classList.add('rf45-responsive');
-    const mode=orientation();
+    const mode=orientation(),occupied=[];
     for(const [name] of ACTIONS){
       const el=name==='joy'?document.getElementById('joy'):document.querySelector('#tbtns button[data-act="'+name+'"]');
-      applyPosition(el,layouts[mode][name],name==='joy'?actualJoyPx():actualButtonPx());
+      applyPosition(el,layouts[mode][name],name==='joy'?actualJoyPx():actualButtonPx(),occupied);
     }
+    document.dispatchEvent(new Event("riftfall-touch-layout"));
     if(editor&&!editor.hidden)paintEditor();
   }
   function setQuality(next){

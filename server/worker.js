@@ -1446,7 +1446,7 @@ export default {
           ok: true,
           service: 'riftfall-arena-api',
           check: 'worker-runtime',
-          version: '20261106-rebuild'
+          version: '55.20'
         });
       }
       if (url.pathname === '/stripe/webhook') return await stripeWebhook(req, env);
@@ -1493,6 +1493,9 @@ export default {
         case '/infinite/progress': return await rf552InfiniteRoute(req,env,H,body,'progress');
         case '/infinite/finish': return await rf552InfiniteRoute(req,env,H,body,'finish');
         case '/infinite/board': return await rf552InfiniteRoute(req,env,H,body,'board');
+        case '/castle/boss': return await rf50Route(req,env,H,body,'boss');
+        case '/castle/raid/arena': return await rf50Route(req,env,H,body,'raid/arena');
+        case '/castle/raid/leave': return await rf50Route(req,env,H,body,'raid/leave');
         case '/castle/self': return await rf50Route(req,env,H,body,'self');
         case '/castle/create': return await rf50Route(req,env,H,body,'create');
         case '/castle/level': return await rf50Route(req,env,H,body,'level');
@@ -2608,13 +2611,13 @@ export class SyncLock {
     this.state = state;
   }
   async fetch(req) {
-    const { data, base, op, amt, gid, opId, wid, pid, mail, ids, style, lord, raidId, amount, castleName, count, maxAffordable } = await req.json();
+    const { data, base, op, amt, gid, opId, wid, pid, mail, ids, style, lord, raidId, amount, castleName, count, maxAffordable, floor, boss } = await req.json();
     return this.state.blockConcurrencyWhile(async () => {
       const store = this.state.storage;
       const row = (await store.get('row')) || null;
       const res = (x, status = 200) => new Response(JSON.stringify(x), { status });
       if (op === 'get') return res({ row });
-      if(typeof op==='string'&&op.startsWith('castle-'))return rf50Wallet(store,row,res,{op,pid,style,lord,raidId,amount,castleName,count,maxAffordable});
+      if(typeof op==='string'&&op.startsWith('castle-'))return rf50Wallet(store,row,res,{op,pid,style,lord,raidId,amount,castleName,count,maxAffordable,floor,boss});
             // RF48: purchase and debit are a single durable-object transaction.
             if(op==='minamoto-owned')return res({owned:!!(await store.get('purchase:minamoto_yoritomo'))});
             if(op==='minamoto-buy'){
@@ -2921,7 +2924,7 @@ async function rf48BuyMinamoto(req,env,H,{code,pid}){
 
 // RF50_CASTLE_REALM_20261111 - authenticated, server-owned castle data
 const RF50_LIMIT=999999;
-const RF50_FLOORS=lv=>1+Math.floor(lv/10);
+const RF50_FLOORS=lv=>Math.min(10,1+Math.floor(lv/10));
 const RF50_TIER=lv=>Math.floor(lv/10);
 const RF50_COST=lv=>500+350*lv;
 // RF553_CASTLE_NAME_BULK_MOBILE_20261111 — validate before publishing a visible base name.
@@ -2932,8 +2935,33 @@ function rf553Name(v){
 }
 const RF50_MONSTERS=['影狼','甲冑兵','朧蜘蛛','双月ゴーレム','霧の術師','鋼牙獣','魔晶騎士','深淵の番兵','古代石像','結界守護者'];
 function rf50Save(row){try{return JSON.parse(row?.data||'null')}catch{return null}}
-function rf50Castle(c){return c?{name:rf553Name(c.name)||'',style:c.style,level:c.level,lord:c.lord,createdAt:c.createdAt,shieldUntil:c.shieldUntil||0,floors:RF50_FLOORS(c.level),appearanceTier:RF50_TIER(c.level),nextCost:c.level<100?RF50_COST(c.level):0}:null}
-function rf50View(r){return r?{id:r.id,status:r.status,targetPid:r.targetPid,floor:r.floor,floors:r.floors,castleLevel:r.castleLevel,style:r.style,lord:r.lord,cpuPercent:r.cpuPercent??100,enemyAttack:rf50EnemyAttack(r),defenseFactor:rf50EnemyDefense(r),enemyName:r.floor===r.floors?r.lordName:RF50_MONSTERS[(r.floor+r.castleLevel)%RF50_MONSTERS.length],attackerHp:r.hp,maxHp:r.maxHp,enemyHp:r.enemyHp,maxEnemyHp:r.maxEnemyHp,charge:r.charge,healsLeft:r.healsLeft,turn:r.turn,lastLog:r.lastLog,expiresAt:r.expiresAt,winAt:r.winAt||0}:null}
+function rf55Plan(plan){
+ return Array.from({length:10},(_,i)=>{
+  const key=Array.isArray(plan)?plan[i]:null,def=typeof key==='string'?ownValue(FIGHTERS,key):null;
+  return def&&!def.hidden&&!def.enemy?key:null;
+ });
+}
+const rf55Revision=c=>Number.isSafeInteger(c?.revision)?c.revision:0;
+const rf55Defenders=['m3','m13','m23','m33','m43','m53','m63','m73','m83','m93'];
+async function rf55Release(storage,r,paid=false){
+ await storage.transaction(async tx=>{
+  await tx.put('castle:raid:'+r.id,r);
+  if(await tx.get('castle:active:'+r.attackerPid)===r.id)await tx.delete('castle:active:'+r.attackerPid);
+  if((await tx.get('castle:underattack:'+r.targetPid))?.id===r.id)await tx.delete('castle:underattack:'+r.targetPid);
+  if(paid){
+   await tx.delete('castle:pending:'+r.attackerPid+':'+r.id);
+   await tx.delete('castle:pending:'+r.targetPid+':'+r.id);
+  }
+ });
+}
+function rf50Castle(c){return c?{name:rf553Name(c.name)||'',style:c.style,level:c.level,lord:c.lord,createdAt:c.createdAt,shieldUntil:c.shieldUntil||0,bossPlan:rf55Plan(c.bossPlan),revision:rf55Revision(c),floors:RF50_FLOORS(c.level),appearanceTier:RF50_TIER(c.level),nextCost:c.level<100?RF50_COST(c.level):0}:null}
+function rf50View(r){
+ if(!r)return null;
+ const index=(r.floor+r.castleLevel)%RF50_MONSTERS.length;
+ const assigned=r.bossPlan?.[r.floor-1];
+ const final=r.floor===r.floors;
+ return {enemyKey:assigned||(final?r.lord:rf55Defenders[index]),
+  combat:r.combat||'commands',hero:r.hero,paid:!!r.paidAt,id:r.id,status:r.status,targetPid:r.targetPid,floor:r.floor,floors:r.floors,castleLevel:r.castleLevel,style:r.style,lord:r.lord,cpuPercent:r.cpuPercent??100,enemyAttack:rf50EnemyAttack(r),defenseFactor:rf50EnemyDefense(r),enemyName:assigned?FIGHTERS[assigned].name:final?r.lordName:RF50_MONSTERS[index],attackerHp:r.hp,maxHp:r.maxHp,enemyHp:r.enemyHp,maxEnemyHp:r.maxEnemyHp,charge:r.charge,healsLeft:r.healsLeft,turn:r.turn,lastLog:r.lastLog,expiresAt:r.expiresAt,winAt:r.winAt||0}}
 // RF50_FLOOR_BALANCE_V2 / each floor raises enemy HP, attack and defense
 function rf50FloorRank(r){const depth=Math.max(0,r.floor-1);return {depth,progress:depth/Math.max(1,r.floors-1),boss:r.floor===r.floors}}
 function rf50Enemy(r){const {depth,progress,boss}=rf50FloorRank(r);const pct=Math.min(100,Math.max(1,Number(r.cpuPercent??100)))/100;
@@ -2946,28 +2974,37 @@ async function rf50Wallet(storage,row,res,b){
  if(!s||!PID_RE.test(String(pid||''))||s.pid!==pid)return res({error:'nosync'},403);
  const balance=s.shards;
  if(!Number.isSafeInteger(balance)||balance<0||balance>RF50_LIMIT)return res({error:'bad_balance'},422);
- const old=await storage.get('castle:home');
+ const old=await storage.get('castle:home'),revision=rf55Revision(old)+1;
  if(op==='castle-self')return res({ok:true,castle:rf50Castle(old),shards:balance,ver:row.ver||0,data:row.data});
  if(op==='castle-create'){
   if(old)return res({error:'already_exists'},409);
   if(!['wa','west'].includes(b.style)||!ownValue(FIGHTERS,b.lord))return res({error:'bad'},400);
   const castleName=b.castleName===undefined?'双月の拠点':rf553Name(b.castleName);
   if(!castleName)return res({error:'invalid_castle_name'},400);
-  const castle={name:castleName,style:b.style,level:1,lord:b.lord,createdAt:now,shieldUntil:now+24*3600000};
+  const castle={name:castleName,style:b.style,level:1,lord:b.lord,revision,createdAt:now,shieldUntil:now+24*3600000};
   await storage.put('castle:home',castle);
   return res({ok:true,castle:rf50Castle(castle),shards:balance,ver:row.ver||0,data:row.data});
  }
  if(op==='castle-lord'){
   if(!old||!ownValue(FIGHTERS,b.lord))return res({error:'bad'},400);
-  const updated={...old,lord:b.lord};
+  const updated={...old,lord:b.lord,revision};
   await storage.put('castle:home',updated);
   return res({ok:true,castle:rf50Castle(updated),shards:balance,ver:row.ver||0,data:row.data});
+ }
+ if(op==='castle-boss'){
+  if(!old)return res({error:'no_castle'},404);
+  if(!Number.isInteger(b.floor)||b.floor<1||b.floor>10)return res({error:'invalid_floor'},400);
+  if(b.boss!==null&&!rf55Plan([b.boss])[0])return res({error:'fighter_locked'},403);
+  const bossPlan=rf55Plan(old.bossPlan);bossPlan[b.floor-1]=b.boss;
+  const castle={...old,bossPlan,revision};
+  await storage.put('castle:home',castle);
+  return res({ok:true,castle:rf50Castle(castle)});
  }
  if(op==='castle-name'){
   if(!old)return res({error:'no_castle'},404);
   const name=rf553Name(b.castleName);
   if(!name)return res({error:'invalid_castle_name'},400);
-  const castle={...old,name};await storage.put('castle:home',castle);
+  const castle={...old,name,revision};await storage.put('castle:home',castle);
   return res({ok:true,castle:rf50Castle(castle),shards:balance,ver:row.ver||0,data:row.data});
  }
  if(op==='castle-level-bulk'){
@@ -2988,7 +3025,7 @@ async function rf50Wallet(storage,row,res,b){
   }
   if(applied===0)return res({error:'shards',available:balance},402);
   s.shards=balance-cost;
-  const upgraded={...old,level:old.level+applied},ver=(row.ver||0)+1;
+  const upgraded={...old,level:old.level+applied,revision},ver=(row.ver||0)+1;
   const data=JSON.stringify(s);if(data.length>200000)return res({error:'size'},413);
   await writeTogether(storage,[['row',{...row,data,ver,at:now,wealth:wealthOf(s),wid:''}],['castle:home',upgraded]]);
   return res({ok:true,castle:rf50Castle(upgraded),shards:s.shards,ver,cost,applied,data});
@@ -2999,7 +3036,7 @@ async function rf50Wallet(storage,row,res,b){
   const cost=RF50_COST(old.level);
   if(balance<cost)return res({error:'shards',cost},402);
   s.shards-=cost;
-  const upgraded={...old,level:old.level+1},ver=(row.ver||0)+1;
+  const upgraded={...old,level:old.level+1,revision},ver=(row.ver||0)+1;
   const data=JSON.stringify(s);if(data.length>200000)return res({error:'size'},413);
   await writeTogether(storage,[['row',{...row,data,ver,at:now,wealth:wealthOf(s),wid:''}],['castle:home',upgraded]]);
   return res({ok:true,castle:rf50Castle(upgraded),shards:s.shards,ver,cost,data});
@@ -3008,7 +3045,7 @@ async function rf50Wallet(storage,row,res,b){
   if(!old||!/^[a-f0-9-]{36}$/i.test(String(b.raidId||'')))return res({error:'bad'},400);
   const key='castle:shield:'+b.raidId;
   if(await storage.get(key))return res({ok:true,already:true,castle:rf50Castle(old)});
-  const castle={...old,shieldUntil:Math.max(old.shieldUntil||0,now+12*3600000)};
+  const castle={...old,revision,shieldUntil:Math.max(old.shieldUntil||0,now+12*3600000)};
   await writeTogether(storage,[['castle:home',castle],[key,{at:now}]]);
   return res({ok:true,castle:rf50Castle(castle)});
  }
@@ -3078,7 +3115,9 @@ async function rf50CastleHub(storage,b,now,out){
  if(b.op==='castle-publish'){
   const c=b.castle;
   if(!PID_RE.test(String(b.pid||''))||!c||!['wa','west'].includes(c.style)||!Number.isInteger(c.level)||c.level<1||c.level>100||typeof b.h!=='string'||!HEX64.test(b.h))return out({error:'bad'},400);
-  await storage.put('castle:fort:'+b.pid,{pid:b.pid,name:rf553Name(c.name)||String(b.name||'旅人').slice(0,12),h:b.h,style:c.style,level:c.level,lord:c.lord,lordName:b.lordName||c.lord,createdAt:c.createdAt||now,shieldUntil:c.shieldUntil||0});
+  const key='castle:fort:'+b.pid,current=await storage.get(key);
+  if(rf55Revision(c)<rf55Revision(current))return out({ok:true});
+  await storage.put(key,{pid:b.pid,bossPlan:rf55Plan(c.bossPlan),revision:rf55Revision(c),name:rf553Name(c.name)||String(b.name||'旅人').slice(0,12),h:b.h,style:c.style,level:c.level,lord:c.lord,lordName:b.lordName||c.lord,createdAt:c.createdAt||now,shieldUntil:Math.max(c.shieldUntil||0,current?.shieldUntil||0)});
   return out({ok:true});
  }
  if(b.op==='castle-pending'){
@@ -3106,20 +3145,28 @@ async function rf50CastleHub(storage,b,now,out){
   const raid={id,attackerPid:b.pid,attackerH:b.h,attackerName:String(b.name||'旅人').slice(0,12),targetPid:defender.pid,targetH:defender.h,targetName:defender.name,
   cpuPercent:Number.isSafeInteger(b.cpuPercent)&&b.cpuPercent>=1&&b.cpuPercent<=100?b.cpuPercent:100,
   castleLevel:defender.level,style:defender.style,lord:defender.lord,lordName:defender.lordName,hero:b.fighter,status:'active',floor:1,floors:RF50_FLOORS(defender.level),
+  bossPlan:rf55Plan(defender.bossPlan),combat:b.combat==='action'?'action':'commands',
   maxHp:hp,hp,power:Math.max(.8,Math.min(5,+b.stats?.power||1)),charge:0,healsLeft:1,turn:0,guard:false,lastAt:0,lastLog:'防衛ダンジョンへ侵入しました',createdAt:now,expiresAt:now+25*60000};
   raid.enemyHp=rf50Enemy(raid);raid.maxEnemyHp=raid.enemyHp;
   await writeTogether(storage,[['castle:raid:'+id,raid],['castle:active:'+b.pid,id],['castle:underattack:'+b.targetPid,{id,expiresAt:raid.expiresAt}],['castle:cool:'+b.pid+':'+b.targetPid,now+24*3600000]]);
   return out({ok:true,raid:rf50View(raid)});
  }
- if(['castle-current','castle-act','castle-payinfo','castle-finalize'].includes(b.op)){
+ if(['castle-current','castle-act','castle-payinfo','castle-finalize','castle-leave'].includes(b.op)){
   const id=b.raidId||(await storage.get('castle:active:'+b.pid));
   const r=id?await storage.get('castle:raid:'+id):null;
   if(!r||r.attackerPid!==b.pid)return out({error:'not_found'},404);
   if(r.expiresAt<now&&r.status==='active'){
    r.status='expired';r.lastLog='制限時間が終了しました';
-   await writeTogether(storage,[['castle:raid:'+r.id,r],['castle:active:'+b.pid,null],['castle:underattack:'+r.targetPid,null]]);
+   await rf55Release(storage,r);
   }
   if(b.op==='castle-current')return out({ok:true,raid:rf50View(r)});
+  if(b.op==='castle-leave'){
+   if(r.status==='active'){
+    r.status='retreated';r.lastLog='拠点から撤退しました';
+    await rf55Release(storage,r);
+   }
+   return out({ok:true,raid:rf50View(r)});
+  }
   if(b.op==='castle-payinfo'){
    if(r.status!=='won')return out({error:'not_won'},409);
    return out({ok:true,id:r.id,attackerPid:r.attackerPid,attackerH:r.attackerH,attackerName:r.attackerName,targetPid:r.targetPid,targetH:r.targetH,targetName:r.targetName,winAt:r.winAt});
@@ -3127,24 +3174,24 @@ async function rf50CastleHub(storage,b,now,out){
   if(b.op==='castle-finalize'){
    if(r.status!=='won')return out({error:'not_won'},409);
    r.paidAt=r.paidAt||now;
-   await storage.transaction(async tx=>{
-     await tx.put('castle:raid:'+id,r);
-     await tx.put('castle:active:'+b.pid,null);
-     await tx.put('castle:underattack:'+r.targetPid,null);
-     await tx.delete('castle:pending:'+r.attackerPid+':'+id);
-     await tx.delete('castle:pending:'+r.targetPid+':'+id);
-   });
+   await rf55Release(storage,r,true);
    const defender=await storage.get('castle:fort:'+r.targetPid);
    if(defender)await storage.put('castle:fort:'+r.targetPid,{...defender,shieldUntil:Math.max(defender.shieldUntil||0,now+12*3600000)});
    return out({ok:true,raid:rf50View(r)});
   }
   if(r.status!=='active')return out({error:'not_active',raid:rf50View(r)},409);
-  if(now-r.lastAt<450)return out({error:'too_fast',raid:rf50View(r)},429);
+  const realtime=r.combat==='action';
+  if(realtime&&(b.floor!==r.floor||b.turn!==r.turn))return out({error:'stale_raid',raid:rf50View(r)},409);
+  if(now-r.lastAt<(realtime?700:450))return out({error:'too_fast',raid:rf50View(r)},429);
   const action=b.action;
-  if(!['attack','skill','guard','heal','over'].includes(action))return out({error:'bad'},400);
+  if(!['attack','skill','guard','heal','over'].includes(action)&&!(realtime&&action==='counter'))return out({error:'bad'},400);
   let damage=0;
   if(action==='attack')damage=Math.round(105+40*r.power);
-  if(action==='skill')damage=Math.round(210+67*r.power);
+  if(action==='skill'){
+   if(realtime&&now-(r.lastSkillAt||0)<1450)return out({error:'skill_cooldown',raid:rf50View(r)},429);
+   if(realtime)r.lastSkillAt=now;
+   damage=Math.round(210+67*r.power);
+  }
   if(action==='over'){
    if(r.charge<100)return out({error:'not_ready',raid:rf50View(r)},409);
    damage=Math.round(520+155*r.power);r.charge=0;
@@ -3157,15 +3204,15 @@ async function rf50CastleHub(storage,b,now,out){
   r.turn++;r.lastAt=now;r.enemyHp=Math.max(0,r.enemyHp-damage);
   r.charge=Math.min(100,r.charge+(action==='attack'?23:action==='skill'?30:action==='guard'?17:action==='heal'?14:0));
   if(r.enemyHp===0){
-   if(r.floor>=r.floors){r.status='won';r.winAt=now;r.lastLog='領主を倒しました！ 攻城戦勝利';}
+   if(r.floor>=r.floors){r.status='won';r.winAt=now;r.lastLog='最上階の防衛ボスを撃破！ 攻城戦勝利';}
    else {r.floor++;r.enemyHp=rf50Enemy(r);r.maxEnemyHp=r.enemyHp;r.healsLeft=1;r.hp=Math.min(r.maxHp,r.hp+Math.round(r.maxHp*.12));r.lastLog='階層突破！第'+r.floor+'階層へ';}
   }else{
-   const incoming=Math.round(rf50EnemyAttack(r)*(action==='guard'?.4:1));
+   const incoming=Math.round(rf50EnemyAttack(r)*(action==='guard'?.4:action==='counter'?.55:1));
    r.hp=Math.max(0,r.hp-incoming);
-   r.lastLog=action==='guard'?'防御成功：被害 '+incoming:action==='heal'?'回復しました。反撃 '+incoming:'与ダメージ '+damage+'、反撃 '+incoming;
-   if(r.hp===0||r.turn>=240){r.status='lost';r.lastLog='攻略失敗。防衛軍の勝利';}
+   r.lastLog=action==='guard'?'防御成功：被害 '+incoming:action==='heal'?'回復しました。反撃 '+incoming:action==='counter'?'防衛ボスの攻撃：被害 '+incoming:'与ダメージ '+damage+'、反撃 '+incoming;
+   if(r.hp===0||(!realtime&&r.turn>=240)){r.status='lost';r.lastLog='攻略失敗。防衛軍の勝利';}
   }
-  if(r.status==='lost')await writeTogether(storage,[['castle:raid:'+id,r],['castle:active:'+b.pid,null],['castle:underattack:'+r.targetPid,null]]);
+  if(r.status==='lost')await rf55Release(storage,r);
   else if(r.status==='won')await writeTogether(storage,[
     ['castle:raid:'+id,r],
     ['castle:pending:'+r.attackerPid+':'+id,{id,attackerPid:r.attackerPid}],
@@ -3195,7 +3242,7 @@ async function rf50Settle(env,pid,raidId){
  if(shield.status!==200)return shield;
  const n=await Promise.all([
   rf50Notice(env,r.targetPid,raidId,'defense','【拠点防衛】攻城戦の結果',r.attackerName+' に城を攻略されました。灯晶 '+debit.data.amount+' が移動し、12時間の防衛保護が開始されました。',r.winAt),
-  rf50Notice(env,r.attackerPid,raidId,'victory','【攻城戦勝利】灯晶獲得',r.targetName+' の領主を倒し、灯晶 '+debit.data.amount+' を獲得しました。',r.winAt)
+  rf50Notice(env,r.attackerPid,raidId,'victory','【攻城戦勝利】灯晶獲得',r.targetName+' の最上階を攻略し、灯晶 '+debit.data.amount+' を獲得しました。',r.winAt)
  ]);
  if(n.some(x=>x.status!==200))return {status:503,data:{error:'mail_retry',amount:debit.data.amount}};
  const done=await doCall(hub,{op:'castle-finalize',pid,raidId});
@@ -3208,6 +3255,7 @@ async function rf50Route(req,env,H,body,action){
  if(!me)return json(H,{error:'nosync'},403);
  const sync=env.SYNC_LOCK.get(env.SYNC_LOCK.idFromName(me.h)),hub=mailStub(env);
  async function fighterStats(key){
+  if(typeof key!=='string')return null;
   const row=await syncRow(env,me.h),sv=rf50Save(row),def=ownValue(FIGHTERS,key);
   if(!sv||!def||def.hidden||def.enemy)return null;
   const role=(await verify(env,body.token,'role'))?.r||null;
@@ -3229,7 +3277,7 @@ async function rf50Route(req,env,H,body,action){
   return {hp:Math.round((def.hp||1000)*(1+.08*(u.hp||0))),power:(def.power||1)*(1+.06*(u.atk||0))};
  }
  const name=cleanTxt(body.name||me.name,12);
- if(['self','create','level','level-bulk','name','lord'].includes(action)){
+ if(['self','create','level','level-bulk','name','lord','boss'].includes(action)){
   if(action==='self'){
     const queue=await doCall(hub,{op:'castle-pending',pid:me.pid});
     if(queue.status===200)for(const task of queue.data?.raids||[]){
@@ -3240,12 +3288,17 @@ async function rf50Route(req,env,H,body,action){
     }
   }
   if((action==='create'||action==='lord')&&!await fighterStats(body.lord))return json(H,{error:'fighter_locked'},403);
-  const op={self:'castle-self',create:'castle-create',level:'castle-level','level-bulk':'castle-level-bulk',name:'castle-name',lord:'castle-lord'}[action];
-  const r=await doCall(sync,{op,pid:me.pid,style:body.style,lord:body.lord,castleName:body.castleName,count:body.count,maxAffordable:body.maxAffordable});
+  if(action==='boss'){
+   if(!Number.isInteger(body.floor)||body.floor<1||body.floor>10)return json(H,{error:'invalid_floor'},400);
+   if(body.boss!==null&&!await fighterStats(body.boss))return json(H,{error:'fighter_locked'},403);
+  }
+  const op={boss:'castle-boss',self:'castle-self',create:'castle-create',level:'castle-level','level-bulk':'castle-level-bulk',name:'castle-name',lord:'castle-lord'}[action];
+  const r=await doCall(sync,{op,pid:me.pid,style:body.style,lord:body.lord,castleName:body.castleName,count:body.count,maxAffordable:body.maxAffordable,floor:body.floor,boss:body.boss});
   if(r.status!==200)return json(H,r.data,r.status);
   if(r.data.castle){
    const lordName=FIGHTERS[r.data.castle.lord]?.name||r.data.castle.lord;
-   await doCall(hub,{op:'castle-publish',pid:me.pid,h:me.h,name,castle:r.data.castle,lordName});
+   const published=await doCall(hub,{op:'castle-publish',pid:me.pid,h:me.h,name,castle:r.data.castle,lordName});
+   if(action==='boss'&&published.status!==200)return json(H,{error:'castle_publish_pending'},503);
   }
   if(action==='self'){
    const loot=await doCall(sync,{op:'castle-loot-collect',pid:me.pid});
@@ -3256,19 +3309,20 @@ async function rf50Route(req,env,H,body,action){
  if(action==='list'){
   const r=await doCall(hub,{op:'castle-directory',pid:me.pid});return json(H,r.data,r.status);
  }
- if(action==='raid/start'){
+ if(action==='raid/start'||action==='raid/arena'){
   if(!PID_RE.test(String(body.targetPid||'')))return json(H,{error:'bad'},400);
   const stats=await fighterStats(body.fighter);if(!stats)return json(H,{error:'fighter_locked'},403);
   const globalCpu=await rf553CpuGet(env);
   if(!globalCpu.ok)return json(H,{error:'settings_unavailable'},503);
-  const result=await doCall(hub,{op:'castle-start',pid:me.pid,h:me.h,name,targetPid:body.targetPid,fighter:body.fighter,stats,cpuPercent:globalCpu.percent});
+  const result=await doCall(hub,{op:'castle-start',pid:me.pid,h:me.h,name,targetPid:body.targetPid,fighter:body.fighter,stats,cpuPercent:globalCpu.percent,combat:action==='raid/arena'?'action':'commands'});
   if(result.status===200){
    await rf50Notice(env,body.targetPid,result.data.raid.id,'warning','【拠点襲撃】侵入者を検知',name+' があなたの城へ侵入しました。防衛ダンジョンを守備します。',Date.now());
   }
   return json(H,result.data,result.status);
  }
- if(action==='raid/current'||action==='raid/act'){
-  const r=await doCall(hub,{op:action==='raid/current'?'castle-current':'castle-act',pid:me.pid,raidId:body.raidId,action:body.action});
+ if(['raid/current','raid/act','raid/leave'].includes(action)){
+  const op={'raid/current':'castle-current','raid/act':'castle-act','raid/leave':'castle-leave'}[action];
+  const r=await doCall(hub,{op,pid:me.pid,raidId:body.raidId,action:body.action,floor:body.floor,turn:body.turn});
   if(r.status!==200)return json(H,r.data,r.status);
   if(action==='raid/act'&&r.data.raid.status==='won'){
    const settled=await rf50Settle(env,me.pid,r.data.raid.id);

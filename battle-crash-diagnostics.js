@@ -103,7 +103,7 @@
     try {
       const gameResource = performance.getEntriesByType('resource')
         .find(entry => /(?:^|\/)game\.js(?:\?|$)/i.test(new URL(entry.name).pathname + new URL(entry.name).search))?.name;
-      const gamePath = new URL('./game.js?v=rf553-chief-cpu-20261111', document.baseURI).href;
+      const gamePath = new URL('./game.js?v=55.20', document.baseURI).href;
       const dataResource = performance.getEntriesByType('resource')
         .find(entry => /(?:^|\/)data\.js(?:\?|$)/i.test(new URL(entry.name).pathname + new URL(entry.name).search))?.name;
       const dataPath = dataResource || new URL('./data.js?v=rf-minamoto-v48-20261111', document.baseURI).href;

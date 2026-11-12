@@ -2,8 +2,8 @@
    DOES NOT alter character meshes, hit boxes, net messages or damage rules.
    WebGL still uses triangles internally; this removes visibly faceted decoration. */
 import * as THREE from 'three';
-import {Battle} from '../game.js?v=rf553-chief-cpu-20261111';
-import {Field} from '../field.js?v=rf-v9-2-20261109';
+import {Battle} from '../game.js?v=55.20';
+import {Field} from '../field.js?v=55.20';
 if(!window.__rf556CGEngine){
  window.__rf556CGEngine=true;
  const mobile=!!matchMedia?.('(pointer:coarse)')?.matches||/iPhone|iPad|Android/i.test(navigator.userAgent);

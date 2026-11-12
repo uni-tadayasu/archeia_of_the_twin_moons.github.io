@@ -2,10 +2,10 @@
 // RF55_EVENT_BGM_20261111
 // RF55_CASTLE_MAIN_CACHE
 // RF54_FIX_20261111
-import {installCharacterLibrary} from './assets/rf-character-library-v53.js?v=rf55-20261111';
+import {installCharacterLibrary} from './assets/rf-character-library-v53.js?v=55.20';
 // RF53_CHAR_LIBRARY_INSTALLED
-import {initCastleRealm} from './castle-realm-v50.js?v=rf553-castle-20261111';
-import {initResponsiveV45} from './assets/rf-responsive-v45.js?v=rf-responsive-v45-20261110';
+import {initCastleRealm} from './castle-realm-v50.js?v=55.20';
+import {initResponsiveV45} from './assets/rf-responsive-v45.js?v=55.20';
 import {installFujiwaraChief} from './fujiwara-chief-v39.js?v=rf-fujiwara-v42-tdzfix-20261110';
 import {installFujiwaraCombat} from './fujiwara-nobuyori.js?v=rf-fujiwara-v43-rainbow-totsuka-20261110';
 // RF_CHIEF_CHAR_EDITOR_V28
@@ -22,17 +22,17 @@ import {installUdaijinCombat} from './udaijin-curse.js?v=rf-fujiwara-noble-motio
 // RF_BATCH_SCALE_STARTUP_V92
 // RF_BATTLE_FIX_V9_1_20261109
 import { installMaouCombat } from './maou-abilities.js?v=rf-v9-2-20261109';
-import { Fighter as MaouFighter } from './game.js?v=rf553-chief-cpu-20261111';
-import './boss-abilities.js?v=rf-v9-2-20261109';
+import { Fighter as MaouFighter } from './game.js?v=55.20';
+import './boss-abilities.js?v=55.20';
 import './exact-model-portraits.js?v=rf-v9-2-20261109';
 // RF_GRAND_FOUR_20261108 main.js
 import * as THREE from 'three';
-import { setupGaizorgAdventure } from './gaizorg-adventure.js?v=rf-minamoto-v48-20261111';
+import { setupGaizorgAdventure } from './gaizorg-adventure.js?v=55.20';
 import { installOperatorCombatFx } from './operator-combat-fx.js?v=20261108-grand-four-v3';
 import { renderExactPortrait } from './glb-portrait.js?v=rf-mobile-v7-20261109';
 // RF_OPERATOR_GIGANTES_MAIN_20261108
 import { loadModel } from './model-runtime.js?v=rf-minamoto-v48-20261111';
-import { Battle, ARENA_R } from './game.js?v=rf553-chief-cpu-20261111';
+import { Battle, ARENA_R } from './game.js?v=55.20';
 import { installNepterionCombat } from './nepterion-water.js?v=rf-v18-20261109';
 import { installActorMotion } from './character-motion.js?v=rf-v18-20261109';
 import { installNepterionFixedSeven } from './nepterion-fixed-seven.js?v=rf-v18-20261109';
@@ -43,8 +43,9 @@ import { initMailbox } from './mailbox.js?v=audio-cast-20261107d';
 import { OPERATOR_KEY_SHA256, CHIEF_KEY_SHA256, MAX_KEY_ATTEMPTS, LOCKOUT_MS, SHOP_ITEMS } from './config.js';
 import { connect, issueInvite, redeemInvite, syncPush, syncPullV } from './net.js?v=rf-v552-coop-20261111';
 import { createEventCoopV552 } from './rf-event-coop-v552.js?v=rf553-chief-cpu-20261111';
-import { createInfiniteDungeonV552 } from './rf-infinite-dungeon-v552.js?v=20261111-1';
+import { createInfiniteDungeonV552 } from './rf-infinite-dungeon-v552.js?v=55.20';
 import { apiEnabled, api, verifyToken } from './api.js';
+import { createOrbitControls } from './assets/rf-camera-v5520.js';
 
 const $ = (s) => document.querySelector(s);
 // RF_MAOU_INSTALL_V6
@@ -56,6 +57,7 @@ installActorMotion({ Fighter: MaouFighter, Battle });
 installStaffAvatarScale({Fighter:MaouFighter,FIGHTERS,ROSTER});
 installKinosakiMotion({Fighter:MaouFighter,Battle});
 const isTouch = matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window;
+document.body.classList.toggle('rf5520-touch',isTouch);
 // V45 quality and touch positioning: initialized after the HTML has been parsed.
 const rf45UI=initResponsiveV45({isTouch});
 
@@ -161,7 +163,7 @@ function setStage(st) {
   arena = new THREE.Group();
   // RF53: CG-illustrated stage backdrop.
   crystals = [];
-  const outer = (ARENA_R + 1.6) / Math.cos(Math.PI / st.seg);
+  const outer = ARENA_R;
   const floor = new THREE.Mesh(new THREE.CircleGeometry(outer, Math.max(96,st.seg)), new THREE.MeshStandardMaterial({ map: floorTex, color: st.floor, roughness: 0.9 }));
   floor.rotation.x = -Math.PI / 2;
   floor.receiveShadow = true;
@@ -927,43 +929,34 @@ function playTrack(name) {
   syncMusicTrack();
 }
 // RF_BGM_EXCLUSIVE_V10 — Atomic single-track BGM switch; no crossfade races.
-function syncMusicTrack() {
-  const key = shouldForceFujiwara() ? 'fujiwara' : state.mode === 'adventure' ? 'adventure' : shouldForceValgard() ? 'valgard' : musicKey(audio.wanted);
-  if (!key || !audio.tracks[key]) return;
-  const next = audio.tracks[key];
-  const previous = audio.tracks[audio.currentKey];
-  const shouldRestart = next !== previous;
-  audio.current = (key === 'fujiwara' || key === 'valgard') ? key : audio.wanted;
-  audio.currentKey = key;
-  // Invalidate any earlier fade callback left over from older runtime versions.
-  ++audio.fadeId;
-  const targetVolume = audio.muted ? 0 : audio.volume * .6;
-  // CRITICAL: pause EVERY other BGM, including tracks from an interrupted fade.
-  // Object identity is used because title/story and event/boss share MP3s.
-  for (const track of new Set(Object.values(audio.tracks))) {
-    if (track === next) continue;
-    if (!track.paused) track.pause();
-    try { if (track.currentTime) track.currentTime = 0; } catch (_) {}
+function syncMusicTrack(fromGesture=false){
+  const key=shouldForceFujiwara()?'fujiwara':state.mode==='adventure'?'adventure':shouldForceValgard()?'valgard':musicKey(audio.wanted);
+  const next=audio.tracks[key];
+  if(!next)return;
+  const previous=selectedBgm;
+  selectedBgm=next;
+  audio.current=(key==='fujiwara'||key==='valgard')?key:audio.wanted;
+  audio.currentKey=key;
+  if(next!==previous){
+    for(const track of new Set(Object.values(audio.tracks)))if(track!==next&&!track.paused)track.pause();
+    if(previous&&next.paused&&!musicAttempts.has(next)){try{next.currentTime=0;}catch{}}
   }
-  if (!audio.unlocked || audio.muted) {
-    if (!next.paused) next.pause();
-    return;
-  }
-  next.volume = targetVolume;
-  if (shouldRestart) {
-    try { next.currentTime = 0; } catch (_) {}
-  }
-  // A repeated call (650ms watcher, focus, BGM slider) must not restart the song.
-  if (!next.paused) return;
-  try {
-    const playResult = next.play();
-    if (playResult && typeof playResult.catch === 'function') playResult.catch(err => {
-      if (audio.currentKey !== key || audio.muted) return;
-      console.warn('[BGM V10] 再生できませんでした:', key, err);
-      const status = document.getElementById('opt-audio-status');
-      if (status) status.textContent = 'BGMを再生できません: ' + MUSIC_FILES[key];
-    });
-  } catch (err) { console.warn('[BGM V10] 再生失敗:', key, err); }
+  next.volume=audio.muted?0:audio.volume*.6;
+  if(audio.muted){if(!next.paused)next.pause();return;}
+  if(!audio.unlocked||document.hidden||!next.paused||musicAttempts.has(next))return;
+  if(fromGesture)musicBlocked.delete(next);
+  if(musicBlocked.has(next))return;
+  try{
+    const attempt=Promise.resolve(next.play());
+    musicAttempts.set(next,attempt);
+    void attempt.catch(error=>{
+      if(error?.name==='NotAllowedError')musicBlocked.add(next);
+      else if(error?.name!=='AbortError'&&selectedBgm===next){
+        const status=$('#opt-audio-status');
+        if(status)status.textContent='BGMを再生できません：'+MUSIC_FILES[key];
+      }
+    }).finally(()=>{if(musicAttempts.get(next)===attempt)musicAttempts.delete(next);});
+  }catch(error){if(error?.name==='NotAllowedError')musicBlocked.add(next);}
 }
 
 function blip(freq) {
@@ -1276,19 +1269,20 @@ function sfx(name, spec) {
   a.volume = (name === 'hit' ? 0.5 : 0.7) * audio.sfxVolume;
   a.play().catch(() => {});
 }
-function unlockAudio() {
+function unlockAudio(fromGesture=false) {
   if (!audio.ctx) {
     const AudioContextCtor = window.AudioContext || window.webkitAudioContext;
     if (AudioContextCtor) audio.ctx = new AudioContextCtor();
   }
   audio.unlocked = true;
   audio.ctx?.resume?.().catch?.(() => {});
-  syncMusicTrack();
+  syncMusicTrack(fromGesture);
 }
-// Browser autoplay policies require an actual user interaction before any BGM
-// can be heard. Keyboard, pointer and gamepad/menu interactions all recover it.
-window.addEventListener('pointerdown', () => { if (!audio.unlocked) unlockAudio(); }, { capture: true });
-window.addEventListener('keydown', () => { if (!audio.unlocked) unlockAudio(); }, { capture: true });
+for(const type of ['pointerup','keydown','click']){
+  window.addEventListener(type,event=>{
+    if(event.isTrusted&&(!audio.unlocked||selectedBgm?.paused))unlockAudio(true);
+  },{capture:true});
+}
 window.addEventListener('focus', () => { if (audio.unlocked && !audio.muted) syncMusicTrack(); });
 document.addEventListener('visibilitychange', () => {
   if (!document.hidden && audio.unlocked && !audio.muted) syncMusicTrack();
@@ -1391,7 +1385,8 @@ function readInput() {
   for (const k in edges) {
     edges[k] = false;
   }
-  return inp;
+  if(state.battle?.siege&&inp.heal){state.battle.siege.heal();inp.heal=false;}
+  return orbitControls.movement(inp);
 }
 
 function setupTouch() {
@@ -1463,11 +1458,16 @@ function setupTouch() {
 }
 
 // ---------- Screens ----------
-const state = { mode: null, myKey: null, oppKey: null, chapter: 0, battle: null, paused: false, net: null, online: null, dialogue: null, lastWin: false };
+const state = { mode: null, returnFromBattle: null, myKey: null, oppKey: null, chapter: 0, battle: null, paused: false, net: null, online: null, dialogue: null, lastWin: false };
+const orbitControls = createOrbitControls($('#rf5520-orbit'),renderer.domElement,camera,() =>
+  (state.mode==='story'||state.mode==='infinite')&&!state.paused&&!!(state.field||state.battle)&&!document.querySelector('.screen.on'));
+const musicAttempts = new WeakMap();
+const musicBlocked = new WeakSet();
+let selectedBgm = null;
 // オンライン途中乱入時も専用曲を優先し、戦闘中は通常曲へ戻さない。
 setInterval(() => {
   const fighters = state.battle?.fighters;
-  if (fighters?.some((f) => f.key === 'bloodfiend') &&
+  if (state.mode!=='castle' && fighters?.some((f) => f.key === 'bloodfiend') &&
       !fighters.some((f) => f.key === 'valgard' || f.key === 'fujiwara_nobuyori') &&
       musicKey(audio.wanted) !== 'zarugureibu') playTrack('zarugureibu');
   refreshGlobalValgardBgm();
@@ -1483,6 +1483,8 @@ function show(id) {
   }
   $('#hud').hidden = id !== null;
   $('#touch').classList.toggle('active', id === null);
+  orbitControls.refresh();
+  if(id)$('#'+id).scrollTop=0;
   if (id === 'scr-title' || id === 'scr-press') {
     audio.wanted = 'title';
     syncMusicTrack();
@@ -1765,6 +1767,8 @@ document.querySelectorAll('[data-to]').forEach((b) => b.addEventListener('click'
 document.querySelectorAll('[data-go]').forEach((b) => b.addEventListener('click', () => {
   sfx('ui');
   state.mode = b.dataset.go;
+  state.returnFromBattle=null;
+  orbitControls.reset();
   state.online = null;
   if (state.mode === 'story') {
     state.chapter = save.chapter % STORY.length;
@@ -1774,10 +1778,7 @@ document.querySelectorAll('[data-go]').forEach((b) => b.addEventListener('click'
   // RF552_MODES — Event solo / 2–4 friends, plus the independent endless challenge.
   if (state.mode === 'event') { openEventPlayChoiceV552(); return; }
   if (state.mode === 'infinite') {
-    openSelect('無限天守へ挑む戦士を選ぶ', '無限階層・HP持ち越し・到達時間ランキング', k => {
-      state.myKey=k;
-      void infiniteDungeon.launch(k).catch(rfBattleStartError);
-    }, {onBack:goTitle});
+    openInfiniteSelect();
     return;
   }
   const crumbs = { cpu: 'ひとりで手合わせ', duo: '背中をあずける', 'online-vs': 'オンライン対戦', 'online-coop': 'オンライン協力' };
@@ -1798,6 +1799,15 @@ document.querySelectorAll('[data-go]').forEach((b) => b.addEventListener('click'
   pickMine();
 }));
 
+function openInfiniteSelect(){
+  openSelect('無限天守へ挑む戦士を選ぶ','無限階層・HP持ち越し・到達時間ランキング',key=>{
+    if(state.battleLoading)return;
+    state.returnFromBattle=openInfiniteSelect;
+    state.myKey=key;
+    void infiniteDungeon.launch(key).catch(rfBattleStartError);
+  },{onBack:goTitle});
+}
+
 // RF552_EVENT_CHOOSER — no existing solo event behavior is removed.
 function openEventPlayChoiceV552(){
   const {ev}=activeEvent();
@@ -1809,14 +1819,14 @@ function openEventPlayChoiceV552(){
   solo.onclick=()=>{
     layer.remove();state.mode='event';
     openSelect('あなたが握る剣は？',`週替わりイベント › ${ev.name}`,k=>{
-      state.myKey=k;openEventLevel(lv=>{state.eventRun={...activeEvent(),lv};void startOffline();});
+      state.myKey=k;openSoloEventLevel();
     },{onBack:goTitle});
   };
   const coop=document.createElement('button');coop.type='button';coop.className='btn';coop.textContent='最大4人で協力する';
   coop.onclick=()=>{
     layer.remove();state.mode='event-coop';
     openSelect('協力戦で使うキャラクター',`協力イベント › ${ev.name}`,k=>{
-      state.myKey=k;eventCoop.prepare();
+      state.myKey=k;openLobby();
     },{onBack:goTitle});
   };
   const close=document.createElement('button');close.type='button';close.className='btn mini';close.textContent='戻る';close.onclick=()=>{layer.remove();goTitle();};
@@ -2107,6 +2117,7 @@ function stageIllustration(st, index) {
   return 'assets/stage-illustrations/' + category + suffix + '.webp';
 }
 function openStageSelect(crumb, onBack) {
+  state.returnFromBattle=()=>openStageSelect(crumb,onBack);
   $('#party-bar').hidden = true;
   $('#select-label').textContent = '戦いの舞台を選ぶ';
   $('#select-crumb').textContent = crumb;
@@ -2132,7 +2143,7 @@ function openStageSelect(crumb, onBack) {
     const title = document.createElement('b');
     title.textContent = st.name;
     const description = document.createElement('small');
-    description.textContent = st.id === 'random' ? '舞台をランダムに決める' : st.seg >= 20 ? '円形の闘技場' : `${st.seg}角の舞台`; 
+    description.textContent = st.id === 'random' ? '舞台をランダムに決める' : '半径13mの円形闘技場'; 
     card.append(image, eyebrow, title, description);
     card.addEventListener('mouseenter', () => st.sky && setStage(st));
     card.addEventListener('focus', () => st.sky && setStage(st));
@@ -2156,6 +2167,8 @@ function goTitle() {
   leaveField();
   setStage(STAGES[0]);
   state.mode = null;
+  state.returnFromBattle=null;
+  orbitControls.reset();
   state.invaded = false;
   if (state.net) {
     state.net.leave();
@@ -2282,7 +2295,8 @@ const ui = {
     fl.classList.add('go');
   },
   end(winTeam) {
-    setTimeout(() => onBattleEnd(winTeam === 0), 1400);
+    const battle=state.battle;
+    setTimeout(()=>{if(battle&&state.battle===battle)onBattleEnd(winTeam===0);},1400);
   }
 };
 
@@ -2290,6 +2304,7 @@ function makeBattle(net) {
   endBattle();
   state.invaded = false;
   state.battle = new Battle(scene, camera, { assets, ui, net });
+  if(state.mode==='story'||state.mode==='infinite')state.battle.rfCameraView=orbitControls.view;
   return state.battle;
 }
 function endBattle() {
@@ -2297,7 +2312,7 @@ function endBattle() {
   if (state.battle) {
     // 覚醒の蓄積ダメージは次の戦いへ持ち越す（覚醒中に終わったらリセット）
     const me = state.battle.fighters.find((f) => f.isPlayer && !f.remoteAuth);
-    if (me) {
+    if (me && !state.battle.siege) {
       save.awk = me.awakened > 0 ? 0 : Math.max(0, Math.min(99, Math.round(me.awk)));
       persist();
     }
@@ -2310,6 +2325,11 @@ function endBattle() {
 const EV_LV = (lv) => ({ hp: 1 + 0.35 * (lv - 1), atk: 1 + 0.15 * (lv - 1), reward: 1 + 0.5 * (lv - 1), first: lv });
 function evCleared() {
   return save.evProg.week === activeEvent().week ? save.evProg.lv : 0;
+}
+function openSoloEventLevel(){
+  state.returnFromBattle=openSoloEventLevel;
+  show('scr-select');
+  openEventLevel(lv=>{state.eventRun={...activeEvent(),lv};void startOffline();});
 }
 function openEventLevel(cb) {
   const { ev } = activeEvent();
@@ -2347,7 +2367,9 @@ function openEventLevel(cb) {
   back.style.marginTop = '10px';
   back.addEventListener('click', () => {
     ov.remove();
-    goTitle();
+    openSelect('あなたが握る剣は？',ev.name,key=>{
+      state.myKey=key;openSoloEventLevel();
+    },{onBack:goTitle});
   });
   box.append(h, p, grid, back);
   ov.append(box);
@@ -2449,9 +2471,11 @@ function beginBattle(boss) {
       : participants.includes('valgard') ? 'valgard'
       : participants.includes('bloodfiend') ? 'zarugureibu'
       : apex ? 'apex:' + apex
-      : (state.mode === 'event' || state.mode === 'event-coop') ? 'event' : boss ? 'boss' : 'battle';
+      : (['event','event-coop','castle'].includes(state.mode)) ? 'event' : boss ? 'boss' : 'battle';
     playTrack(fallback);
     ui.banner({ name: '— ♪ 藤原信頼 専用BGM —' }, '他の全BGMより最優先');
+  } else if (state.mode === 'castle') {
+    playTrack('event');
   } else if (state.mode === 'adventure') {
     playTrack('adventure');
     ui.banner({ name: '— ♪ ADVENTURE —' }, '休憩所と戦闘で同じBGM');
@@ -2557,7 +2581,7 @@ const eventCoop = createEventCoopV552({
 const infiniteDungeon=createInfiniteDungeonV552({
   state,save,FIGHTERS,STAGES,ROSTER,ENEMY_ROSTER,BOSS_ROSTER,ensureAllModelsReady,
   setStage,makeBattle,endBattle,beginBattle,foeCpu,foeHp,upgFor,gearFor,showResult,
-  ui,syncCodeNow,apiEnabled,api,myName,rfBattleStartError
+  ui,syncCodeNow,apiEnabled,api,myName,getArena:()=>arena
 });
 document.getElementById('rf552-infinite-rank')?.addEventListener('click',()=>infiniteDungeon.openLeaderboard());
 const REWARD = { cpu: 30, duo: 40, story: 60, 'online-vs': 50, 'online-coop': 60 };
@@ -2571,6 +2595,7 @@ function onBattleEnd(won) {
   if (!state.battle) {
     return;
   }
+  if (state.mode === 'castle') { castleRealm.onBattleEnd(); return; }
   if (state.mode === 'adventure') { gaizorgAdventure.finish(won); return; }
   if (state.mode === 'infinite') { infiniteDungeon.onEnd(won); return; }
   if (state.mode === 'event-coop') eventCoop.finished();
@@ -2681,9 +2706,30 @@ function showResult(title, text, reward, retry, next) {
   $('#res-reward').textContent = reward;
   $('#btn-retry').hidden = !retry;
   $('#btn-next').hidden = !next;
+  $('#result-back').textContent=state.mode==='story'?'分かれ道へ':'出撃前の画面へ戻る';
   playTrack(state.mode === 'story' ? 'story' : 'title');
   show('scr-result');
 }
+function returnFromBattle(){
+  state.paused=false;
+  $('#pause').hidden=true;
+  if(state.mode==='story'){goTitle();return;}
+  if(state.mode==='castle'){castleRealm.retreat();return;}
+  if(state.mode==='adventure'){gaizorgAdventure.back();return;}
+  const previous=state.returnFromBattle;
+  if(!previous){goTitle();return;}
+  infiniteDungeon.stop();
+  endBattle();
+  leaveField();
+  state.net?.leave();
+  state.net=null;
+  state.online=null;
+  state.battleLoading=false;
+  orbitControls.reset();
+  playTrack('title');
+  previous();
+}
+$('#result-back').addEventListener('click',returnFromBattle);
 $('#btn-retry').addEventListener('click', () => {
   sfx('ui');
   if (state.mode === 'story') {
@@ -2848,14 +2894,14 @@ async function enterField() {
   const storyBoss=STORY[state.chapter]?.enemies?.[0]?.k;
   if (!(await ensureAllModelsReady([...party,...fieldNpcKeys,...fieldEnemyPool,storyBoss].filter(k=>FIGHTERS[k])))) return;
   try {
-  const { Field } = await import('./field.js?v=rf-v9-2-20261109');
+  const { Field } = await import('./field.js?v=55.20');
   leaveField();
   const ch = STORY[state.chapter];
   const st = stageById(ch.stage);
   setStage(st);
   state.myKey = mainKey;
   state.field = new Field(scene, {
-    chapter: state.chapter, ch, stage: st, assets, floorTex,
+    chapter: state.chapter, ch, stage: st, assets, floorTex, cameraView:orbitControls.view,
     mainKey, gear: gearFor(mainKey), partyKeys: party, npcKeys: fieldNpcKeys, enemyPool: fieldEnemyPool,
     onTalk: (lines) => {
       sfx('ui');
@@ -3213,7 +3259,12 @@ $('#btn-forge').addEventListener('click', () => {
 
 // ---------- Online ----------
 function openLobby() {
-  if(state.mode==='event-coop'){eventCoop.prepare();return;}
+  state.returnFromBattle=()=>{
+    const room=$('#lobby-room').value;
+    openLobby();
+    if(room)$('#lobby-room').value=room;
+  };
+  if(state.mode==='event-coop'){eventCoop.close();eventCoop.prepare();return;}
   const ec=document.getElementById('rf552-event-coop');if(ec)ec.hidden=true;
   $('#lobby-mode').textContent = state.mode === 'online-vs' ? '遠い誰かと剣を交える' : '遠い誰かと、裁定者に挑む';
   const params = new URLSearchParams(location.search);
@@ -3528,6 +3579,7 @@ async function startInvade(p) {
     tk = r.ticket;
   }
   state.mode = 'invade';
+  state.returnFromBattle=()=>{show('scr-invade');renderInvadeList();};
   // V36: invitation is sent after signed presence is advertised.
   setStage(stageById(STORY[p.ch]?.stage));
   const b = makeBattle(w);
@@ -3802,6 +3854,7 @@ function togglePause() {
   }
   state.paused = !state.paused;
   $('#pause').hidden = !state.paused;
+  orbitControls.refresh();
   $('#pause-note').textContent = state.online ? '遠い相手の時間は止まりません。' : '';
   if (state.paused && !isTouch) {
     $('#btn-resume').focus();
@@ -3809,7 +3862,7 @@ function togglePause() {
 }
 $('#btn-pause').addEventListener('click', togglePause);
 $('#btn-resume').addEventListener('click', togglePause);
-$('#btn-quit').addEventListener('click', goTitle);
+$('#btn-quit').addEventListener('click', returnFromBattle);
 
 // ---------- Options / operator key ----------
 async function sha256(text) {
@@ -4537,8 +4590,48 @@ const gaizorgAdventure = setupGaizorgAdventure({
 });
 
 
-// RF50_CASTLE_INIT
-initCastleRealm({save,persist,FIGHTERS,canUse,show,goTitle,state,playerName:myName,syncCodeNow,setCastleMusic:(active)=>playTrack(active?'event':'title'),roleToken:()=>roleState.tok,roleKind:()=>roleState.r,markSynced,syncVer,syncBefore:async()=>{
+async function startCastleBattle(session){
+  const r=session.raid;
+  if(!FIGHTERS[r.hero]||!FIGHTERS[r.enemyKey])throw Error('出撃データを読み込めません。');
+  if(!(await ensureAllModelsReady([r.hero,r.enemyKey])))return false;
+  if(!isScreen('scr-castle')){state.battleLoading=false;return false;}
+  state.mode='castle';
+  state.myKey=r.hero;
+  setStage(stageById(r.style==='wa'?'bamboo':'moon'));
+  const battle=makeBattle(null);
+  const player=battle.add(r.hero,{team:0,player:true,pos:[-4,3],facing:2.3,upg:upgFor(r.hero),gear:gearFor(r.hero)});
+  const enemy=battle.add(r.enemyKey,{team:1,cpu:Math.max(.01,r.cpuPercent/100),pos:[4,-3],facing:-.9,name:r.enemyName});
+  player.maxHp=r.maxHp;
+  enemy.maxHp=r.maxEnemyHp;
+  for(const [fighter,property] of [[player,'attackerHp'],[enemy,'enemyHp']]){
+    Object.defineProperty(fighter,'hp',{get:()=>session.raid[property],set(){},configurable:true});
+  }
+  let previous=r;
+  battle.siege={
+    contact(attacker,target,kind,guarded){
+      if(battle.intro>0)return;
+      if(attacker===player&&target===enemy)void session.action(kind);
+      else if(attacker===enemy&&target===player)void session.action(guarded?'guard':'counter');
+    },
+    heal(){if(battle.intro<=0)void session.action('heal');},
+    update(){
+      const next=session.raid;
+      if(!player.action&&!session.busy)player.over=next.charge;
+      if(next.turn===previous.turn)return;
+      const hp=next.attackerHp-previous.attackerHp,damage=previous.enemyHp-next.enemyHp;
+      if(hp)ui.popup(player.pos,Math.abs(hp),hp>0?'#a5ed9b':'#ff8f7a');
+      if(damage>0)ui.popup(enemy.pos,damage,'#ffe9a8');
+      if(hp<0)battle.shake=Math.max(battle.shake,.12);
+      previous=next;
+    }
+  };
+  player.over=r.charge;
+  beginBattle(false);
+  ui.banner({name:'— 攻城戦 第'+r.floor+'/'+r.floors+'階 —'},r.enemyName);
+  return true;
+}
+
+const castleRealm=initCastleRealm({startBattle:startCastleBattle,endBattle,save,persist,FIGHTERS,canUse,show,goTitle,state,playerName:myName,syncCodeNow,setCastleMusic:(active)=>playTrack(active?'event':'title'),roleToken:()=>roleState.tok,roleKind:()=>roleState.r,markSynced,syncVer,syncBefore:async()=>{
   let tries=0;
   while(autoBusy||syncSpendBusy||syncImportBusy){if(++tries>250)throw Error('busy');await new Promise(resolve=>setTimeout(resolve,100))}
   syncSpendBusy=true;
