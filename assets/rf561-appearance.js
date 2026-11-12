@@ -1,6 +1,6 @@
 /* V55.11: apply stable geometry-changing appearances to the generated roster. */
 import {FIGHTERS,ROSTER} from '../data.js?v=rf-minamoto-v48-20261111';
-import {Fighter} from '../game.js?v=55.20';
+import {Fighter} from '../game.js?v=55.21';
 import {assignUniqueAppearances} from '../appearance-data.js';
 import {applyCharacterVariant} from '../character-variants.js';
 if(!window.__rf561AppearanceReady){

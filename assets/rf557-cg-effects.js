@@ -1,106 +1,11 @@
-/* RIFTFALL ARENA V55.7 — restrained painterly CGI magic and world atmosphere.
-   Decorative only. Damage, hit tests, stamina, HP, online packets and models untouched.
-   This module deliberately loads AFTER V55.6's existing engine extension. */
-import './rf556-cg-engine.js?v=20261112-v556';
 import * as THREE from 'three';
-import {Battle} from '../game.js?v=55.20';
-import {Field} from '../field.js?v=55.20';
+import {Field} from '../field.js?v=55.21';
 
 if (!window.__rf557CGEff) {
  window.__rf557CGEff = true;
  const mobile=window.matchMedia?.('(pointer: coarse)').matches || /iPhone|iPad|Android/i.test(navigator.userAgent||'');
- const motion=window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
  const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
  const lifeProfile=()=>window.RF556Graphics?.profile?.()||'balanced';
- const limits=()=>lifeProfile()==='economy'?0:mobile?11:27;
- const registry=new WeakMap();
- const sprites=new Map();
- const loader=new THREE.TextureLoader();
- function texture(name){
-  if(!sprites.has(name)){
-   const t=loader.load('assets/rf557/spell-'+name+'.webp',undefined,undefined,err=>{
-    console.warn('[CG V55.7] optional FX texture unavailable:',name,err?.message||'download');
-   });
-   t.colorSpace=THREE.SRGBColorSpace;
-   t.minFilter=THREE.LinearFilter;t.magFilter=THREE.LinearFilter;
-   sprites.set(name,t);
-  }
-  return sprites.get(name);
- }
- function stateOf(b){
-  if(!registry.has(b))registry.set(b,{active:0,owned:new Set()});
-  return registry.get(b);
- }
- function emit(b,position,color=0xaadfff,scale=1.2,life=.48,options={}){
-  if(!b?.fx||b.ended||motion||limits()===0)return null;
-  const state=stateOf(b);
-  if(state.active>=limits())return null;
-  const ring=options.ring===true;
-  const mat=ring?
-   new THREE.MeshBasicMaterial({map:texture('ring'),color,transparent:true,opacity:.72,
-     blending:THREE.AdditiveBlending,depthWrite:false,depthTest:true,side:THREE.DoubleSide}):
-   new THREE.SpriteMaterial({map:texture('flare'),color,transparent:true,opacity:.86,
-     blending:THREE.AdditiveBlending,depthWrite:false,depthTest:true});
-  const shape=ring?new THREE.Mesh(new THREE.PlaneGeometry(1,1),mat):new THREE.Sprite(mat);
-  shape.userData.rf557Decoration=true;
-  if(ring){shape.rotation.x=-Math.PI/2;}
-  shape.position.copy(position);
-  shape.scale.setScalar(Math.max(.01,scale));
-  b.fx.add(shape);state.owned.add(shape);state.active++;
-  let t=0,cleaned=false;
-  const clean=()=>{
-   if(cleaned)return;cleaned=true;
-   shape.removeFromParent();mat.dispose();if(ring)shape.geometry.dispose();
-   state.owned.delete(shape);state.active=Math.max(0,state.active-1);
-  };
-  const interval=Math.max(.08,life);
-  try{b.addEffect(dt=>{
-   t+=Math.max(0,dt);let v=clamp(t/interval,0,1);
-   const growth=ring?.75+v*1.65:.9+v*.7;
-   const sc=Math.max(.01,scale*growth);
-   shape.scale.set(sc,sc,sc);
-   shape.material.opacity=(ring?.75:.83)*Math.pow(1-v,ring?1.25:1.5);
-   if(!ring)shape.position.y+=dt*(options.rise??.72);
-   if(v>=1){clean();return false;}
-   return true;
-  });}catch(e){clean();return null;}
-  return shape;
- }
- // The original spell remains authoritative; these effects are always cosmetic.
- const previousCast=Battle.prototype.castFx;
- if(typeof previousCast==='function')Battle.prototype.castFx=function(f,color,spec){
-  const result=previousCast.call(this,f,color,spec);
-  if(limits()>0 && f?.pos && !this.ended){
-   const c=color??0x9bc4ff,x=f.pos.x,z=f.pos.z;
-   emit(this,new THREE.Vector3(x,.13,z),c,3.15,.67,{ring:true});
-   emit(this,new THREE.Vector3(x,1.28,z),c,1.1,.44,{rise:.55});
-   if(!mobile && lifeProfile()==='quality') {
-    emit(this,new THREE.Vector3(x+.24,1.7,z-.15),0xf6fdff,.54,.37,{rise:1.1});
-   }
-  }
-  return result;
- };
- const previousGrand=Battle.prototype.grandFx;
- if(typeof previousGrand==='function')Battle.prototype.grandFx=function(pos,elem,color,power){
-  const result=previousGrand.apply(this,arguments);
-  if(pos&&limits()>0){
-   const f=clamp(Number(power)||1,.6,3);
-   emit(this,new THREE.Vector3(pos.x,.13,pos.z),color||0xa9dfff,3.1*f,.85,{ring:true});
-   if(!mobile)emit(this,new THREE.Vector3(pos.x,pos.y+1.4,pos.z),0xe2f9ff,1.2*f,.62,{rise:1.3});
-  }
-  return result;
- };
- const previousDispose=Battle.prototype.dispose;
- if(typeof previousDispose==='function')Battle.prototype.dispose=function(...args){
-  const state=registry.get(this);
-  if(state){for(const shape of state.owned){
-   shape.removeFromParent();shape.material?.dispose();if(shape.isMesh)shape.geometry?.dispose();
-  }state.owned.clear();state.active=0;registry.delete(this);}
-  return previousDispose.apply(this,args);
- };
-
- // An illustrated sky is painted from the already-generated per-biome source.
- // No independent world/model content is fabricated; colors derive from the actual biome.
  const enhancedSkies=new Map();
  function enhanceSky(base,biome){
   const key=String(biome?.name||biome?.sky||'sky');

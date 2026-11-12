@@ -1,14 +1,14 @@
 {
   "name": "双月のアルケイア",
   "short_name": "双月のアルケイア",
-  "description": "双つの月が照らす幻想世界へ。個性豊かな戦士を育て、剣と魔法で壮大な冒険へ。物語、イベント戦、最大4人協力、無限天守に挑戦！PC・スマホ対応、インストール不要で無料プレイ。",
+  "description": "双つの月の下を旅する無料3DアクションRPG。ストーリー、無限天守、拠点攻城戦、オンライン対戦・協力をPCとスマホのブラウザで楽しめます。",
   "lang": "ja",
   "start_url": "./",
   "scope": "./",
   "display": "fullscreen",
   "orientation": "any",
-  "background_color": "#1b1d3a",
-  "theme_color": "#1b1d3a",
+  "background_color": "#101a27",
+  "theme_color": "#101a27",
   "icons": [
     {
       "src": "assets/site-icon-192.png",

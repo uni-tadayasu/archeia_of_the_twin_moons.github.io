@@ -25,7 +25,7 @@ function menu(title,description,actions){
   function onKey(ev){
    if(ev.key==='Escape'){ev.preventDefault();ev.stopPropagation();done(null);return;}
    if(ev.key==='Tab'){
-    const list=[...buttons.querySelectorAll('button:not([disabled])')];
+    const list=[...box.querySelectorAll('button:not([disabled])')];
     const i=list.indexOf(document.activeElement);
     if(ev.shiftKey&&i<=0){ev.preventDefault();list[list.length-1]?.focus();}
     if(!ev.shiftKey&&i===list.length-1){ev.preventDefault();list[0]?.focus();}
@@ -100,17 +100,8 @@ async function chooseStart(){
   }catch(e){await menu('復元できませんでした',String(e?.message||e),[{id:'close',label:'閉じる',primary:true}]);}
  }
 }
-document.addEventListener('pointerdown',ev=>{
- if(!isPress()||!ev.target.closest('#scr-press')||bypassStart)return;
- ev.preventDefault();ev.stopImmediatePropagation();void chooseStart();
-},true);
-document.addEventListener('keydown',ev=>{
- if(isPress()&&!open&&!bypassStart&&['Enter',' ','Spacebar'].includes(ev.key)){
-  ev.preventDefault();ev.stopImmediatePropagation();void chooseStart();
- }
-},true);
 function riskyButton(button){
- if(button.closest('#rf51-overlay,#scr-castle,#mailbox-dialog'))return null;
+ if(button.closest('.rf51-overlay,#scr-castle,#mailbox-dialog'))return null;
  if(button.dataset.rf51Confirmed==='skip')return null;
  const id=button.id||'';
  const label=String(button.textContent||button.getAttribute('aria-label')||'').replace(/\s+/g,' ').trim().slice(0,100);
@@ -123,12 +114,14 @@ function riskyButton(button){
 }
 const bypass=new WeakSet();
 document.addEventListener('click',ev=>{
- if(!ev.isTrusted)return;
  const btn=ev.target.closest?.('button,input[type=submit],[role=button]');
  if(!btn||bypass.has(btn))return;
- if(isPress()&&btn.closest('#scr-press')&&!bypassStart){
-  ev.preventDefault();ev.stopImmediatePropagation();void chooseStart();return;
+ if(btn.id==='press-start'&&isPress()&&!bypassStart){
+  ev.preventDefault();ev.stopImmediatePropagation();
+  if(!btn.disabled)void chooseStart();
+  return;
  }
+ if(!ev.isTrusted)return;
  const risk=riskyButton(btn);
  if(!risk)return;
  ev.preventDefault();ev.stopImmediatePropagation();

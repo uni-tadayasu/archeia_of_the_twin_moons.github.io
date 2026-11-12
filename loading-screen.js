@@ -2,12 +2,12 @@
 (function(){
   'use strict';
   if(window.RiftfallLoading)return;
-  const tasks=new Map();let seq=0,el=null,parts={},hideTimer=0,watchdog=0;
+  const tasks=new Map();let seq=0,el=null,parts={},hideTimer=0;
   function mount(){
     if(el||!document.body)return;
     el=document.createElement('div');el.id='rf-loading-screen';el.hidden=true;el.className='rf-vanish';
     el.setAttribute('role','status');el.setAttribute('aria-label','ゲームのロード画面');el.setAttribute('aria-live','polite');
-    el.innerHTML='<div class="rf-load-particles" aria-hidden="true"></div><section class="rf-load-panel"><div class="rf-load-emblem" aria-hidden="true"><span>✦</span></div><p class="rf-load-kicker">ARKEIA OF THE TWIN MOONS</p><h2 class="rf-load-title">双月のアルケイア</h2><span class="rf-load-en">LOADING YOUR JOURNEY</span><p class="rf-load-description" id="rf-load-description">冒険の準備をしています</p><div class="rf-load-bar-shell rf-indeterminate" id="rf-load-shell" role="progressbar" aria-label="読み込みの進捗" aria-valuemin="0" aria-valuemax="100"><div class="rf-load-bar-fill" id="rf-load-fill"></div></div><div class="rf-load-meta"><span class="rf-load-filename" id="rf-load-file">データを確認しています…</span><span class="rf-load-percent" id="rf-load-percent">準備中</span></div><button type="button" class="rf-load-dismiss" id="rf-load-dismiss">画面を閉じる</button><p class="rf-load-footer">KASAI SOLUTIONS · GAME SYSTEM</p></section>';
+    el.innerHTML='<section class="rf-load-panel"><div class="rf-load-emblem" aria-hidden="true"></div><h2 class="rf-load-description" id="rf-load-description">出撃の準備をしています</h2><div class="rf-load-bar-shell rf-indeterminate" id="rf-load-shell" role="progressbar" aria-label="読み込みの進捗" aria-valuemin="0" aria-valuemax="100"><div class="rf-load-bar-fill" id="rf-load-fill"></div></div><div class="rf-load-meta"><span class="rf-load-filename" id="rf-load-file"></span><span class="rf-load-percent" id="rf-load-percent">準備中</span></div><button type="button" class="rf-load-dismiss" id="rf-load-dismiss">閉じる</button></section>';
     document.body.append(el);
     parts={desc:el.querySelector('#rf-load-description'),shell:el.querySelector('#rf-load-shell'),fill:el.querySelector('#rf-load-fill'),file:el.querySelector('#rf-load-file'),percent:el.querySelector('#rf-load-percent'),dismiss:el.querySelector('#rf-load-dismiss')};
     parts.dismiss.addEventListener('click',()=>{tasks.clear();conceal();});
@@ -66,10 +66,6 @@
   }
   const api={begin,progress,end,error,transition,manual:begin};
   Object.defineProperty(window,'RiftfallLoading',{value:api,configurable:false});
-  // The first scene is ready when main.js reports completion of its first GLB.
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',mount,{once:true});else mount();
-  begin('ゲームの起動準備をしています',{token:'boot',note:'最初の3Dモデルと戦場を準備中',delay:0});
-  // Avoid an infinite overlay when application startup itself has a fatal error.
-  watchdog=setTimeout(()=>{if(tasks.has('boot'))error('boot','起動に時間がかかっています。通信状況または開発者ツールのエラーを確認してください。');},90000);
-  window.addEventListener('pagehide',()=>{clearTimeout(watchdog);clearTimeout(hideTimer);});
+  window.addEventListener('pagehide',()=>clearTimeout(hideTimer));
 })();

@@ -1,3 +1,4 @@
+import { collectMotionClips, playMotion, animateStatic } from './assets/riftfall-motion-v5521.js';
 // RF_BATCH_SCALE_STARTUP_V92
 // RF_GRAND_FOUR_20261108 field.js
 // ストーリーモードのフィールド：町 → 野 → ダンジョン（迷宮）を歩いて目的地へ。
@@ -6,7 +7,7 @@ import * as THREE from 'three';
 import { attachValgardMotion } from './valgard-motion.js?v=20261108-grand-four-v3';
 import { instantiateModel, disposeModel } from './model-runtime.js?v=rf-minamoto-v48-20261111';
 import { applyCharacterVariant, disposeCharacterVariant } from './character-variants.js';
-import { finishIllustratedModel } from './assets/rf5520-illustrated-material.js';
+import { finishIllustratedModel } from './assets/rf5520-illustrated-material.js?v=55.21';
 import { FIGHTERS } from './data.js?v=rf-minamoto-v48-20261111';
 import { makeGear, animGear, removeGear } from './gear.js';
 
@@ -71,20 +72,11 @@ function makeActor(gltf, height, color, tint, key = "") {
   a.valgardMotion = attachValgardMotion(instance.model, key);
   a.mixer = new THREE.AnimationMixer(instance.model);
   instance.model.userData.valgardAnimatedRig = !!(gltf.animations?.length);
-  for (const clip of gltf.animations || []) {
-    const n = clip.name.toLowerCase();
-    for (const k of ['idle', 'walk', 'run']) if (n.includes(k) && !a.clips[k]) a.clips[k] = clip;
-  }
-  a.play = (name) => {
-    if (!a.mixer || a.cur === name) return;
-    a.cur = name;
-    const clip = a.clips[name] || (name === 'run' ? a.clips.walk : null) || a.clips.idle;
-    if (!clip) return;
-    const act = a.mixer.clipAction(clip);
-    if (act === a.act) return;
-    act.reset().fadeIn(0.2).play();
-    a.act?.fadeOut(0.2);
-    a.act = act;
+  a.clips=collectMotionClips(gltf.animations);
+  a.play=name=>{
+    if(a.cur===name)return;
+    a.cur=name;
+    playMotion(a,name);
   };
   a.play('idle');
   return a;
@@ -1556,6 +1548,7 @@ export class Field {
     for (const a of [p, ...this.followers, ...this.npcs, ...this.syms, this.boss]) {
       if (a.far) continue;
       a.mixer?.update(dt);
+      animateStatic(a,dt,{moving:a.cur==='run'||a.cur==='walk',fast:a.cur==='run'});
       a.valgardMotion?.update(dt, a.cur === 'run' || a.cur === 'walk' ? (a.cur === 'run' ? 'run' : 'walk') : false);
       if (a.gear) animGear(a.gear, dt, false, a.cur === 'run');
       a.root.position.copy(a.pos);

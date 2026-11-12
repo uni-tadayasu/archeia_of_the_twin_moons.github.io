@@ -8,6 +8,7 @@ export function createOrbitControls(panel, canvas, camera, active) {
   const auto = panel.querySelector('[data-view="auto"]');
   const status = panel.querySelector('output');
   const direction = camera.position.clone();
+  const controlsDirection = camera.position.clone();
   const dragArea = panel.querySelector('.rf5520-orbit-drag');
   let drag = null;
   function reflect() {
@@ -71,7 +72,7 @@ export function createOrbitControls(panel, canvas, camera, active) {
   }
   document.addEventListener('riftfall-touch-layout',fitTouchPanel);
   return {
-    view,reset,
+    view,reset,rotate,
     refresh(){
       panel.hidden=!active();
       if(panel.hidden)drag=null;
@@ -79,10 +80,10 @@ export function createOrbitControls(panel, canvas, camera, active) {
     },
     movement(input){
       if(!active()||view.yaw===null)return input;
-      camera.getWorldDirection(direction);
-      const length=Math.hypot(direction.x,direction.z);
+      camera.getWorldDirection(controlsDirection);
+      const length=Math.hypot(controlsDirection.x,controlsDirection.z);
       if(length<.001)return input;
-      const sin=-direction.x/length,cos=-direction.z/length;
+      const sin=-controlsDirection.x/length,cos=-controlsDirection.z/length;
       return {...input,mx:input.mx*cos+input.mz*sin,mz:input.mz*cos-input.mx*sin};
     }
   };

@@ -78,25 +78,6 @@
     }
   }
 
-  function annotateCharacterPortraits() {
-    const grid=$('#select-grid');if(!grid)return;
-    for(const card of grid.querySelectorAll('button.card:not(.stage-tile)')) {
-      if(card.dataset.rf557Card)continue;
-      const face=card.querySelector('img.face');
-      if(!face)continue;
-      card.dataset.rf557Card='1';
-      face.decoding='async';
-      face.loading='lazy';
-      // Existing V55.6 module replaces this image with a photograph of the real GLB.
-      // Do NOT replace character images with AI-generated look-alikes.
-      const badge=document.createElement('span');
-      badge.className='rf557-portrait-badge';
-      badge.setAttribute('aria-hidden','true');
-      badge.textContent='MODEL VIEW';
-      card.append(badge);
-    }
-  }
-
   function annotateModes() {
     const title=$('#scr-title');if(!title)return;
     for(const b of title.querySelectorAll('.mode-tile')){
@@ -118,7 +99,7 @@
     pending=true;
     requestAnimationFrame(()=>{
       pending=false;
-      hudDensity();annotateModes();annotateCharacterPortraits();
+      hudDensity();annotateModes();
       updateMenuVisibility();addGraphicQualityNote();
     });
   }

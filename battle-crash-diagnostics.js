@@ -68,7 +68,7 @@
       if (previous && now() - previous.at < 300000 && ['loading', 'battle', 'error', 'gpu-error'].includes(previous.phase)) {
         showDiagnostics('前回の戦闘が正常に終了しなかった可能性があります',
           '戦闘開始時の処理落ち、GPUメモリ不足、JavaScriptエラーが考えられます。エラー情報をコピーして確認できます。');
-      } else if (!window.__arkeiaBootOk) {
+      } else if (!window.__arkeiaBootOk && !window.__riftfallGraphicsUnavailable) {
         showDiagnostics('ゲーム初期化エラー', 'main.js の初期化を確認してください。');
       }
     }, 10000);
@@ -103,7 +103,7 @@
     try {
       const gameResource = performance.getEntriesByType('resource')
         .find(entry => /(?:^|\/)game\.js(?:\?|$)/i.test(new URL(entry.name).pathname + new URL(entry.name).search))?.name;
-      const gamePath = new URL('./game.js?v=55.20', document.baseURI).href;
+      const gamePath = new URL('./game.js?v=55.21', document.baseURI).href;
       const dataResource = performance.getEntriesByType('resource')
         .find(entry => /(?:^|\/)data\.js(?:\?|$)/i.test(new URL(entry.name).pathname + new URL(entry.name).search))?.name;
       const dataPath = dataResource || new URL('./data.js?v=rf-minamoto-v48-20261111', document.baseURI).href;
@@ -193,42 +193,16 @@
           this.__rfShadowState = [];
         }
       };
-      // Small hit sparks were removed from the scene but their individual GPU
-      // materials were never disposed. A shared low-poly geometry and proper
-      // per-instance disposal avoids the memory leak in long battles.
-      const sparkGeometry = new THREE.OctahedronGeometry(1, 0);
-      proto.spark = function(pos, color, size = 1) {
-        const material = new THREE.MeshBasicMaterial({
-          color, transparent: true, opacity: 0.9, depthWrite: false,
-          blending: THREE.AdditiveBlending
-        });
-        const mesh = new THREE.Mesh(sparkGeometry, material);
-        mesh.position.copy(pos);
-        this.fx.add(mesh);
-        let t = 0;
-        this.addEffect((dt) => {
-          t += dt;
-          mesh.scale.setScalar(size * (0.3 + t * 4));
-          mesh.rotation.y += dt * 8;
-          material.opacity = Math.max(0, 0.9 - t * 5);
-          if (t > 0.2) {
-            mesh.removeFromParent();
-            material.dispose();
-            return false;
-          }
-          return true;
-        });
-      };
       // Effects methods listed here affect visuals only. Never throttle effect
       // callbacks in Battle.update: some of those carry hit/damage timing.
-      for (const method of ['fxPop', 'fx3d', 'grandFx', 'spark', 'puff', 'burstFx']) {
+      for (const method of ['fxPop', 'burstFx']) {
         const original = proto[method];
         if (typeof original !== 'function') continue;
         proto[method] = function(...args) {
           const nodes = this.fx?.children?.length || 0;
           const callbacks = this.effects?.length || 0;
           if (nodes >= maxVisualNodes || callbacks >= maxCallbacks ||
-              ((method === 'fx3d' || method === 'grandFx' || method === 'burstFx') && nodes >= max3DFxNodes)) {
+              (method === 'burstFx' && nodes >= max3DFxNodes)) {
             // Return a harmless object for the fxPop API (which normally
             // returns an Object3D), including when third-party skill code
             // keeps the return value. No hit callbacks are skipped.
@@ -237,32 +211,6 @@
           return original.apply(this, args);
         };
       }
-      // Pool camera vectors instead of allocating 2-3 new vectors each frame.
-      // Camera interpolation and shake formulas are kept equivalent.
-      proto.updateCamera = function(dt) {
-        const c = (this.__rfCamTemp ||= new THREE.Vector3()).set(0, 0, 0);
-        let weight = 0;
-        for (const f of this.fighters) {
-          if (f.dead) continue;
-          const k = f.isPlayer ? 2 : 1;
-          c.addScaledVector(f.pos, k); weight += k;
-        }
-        if (weight) c.multiplyScalar(1 / weight);
-        let spread = 0;
-        for (const f of this.fighters) if (!f.dead) spread = Math.max(spread, f.pos.distanceTo(c));
-        this.camCenter.lerp(c, 1 - Math.exp(-5 * dt));
-        const portrait = this.camera.aspect < 1 ? 1.7 : 1;
-        const dist = (8 + spread * 0.9) * portrait;
-        const target = (this.__rfCamTarget ||= new THREE.Vector3())
-          .copy(this.camCenter).addScaledVector((this.__rfCamUp ||= new THREE.Vector3(0, 1, 0)), dist * 0.62 + 1);
-        target.z += dist;
-        this.camera.position.lerp(target, 1 - Math.exp(-4 * dt));
-        this.shake = Math.max(0, this.shake - dt * 1.8);
-        const shake = this.shake * 0.35;
-        this.camera.position.x += (Math.random() - 0.5) * shake;
-        this.camera.position.y += (Math.random() - 0.5) * shake;
-        this.camera.lookAt(this.camCenter.x, 1, this.camCenter.z);
-      };
       window.__rfBattleFastPathInstalled = true;
       console.info('[Riftfall V11] Combat optimizer installed: lower GPU cost, cached model bounds, NPC animation 30Hz, capped visual FX.');
     } catch (error) {

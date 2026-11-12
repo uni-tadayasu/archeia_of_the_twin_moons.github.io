@@ -1,5 +1,5 @@
-import { Fighter } from '../game.js?v=55.20';
-import { finishIllustratedModel } from './rf5520-illustrated-material.js';
+import { Fighter } from '../game.js?v=55.21';
+import { finishIllustratedModel } from './rf5520-illustrated-material.js?v=55.21';
 const build=Fighter.prototype.buildModel;
 Fighter.prototype.buildModel=function(...args){
  const result=build.apply(this,args);

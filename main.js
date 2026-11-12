@@ -22,8 +22,8 @@ import {installUdaijinCombat} from './udaijin-curse.js?v=rf-fujiwara-noble-motio
 // RF_BATCH_SCALE_STARTUP_V92
 // RF_BATTLE_FIX_V9_1_20261109
 import { installMaouCombat } from './maou-abilities.js?v=rf-v9-2-20261109';
-import { Fighter as MaouFighter } from './game.js?v=55.20';
-import './boss-abilities.js?v=55.20';
+import { Fighter as MaouFighter } from './game.js?v=55.21';
+import './boss-abilities.js?v=55.21';
 import './exact-model-portraits.js?v=rf-v9-2-20261109';
 // RF_GRAND_FOUR_20261108 main.js
 import * as THREE from 'three';
@@ -32,7 +32,7 @@ import { installOperatorCombatFx } from './operator-combat-fx.js?v=20261108-gran
 import { renderExactPortrait } from './glb-portrait.js?v=rf-mobile-v7-20261109';
 // RF_OPERATOR_GIGANTES_MAIN_20261108
 import { loadModel } from './model-runtime.js?v=rf-minamoto-v48-20261111';
-import { Battle, ARENA_R } from './game.js?v=55.20';
+import { Battle, ARENA_R } from './game.js?v=55.21';
 import { installNepterionCombat } from './nepterion-water.js?v=rf-v18-20261109';
 import { installActorMotion } from './character-motion.js?v=rf-v18-20261109';
 import { installNepterionFixedSeven } from './nepterion-fixed-seven.js?v=rf-v18-20261109';
@@ -45,7 +45,7 @@ import { connect, issueInvite, redeemInvite, syncPush, syncPullV } from './net.j
 import { createEventCoopV552 } from './rf-event-coop-v552.js?v=rf553-chief-cpu-20261111';
 import { createInfiniteDungeonV552 } from './rf-infinite-dungeon-v552.js?v=55.20';
 import { apiEnabled, api, verifyToken } from './api.js';
-import { createOrbitControls } from './assets/rf-camera-v5520.js';
+import { createOrbitControls } from './assets/rf-camera-v5520.js?v=55.21';
 
 const $ = (s) => document.querySelector(s);
 // RF_MAOU_INSTALL_V6
@@ -56,14 +56,23 @@ installActorMotion({ Fighter: MaouFighter, Battle });
 // RF_V42_TDZ_FIX: install these after save, state and roleState initialization.
 installStaffAvatarScale({Fighter:MaouFighter,FIGHTERS,ROSTER});
 installKinosakiMotion({Fighter:MaouFighter,Battle});
-const isTouch = matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window;
+const isTouch = matchMedia('(pointer: coarse)').matches || navigator.maxTouchPoints > 0;
 document.body.classList.toggle('rf5520-touch',isTouch);
 // V45 quality and touch positioning: initialized after the HTML has been parsed.
 const rf45UI=initResponsiveV45({isTouch});
 
 // ---------- Renderer / scene ----------
 const container = $('#game-container');
-const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, powerPreference: 'high-performance' });
+let renderer;
+try {
+  renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, powerPreference: 'high-performance' });
+} catch (error) {
+  window.__riftfallGraphicsUnavailable = true;
+  $('#press-start').disabled = true;
+  $('#press-hint').hidden = true;
+  $('#loading').textContent = '3D描画を開始できません。ブラウザでWebGL 2を利用できる環境で開き直してください。';
+  throw error;
+}
 renderer.setClearColor(0x000000,0);
 renderer.outputColorSpace=THREE.SRGBColorSpace;
 renderer.toneMapping=THREE.ACESFilmicToneMapping;
@@ -311,7 +320,6 @@ async function ensureAllModelsReady(requiredKeys = null) {
 // downloads and expensive animation parses on mobile browsers.
 const firstModel = FIGHTERS.rowen?.model || modelUrls[0];
 loadPromise = firstModel ? retrieveModel(firstModel) : Promise.resolve(true);
-loadPromise.then(ok=>{if(ok)window.RiftfallLoading?.end('boot');else window.RiftfallLoading?.error('boot','起動用3Dモデルの読み込みに失敗しました');}).catch(e=>window.RiftfallLoading?.error('boot',e?.message||String(e)));
 
 updateModelStatus();
 
@@ -1315,57 +1323,81 @@ const keys = new Set();
 const edges = { attack: false, skill: false, skill2: false, heal: false, over: false, jump: false };
 const touchState = { mx: 0, mz: 0, guard: false, skill: false, skill2: false };
 const padState = { mx: 0, mz: 0, guard: false, skill: false, skill2: false };
-let mouseSkillHeld = false; // 右クリック長押し（追加技）
-window.addEventListener('mouseup', (e) => {
-  if (e.button === 2) mouseSkillHeld = false;
-});
+let mouseSkillHeld = false;
+let resetTouch = () => {};
 const KEYMAP = { KeyJ: 'attack', KeyZ: 'attack', KeyK: 'skill', KeyX: 'skill', KeyU: 'skill2', KeyV: 'skill2', KeyH: 'heal', KeyL: 'over', KeyC: 'over', Space: 'jump' };
+const MOVE_KEYS = new Set(['KeyA','KeyD','KeyW','KeyS','ArrowLeft','ArrowRight','ArrowUp','ArrowDown','ShiftLeft','ShiftRight','KeyI']);
+const activeModal = () => document.querySelector('dialog[open], [role="dialog"][aria-modal="true"]:not([hidden])');
 
 function inBattleView() {
   return (!!state.battle || !!state.field) && !document.querySelector('.screen.on');
 }
 
-window.addEventListener('keydown', (e) => {
-  if (e.target.tagName === 'INPUT') {
-    if (e.code === 'Escape') {
-      e.target.blur();
+function acceptsCombatInput() {
+  return (inBattleView() || state.adventureRest) && !state.paused && !activeModal();
+}
+
+function resetInput() {
+  keys.clear();
+  for (const key in edges) edges[key] = false;
+  for (const source of [touchState, padState]) {
+    source.mx = source.mz = 0;
+    source.guard = source.skill = source.skill2 = false;
+  }
+  mouseSkillHeld = false;
+  resetTouch();
+  const player = state.battle?.fighters.find(fighter => fighter.isPlayer);
+  if (player) player.queuedPress = null;
+}
+
+window.addEventListener('mouseup', event => {
+  if (event.button === 2) mouseSkillHeld = false;
+});
+window.addEventListener('keydown', event => {
+  if (event.defaultPrevented || event.isComposing || event.altKey || event.ctrlKey || event.metaKey || activeModal()) return;
+  const interactive = event.target.closest?.('button, a[href], input, textarea, select, [contenteditable]');
+  if (interactive?.matches('input, textarea, select, [contenteditable]')) {
+    if (event.code === 'Escape') interactive.blur();
+    return;
+  }
+  const confirm = event.code === 'Enter' || event.code === 'Space';
+  if (isScreen('scr-press')) {
+    if (confirm && !interactive && !event.repeat) {
+      event.preventDefault();
+      $('#press-start').click();
     }
     return;
   }
-  if (isScreen('scr-press')) {
-    enterTitle();
+  if (event.code === 'Escape') {
+    if (!event.repeat) goBackCurrent();
+    event.preventDefault();
     return;
   }
-  if (e.code === 'Escape') {
-    goBackCurrent();
-    return;
-  }
-  if (inBattleView() && !e.repeat && KEYMAP[e.code]) {
-    edges[KEYMAP[e.code]] = true;
-  }
-  if (isScreen('scr-story') && (e.code === 'Enter' || e.code === 'Space')) {
+  if (interactive && confirm) return;
+  if (isScreen('scr-story') && confirm && !event.repeat) {
+    event.preventDefault();
     advanceDialogue();
-  }
-  keys.add(e.code);
-  if (e.code === 'Space' && inBattleView()) {
-    e.preventDefault();
-  }
-});
-window.addEventListener('keyup', (e) => keys.delete(e.code));
-window.addEventListener('blur', () => keys.clear());
-renderer.domElement.addEventListener('mousedown', (e) => {
-  if (!inBattleView()) {
     return;
   }
-  if (e.button === 0) {
-    edges.attack = true;
-  }
-  if (e.button === 2) {
+  if (!acceptsCombatInput() || !(KEYMAP[event.code] || MOVE_KEYS.has(event.code))) return;
+  event.preventDefault();
+  keys.add(event.code);
+  if (!event.repeat && KEYMAP[event.code]) edges[KEYMAP[event.code]] = true;
+});
+window.addEventListener('keyup', event => keys.delete(event.code));
+window.addEventListener('blur', resetInput);
+document.addEventListener('visibilitychange', () => { if (document.hidden) resetInput(); });
+renderer.domElement.addEventListener('mousedown', event => {
+  if (!acceptsCombatInput()) return;
+  if (event.button === 0) edges.attack = true;
+  if (event.button === 2) {
     edges.skill = true;
     mouseSkillHeld = true;
   }
 });
-renderer.domElement.addEventListener('contextmenu', (e) => e.preventDefault());
+renderer.domElement.addEventListener('contextmenu', event => {
+  if (acceptsCombatInput()) event.preventDefault();
+});
 
 function readInput() {
   let mx = touchState.mx + padState.mx;
@@ -1390,77 +1422,83 @@ function readInput() {
 }
 
 function setupTouch() {
-  if (!isTouch) {
-    return;
-  }
-  $('#press-hint').textContent = '— 画面に触れて、扉をひらく —';
+  if (!isTouch) return;
+  $('#press-hint').textContent = 'タップでメニューへ';
   const pad = $('#touch');
-  pad.hidden = false;
   const joy = $('#joy');
   const knob = $('#knob');
-  let jid = null;
-  let ox = 0;
-  let oy = 0;
-  joy.addEventListener('pointerdown', (e) => {
-    jid = e.pointerId;
-    const r = joy.getBoundingClientRect();
-    ox = r.left + r.width / 2;
-    oy = r.top + r.height / 2;
-    joy.setPointerCapture(jid);
-  });
-  joy.addEventListener('pointermove', (e) => {
-    if (e.pointerId !== jid) {
-      return;
-    }
-    const R = joy.clientWidth / 2;
-    let dx = (e.clientX - ox) / R;
-    let dy = (e.clientY - oy) / R;
-    const l = Math.hypot(dx, dy);
-    if (l > 1) {
-      dx /= l;
-      dy /= l;
-    }
-    touchState.mx = dx;
-    touchState.mz = dy;
-    knob.style.transform = `translate(${dx * R * 0.6}px, ${dy * R * 0.6}px)`;
-  });
-  const endJoy = (e) => {
-    if (e.pointerId !== jid) {
-      return;
-    }
-    jid = null;
+  const activeButtons = new Map();
+  let joystickPointer = null;
+  pad.hidden = false;
+
+  function updateStick(event) {
+    const rect = joy.getBoundingClientRect();
+    const radius = Math.max(1, rect.width / 2);
+    const dx = (event.clientX - rect.left - radius) / radius;
+    const dy = (event.clientY - rect.top - rect.height / 2) / radius;
+    const distance = Math.hypot(dx, dy);
+    const amount = Math.max(0, Math.min(1, (distance - .13) / .87));
+    touchState.mx = distance ? dx * amount / distance : 0;
+    touchState.mz = distance ? dy * amount / distance : 0;
+    knob.style.transform = 'translate(' + (touchState.mx * radius * .6) + 'px,' + (touchState.mz * radius * .6) + 'px)';
+  }
+  function clearStick() {
+    const pointer = joystickPointer;
+    joystickPointer = null;
     touchState.mx = touchState.mz = 0;
     knob.style.transform = '';
-  };
-  joy.addEventListener('pointerup', endJoy);
-  joy.addEventListener('pointercancel', endJoy);
-  for (const b of pad.querySelectorAll('[data-act]')) {
-    const act = b.dataset.act;
-    b.addEventListener('pointerdown', (e) => {
-      e.preventDefault();
-      if (act === 'guard') {
-        touchState.guard = true;
-      } else {
-        edges[act] = true;
-        if (act === 'skill' || act === 'skill2') touchState[act] = true;
-      }
-    });
-    const up = () => {
-      if (act === 'guard') {
-        touchState.guard = false;
-      }
-      if (act === 'skill' || act === 'skill2') touchState[act] = false;
-    };
-    b.addEventListener('pointerup', up);
-    b.addEventListener('pointercancel', up);
-    b.addEventListener('pointerleave', up);
+    if (pointer !== null && joy.hasPointerCapture(pointer)) joy.releasePointerCapture(pointer);
   }
+  joy.addEventListener('pointerdown', event => {
+    if (joystickPointer !== null || !acceptsCombatInput() || event.button !== 0) return;
+    event.preventDefault();
+    joystickPointer = event.pointerId;
+    joy.setPointerCapture(joystickPointer);
+    updateStick(event);
+  });
+  joy.addEventListener('pointermove', event => {
+    if (event.pointerId === joystickPointer) updateStick(event);
+  });
+  for (const type of ['pointerup','pointercancel','lostpointercapture']) {
+    joy.addEventListener(type, event => { if (event.pointerId === joystickPointer) clearStick(); });
+  }
+
+  const heldActions = new Set(['guard','skill','skill2']);
+  function clearButton(button) {
+    const pointer = activeButtons.get(button);
+    if (pointer === undefined) return;
+    activeButtons.delete(button);
+    button.classList.remove('rf5521-held');
+    if (heldActions.has(button.dataset.act)) touchState[button.dataset.act] = false;
+    if (button.hasPointerCapture(pointer)) button.releasePointerCapture(pointer);
+  }
+  for (const button of pad.querySelectorAll('[data-act]')) {
+    const act = button.dataset.act;
+    button.addEventListener('pointerdown', event => {
+      if (!acceptsCombatInput() || activeButtons.has(button) || event.button !== 0) return;
+      event.preventDefault();
+      activeButtons.set(button, event.pointerId);
+      button.setPointerCapture(event.pointerId);
+      button.classList.add('rf5521-held');
+      if (act !== 'guard') edges[act] = true;
+      if (heldActions.has(act)) touchState[act] = true;
+    });
+    for (const type of ['pointerup','pointercancel','lostpointercapture']) {
+      button.addEventListener(type, event => {
+        if (activeButtons.get(button) === event.pointerId) clearButton(button);
+      });
+    }
+  }
+  resetTouch = () => {
+    clearStick();
+    for (const button of activeButtons.keys()) clearButton(button);
+  };
 }
 
 // ---------- Screens ----------
 const state = { mode: null, returnFromBattle: null, myKey: null, oppKey: null, chapter: 0, battle: null, paused: false, net: null, online: null, dialogue: null, lastWin: false };
 const orbitControls = createOrbitControls($('#rf5520-orbit'),renderer.domElement,camera,() =>
-  (state.mode==='story'||state.mode==='infinite')&&!state.paused&&!!(state.field||state.battle)&&!document.querySelector('.screen.on'));
+  (state.mode==='story'||state.mode==='infinite')&&acceptsCombatInput()&&!!(state.field||state.battle));
 const musicAttempts = new WeakMap();
 const musicBlocked = new WeakSet();
 let selectedBgm = null;
@@ -1478,22 +1516,28 @@ function isScreen(id) {
   return $('#' + id)?.classList.contains('on');
 }
 function show(id) {
-  for (const s of document.querySelectorAll('.screen')) {
-    s.classList.toggle('on', s.id === id);
+  resetInput();
+  const target = id ? document.getElementById(id) : null;
+  if (document.activeElement?.closest('.screen') !== target) document.activeElement?.blur?.();
+  for (const screen of document.querySelectorAll('.screen')) {
+    const visible = screen === target;
+    screen.classList.toggle('on', visible);
+    screen.inert = !visible;
   }
   $('#hud').hidden = id !== null;
   $('#touch').classList.toggle('active', id === null);
   orbitControls.refresh();
-  if(id)$('#'+id).scrollTop=0;
+  if (target) target.scrollTop = 0;
   if (id === 'scr-title' || id === 'scr-press') {
     audio.wanted = 'title';
     syncMusicTrack();
   }
-  if (id) {
-    const first = $('#' + id).querySelector('.menu button, .card:not(.locked), .chip');
-    if (first && !isTouch) {
-      first.focus({ preventScroll: true });
-    }
+  if (target && !isTouch) {
+    const preferred = target.querySelector('#press-start, .hero-cta, .topbar .back');
+    const focusable = node => node && !node.disabled && node.getClientRects().length;
+    const first = focusable(preferred) ? preferred :
+      [...target.querySelectorAll('button:not(:disabled), a[href], input:not(:disabled), [tabindex="0"]')].find(focusable);
+    first?.focus({preventScroll: true});
   }
 }
 function goBackCurrent() {
@@ -1746,9 +1790,9 @@ function enterTitle() {
   ensureWorld().catch((err) => console.warn('[WORLD BGM] 世界ルームへ接続できません:', err));
 }
 
-$('#scr-press').addEventListener('pointerdown', () => {
-  if (isScreen('scr-press')) {
-    enterTitle();
+$('#scr-press').addEventListener('pointerup', (event) => {
+  if (event.button === 0 && !event.target.closest('a, button') && isScreen('scr-press')) {
+    $('#press-start').click();
   }
 });
 $('#press-start')?.addEventListener('click', () => {
@@ -1865,7 +1909,7 @@ function openSelect(label, crumb, cb, { allowLocked = false, onBack = goTitle } 
       const img = document.createElement('img');
       img.className = 'face';
       img.src = d.face;
-      img.alt = `${d.name}のキャラクターイラスト`;
+      img.alt = locked ? '' : d.name + 'のキャラクターイラスト';
       img.decoding = 'async';
       img.loading = 'lazy';
       img.onerror = () => {
@@ -2052,6 +2096,7 @@ function openPartySelect(done) {
     const d = FIGHTERS[k];
     const card = document.createElement('button');
     card.className = 'card';
+    card.dataset.specialKey = k;
     card.style.setProperty('--c', '#' + d.color.toString(16).padStart(6, '0'));
     if (d.face) {
       const img = document.createElement('img');
@@ -2135,16 +2180,17 @@ function openStageSelect(crumb, onBack) {
     card.dataset.search = [st.name, st.id, st.pshape || '', st.cshape || '', st.seg || ''].join(' ');
     const image = document.createElement('div');
     image.className = 'sthumb';
-    image.style.backgroundImage = `url("${stageIllustration(st, i)}")`;
-    image.setAttribute('role', 'img');
-    image.setAttribute('aria-label', st.name + 'の背景イラスト');
-    const eyebrow = document.createElement('em');
-    eyebrow.textContent = st.id === 'random' ? 'RANDOM / いずれかの舞台' : `${String(i).padStart(3, '0')} / STAGE`;
+    const photo = new Image(960, 540);
+    photo.src = stageIllustration(st, i);
+    photo.alt = '';
+    photo.loading = 'lazy';
+    photo.decoding = 'async';
+    image.append(photo);
     const title = document.createElement('b');
     title.textContent = st.name;
     const description = document.createElement('small');
     description.textContent = st.id === 'random' ? '舞台をランダムに決める' : '半径13mの円形闘技場'; 
-    card.append(image, eyebrow, title, description);
+    card.append(image, title, description);
     card.addEventListener('mouseenter', () => st.sky && setStage(st));
     card.addEventListener('focus', () => st.sky && setStage(st));
     card.addEventListener('click', () => {
@@ -2894,7 +2940,7 @@ async function enterField() {
   const storyBoss=STORY[state.chapter]?.enemies?.[0]?.k;
   if (!(await ensureAllModelsReady([...party,...fieldNpcKeys,...fieldEnemyPool,storyBoss].filter(k=>FIGHTERS[k])))) return;
   try {
-  const { Field } = await import('./field.js?v=55.20');
+  const { Field } = await import('./field.js?v=55.21');
   leaveField();
   const ch = STORY[state.chapter];
   const st = stageById(ch.stage);
@@ -3853,6 +3899,7 @@ function togglePause() {
     return;
   }
   state.paused = !state.paused;
+  resetInput();
   $('#pause').hidden = !state.paused;
   orbitControls.refresh();
   $('#pause-note').textContent = state.online ? '遠い相手の時間は止まりません。' : '';
@@ -4519,6 +4566,7 @@ function pollPad(dt) {
   padState.skill = padState.skill2 = false;
   const g = activePad();
   if (!g) {
+    pad.prev = [];
     return;
   }
   const btn = (i) => !!(g.buttons[i] && (g.buttons[i].pressed || g.buttons[i].value > 0.5));
@@ -4530,11 +4578,10 @@ function pollPad(dt) {
   if (btn(12)) mz = -1;
   if (btn(13)) mz = 1;
   const anyDown = g.buttons.some((_, i) => down(i));
-  if (isScreen('scr-press')) {
-    if (anyDown) {
-      enterTitle();
-    }
-  } else if ((inBattleView() || state.adventureRest) && !state.paused) {
+  const dialog = activeModal();
+  if (isScreen('scr-press') && !dialog) {
+    if (anyDown) $('#press-start').click();
+  } else if (acceptsCombatInput()) {
     padState.mx = mx;
     padState.mz = mz;
     padState.guard = btn(4) || btn(6) || btn(7);
@@ -4545,11 +4592,14 @@ function pollPad(dt) {
     if (down(5)) edges.skill2 = true;
     if (down(3)) edges.over = true;
     if (down(1)) edges.jump = true;
-    if (down(12) || down(10)) edges.heal = true;
+    if (down(10)) edges.heal = true;
+    const turn = g.mapping === 'standard' ? g.axes[2] || 0 : 0;
+    if (Math.abs(turn) > .2) orbitControls.rotate(turn * dt * 2.6);
+    if (g.mapping === 'standard' && !$('#rf5520-orbit').hidden && down(11)) orbitControls.reset();
     if (down(9)) togglePause();
   } else {
-    const root = state.paused ? $('#pause') : document.querySelector('.screen.on');
-    const items = root ? [...root.querySelectorAll('button:not([disabled]), input, #story-box')].filter((b) => b.offsetParent !== null) : [];
+    const root = dialog || (state.paused ? $('#pause') : document.querySelector('.screen.on'));
+    const items = root ? [...root.querySelectorAll('button:not([disabled]), a[href], input, #story-box')].filter((b) => b.offsetParent !== null) : [];
     pad.navT -= dt;
     if (items.length && pad.navT <= 0 && (Math.abs(mx) > 0.5 || Math.abs(mz) > 0.5)) {
       pad.navT = 0.18;
@@ -4561,7 +4611,7 @@ function pollPad(dt) {
     if (down(0)) {
       unlockAudio();
       const el = document.activeElement;
-      if (isScreen('scr-story') && (!el || el === document.body || el.id === 'story-box')) {
+      if (!dialog && isScreen('scr-story') && (!el || el === document.body || el.id === 'story-box')) {
         advanceDialogue();
       } else if (el && items.includes(el)) {
         el.click();
@@ -4570,9 +4620,11 @@ function pollPad(dt) {
       }
     }
     if (down(1) || down(8)) {
-      goBackCurrent();
+      if (dialog instanceof HTMLDialogElement) dialog.close();
+      else if (dialog) dialog.querySelector('button[aria-label="閉じる"]')?.click();
+      else goBackCurrent();
     }
-    if (down(9) && state.paused) {
+    if (!dialog && down(9) && state.paused) {
       togglePause();
     }
   }
@@ -4704,6 +4756,7 @@ renderer.setAnimationLoop((time) => {
 
 // RF_CHIEF_CHAR_EDITOR_V28: secure chief-only page; server enforces authorization.
 initChiefCharacterEditor({ FIGHTERS, isChief:()=>chiefUnlocked(), roleToken:()=>roleState.tok, inBattle:()=>!!state.battle, getState:()=>state, Fighter:MaouFighter });
+$('#press-start').disabled = false;
 show('scr-press');
 window.__arkeiaBootOk = true;
 window.dispatchEvent(new Event('arkeia-boot-ready'));

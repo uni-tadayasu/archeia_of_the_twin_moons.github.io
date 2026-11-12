@@ -1,3 +1,5 @@
+import { presentationFor } from './assets/riftfall-effects-v5521.js';
+import { collectMotionClips, playMotion, fighterMotion, animateStatic } from './assets/riftfall-motion-v5521.js';
 import { disposeCharacterVariant } from './character-variants.js';
 // RF53_SMOOTH_EFFECTS — smoother shading without changing model assets.
 // RF_ULTRA_V12_GAME
@@ -486,8 +488,6 @@ function fxTex(elem, slot) {
   }
   return FX_TEX[key];
 }
-// 起動時に全100枚を先読み
-for (let e = 0; e < 10; e++) for (let s = 0; s < 10; s++) fxTex(e, s);
 const elOf = (spec, fallback = 5) => (spec && spec.elem != null ? spec.elem : fallback);
 const PLANE = new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2);
 function fxSprite(elem, slot, size, opacity = 1) {
@@ -524,8 +524,6 @@ const G3 = {
   crescent: new THREE.TorusGeometry(0.9, 0.06, 4, 28, Math.PI * 0.9),
   core: new THREE.IcosahedronGeometry(0.5, 1)
 };
-let fx3dLive = 0;
-let grandLive = 0;
 function lite(color, k = 0.4) {
   return new THREE.Color(color).lerp(new THREE.Color(0xffffff), k).getHex();
 }
@@ -762,14 +760,11 @@ export class Fighter {
     this.visual.add(instance.wrapper);
     this.valgardMotion = attachValgardMotion(instance.model, this.key);
     this.mixer = new THREE.AnimationMixer(instance.model);
-    this.clips = {};
+    this.clips = collectMotionClips(gltf.animations);
+    this.motionPlaying = null;
+    this.curAction = null;
+    this.staticMotion = null;
     instance.model.userData.valgardAnimatedRig = !!(gltf.animations?.length);
-    for (const clip of gltf.animations || []) {
-      const n = clip.name.toLowerCase();
-      for (const key of ['idle', 'walk', 'run', 'jump']) {
-        if (n.includes(key) && !this.clips[key]) this.clips[key] = clip;
-      }
-    }
     // 装備：骨格と体形を測ってフィット（骨に付けてアニメに追従）
     const model = instance.model;
     this.gear = this.gearIds ? makeGear(h, this.gearIds.w, this.gearIds.a, model, this.visual) : null;
@@ -786,23 +781,9 @@ export class Fighter {
   }
 
   anim(name) {
-    if (!this.mixer || this.curAnim === name) {
-      return;
-    }
-    const clip = this.clips[name] || (name === 'run' ? this.clips.walk : null) || this.clips.idle;
-    this.curAnim = name;
-    if (!clip) {
-      return;
-    }
-    const a = this.mixer.clipAction(clip);
-    if (a === this.curAction) {
-      return;
-    }
-    a.reset().fadeIn(0.15).play();
-    if (this.curAction) {
-      this.curAction.fadeOut(0.15);
-    }
-    this.curAction = a;
+    const [pose,duration,token] = fighterMotion(this,name);
+    const pace = this.moving && pose === 'walk' ? Math.min(1.45, Math.max(.65, this.vel.length() / 2.7)) : 1;
+    playMotion(this,pose,{duration,token,pace});
   }
 
   forward() {
@@ -836,7 +817,8 @@ export class Fighter {
     this.inv = Math.max(0, this.inv - dt);
     this.comboWindow = Math.max(0, this.comboWindow - dt);
     if (this.dead) {
-      this.visual.rotation.x = THREE.MathUtils.damp(this.visual.rotation.x, -Math.PI / 2, 6, dt);
+      if(this.clips.death)this.anim('death');
+      else this.visual.rotation.x = THREE.MathUtils.damp(this.visual.rotation.x, -Math.PI / 2, 6, dt);
       this.guardMesh.visible = false;
       this.sync();
       return;
@@ -889,6 +871,18 @@ export class Fighter {
         this.battle.ui.sfx?.('burst');
       }
       this.nullGuardPressed = !!inp.guard;
+    }
+    if(this.isPlayer&&!this.battle.net&&!this.battle.siege){
+      const now=performance.now();
+      if(this.queuedPress&&now>this.queuedPress.until)this.queuedPress=null;
+      if(this.stun>0||this.battle.intro>0||this.battle.ended)this.queuedPress=null;
+      else if(this.action){
+        const key=['attack','skill','skill2','heal','over','jump'].find(name=>inp[name]);
+        if(key)this.queuedPress={key,until:now+150};
+      }else if(this.queuedPress&&!inp.guard){
+        if(!inp.attack&&!inp.skill&&!inp.skill2&&!inp.heal&&!inp.over&&!inp.jump)inp={...inp,[this.queuedPress.key]:true};
+        this.queuedPress=null;
+      }
     }
     let moving = false;
     // 追加技：技を出した後、同じボタンを長押しし続けると発動（全モード共通）
@@ -964,10 +958,8 @@ export class Fighter {
     this.root.position.set(this.pos.x, this.y, this.pos.z);
     this.root.rotation.y = this.facing;
     this.guardMesh.visible = this.guard;
-    if ((!this.mixer || !this.clips.idle) && !this.valgardMotion && this.visual.children[0]) {
-      const bob = (this.moving || this.netMoving) && !this.dead;
-      this.visual.children[0].position.y = (this.baseY ??= this.visual.children[0].position.y) + (bob ? Math.abs(Math.sin(performance.now() / 70)) * 0.12 : 0);
-    }
+    if(!this.dead)animateStatic(this,this.motionDt,{moving:this.moving||this.netMoving,fast:this.vel.lengthSq()>16||this.netMoving,
+      action:this.action,guard:this.guard});
     const flashOn = this.hitFlash > 0;
     this.visual.position.x = flashOn ? (Math.random() - 0.5) * 0.12 : 0;
     this.hitFlash = Math.max(0, (this.hitFlash || 0) - 1 / 60);
@@ -1294,7 +1286,6 @@ export class Fighter {
 
 export class Battle {
   constructor(scene, camera, opts) {
-    fx3dLive = 0;
     this.scene = scene;
     this.camera = camera;
     this.assets = opts.assets;
@@ -1318,7 +1309,6 @@ export class Battle {
       this.fxLights.push(L);
     }
     this.lightIdx = 0;
-    grandLive = 0;
   }
 
   // 一瞬の色付き閃光
@@ -1389,95 +1379,7 @@ export class Battle {
 
   // 豪華化レイヤー：多重魔法陣・螺旋に昇る光粒・光柱・衝撃環・飛散する光条・閃光
   grandFx(pos, elem, color, power = 1) {
-    if (grandLive >= 4) return;
-    grandLive++;
-    const P = power;
-    const g = new THREE.Group();
-    g.position.set(pos.x, 0.05, pos.z);
-    this.fx.add(g);
-    const lc = lite(color, 0.5), wc = lite(color, 0.85);
-    const parts = [];
-    const mk = (geo, col, op) => {
-      const m = new THREE.Mesh(geo, glow(col, op));
-      g.add(m);
-      parts.push(m);
-      return m;
-    };
-    // 3段に重なる回転魔法陣（地面・中段・上空）
-    const rings = [];
-    for (let i = 0; i < 3; i++) {
-      const r = mk(i === 1 ? SG.rune2 : runeOf({ elem }), i ? lc : color, 0.85 - i * 0.15);
-      r.position.y = i * 1.3 * P;
-      r.userData.s = (1.6 - i * 0.35) * P;
-      r.userData.spd = (i % 2 ? -1 : 1) * (3 + i * 2);
-      rings.push(r);
-    }
-    // 外周の細い衝撃環を2重に
-    const shock = [mk(G3.wave, wc, 0.9), mk(G3.wave, color, 0.6)];
-    for (const s of shock) s.rotation.x = Math.PI / 2;
-    // 中央の光柱（外殻＋白い芯）
-    const pillarA = mk(G3.beam, color, 0.4);
-    const pillarB = mk(G3.beam, 0xffffff, 0.65);
-    // 螺旋に昇る光粒
-    const orbs = [];
-    const no = Math.round(10 + P * 8);
-    for (let i = 0; i < no; i++) {
-      const o = mk(i % 3 ? G3.star : G3.drop, i % 2 ? color : wc, 1);
-      o.userData.a = (i / no) * Math.PI * 2;
-      o.userData.r = (1.2 + (i % 3) * 0.5) * P;
-      o.userData.h = 0;
-      o.userData.vs = 2.5 + Math.random() * 3;
-      orbs.push(o);
-    }
-    // 放射状に飛ぶ光条
-    const rays = [];
-    for (let i = 0; i < 12; i++) {
-      const ray = mk(G3.bolt, i % 2 ? wc : color, 1);
-      const a = (i / 12) * Math.PI * 2;
-      ray.userData.dir = new THREE.Vector3(Math.cos(a), 0.25 + Math.random() * 0.5, Math.sin(a)).normalize();
-      ray.position.y = 1;
-      ray.lookAt(ray.userData.dir.clone().add(ray.position));
-      rays.push(ray);
-    }
-    this.flashLight(new THREE.Vector3(pos.x, 1, pos.z), color, P, 0.5);
-    const life = 0.8 + P * 0.35;
-    let t = 0;
-    this.addEffect((dt) => {
-      t += dt;
-      const k = Math.min(1, t / life);
-      const ease = 1 - Math.pow(1 - Math.min(1, k * 2.5), 3);
-      for (const r of rings) {
-        r.scale.setScalar(r.userData.s * (0.3 + ease * 0.9));
-        r.rotation.y += r.userData.spd * dt;
-      }
-      shock[0].scale.setScalar(0.5 + k * 7 * P);
-      shock[1].scale.setScalar(0.3 + Math.max(0, k - 0.15) * 5.5 * P);
-      shock[0].position.y = 0.1;
-      shock[1].position.y = 0.2;
-      const pw = Math.sin(Math.min(1, k * 1.6) * Math.PI);
-      pillarA.scale.set(1.4 * P * (0.4 + pw), 9 * P * Math.min(1, k * 5), 1.4 * P * (0.4 + pw));
-      pillarB.scale.set(0.5 * P * pw + 0.01, 10 * P * Math.min(1, k * 5), 0.5 * P * pw + 0.01);
-      for (const o of orbs) {
-        const u = o.userData;
-        u.a += dt * (4 + u.vs * 0.4);
-        u.h += dt * u.vs;
-        const rr = u.r * (1 - k * 0.6);
-        o.position.set(Math.cos(u.a) * rr, u.h, Math.sin(u.a) * rr);
-        o.rotation.y += dt * 8;
-        o.scale.setScalar(Math.max(0.05, (1 - k) * 1.2));
-      }
-      for (const ray of rays) {
-        ray.position.addScaledVector(ray.userData.dir, dt * 14 * P);
-        ray.scale.set(1.8, 1.8, 0.5 + 3 * Math.sin(Math.min(1, k * 2) * Math.PI));
-      }
-      fade(g, 1 - k * k);
-      if (k >= 1) {
-        kill(this.fx, g);
-        grandLive--;
-        return false;
-      }
-      return true;
-    });
+    presentationFor(this).burst(pos, elem, color, power, true);
   }
 
   // 第二形態への変身演出
@@ -1763,6 +1665,7 @@ export class Battle {
       if (isOver) f.netOverAt = nowS;
       else f.netSkillAt = nowS;
       f.netCastAt = nowS;
+      f.remoteMotion={name:isOver?slot:'cast',until:performance.now()+480};
     }
     // 技の順番：このチームの技枠を確保（通信相手の技も含む）
     if (!isOver) (this.skillLock ||= {})[f.team] = { f, until: performance.now() / 1000 + (spec.kind === 'dash' ? (spec.dur || 0.5) + 0.25 : 0.9) };
@@ -1816,7 +1719,7 @@ export class Battle {
     if (!f.remoteAuth) {
       f.action = spec.kind === 'dash'
         ? { type: 'dash', t: 0, dur: spec.dur, keepVel: true, hitSet: new Set(), spec }
-        : { type: 'cast', t: 0, dur: 0.45 };
+        : { type: 'cast', t: 0, dur: 0.45, motion: isOver ? slot : 'cast' };
       if (spec.kind === 'dash') {
         f.vel.copy(f.forward().multiplyScalar(spec.speed));
       } else {
@@ -2045,105 +1948,8 @@ export class Battle {
   }
 
   // 属性ごとの立体エフェクト（炎の柱・氷晶・雷撃・旋風・岩塊・光柱・闇の結び目・波紋・毒泡・血の刃）
-  fx3d(pos, elem, power = 1, color = 0xffffff) {
-    if (fx3dLive >= (window.RF45Performance?.maxThreeDEffects() ?? 10)) return; // V45: quality-dependent cosmetic limit
-    fx3dLive++;
-    const e = ((elem ?? 5) % 10 + 10) % 10;
-    const g = new THREE.Group();
-    g.position.copy(pos);
-    this.fx.add(g);
-    const lc = lite(color, 0.35);
-    const parts = [];
-    const add = (geo, col, op, p) => {
-      const m = new THREE.Mesh(geo, glow(col, op));
-      if (geo.type !== 'RingGeometry' && geo.type !== 'PlaneGeometry') outline(m);
-      Object.assign(m.userData, { v: new THREE.Vector3(), spin: new THREE.Vector3(), s0: 1, s1: 1, grav: 0 }, p);
-      if (p.pos) m.position.copy(p.pos);
-      if (p.rot) m.rotation.copy(p.rot);
-      m.scale.setScalar(m.userData.s0);
-      g.add(m);
-      parts.push(m);
-      return m;
-    };
-    const R = () => Math.random() - 0.5;
-    const P = power;
-    const n = Math.round(6 + P * 4);
-    if (e === 0) {
-      for (let i = 0; i < n; i++) {
-        const a = (i / n) * Math.PI * 2;
-        add(G3.flame, i % 2 ? color : 0xffd040, 0.85, { pos: new THREE.Vector3(Math.cos(a) * 0.5 * P, 0, Math.sin(a) * 0.5 * P), v: new THREE.Vector3(Math.cos(a) * 2, 3 + Math.random() * 3, Math.sin(a) * 2).multiplyScalar(P), spin: new THREE.Vector3(0, 8, 0), s0: 0.4 * P, s1: 1.4 * P });
-      }
-      for (let i = 0; i < n; i++) add(G3.drop, 0xffa020, 1, { v: new THREE.Vector3(R() * 8, 4 + Math.random() * 6, R() * 8).multiplyScalar(P), grav: 10, s0: 0.8, s1: 0.1 });
-    } else if (e === 1) {
-      for (let i = 0; i < n + 2; i++) {
-        const a = Math.random() * Math.PI * 2;
-        add(G3.crystal, i % 3 ? color : 0xffffff, 0.9, { rot: new THREE.Euler(Math.cos(a) * 0.9, 0, Math.sin(a) * 0.9), v: new THREE.Vector3(Math.cos(a) * 1.5, 0.5, Math.sin(a) * 1.5).multiplyScalar(P), s0: 0.2 * P, s1: 1.5 * P });
-      }
-    } else if (e === 2) {
-      for (let b = 0; b < 3; b++) {
-        let x = 0, y = 4 * P, z = 0;
-        const ox = R() * 1.5, oz = R() * 1.5;
-        for (let i = 0; i < 7; i++) {
-          const nx = ox * (i / 6) + R() * 0.8, ny = y - (4 * P) / 7, nz = oz * (i / 6) + R() * 0.8;
-          const seg = add(G3.bolt, i % 2 ? color : 0xffffff, 1, { pos: new THREE.Vector3((x + nx) / 2, (y + ny) / 2, (z + nz) / 2), s0: 1, s1: 1 });
-          seg.scale.set(1.6, 1.6, Math.hypot(nx - x, ny - y, nz - z));
-          seg.userData.fixed = true;
-          seg.lookAt(nx, ny, nz); // 親グループは未更新（単位行列）なのでローカル座標で向ける
-          x = nx; y = ny; z = nz;
-        }
-      }
-      for (let i = 0; i < n; i++) add(G3.star, 0xffffa0, 1, { v: new THREE.Vector3(R() * 10, Math.random() * 6, R() * 10), spin: new THREE.Vector3(9, 9, 0), s0: 0.6, s1: 0.1 });
-    } else if (e === 3) {
-      for (let i = 0; i < 4; i++) add(G3.helix, i % 2 ? color : lc, 0.8, { pos: new THREE.Vector3(0, 0.3 + i * 0.6, 0), rot: new THREE.Euler(Math.PI / 2, 0, i), v: new THREE.Vector3(0, 2.5, 0), spin: new THREE.Vector3(0, 0, 12 - i * 2), s0: 0.5 * P, s1: (1.6 + i * 0.3) * P });
-    } else if (e === 4) {
-      for (let i = 0; i < n + 2; i++) {
-        const m = add(G3.rock, i % 2 ? 0x8a6a40 : color, 1, { v: new THREE.Vector3(R() * 7, 5 + Math.random() * 5, R() * 7).multiplyScalar(P), grav: 18, spin: new THREE.Vector3(R() * 12, R() * 12, 0), s0: (0.6 + Math.random() * 0.8) * P, s1: 0.5 * P });
-        m.material.blending = THREE.NormalBlending;
-      }
-      add(G3.wave, color, 0.8, { rot: new THREE.Euler(Math.PI / 2, 0, 0), s0: 0.3, s1: 2.8 * P });
-    } else if (e === 5) {
-      add(G3.beam, color, 0.55, { pos: new THREE.Vector3(0, -pos.y, 0), s0: 0.2, s1: 1 }).userData.beam = 7 * P;
-      add(G3.beam, 0xffffff, 0.7, { pos: new THREE.Vector3(0, -pos.y, 0), s0: 0.1, s1: 0.4 }).userData.beam = 8 * P;
-      for (let i = 0; i < n; i++) add(G3.star, i % 2 ? color : 0xffffff, 1, { v: new THREE.Vector3(R() * 6, 2 + Math.random() * 5, R() * 6).multiplyScalar(P), spin: new THREE.Vector3(6, 8, 0), s0: 1, s1: 0.2 });
-    } else if (e === 6) {
-      const c = add(G3.core, 0x200030, 0.95, { s0: 0.3 * P, s1: 2 * P });
-      c.material.blending = THREE.NormalBlending;
-      for (let i = 0; i < 3; i++) add(G3.knot, color, 0.85, { rot: new THREE.Euler(i, i * 2, 0), spin: new THREE.Vector3(3 + i, 5, 2), s0: 0.6 * P, s1: 2.2 * P });
-    } else if (e === 7) {
-      for (let i = 0; i < 3; i++) add(G3.wave, i % 2 ? lc : color, 0.8, { pos: new THREE.Vector3(0, 0.2 - pos.y + i * 0.15, 0), rot: new THREE.Euler(Math.PI / 2, 0, 0), s0: 0.2, s1: (2 + i) * P });
-      for (let i = 0; i < n + 4; i++) add(G3.drop, i % 2 ? color : 0xffffff, 0.9, { v: new THREE.Vector3(R() * 6, 4 + Math.random() * 6, R() * 6).multiplyScalar(P), grav: 16, s0: 1.2, s1: 0.4 });
-    } else if (e === 8) {
-      for (let i = 0; i < n + 4; i++) add(G3.bubble, i % 3 ? color : 0xd080ff, 0.6, { pos: new THREE.Vector3(R() * 2 * P, R(), R() * 2 * P), v: new THREE.Vector3(R() * 1.5, 1.5 + Math.random() * 3, R() * 1.5), s0: 0.4, s1: (1.5 + Math.random() * 1.5) * P });
-    } else {
-      for (let i = 0; i < 5; i++) add(G3.crescent, i % 2 ? color : 0xff6060, 0.95, { rot: new THREE.Euler(R() * 2, Math.random() * 6, R() * 2), spin: new THREE.Vector3(0, 0, 16), s0: 0.4 * P, s1: 2 * P });
-      for (let i = 0; i < n; i++) add(G3.drop, 0xa00010, 1, { v: new THREE.Vector3(R() * 8, 3 + Math.random() * 5, R() * 8).multiplyScalar(P), grav: 18, s0: 1, s1: 0.5 });
-    }
-    const life = 0.55 + P * 0.25;
-    let t = 0;
-    this.addEffect((dt) => {
-      t += dt;
-      const k = Math.min(1, t / life);
-      for (const m of parts) {
-        const u = m.userData;
-        if (u.beam) {
-          m.scale.set(u.s0 + (u.s1 - u.s0) * k, u.beam * Math.min(1, k * 4), u.s0 + (u.s1 - u.s0) * k);
-        } else if (!u.fixed) {
-          u.v.y -= u.grav * dt;
-          m.position.addScaledVector(u.v, dt);
-          m.rotation.x += u.spin.x * dt;
-          m.rotation.y += u.spin.y * dt;
-          m.rotation.z += u.spin.z * dt;
-          m.scale.setScalar(Math.max(0.01, u.s0 + (u.s1 - u.s0) * Math.sin(k * Math.PI * 0.5)));
-        }
-      }
-      fade(g, e === 2 ? (Math.random() < 0.3 ? 0.3 : 1) * (1 - k) : 1 - k * k);
-      if (k >= 1) {
-        kill(this.fx, g);
-        fx3dLive--;
-        return false;
-      }
-      return true;
-    });
+  fx3d(pos, elem, power = 1, color) {
+    presentationFor(this).burst(pos, elem, color, power, false);
   }
 
   // 素材エフェクトを1枚出して、拡大・回転・上昇・フェードさせる
@@ -2261,57 +2067,7 @@ export class Battle {
   }
 
   castFx(f, color, spec) {
-    // 足元に回転する紋章陣（技ごとに角数が違う）+ 立ち昇る光輪
-    const g = new THREE.Group();
-    const r1 = new THREE.Mesh(runeOf(spec), glow(color, 0.9));
-    const r2 = new THREE.Mesh(SG.rune2, glow(lite(color), 0.6));
-    r2.scale.setScalar(1.3);
-    const el = elOf(spec);
-    const isOver = spec && (spec === f.def.over || spec.hi);
-    const base = new THREE.Vector3(f.pos.x, 0.08, f.pos.z);
-    this.fxPop(base, el, 5, isOver ? 6 : 3.2, isOver ? 1.2 : 0.7, { flat: true, spin: 2.5, grow: 1.15, hold: true });
-    this.fxPop(base.clone().setY(1.2), el, 1, isOver ? 5 : 2.6, 0.35, { spin: 4, grow: 1.5 });
-    this.fx3d(base.clone().setY(0.4), el, isOver ? 1.8 : 0.8, color);
-    this.grandFx(base, el, color, isOver ? 1.8 : 0.9);
-    if (isOver) {
-      // 奥義：時間差で重なる魔法陣と立体エフェクトの多重展開
-      for (let i = 1; i <= 3; i++) {
-        let d = i * 0.18;
-        this.addEffect((dt) => {
-          d -= dt;
-          if (d > 0) return true;
-          const a = Math.random() * Math.PI * 2;
-          const q = base.clone().add(new THREE.Vector3(Math.cos(a) * 2.5, 0, Math.sin(a) * 2.5));
-          this.grandFx(q, el, i % 2 ? lite(color, 0.3) : color, 1 + i * 0.2);
-          this.fx3d(q.setY(0.6), (el + i) % 10, 1.2, color);
-          return false;
-        });
-      }
-      this.shake = Math.max(this.shake, 0.5);
-    }
-    if (isOver) {
-      for (let i = 0; i < 4; i++) this.fxPop(base.clone().setY(0.5 + i * 0.9), el, 9, 2.4, 0.9, { rise: 2.5, spin: 3, delay: i * 0.08, op: 0.8 });
-    }
-    const halo = new THREE.Mesh(SG.torus, glow(color, 0.8));
-    halo.rotation.x = Math.PI / 2;
-    g.add(r1, r2, halo);
-    g.position.set(f.pos.x, 0.06, f.pos.z);
-    this.fx.add(g);
-    let t = 0;
-    this.addEffect((dt) => {
-      t += dt;
-      g.scale.setScalar(0.6 + Math.min(1, t * 5) * 1.2);
-      r1.rotation.y += dt * 4;
-      r2.rotation.y -= dt * 2;
-      halo.position.y = t * 5;
-      halo.scale.setScalar(0.8 - t * 0.6);
-      fade(g, Math.max(0, 1 - t / 0.35));
-      if (t > 0.35) {
-        kill(this.fx, g);
-        return false;
-      }
-      return true;
-    });
+    presentationFor(this).cast(f, color, spec);
   }
 
   afterimage(f, color) {
@@ -2332,21 +2088,7 @@ export class Battle {
     });
   }
   puff(pos, color, size) {
-    if (this.fx.children.length > 75) return;
-    const m = new THREE.Mesh(GEO.sphere, glow(color, 0.5));
-    m.position.copy(pos);
-    m.scale.setScalar(size);
-    this.fx.add(m);
-    let t = 0;
-    this.addEffect((dt) => {
-      t += dt;
-      m.scale.setScalar(size * (1 - t * 3));
-      if (t > 0.3) {
-        kill(this.fx, m);
-        return false;
-      }
-      return true;
-    });
+    presentationFor(this).puff(pos, color, size);
   }
 
   burst(pos, color, size, spec) {
@@ -2602,51 +2344,10 @@ export class Battle {
   }
 
   swingFx(f) {
-    const L = f.def.light;
-    const arc = new THREE.Mesh(new THREE.TorusGeometry(L.range * (L.spin ? 0.95 : 0.7), L.spin ? 0.09 : 0.05, 4, L.spin ? 40 : 16, Math.PI * (L.spin ? 2 : 0.8)), glow(L.color ?? f.def.color, 0.9));
-    arc.rotation.set(Math.PI / 2, 0, -f.facing - Math.PI * 0.9 + Math.PI / 2);
-    if (L.spin) {
-      // 回転斬り：足元に水平の刃風を重ねる
-      for (let i = 0; i < 3; i++) this.spark(f.pos.clone().setY(1 + i * 0.2), L.color, 0.6 + i * 0.3);
-    }
-    arc.position.set(f.pos.x, 1.1 + f.y, f.pos.z);
-    this.fx.add(arc);
-    const el = L.shots ? 9 : elOf(f.def.skills[0]);
-    const fw = f.forward();
-    if (L.spin) {
-      this.fxPop(new THREE.Vector3(f.pos.x, 1 + f.y, f.pos.z), el, 4, L.range * 1.4, 0.3, { flat: true, grow: 1.6, spin: 14 });
-    } else {
-      this.fxPop(new THREE.Vector3(f.pos.x + fw.x * L.range * 0.6, 1.1 + f.y, f.pos.z + fw.z * L.range * 0.6), el, 6, L.range * 1.5, 0.22, { flat: true, rot: f.facing + Math.PI / 2, grow: 1.25 });
-    }
-    let t = 0;
-    this.addEffect((dt) => {
-      t += dt;
-      arc.material.opacity = Math.max(0, 0.9 - t * 5);
-      if (t > 0.2) {
-        arc.geometry.dispose();
-        this.fx.remove(arc);
-        return false;
-      }
-      return true;
-    });
+    presentationFor(this).swing(f);
   }
   spark(pos, color, size) {
-    if (this.fx.children.length > 82) return;
-    const m = new THREE.Mesh(GEO.oct, glow(color, 0.95));
-    m.position.copy(pos);
-    this.fx.add(m);
-    let t = 0;
-    this.addEffect((dt) => {
-      t += dt;
-      m.scale.setScalar(size * (0.3 + t * 4));
-      m.rotation.y += dt * 8;
-      m.material.opacity = Math.max(0, 0.95 - t * 5);
-      if (t > 0.2) {
-        this.fx.remove(m);
-        return false;
-      }
-      return true;
-    });
+    presentationFor(this).spark(pos, color, size);
   }
 
   projectile(f, spec, ang) {
@@ -3131,6 +2832,7 @@ export class Battle {
       }
     }
     this.siege?.update();
+    this.presentation?.tick(rawDt);
     this.updateCamera(rawDt);
     if (!this.ended) {
       // RF566: spawn the next advancing enemy unit before victory is judged.
@@ -3206,6 +2908,8 @@ export class Battle {
   }
 
   dispose() {
+    this.presentation?.dispose();
+    this.presentation = null;
     for (const clean of [...(this.__chantArtCleanups||[])]) clean();
     this.__chantArtCleanups?.clear();
     for (const f of this.fighters) {

@@ -233,8 +233,8 @@
       clearTimeout(hideTimer);clearTimeout(noticeTimer);
       openAt=performance.now();
       title.textContent=tile.querySelector('b')?.textContent?.trim()||'新たな舞台';
-      const pic=tile.querySelector('.sthumb');
-      art.style.backgroundImage=pic?.style?.backgroundImage || '';
+      const pic=tile.querySelector('.sthumb img');
+      art.style.backgroundImage=pic?.src ? 'url("' + (pic.currentSrc || pic.src) + '")' : '';
       label.textContent='キャラクターモデルとステージを読み込んでいます';
       overlay.hidden=false;overlay.setAttribute('aria-busy','true');
       if(watcher)watcher.disconnect();
@@ -264,8 +264,8 @@
   const VISUAL_VERSION = 'painted-cg-20261107a';
   Promise.all([
     import('three'),
-    import('./game.js?v=55.20'),
-    import('./field.js?v=55.20')
+    import('./game.js?v=55.21'),
+    import('./field.js?v=55.21')
   ]).then(([THREE, battleModule, worldModule]) => {
     installPaintedEffects(THREE, battleModule.Battle);
     installPaintedWorld(THREE, worldModule.Field);
@@ -489,15 +489,6 @@
     Battle.prototype.fxPop=function(pos,elem,slot,size,life,options={}){
       return spawn(this,pos,elem,slot,size,life,options);
     };
-    Battle.prototype.fx3d=function(pos,elem,power=1,color=0xffffff){
-      multi(this,pos,elem,power,'burst');
-      if(power>=1.4)this.flashLight?.(pos,color,.85,.24);
-    };
-    Battle.prototype.grandFx=function(pos,elem,color,power=1){
-      multi(this,pos,elem,power,'chant');
-      if(power>=1.5)spawn(this,pos.clone().add(new THREE.Vector3(0,1.7,0)),elem,8,4.1*power,.7,{grow:1.7,op:.72});
-      this.flashLight?.(pos,color,Math.min(2,power),.38);
-    };
     Battle.prototype.burstFx=function(pos,color,elem){
       multi(this,pos.clone().setY(Math.max(1,pos.y)),elem,1.6);
       this.shake=Math.max(this.shake||0,.28);
@@ -508,25 +499,8 @@
       multi(this,pos,e,power);
       if(size>1)this.flashLight?.(pos,color,power,.25);
     };
-    Battle.prototype.spark=function(pos,color,size){
-      const e=6;
-      spawn(this,pos,e,1,1.5*Math.max(.22,size),.2,{grow:2.3});
-      spawn(this,pos,e,7,1.3*Math.max(.2,size),.27,{grow:1.7});
-    };
-    Battle.prototype.puff=function(pos,color,size){
-      spawn(this,pos,3,3,1.55*Math.max(.22,size),.3,{grow:2.1,rise:.4,op:.55});
-    };
     Battle.prototype.afterimage=function(f,color){
       multi(this,f.pos.clone().setY(1+f.y),element(f.def?.skills?.[0]),.68,'slash');
-    };
-    Battle.prototype.swingFx=function(f){
-      const L=f.def?.light||{};
-      const e=L.shots?9:element(f.def?.skills?.[0]);
-      const reach=L.range||2.5;
-      const dir=f.forward();
-      const p=f.pos.clone().addScaledVector(dir,Math.min(2,reach*.47)).setY(1.15+f.y);
-      multi(this,p,e,Math.max(.65,Math.min(1.75,reach/3)),'slash');
-      if(L.spin)spawn(this,new THREE.Vector3(f.pos.x,.1,f.pos.z),e,4,reach*1.6,.42,{flat:true,grow:1.9,spin:7});
     };
     // Flying projectile collision/hit logic remains the original implementation.
     // Only the 3D solid in the newly created projectile root is replaced by paint.
@@ -617,7 +591,7 @@
    */
   Promise.all([
     import('three'),
-    import('./game.js?v=55.20'),
+    import('./game.js?v=55.21'),
     import('./data.js?v=rf-minamoto-v48-20261111')
   ]).then(([THREE,combat,data]) => {
     installAstralJudgment(THREE,combat.Battle,data.FIGHTERS);
@@ -1969,7 +1943,7 @@
    * It never changes the game's existing save format or battle network packets.
    */
   Promise.all([
-    import('./game.js?v=55.20'),
+    import('./game.js?v=55.21'),
     import('./data.js?v=rf-minamoto-v48-20261111')
   ]).then(([combat, data]) => {
     installCharacterProgression(combat.Battle, data.FIGHTERS);
@@ -2301,7 +2275,7 @@
    * Echo is still an independent proxy, NEVER an extra core Fighter.
    * Ice seal / frozen enemies / 30s duration are unchanged.
    */
-  import('./game.js?v=55.20').then(combat => {
+  import('./game.js?v=55.21').then(combat => {
     installValgardIceEcho(combat.Battle, combat.Fighter);
   }).catch(error => console.warn('[Arkeia] Valgard ice echo unavailable:', error));
 

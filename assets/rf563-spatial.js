@@ -3,7 +3,7 @@
  * and persistence are not changed. Installed before main.js, on its shared modules.
  */
 import * as THREE from 'three';
-import { Field } from '../field.js?v=55.20';
+import { Field } from '../field.js?v=55.21';
 
 if (!window.__rf563Spatial) {
   window.__rf563Spatial = true;

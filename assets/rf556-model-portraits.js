@@ -1,11 +1,9 @@
-/* RIFTFALL ARENA V55.6 — Real GLB model thumbnails for all character cards.
-   Nothing is recolored or impersonated; this photographs the existing model.
-   Lazy, one GPU renderer, persistent small WebP cache with failure fallbacks. */
 import * as THREE from 'three';
 import {FIGHTERS,ROSTER} from '../data.js?v=rf-minamoto-v48-20261111';
 import {loadModel,instantiateModel,disposeModel} from '../model-runtime.js?v=rf-minamoto-v48-20261111';
 import {assignUniqueAppearances} from '../appearance-data.js';
 import {applyCharacterVariant,disposeCharacterVariant} from '../character-variants.js';
+import {finishIllustratedModel} from './rf5520-illustrated-material.js?v=55.21';
 if(!window.__rf561PortraitAppearanceApplied){
   if(!window.__rf561AppearanceReady) assignUniqueAppearances(Object.fromEntries(ROSTER.filter(key=>FIGHTERS[key]).map(key=>[key,FIGHTERS[key]])));
   window.__rf561PortraitAppearanceApplied=true;
@@ -14,13 +12,14 @@ if(!window.__rf556Portraits){
  window.__rf556Portraits=true;
  const DB='rf556-model-portraits';
  const lowMemory=(Number(navigator.deviceMemory)||8)<=4;
- const mobile=!!matchMedia?.('(pointer:coarse)')?.matches;
+ const mobile=matchMedia('(pointer:coarse)').matches||navigator.maxTouchPoints>0;
+ const conserve=mobile||lowMemory||navigator.connection?.saveData;
  // V55.7: higher definition real-GLB captures on desktop; preserve mobile budget and old cache.
  const W=(mobile||lowMemory)?240:384,H=(mobile||lowMemory)?320:512;
  // RF558_TEXTURE_COLOR_REPAIR — discard stale GLB captures generated with inverted atlas UVs.
- const CACHE_VER=(mobile||lowMemory)?'rf564-smooth-unique-mobile-20261112':'rf564-smooth-unique-desktop-20261112';
+ const CACHE_VER=conserve?'rf5521-portrait-mobile':'rf5521-portrait-desktop';
  const completed=new Map(),busyKeys=new Map();
- let renderer=null,locked=false,queue=[],observer=null,paused=false;
+ let renderer=null,locked=false,queue=[],observer=null;
  let lastFailure='',dbPromise=null;
  const pause=()=>new Promise(ok=>setTimeout(ok,mobile?160:60));
  const keyOf=el=>el.dataset.rf53Key||el.dataset.specialKey||el.dataset.fighterId||el.closest('[data-special-key]')?.dataset.specialKey||'';
@@ -53,7 +52,7 @@ if(!window.__rf556Portraits){
   renderer.setPixelRatio(1);renderer.setSize(W,H,false);
   renderer.setClearColor(0,0);
   renderer.outputColorSpace=THREE.SRGBColorSpace;
-  renderer.toneMapping=THREE.ACESFilmicToneMapping;renderer.toneMappingExposure=1.15;
+  renderer.toneMapping=THREE.ACESFilmicToneMapping;renderer.toneMappingExposure=1.03;
   renderer.domElement.addEventListener('webglcontextlost',()=>{renderer=null;lastFailure='WebGL context lost';},{once:true});
   return renderer;
  }
@@ -65,6 +64,7 @@ if(!window.__rf556Portraits){
   try{
    instance=instantiateModel(gltf,3.8,null);
    if(def.appearance)applyCharacterVariant(instance.model,def);
+   finishIllustratedModel(instance,key);
    scene.add(instance.wrapper);
    instance.wrapper.updateMatrixWorld(true);
    const bb=new THREE.Box3().setFromObject(instance.wrapper);
@@ -76,9 +76,9 @@ if(!window.__rf556Portraits){
    const distance=Math.max(size.y/(2*Math.tan(rad)),width/(2*Math.tan(rad)*aspect))*1.34;
    camera.position.set(center.x+distance*.12,center.y+size.y*.07,center.z+distance);
    camera.lookAt(center.x,center.y+size.y*.035,center.z);
-   scene.add(new THREE.HemisphereLight(0xf5fbff,0x283451,2.05));
-   const sun=new THREE.DirectionalLight(0xffffff,3.25);sun.position.set(4,9,8);scene.add(sun);
-   const rim=new THREE.DirectionalLight(0x89caff,2.2);rim.position.set(-5,5,-7);scene.add(rim);
+   scene.add(new THREE.HemisphereLight(0xeaf3ff,0x685147,1.68));
+   const sun=new THREE.DirectionalLight(0xffebd9,2.8);sun.position.set(4,7,9);scene.add(sun);
+   const rim=new THREE.DirectionalLight(0xa0c9ef,1.95);rim.position.set(-5,5,-7);scene.add(rim);
    const r=readyRenderer();r.render(scene,camera);
    const blob=await new Promise((resolve,reject)=>r.domElement.toBlob(v=>v?resolve(v):reject(Error('WebP画像の書き出しに失敗')),'image/webp',mobile ? 0.84 : 0.89));
    if(blob.size<500)throw Error('空白の画像が出力されました');
@@ -88,11 +88,11 @@ if(!window.__rf556Portraits){
   }
  }
  function paint(card,key,url){
-  if(!card.isConnected || !FIGHTERS[key])return;
+  if(!card.isConnected || card.disabled || key!==keyOf(card) || !FIGHTERS[key])return;
   const img=card.querySelector('img.face');
   if(!img)return;
   img.src=url;img.decoding='async';img.alt=FIGHTERS[key].name+' — 実際の3Dモデルを撮影したプレビュー';
-  img.style.filter='none';img.style.imageRendering='auto';
+  img.style.imageRendering='auto';
   card.dataset.rf556Portrait='done';
   card.removeAttribute('aria-busy');
  }
@@ -100,15 +100,22 @@ if(!window.__rf556Portraits){
   card.dataset.rf556Portrait=state;
   if(state==='loading')card.setAttribute('aria-busy','true');else card.removeAttribute('aria-busy');
  }
- async function acquire(key){
+ async function acquire(key,automatic=false){
   if(completed.has(key))return completed.get(key);
-  if(busyKeys.has(key))return busyKeys.get(key);
+  if(busyKeys.has(key)){
+   const pending=await busyKeys.get(key);
+   if(pending||automatic)return pending;
+  }
   const model=FIGHTERS[key]?.model;
   if(!model)throw Error('3Dモデル未設定');
   const cacheKey=CACHE_VER+':'+key+':'+(FIGHTERS[key]?.appearance?.id||model);
   const work=(async()=>{
     let blob=await getBlob(cacheKey);
-    if(!blob){blob=await renderGLB(key);await putBlob(cacheKey,blob);}
+    if(!blob){
+      if(automatic&&conserve)return null;
+      blob=await renderGLB(key);
+      await putBlob(cacheKey,blob);
+    }
     const url=URL.createObjectURL(blob);
     completed.set(key,url);return url;
   })();
@@ -116,17 +123,19 @@ if(!window.__rf556Portraits){
   try{return await work;}finally{busyKeys.delete(key);}
  }
  async function drain(){
-  if(locked || paused)return;
+  if(locked)return;
   locked=true;
   try{
    while(queue.length){
-    if(!isOpen() || document.hidden){paused=false;break;}
+    if(!isOpen() || document.hidden)break;
     const {card,key}=queue.shift();
-    if(!card.isConnected || key!==keyOf(card))continue;
+    if(!card.isConnected || card.disabled || key!==keyOf(card))continue;
     try{
      await pause();
-     if(!isOpen() || !card.isConnected){delete card.dataset.rf556Portrait;continue;}
-     const url=await acquire(key);paint(card,key,url);
+     if(!isOpen() || !card.isConnected){card.removeAttribute('aria-busy');delete card.dataset.rf556Portrait;continue;}
+     const url=await acquire(key,!!card.querySelector('img.face')?.getAttribute('src'));
+     if(url)paint(card,key,url);
+     else label(card,key,'fallback');
     }catch(e){
      label(card,key,'fallback');
      if(String(e?.message||e)!==lastFailure){lastFailure=String(e?.message||e);console.warn('[V55.6 model portrait]',key,lastFailure);}
@@ -135,7 +144,7 @@ if(!window.__rf556Portraits){
   }finally{locked=false;}
  }
  function schedule(card){
-  if(!card?.isConnected)return;
+  if(!card?.isConnected||card.disabled)return;
   const key=keyOf(card),fighter=FIGHTERS[key];
   if(!fighter)return;
   if(!fighter.model){label(card,key,'fallback');return;}
@@ -145,8 +154,8 @@ if(!window.__rf556Portraits){
  }
  function examine(){
   const grid=document.getElementById('select-grid');if(!grid)return;
-  for(const card of grid.querySelectorAll('button.card:not(.stage-tile)')){
-   if(card.dataset.rf556Portrait==='done'||card.dataset.rf556Portrait==='loading'||card.dataset.rf556Portrait==='fallback')continue;
+  for(const card of grid.querySelectorAll('button.card:not(.stage-tile):not(:disabled)')){
+   if(['done','loading','observing','fallback'].includes(card.dataset.rf556Portrait))continue;
    if(observer){card.dataset.rf556Portrait='observing';observer.observe(card);}else schedule(card);
   }
  }
@@ -167,11 +176,12 @@ if(!window.__rf556Portraits){
   mutations.observe(grid,{childList:true,subtree:false});
   const selection=document.getElementById('scr-select');
   if(selection){
-   new MutationObserver(()=>{if(isOpen()){paused=false;examine();drain();}}).observe(selection,{attributes:true,attributeFilter:['class']});
+   new MutationObserver(()=>{if(isOpen()){examine();drain();}}).observe(selection,{attributes:true,attributeFilter:['class']});
    selection.addEventListener('scroll',()=>{if(isOpen())examine();},{passive:true});
   }
-  document.addEventListener('visibilitychange',()=>{if(!document.hidden && isOpen()){paused=false;examine();drain();}});
-  window.addEventListener('pagehide',()=>{
+  document.addEventListener('visibilitychange',()=>{if(!document.hidden && isOpen()){examine();drain();}});
+  window.addEventListener('pagehide',event=>{
+   if(event.persisted)return;
    completed.forEach(url=>URL.revokeObjectURL(url));completed.clear();
    renderer?.dispose();renderer?.forceContextLoss?.();renderer=null;
   });
@@ -181,7 +191,7 @@ if(!window.__rf556Portraits){
    for(const card of grid.querySelectorAll('button.card')){
     if(card.dataset.rf556Portrait==='fallback'){
      delete card.dataset.rf556Portrait;
-     const key=keyOf(card);if(key){completed.delete(key);busyKeys.delete(key)}
+     const key=keyOf(card);if(key&&completed.has(key)){URL.revokeObjectURL(completed.get(key));completed.delete(key);}
     }
    }
    lastFailure='';examine();drain();

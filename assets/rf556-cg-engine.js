@@ -1,13 +1,8 @@
-/* RIFTFALL ARENA V55.6 — cinematic world and skill presentation.
-   DOES NOT alter character meshes, hit boxes, net messages or damage rules.
-   WebGL still uses triangles internally; this removes visibly faceted decoration. */
 import * as THREE from 'three';
-import {Battle} from '../game.js?v=55.20';
-import {Field} from '../field.js?v=55.20';
+import {Field} from '../field.js?v=55.21';
 if(!window.__rf556CGEngine){
  window.__rf556CGEngine=true;
  const mobile=!!matchMedia?.('(pointer:coarse)')?.matches||/iPhone|iPad|Android/i.test(navigator.userAgent);
- const clamp=(n,a,b)=>Math.max(a,Math.min(b,n));
  const sprites=new Map();
  function tex(kind){
   if(sprites.has(kind))return sprites.get(kind);
@@ -38,134 +33,6 @@ if(!window.__rf556CGEngine){
   texture.colorSpace=THREE.SRGBColorSpace;texture.minFilter=THREE.LinearFilter;texture.magFilter=THREE.LinearFilter;
   sprites.set(kind,texture);return texture;
  }
- function capacity(){return window.RF556Graphics?.spriteLimit?.()||(mobile?17:38);}
- function allow(b){
-  if(!b?.fx || b.ended)return false;
-  const st=b.__rf6Particles||(b.__rf6Particles={count:0,last:performance.now(),active:0});
-  const t=performance.now();if(t-st.last>1000){st.last=t;st.count=0;}
-  const limit=capacity();
-  if(st.count>=limit*2 || st.active>=limit)return false;
-  st.count++;st.active++;return true;
- }
- function particle(b,pos,color=0xbbe8ff,size=1,life=.35,opts={}){
-  if(!allow(b))return;
-  const mat=new THREE.SpriteMaterial({map:tex(opts.kind||'flare'),color:new THREE.Color(color),transparent:true,
-   opacity:opts.opacity??.85,blending:THREE.AdditiveBlending,depthWrite:false,depthTest:true});
-  const p=new THREE.Sprite(mat);
-  p.userData.rf556Particle=true;p.position.copy(pos);p.scale.setScalar(Math.max(.05,size));b.fx.add(p);
-  const lifeSec=Math.max(.08,life);const dx=(Math.random()-.5)*(opts.spread||0),dz=(Math.random()-.5)*(opts.spread||0);
-  const opacity=mat.opacity;let t=0;
-  b.addEffect(dt=>{
-   t+=dt;const u=clamp(t/lifeSec,0,1);
-   p.scale.setScalar(Math.max(.002,size*((opts.kind==='smoke'?.8:.45)+(opts.grow||1.4)*u)));
-   p.position.x+=dx*dt;p.position.y+=(opts.rise||.2)*dt;p.position.z+=dz*dt;
-   mat.opacity=opacity*(1-u)*(1-u*.35);
-   if(u>=1){b.fx.remove(p);mat.dispose();b.__rf6Particles.active=Math.max(0,b.__rf6Particles.active-1);return false;}
-   return true;
-  });
-  return p;
- }
- function ring(b,pos,color,size,life=.6){
-  if(!allow(b))return;
-  const mat=new THREE.MeshBasicMaterial({map:tex('ring'),color,transparent:true,opacity:.8,
-   side:THREE.DoubleSide,depthWrite:false,depthTest:true,blending:THREE.AdditiveBlending});
-  const obj=new THREE.Mesh(new THREE.PlaneGeometry(1,1),mat);obj.userData.rf556Particle=true;
-  obj.rotation.x=-Math.PI/2;obj.position.copy(pos);obj.position.y=Math.max(.05,obj.position.y);
-  b.fx.add(obj);let t=0;
-  b.addEffect(dt=>{
-   t+=dt;const q=clamp(t/life,0,1),s=size*(.4+q*1.85);obj.scale.set(s,s,s);mat.opacity=.8*Math.pow(1-q,1.5);
-   if(q>=1){b.fx.remove(obj);obj.geometry.dispose();mat.dispose();b.__rf6Particles.active=Math.max(0,b.__rf6Particles.active-1);return false;}
-   return true;
-  });return obj;
- }
- // Classic faceted ornament meshes can be replaced independently; never modify
- // shared original geometry. The replacement is owned by its mesh and disposed by the base engine.
- const FACETS=/^(?:OctahedronGeometry|DodecahedronGeometry|TetrahedronGeometry|IcosahedronGeometry)$/;
- const oldUpdate=Battle.prototype.update;
- if(typeof oldUpdate==='function')Battle.prototype.update=function(...args){
-  const result=oldUpdate.apply(this,args);
-  if(this.fx){
-   const now=performance.now();
-   if(now-(this.__rf556SmoothAt||0)>160){
-    this.__rf556SmoothAt=now;let budget=mobile?4:12;
-    const owned=this.__rf556SmoothGeom||(this.__rf556SmoothGeom=new Map());
-    const live=new Set();
-    this.fx.traverse(o=>{
-     if(o.isMesh && o.userData.rf556Smooth)live.add(o);
-     if(budget<=0||!o.isMesh||o.userData.rf556Smooth||o.userData.rf556Particle||!FACETS.test(o.geometry?.type||''))return;
-     const r=clamp(Number(o.geometry?.parameters?.radius)||1,.05,40);
-     o.geometry=new THREE.SphereGeometry(r,mobile?12:20,mobile?8:14);
-     owned.set(o,o.geometry);live.add(o);
-     o.userData.rf556Smooth=true;budget--;
-     if(o.material && !Array.isArray(o.material)){
-      o.material.flatShading=false;o.material.needsUpdate=true;
-     }
-    });
-    // Clean geometry for effects whose parent group has already left this.fx.
-    // The original engine sometimes removes cosmetic objects without disposal.
-    for(const [obj,geo] of owned){if(live.has(obj))continue;geo.dispose();owned.delete(obj);}
-   }
-  }
-  return result;
- };
- Battle.prototype.spark=function(pos,color,size=1){
-  particle(this,pos,color||0xbbeaff,Math.max(.28,size*2),.22,{spread:1.2,rise:.25});
-  if(!mobile && size>.6)particle(this,pos,0xffffff,size*.72,.16,{rise:.15});
- };
- Battle.prototype.puff=function(pos,color,size=.3){
-  particle(this,pos,color||0xffffff,Math.max(.18,size*1.4),.38,{kind:'smoke',rise:.45,spread:2});
- };
- Battle.prototype.fx3d=function(pos,elem,power=1,color=0xc9f2ff){
-  const k=clamp(power,.4,2.5);
-  particle(this,pos,color,1.4*k,.42,{rise:1.5,grow:1.6});
-  const n=Math.min(mobile?4:9,Math.ceil(k*5));
-  for(let i=0;i<n;i++){
-   const a=(i+.2*Math.random())*Math.PI*2/n;
-   particle(this,new THREE.Vector3(pos.x+Math.cos(a)*.55*k,pos.y+(Math.random()-.5),pos.z+Math.sin(a)*.55*k),
-    i%4===0?0xffffff:color,.35*k,.3+Math.random()*.25,{spread:2.4,rise:1.5});
-  }
-  this.flashLight?.(pos,color,Math.min(1.1,k),.2);
- };
- Battle.prototype.grandFx=function(pos,elem,color=0xbbe9ff,power=1){
-  const k=clamp(power,.45,2.5);
-  ring(this,new THREE.Vector3(pos.x,.07,pos.z),color,3.2*k,.8);
-  particle(this,new THREE.Vector3(pos.x,pos.y+1,pos.z),color,2*k,.76,{rise:1.3,grow:2.1});
-  const n=mobile?6:12;
-  for(let i=0;i<n;i++){
-   const a=(i/n)*Math.PI*2,r=(.8+Math.random()*.9)*k;
-   particle(this,new THREE.Vector3(pos.x+Math.cos(a)*r,pos.y+.4+Math.random()*1.2,pos.z+Math.sin(a)*r),
-    i%4===0?0xffffff:color,.36*k,.55+Math.random()*.35,{rise:1.1,spread:1.2});
-  }
-  this.flashLight?.(new THREE.Vector3(pos.x,pos.y+1,pos.z),color,1.15*k,.35);
- };
- // All common casting animations gain a soft, color-matched CGI halo.
- const originalCastFx=Battle.prototype.castFx;
- if(typeof originalCastFx==='function')Battle.prototype.castFx=function(f,color,spec){
-  const result=originalCastFx.call(this,f,color,spec);
-  if(f?.pos)particle(this,new THREE.Vector3(f.pos.x,.9,f.pos.z),color,2.2,.5,{rise:1,grow:1.5});
-  return result;
- };
- // All standard weapon/magic particles inherit a limited secondary glow.
- const originalFxPop=Battle.prototype.fxPop;
- if(typeof originalFxPop==='function')Battle.prototype.fxPop=function(pos,elem,slot,size,life,opts={}){
-  const result=originalFxPop.call(this,pos,elem,slot,size,life,opts);
-  if(result && !opts?.flat && life>.18 && Math.random()<(mobile?.08:.17)){
-    const c=Array.isArray(this.fighters)&&this.fighters.length?0x9bd8ff:0xffffff;
-    particle(this,pos,c,Math.max(.25,size*.36),Math.min(.46,life),{rise:.4,spread:1.5});
-  }
-  return result;
- };
- // Base engine disposal doesn't dispose detached, mid-animation VFX sprites.
- const prevDispose=Battle.prototype.dispose;
- if(typeof prevDispose==='function')Battle.prototype.dispose=function(...args){
-  if(this.fx)this.fx.traverse(o=>{
-   if(!o.userData?.rf556Particle)return;
-   o.material?.dispose?.();if(o.isMesh)o.geometry?.dispose?.();
-  });
-  for(const geometry of this.__rf556SmoothGeom?.values?.()||[])geometry.dispose();
-  this.__rf556SmoothGeom?.clear?.();
-  return prevDispose.apply(this,args);
- };
  const oldStd=Field.prototype.std;
  if(typeof oldStd==='function')Field.prototype.std=function(color,extra={}){
   const mat=oldStd.call(this,color,extra);
