@@ -37,7 +37,7 @@
     <meta name="referrer" content="strict-origin-when-cross-origin" />
     <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' https://esm.sh https://storage.googleapis.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob: https:; media-src 'self' blob: https:; connect-src 'self' data: blob: https://www.gstatic.com https://esm.sh https://api.instantdb.com wss://api.instantdb.com https://*.instantdb.com wss://*.instantdb.com https://storage.googleapis.com https://*.workers.dev https://api.kasai-solutions-inc.com wss://arkeia-api.kasai-solutions-inc.workers.dev wss://api.kasai-solutions-inc.com; worker-src 'self' blob:; object-src 'none'; frame-src 'none'; manifest-src 'self'; script-src-attr 'none'; base-uri 'self'; form-action 'none'; upgrade-insecure-requests" />
     <script type="application/ld+json">
-      {"@context":"https://schema.org","@graph":[{"@type":"WebSite","@id":"https://www.kasai-solutions-inc.com/#website","url":"https://www.kasai-solutions-inc.com/","name":"双月のアルケイア","alternateName":"Riftfall Arena","inLanguage":"ja"},{"@type":"VideoGame","@id":"https://www.kasai-solutions-inc.com/#game","url":"https://www.kasai-solutions-inc.com/","name":"双月のアルケイア","alternateName":"Riftfall Arena","description":"双つの月の下を旅する和風3DアクションRPG。物語、無限天守、拠点攻城戦、世界ランクマッチをPC・スマホで無料プレイ。神属性の天子と舞台の情報も掲載。","image":"https://www.kasai-solutions-inc.com/assets/rf5523/sky-observatory-share.jpg","genre":["Action","Fighting","Fantasy","RPG"],"gamePlatform":["Web browser","PC","Mobile"],"playMode":["https://schema.org/SinglePlayer","https://schema.org/MultiPlayer","https://schema.org/CoOp"],"applicationCategory":"Game","operatingSystem":"Web browser","inLanguage":"ja","softwareVersion":"55.23","isAccessibleForFree":true,"offers":{"@type":"Offer","price":"0","priceCurrency":"JPY"},"publisher":{"@type":"Organization","name":"KASAI SOLUTIONS INC."},"isPartOf":{"@id":"https://www.kasai-solutions-inc.com/#website"}}]}
+      {"@context":"https://schema.org","@graph":[{"@type":"WebSite","@id":"https://www.kasai-solutions-inc.com/#website","url":"https://www.kasai-solutions-inc.com/","name":"双月のアルケイア","alternateName":"Riftfall Arena","inLanguage":"ja"},{"@type":"VideoGame","@id":"https://www.kasai-solutions-inc.com/#game","url":"https://www.kasai-solutions-inc.com/","name":"双月のアルケイア","alternateName":"Riftfall Arena","description":"双つの月の下を旅する和風3DアクションRPG。物語、無限天守、拠点攻城戦、世界ランクマッチをPC・スマホで無料プレイ。神属性の天子と舞台の情報も掲載。","image":"https://www.kasai-solutions-inc.com/assets/rf5523/sky-observatory-share.jpg","genre":["Action","Fighting","Fantasy","RPG"],"gamePlatform":["Web browser","PC","Mobile"],"playMode":["https://schema.org/SinglePlayer","https://schema.org/MultiPlayer","https://schema.org/CoOp"],"applicationCategory":"Game","operatingSystem":"Web browser","inLanguage":"ja","softwareVersion":"55.24","isAccessibleForFree":true,"offers":{"@type":"Offer","price":"0","priceCurrency":"JPY"},"publisher":{"@type":"Organization","name":"KASAI SOLUTIONS INC."},"isPartOf":{"@id":"https://www.kasai-solutions-inc.com/#website"}}]}
     </script>
     <link rel="preconnect" href="https://esm.sh" crossorigin>
     <meta name="author" content="KASAI SOLUTIONS INC." />
@@ -97,6 +97,8 @@
       body { touch-action:none; font-family:'Shippori Mincho','Hiragino Mincho ProN','Yu Mincho',serif; color:var(--paper); -webkit-user-select:none; user-select:none; }
       canvas { display:block; }
       #ui { position:fixed; inset:0; pointer-events:none; }
+      #scr-options .audio-theme-toggle { flex-direction:row; align-items:center; justify-content:space-between; min-height:44px; cursor:pointer; touch-action:manipulation; }
+      #scr-options .audio-theme-toggle input { width:1.125rem; height:1.125rem; flex:none; margin:0; }
       #ui button, #ui input, .screen.on, #touch.active * , #pause { pointer-events:auto; }
       button { font-family:inherit; cursor:pointer; }
       input { -webkit-user-select:text; user-select:text; }
@@ -503,7 +505,7 @@
             </div>
           </section>
           <details class="portal-controls"><summary>基本操作を確認する</summary><p>WASD：移動 ／ J：斬る ／ K：技A ／ U：技B ／ L：奥義 ／ Shift：構え ／ Space：跳ぶ ／ Esc：戻る・休む</p><p>移動中に技を出すと派生。技の直後に同じ技を押すと追加技。覚醒中の奥義は秘奥義に変化します。</p></details>
-          <footer class="portal-footer"><span>双月のアルケイア · V55.23</span><nav aria-label="サイト案内"><a href="./play-guide.html">操作</a><a href="./world-guide.html">舞台</a><a href="./tenshi.html">天子</a></nav><span>© <span id="copy-year">2026</span> KASAI SOLUTIONS INC.</span></footer>
+          <footer class="portal-footer"><span>双月のアルケイア · V55.24</span><nav aria-label="サイト案内"><a href="./play-guide.html">操作</a><a href="./world-guide.html">舞台</a><a href="./tenshi.html">天子</a></nav><span>© <span id="copy-year">2026</span> KASAI SOLUTIONS INC.</span></footer>
         </div>
       </section>
 
@@ -514,6 +516,7 @@
           <div class="menu">
             <button class="btn" id="opt-mute">音：鳴らす</button>
             <label class="audio-volume-control" for="opt-bgm-volume"><span>BGM音量 <output id="opt-bgm-value">70%</output></span><input id="opt-bgm-volume" type="range" min="0" max="100" step="5" value="70" aria-label="BGM音量" /></label>
+            <label class="audio-volume-control audio-theme-toggle" for="opt-fujiwara-bgm"><span>藤原信頼の専用BGM</span><input id="opt-fujiwara-bgm" type="checkbox" checked></label>
             <label class="audio-volume-control" for="opt-sfx-volume"><span>戦闘効果音 <output id="opt-sfx-value">80%</output></span><input id="opt-sfx-volume" type="range" min="0" max="100" step="5" value="80" aria-label="戦闘効果音の音量" /></label>
             <label class="audio-volume-control" for="opt-voice-volume"><span>戦闘ボイス <output id="opt-voice-value">75%</output></span><input id="opt-voice-volume" type="range" min="0" max="100" step="5" value="75" aria-label="戦闘ボイスの音量" /></label>
             <label class="audio-volume-control" for="opt-ui-volume"><span>ボタン操作音 <output id="opt-ui-value">65%</output></span><input id="opt-ui-volume" type="range" min="0" max="100" step="5" value="65" aria-label="ボタン操作音の音量" /><small>音量は端末に保存されます。初回再生はクリック・キー操作後に始まります。</small></label>
@@ -748,7 +751,7 @@
     <script type="module" src="./assets/rf563-spatial.js?v=55.21"></script>
      <script type="module" src="./assets/rf564-world-life.js?v=55.21"></script>
     <script type="module" src="./assets/rf566-story-flow.js?v=55.21"></script>
-    <script type="module" src="main.js?v=55.23"></script>
+    <script type="module" src="main.js?v=55.24"></script>
 <script defer src="./assets/rf-ui-safe-v34.js?v=rf-responsive-v45-20261110"></script>
 <script id="rf46-responsive-js" defer src="./assets/rf-responsive-v46.js?v=rf-responsive-v46-20261111"></script>
 <script id="rf49-js" defer src="./assets/rf-responsive-v49.js?v=rf556-20261112"></script>

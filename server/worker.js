@@ -2196,7 +2196,7 @@ export default {
           ok: true,
           service: 'riftfall-arena-api',
           check: 'worker-runtime',
-          version: '55.23'
+          version: '55.24'
         });
       }
       if (url.pathname.startsWith('/rank/socket/')) return await openRankSocket(req,env,url.pathname.slice('/rank/socket/'.length));
@@ -2643,13 +2643,29 @@ async function whoAmI(env, code, name) {
 }
 // Ranked points belong to the verified sync player and are independent of save edits.
 let rankedFighters;
-function rankedPool() {
-  return rankedFighters ||= new Map([...new Set(ROSTER)].flatMap(fighter=>{
-    const def=ownValue(FIGHTERS,fighter);
-    if (!def || !def.model || def.special || def.locked || def.hidden || def.enemy || def.shop || def.shardPrice) return [];
-    return [[fighter,{fighter,speed:Math.max(5.35,Math.min(6.35,Number(def.speed)||5.9)),
-      reach:Math.max(1.9,Math.min(2.65,Number(def.light?.range)||2.1))}]];
-  }));
+function rankedPool(role) {
+  if (!rankedFighters) {
+    const regular = new Map(), chief = new Map(), op = new Map();
+    const keys = new Set([...ROSTER, ...CHIEF_ONLY, ...OP_ONLY, ...OP_EXCLUSIVE]);
+    for (const fighter of keys) {
+      const def = ownValue(FIGHTERS, fighter);
+      if (!def?.model || def.hidden || def.enemy || def.shop) continue;
+      const profile = {
+        fighter,
+        speed: Math.max(5.35, Math.min(6.35, Number(def.speed) || 5.9)),
+        reach: Math.max(1.9, Math.min(2.65, Number(def.light?.range) || 2.1))
+      };
+      if (CHIEF_ONLY.has(fighter)) chief.set(fighter, profile);
+      else if (OP_ONLY.has(fighter) || OP_EXCLUSIVE.has(fighter)) op.set(fighter, profile);
+      else if (!def.special && !def.locked && !def.shardPrice) regular.set(fighter, profile);
+    }
+    rankedFighters = {
+      regular,
+      chief: new Map([...regular, ...chief]),
+      op: new Map([...regular, ...op])
+    };
+  }
+  return role === 'chief' ? rankedFighters.chief : role === 'op' ? rankedFighters.op : rankedFighters.regular;
 }
 async function rankedRoute(req,env,H,body,action) {
   if (!env.RANK_HUB || !env.RANK_DUEL || !env.LIMITER) return json(H,{error:'rank_unavailable'},503);
@@ -2660,19 +2676,21 @@ async function rankedRoute(req,env,H,body,action) {
     const me=await whoAmI(env,body.code,body.name);
     if (!me) return json(H,{error:'nosync'},403);
     const name=me.name.replace(/\p{Cf}/gu,'').trim() || '旅人';
-    const chief=await verify(env,body.role,'role');
-    const divine=chief?.r==='chief';
-    const expires=Math.min(Date.now()+4*3600000,divine?chief.exp:Infinity);
-    const fighters=[...rankedPool().keys(),...(divine?[TENSHI_KEY]:[])];
-    return json(H,{token:await sign(env,{t:'rank',p:me.pid,n:name,chief:divine,exp:expires}),expires,fighters});
+    const auth = await verify(env, body.role, 'role');
+    const role = auth?.r === 'chief' || auth?.r === 'op' ? auth.r : null;
+    const expires = Math.min(Date.now() + 4 * 3600000, role ? auth.exp : Infinity);
+    const fighters = [...rankedPool(role).keys()];
+    const token = await sign(env, { t:'rank', p:me.pid, n:name, r:role, chief:role === 'chief', exp:expires });
+    return json(H, { token, expires, fighters });
   }
   const credential=body.token ? await verify(env,body.token,'rank') : null;
   const pid=credential && PID_RE.test(credential.p) ? credential.p : null;
   if ((!pid && action!=='board') || (body.token && !pid)) return json(H,{error:'rank_session'},401);
   const data={pid};
   if (action==='join') {
-    const profile=body.fighter===TENSHI_KEY&&credential.chief ?
-      {fighter:TENSHI_KEY,speed:6.15,reach:2.28} : rankedPool().get(body.fighter);
+    // V55.23 rank sessions carried a signed chief flag.
+    const role = credential.r ?? (credential.chief === true ? 'chief' : null);
+    const profile = rankedPool(role).get(body.fighter);
     if (!profile) return json(H,{error:'rank_fighter'},400);
     data.player={...profile,name:credential.n};
   }

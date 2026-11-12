@@ -824,8 +824,10 @@ function refreshGlobalValgardBgm() {
 
 
 // ---------- Audio ----------
+const FUJIWARA_BGM_SETTING = 'arkeia-fujiwara-bgm';
 const audio = {
   muted: localStorage.getItem('arkeia-muted') === '1',
+  fujiwaraBgm: localStorage.getItem(FUJIWARA_BGM_SETTING) !== '0',
   tracks: {}, current: null, currentKey: null, wanted: 'title', pools: {}, ctx: null,
   unlocked: false,
   volume: Math.max(0, Math.min(100, +(localStorage.getItem('arkeia-bgm-volume') ?? 70))) / 100,
@@ -913,6 +915,7 @@ function setBgmVolume(value) {
 // 音楽はシーンの希望曲と、全世界のヴァルガルド優先曲を分けて管理する。
 // 音楽が未解禁の状態で先に曲名を登録しても、最初のユーザー操作で必ず再生する。
 function shouldForceFujiwara() {
+  if (!audio.fujiwaraBgm) return false;
   // Do not keep stale fighters from a previous session playing over the title UI.
   const titleOpen = isScreen('scr-press') || isScreen('scr-title');
   const b = state?.battle;
@@ -1315,6 +1318,15 @@ function setMuted(m) {
 }
 setMuted(audio.muted);
 $('#opt-bgm-volume')?.addEventListener('input', (e) => setBgmVolume(e.currentTarget.value));
+const fujiwaraBgmToggle = $('#opt-fujiwara-bgm');
+if (fujiwaraBgmToggle) {
+  fujiwaraBgmToggle.checked = audio.fujiwaraBgm;
+  fujiwaraBgmToggle.addEventListener('change', (event) => {
+    audio.fujiwaraBgm = fujiwaraBgmToggle.checked;
+    localStorage.setItem(FUJIWARA_BGM_SETTING, audio.fujiwaraBgm ? '1' : '0');
+    syncMusicTrack(event.isTrusted);
+  });
+}
 for (const kind of ['sfx', 'voice', 'ui']) {
   $('#opt-' + kind + '-volume')?.addEventListener('input', (e) => setChannelVolume(kind, e.currentTarget.value));
 }
@@ -1508,8 +1520,8 @@ let selectedBgm = null;
 // オンライン途中乱入時も専用曲を優先し、戦闘中は通常曲へ戻さない。
 setInterval(() => {
   const fighters = state.battle?.fighters;
-  if (state.mode!=='castle' && fighters?.some((f) => f.key === 'bloodfiend') &&
-      !fighters.some((f) => f.key === 'valgard' || f.key === 'fujiwara_nobuyori') &&
+  if (!['castle','ranked'].includes(state.mode) && fighters?.some((f) => f.key === 'bloodfiend') &&
+      !fighters.some((f) => f.key === 'valgard' || (audio.fujiwaraBgm && f.key === 'fujiwara_nobuyori')) &&
       musicKey(audio.wanted) !== 'zarugureibu') playTrack('zarugureibu');
   refreshGlobalValgardBgm();
   if (audio.unlocked) syncMusicTrack();
@@ -1884,7 +1896,7 @@ function openEventPlayChoiceV552(){
   document.body.append(layer);
 }
 
-function openSelect(label, crumb, cb, { allowLocked = false, onBack = goTitle, keys = null } = {}) {
+function openSelect(label, crumb, cb, { allowLocked = false, onBack = goTitle, keys = null, ranked = false } = {}) {
   if ($('#select-search')) $('#select-search').value = '';
   $('#select-label').textContent = label;
   $('#select-crumb').textContent = crumb;
@@ -1903,13 +1915,10 @@ function openSelect(label, crumb, cb, { allowLocked = false, onBack = goTitle, k
     card.dataset.specialKey = k;
     card.style.setProperty('--c', '#' + d.color.toString(16).padStart(6, '0'));
     const t = document.createElement('em');
-    t.textContent = locked ? '名を封じられし者' : d.title;
+    const rankTitle = ranked && (d.locked || d.special) ? (chiefUnlocked() ? '運営長専用' : '運営専用') : d.title;
+    t.textContent = locked ? '名を封じられし者' : rankTitle;
     const n = document.createElement('b');
     n.textContent = locked ? '？？？' : d.name;
-    const s = document.createElement('small');
-    s.textContent = locked
-      ? (d.shop ? '灯晶商店で迎えられる' : '運営の鍵でのみ目覚める')
-      : `${d.skills.slice(0, 4).map((x) => `${x.name}（詠唱${spellCastTime(x).toFixed(1)}秒）`).join('／')}\n奥義：${d.over.name}（詠唱${spellCastTime(d.over, 'over').toFixed(1)}秒）`;
     if (d.face) {
       const img = document.createElement('img');
       img.className = 'face';
@@ -1931,7 +1940,14 @@ function openSelect(label, crumb, cb, { allowLocked = false, onBack = goTitle, k
       if (locked) img.style.filter = 'brightness(0)';
       card.append(img);
     }
-    card.append(t, n, s);
+    card.append(t, n);
+    if (!ranked || locked) {
+      const skills = document.createElement('small');
+      skills.textContent = locked
+        ? (d.shop ? '灯晶商店で迎えられる' : '運営の鍵でのみ目覚める')
+        : `${d.skills.slice(0, 4).map((x) => `${x.name}（詠唱${spellCastTime(x).toFixed(1)}秒）`).join('／')}\n奥義：${d.over.name}（詠唱${spellCastTime(d.over, 'over').toFixed(1)}秒）`;
+      card.append(skills);
+    }
     card.disabled = locked;
     card.addEventListener('click', () => {
       sfx('ui');
@@ -2515,40 +2531,36 @@ function beginBattle(boss) {
   show(null);
   state.battleLoading = false;
   window.__rfMarkBattlePhase?.('battle', '戦闘開始');
-  // 添付の実音源を再生。ザルグレイヴが戦闘に参加したときは敵味方を問わず最優先。
+  // 場面の曲を選び、専用曲の優先順位は syncMusicTrack() に任せる。
   const participants = state.battle.fighters.map((f) => f.key);
   const ks = state.battle.fighters.filter((f) => f.team === 1 || state.mode === 'invade').map((f) => f.key);
   const apex = ks.some((k) => k === 'sovereign' || k === 'sovereign2') ? 2 : ks.includes('chief') || ks.includes('valgard') || ks.includes('bloodfiend') || ks.includes('valdarion') ? 1 : 0;
-  if (participants.includes('fujiwara_nobuyori')) {
-    // Keep the original scene music as the fallback. Fujiwara takes priority inside syncMusicTrack().
-    const fallback = state.mode === 'adventure' ? 'adventure'
-      : participants.includes('valgard') ? 'valgard'
-      : participants.includes('bloodfiend') ? 'zarugureibu'
-      : apex ? 'apex:' + apex
-      : (['event','event-coop','castle'].includes(state.mode)) ? 'event' : boss ? 'boss' : 'battle';
-    playTrack(fallback);
-    ui.banner({ name: '— ♪ 藤原信頼 専用BGM —' }, '他の全BGMより最優先');
-  } else if (state.mode === 'castle') {
-    playTrack('event');
+  let track = boss ? 'boss' : 'battle';
+  let banner = [boss ? '— ♪ ボス戦 —' : '— ♪ 通常戦闘曲 —', '剣を抜け'];
+  if (state.mode === 'castle') {
+    track = 'event';
+    banner = null;
   } else if (state.mode === 'adventure') {
-    playTrack('adventure');
-    ui.banner({ name: '— ♪ ADVENTURE —' }, '休憩所と戦闘で同じBGM');
+    track = 'adventure';
+    banner = ['— ♪ ADVENTURE —', '休憩所と戦闘で同じBGM'];
   } else if (participants.some((k) => k === 'valgard')) {
-    playTrack('valgard');
-    ui.banner({ name: '— ♪ ヴァルガルド専用BGM —' }, '氷鋼覇王、降臨');
+    track = 'valgard';
+    banner = ['— ♪ ヴァルガルド専用BGM —', '氷鋼覇王、降臨'];
   } else if (participants.includes('bloodfiend')) {
-    playTrack('zarugureibu');
-    ui.banner({ name: '— ♪ ザルグレイヴ専用戦闘曲 —' }, '紅翼の血魔');
+    track = 'zarugureibu';
+    banner = ['— ♪ ザルグレイヴ専用戦闘曲 —', '紅翼の血魔'];
   } else if (apex) {
-    playTrack('apex:' + apex);
-    ui.banner({ name: `— ♪ ${APEX_BGM[apex].name} —` }, '頂上決戦');
+    track = 'apex:' + apex;
+    banner = [`— ♪ ${APEX_BGM[apex].name} —`, '頂上決戦'];
   } else if (state.mode === 'event' || state.mode === 'event-coop') {
-    playTrack('event');
-    ui.banner({ name: '— ♪ イベント専用曲 —' }, '特別試練');
-  } else {
-    playTrack(boss ? 'boss' : 'battle');
-    ui.banner({ name: boss ? '— ♪ ボス戦 —' : '— ♪ 通常戦闘曲 —' }, '剣を抜け');
+    track = 'event';
+    banner = ['— ♪ イベント専用曲 —', '特別試練'];
   }
+  playTrack(track);
+  if (audio.currentKey === 'fujiwara' && participants.includes('fujiwara_nobuyori')) {
+    banner = ['— ♪ 藤原信頼 専用BGM —', '専用BGM：オン'];
+  }
+  if (banner) ui.banner({ name: banner[0] }, banner[1]);
   // 開戦の合図：構え → 3・2・1 → 戦闘開始！（その間は誰も動かない）
   const b = state.battle;
   b.intro = 4.3;
@@ -2646,7 +2658,7 @@ const ranked=createRankedMode({
     $('#btn-options').click();
     $('#sync-push').focus();
   },
-  chooseFighter:(keys,choose,onBack)=>openSelect('ランク戦の戦士を選ぶ','ランクマッチ',choose,{keys,onBack}),
+  chooseFighter:(keys,choose,onBack)=>openSelect('ランク戦の戦士を選ぶ','ランクマッチ',choose,{keys,onBack,ranked:true}),
   loadFighter:key=>assets[key] ? Promise.resolve(true) : retrieveModel(FIGHTERS[key].model),
   makeBattle:()=>{
     setStage(stageById('moon'));
