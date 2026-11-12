@@ -63,6 +63,7 @@ function uiConfirm(text, okLabel = 'はい', danger = false, extra = {}) {
       return b;
     };
     const no = mk('キャンセル', '#2a2740');
+    no.dataset.rfDialogCancel = '';
     const ok = mk(okLabel, danger ? '#8a2330' : '#7a5a1e');
     const result = (yes) => (field ? (yes ? field.value : null) : yes);
     let closed = false;

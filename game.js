@@ -1,5 +1,5 @@
 import { tenshiTexture, divinePalette, tenshiImpact } from './assets/tenshi-effects.js?v=55.23';
-import { presentationFor } from './assets/riftfall-effects-v5521.js';
+import { presentationFor } from './assets/rf5527/combat-effects.js?v=55.27';
 import { collectMotionClips, playMotion, fighterMotion, animateStatic } from './assets/riftfall-motion-v5521.js';
 import { disposeCharacterVariant } from './character-variants.js';
 // RF53_SMOOTH_EFFECTS — smoother shading without changing model assets.
@@ -576,6 +576,14 @@ function fade(obj, k) {
 function kill(parent, obj) {
   parent.remove(obj);
   obj.traverse((o) => o.material?.dispose());
+}
+
+function disposeFighterMarkers(fighter) {
+  for (const marker of [fighter.ringMesh, fighter.guardMesh]) {
+    if (!marker?.isMesh) continue;
+    marker.removeFromParent();
+    marker.material.dispose();
+  }
 }
 
 function makeShape(kind, color, s = 1) {
@@ -1270,7 +1278,7 @@ export class Fighter {
     this.valgardMotion?.stop();
     this.valgardMotion = null;
     this.visual.clear();
-    this.root.remove(this.ringMesh, this.guardMesh);
+    disposeFighterMarkers(this);
     this.visual.rotation.set(0, 0, 0);
     this.visual.position.set(0, 0, 0);
     this.mixer?.stopAllAction();
@@ -1326,59 +1334,11 @@ export class Battle {
     L.userData.p = 4 * power; // 閃光は弱めに
   }
 
-  // 追加技：パチパチと弾け飛ぶ火花＋はじける衝撃環＋連続ポップ
+  // 追加技：衝撃環と時間差で消える光片。
   burstFx(pos, color, el) {
-    const N = 26;
-    const geo = new THREE.BufferGeometry();
-    const p = new Float32Array(N * 3), v = [];
-    for (let i = 0; i < N; i++) {
-      p[i * 3] = pos.x; p[i * 3 + 1] = 1.1; p[i * 3 + 2] = pos.z;
-      const a = Math.random() * Math.PI * 2, e = Math.random() * 1.2 - 0.2, s = 5 + Math.random() * 9;
-      v.push(Math.cos(a) * Math.cos(e) * s, Math.sin(e) * s + 3, Math.sin(a) * Math.cos(e) * s);
-    }
-    geo.setAttribute('position', new THREE.BufferAttribute(p, 3));
-    const mat = new THREE.PointsMaterial({ color: lite(color, 0.55), size: 0.28, transparent: true, opacity: 1, blending: THREE.AdditiveBlending, depthWrite: false });
-    const pts = new THREE.Points(geo, mat);
-    this.fx.add(pts);
-    const ring = new THREE.Mesh(new THREE.RingGeometry(0.6, 0.85, 40), glow(lite(color, 0.7), 0.95));
-    ring.rotation.x = -Math.PI / 2;
-    ring.position.set(pos.x, 0.12, pos.z);
-    this.fx.add(ring);
-    const core = new THREE.Mesh(new THREE.SphereGeometry(0.5, 14, 10), glow(0xffffff, 0.9));
-    core.position.set(pos.x, 1.1, pos.z);
-    this.fx.add(core);
-    let t = 0, pops = 0;
-    const life = 0.75;
-    this.addEffect((dt) => {
-      t += dt;
-      const k = t / life;
-      for (let i = 0; i < N; i++) {
-        v[i * 3 + 1] -= 18 * dt;
-        v[i * 3] *= 0.96; v[i * 3 + 2] *= 0.96;
-        p[i * 3] += v[i * 3] * dt; p[i * 3 + 1] = Math.max(0.05, p[i * 3 + 1] + v[i * 3 + 1] * dt); p[i * 3 + 2] += v[i * 3 + 2] * dt;
-      }
-      geo.attributes.position.needsUpdate = true;
-      mat.opacity = Math.max(0, 1 - k) * (0.6 + 0.4 * Math.sin(t * 60)); // チカチカ明滅
-      mat.size = 0.28 * (1 - k * 0.5);
-      ring.scale.setScalar(1 + k * 7);
-      ring.material.opacity = Math.max(0, 0.95 * (1 - k * 1.4));
-      core.scale.setScalar(Math.max(0.01, 1.6 - k * 4));
-      core.material.opacity = Math.max(0, 0.9 - k * 3);
-      // 弾けの連鎖：周囲で小さな破裂が続く
-      if (pops < 4 && t > pops * 0.09) {
-        pops++;
-        const q = new THREE.Vector3(pos.x + (Math.random() - 0.5) * 3, 0.9 + Math.random(), pos.z + (Math.random() - 0.5) * 3);
-        this.fxPop(q, el, 6, 1.2, 0.25, { grow: 2.6, spin: 6 });
-      }
-      if (t < life) return true;
-      for (const o of [pts, ring, core]) {
-        this.fx.remove(o);
-        o.geometry.dispose();
-        o.material.dispose();
-      }
-      return false;
-    });
-    this.flashLight(pos, color, 1.2, 0.25);
+    const art = presentationFor(this);
+    art.burst(pos, el, color, 1.24, true);
+    art.shards(pos.clone().setY(Math.max(.58, pos.y)), color, 1.45);
     this.shake = Math.max(this.shake || 0, 0.25);
   }
 
@@ -1731,7 +1691,7 @@ export class Battle {
         f.vel.set(0, 0, 0);
       }
     }
-    this.castFx(f, spec.color, spec);
+    this.castFx(f, spec.color, spec, isOver);
     if (spec.evolvedFollow) {
       // Elegant alternate variant (painted textures via current fxPop override), not more polygon geometry.
       const p = new THREE.Vector3(f.pos.x, .09, f.pos.z);
@@ -2090,8 +2050,8 @@ export class Battle {
     }
   }
 
-  castFx(f, color, spec) {
-    presentationFor(this).cast(f, color, spec);
+  castFx(f, color, spec, strong) {
+    presentationFor(this).cast(f, color, spec, strong);
   }
 
   afterimage(f, color) {
@@ -2128,30 +2088,7 @@ export class Battle {
       if (size >= 1.2) this.grandFx(pos, el, color, Math.min(2, size * 0.6));
       else this.flashLight(pos, color, size * 0.6, 0.25);
     }
-    const n = 7;
-    const geo = spec ? primOf(spec) : SG.tetra;
-    const lc = lite(color);
-    for (let i = 0; i < n; i++) {
-      const m = new THREE.Mesh(geo, glow(i % 2 ? lc : color, 0.95));
-      m.scale.setScalar(0.12 * size);
-      m.position.copy(pos);
-      const v = new THREE.Vector3((Math.random() - 0.5) * 8, 3 + Math.random() * 5, (Math.random() - 0.5) * 8).multiplyScalar(size * 0.7);
-      this.fx.add(m);
-      let t = 0;
-      this.addEffect((dt) => {
-        t += dt;
-        v.y -= 18 * dt;
-        m.position.addScaledVector(v, dt);
-        m.rotation.x += dt * 12;
-        m.rotation.z += dt * 9;
-        fade(m, Math.max(0, 1 - t / 0.5));
-        if (t > 0.5) {
-          kill(this.fx, m);
-          return false;
-        }
-        return true;
-      });
-    }
+    presentationFor(this).shards(pos, color, size);
   }
 
   // ---- 召喚獣：HPを持ち、倒されるまで使い手の前方に居続ける。通常攻撃の代わりに攻撃する ----
@@ -2923,6 +2860,7 @@ export class Battle {
     }
     f.hudPlate?.remove();
     this.scene.remove(f.root);
+    disposeFighterMarkers(f);
     if (f.redMats) f.endAwaken();
     disposeNullGuardAura(f);
     disposeCharacterVariant(f.modelInstance?.model);
@@ -2938,6 +2876,7 @@ export class Battle {
     this.__chantArtCleanups?.clear();
     for (const f of this.fighters) {
       this.scene.remove(f.root);
+      disposeFighterMarkers(f);
       if (f.redMats) f.endAwaken();
       disposeNullGuardAura(f);
       disposeCharacterVariant(f.modelInstance?.model);

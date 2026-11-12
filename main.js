@@ -40,7 +40,7 @@ import { installActorMotion } from './character-motion.js?v=rf-v18-20261109';
 import { installNepterionFixedSeven } from './nepterion-fixed-seven.js?v=rf-v18-20261109';
 import { FIGHTERS, spellCastTime, STORY, ROSTER, UPGRADES, MAX_LV, STAGES, BGM, APEX_BGM, ENEMY_ROSTER, UPG_CAP, LB_MAX, lbMaxLv, lbMul, lbCost, WEAPONS, ARMORS, SUMMONS, STAT_LABEL, SPECIAL_KEYS, BOSS_ROSTER, currentEvent, sanitizeEvent, EV_FOE_KINDS } from './data.js?v=rf-minamoto-v48-20261111';
 import { sayBattle, setVoiceMuted, setVoiceVolume, stopVoices } from './voice.js?v=audio-cast-20261107d';
-import { initSocial, uiConfirm } from './social.js?v=rf54-20261111';
+import { initSocial, uiConfirm } from './social.js?v=55.27';
 import { initMailbox } from './mailbox.js?v=audio-cast-20261107d';
 import { OPERATOR_KEY_SHA256, CHIEF_KEY_SHA256, MAX_KEY_ATTEMPTS, LOCKOUT_MS, SHOP_ITEMS } from './config.js';
 import { connect, issueInvite, redeemInvite, syncPush, syncPullV } from './net.js?v=rf-v552-coop-20261111';
@@ -48,6 +48,7 @@ import { createEventCoopV552 } from './rf-event-coop-v552.js?v=rf553-chief-cpu-2
 import { createInfiniteDungeonV552 } from './rf-infinite-dungeon-v552.js?v=55.20';
 import { apiEnabled, api, verifyToken } from './api.js';
 import { createOrbitControls } from './assets/rf-camera-v5520.js?v=55.21';
+import { activeInputModal, bindTouchControls, EDITABLE_CONTROL } from './assets/rf5527/controls.js?v=55.27';
 import { createContactShadows, createRenderBudget, createStageReflections } from './assets/rf5526/graphics.js?v=55.26';
 
 const $ = (s) => document.querySelector(s);
@@ -1322,17 +1323,26 @@ const edges = { attack: false, skill: false, skill2: false, heal: false, over: f
 const touchState = { mx: 0, mz: 0, guard: false, skill: false, skill2: false };
 const padState = { mx: 0, mz: 0, guard: false, skill: false, skill2: false };
 let mouseSkillHeld = false;
+let padNeedsNeutral = false;
+let combatInputWasAllowed = false;
 let resetTouch = () => {};
 const KEYMAP = { KeyJ: 'attack', KeyZ: 'attack', KeyK: 'skill', KeyX: 'skill', KeyU: 'skill2', KeyV: 'skill2', KeyH: 'heal', KeyL: 'over', KeyC: 'over', Space: 'jump' };
 const MOVE_KEYS = new Set(['KeyA','KeyD','KeyW','KeyS','ArrowLeft','ArrowRight','ArrowUp','ArrowDown','ShiftLeft','ShiftRight','KeyI']);
-const activeModal = () => document.querySelector('dialog[open], [role="dialog"][aria-modal="true"]:not([hidden])');
+const activeModal = () => activeInputModal(document);
+function activeGameOverlay() {
+  const chat = document.getElementById('chat-panel');
+  if (chat && !chat.hidden) return chat;
+  const world = document.getElementById('world-panel');
+  return !world.hidden && !document.getElementById('hud').hidden && document.body.classList.contains('field-mode') ? world : null;
+}
 
 function inBattleView() {
   return (!!state.battle || !!state.field) && !document.querySelector('.screen.on');
 }
 
 function acceptsCombatInput() {
-  return (inBattleView() || state.adventureRest) && !state.paused && !activeModal();
+  return !document.hidden && (inBattleView() || state.adventureRest) && !state.paused &&
+    !activeModal() && !activeGameOverlay() && !document.activeElement?.closest(EDITABLE_CONTROL);
 }
 
 function resetInput() {
@@ -1343,6 +1353,7 @@ function resetInput() {
     source.guard = source.skill = source.skill2 = false;
   }
   mouseSkillHeld = false;
+  padNeedsNeutral = true;
   resetTouch();
   const player = state.battle?.fighters.find(fighter => fighter.isPlayer);
   if (player) player.queuedPress = null;
@@ -1353,8 +1364,8 @@ window.addEventListener('mouseup', event => {
 });
 window.addEventListener('keydown', event => {
   if (event.defaultPrevented || event.isComposing || event.altKey || event.ctrlKey || event.metaKey || activeModal()) return;
-  const interactive = event.target.closest?.('button, a[href], input, textarea, select, [contenteditable]');
-  if (interactive?.matches('input, textarea, select, [contenteditable]')) {
+  const interactive = event.target.closest?.(`button, a[href], ${EDITABLE_CONTROL}`);
+  if (interactive?.matches(EDITABLE_CONTROL)) {
     if (event.code === 'Escape') interactive.blur();
     return;
   }
@@ -1379,11 +1390,15 @@ window.addEventListener('keydown', event => {
   }
   if (!acceptsCombatInput() || !(KEYMAP[event.code] || MOVE_KEYS.has(event.code))) return;
   event.preventDefault();
+  if (event.repeat) return;
   keys.add(event.code);
-  if (!event.repeat && KEYMAP[event.code]) edges[KEYMAP[event.code]] = true;
+  if (KEYMAP[event.code]) edges[KEYMAP[event.code]] = true;
 });
 window.addEventListener('keyup', event => keys.delete(event.code));
 window.addEventListener('blur', resetInput);
+document.addEventListener('focusin', event => {
+  if (inBattleView() && (event.target.closest?.(EDITABLE_CONTROL) || activeModal() || activeGameOverlay())) resetInput();
+});
 document.addEventListener('visibilitychange', () => { if (document.hidden) resetInput(); });
 renderer.domElement.addEventListener('mousedown', event => {
   if (!acceptsCombatInput()) return;
@@ -1423,74 +1438,8 @@ function setupTouch() {
   if (!isTouch) return;
   $('#press-hint').textContent = 'タップでメニューへ';
   const pad = $('#touch');
-  const joy = $('#joy');
-  const knob = $('#knob');
-  const activeButtons = new Map();
-  let joystickPointer = null;
   pad.hidden = false;
-
-  function updateStick(event) {
-    const rect = joy.getBoundingClientRect();
-    const radius = Math.max(1, rect.width / 2);
-    const dx = (event.clientX - rect.left - radius) / radius;
-    const dy = (event.clientY - rect.top - rect.height / 2) / radius;
-    const distance = Math.hypot(dx, dy);
-    const amount = Math.max(0, Math.min(1, (distance - .13) / .87));
-    touchState.mx = distance ? dx * amount / distance : 0;
-    touchState.mz = distance ? dy * amount / distance : 0;
-    knob.style.transform = 'translate(' + (touchState.mx * radius * .6) + 'px,' + (touchState.mz * radius * .6) + 'px)';
-  }
-  function clearStick() {
-    const pointer = joystickPointer;
-    joystickPointer = null;
-    touchState.mx = touchState.mz = 0;
-    knob.style.transform = '';
-    if (pointer !== null && joy.hasPointerCapture(pointer)) joy.releasePointerCapture(pointer);
-  }
-  joy.addEventListener('pointerdown', event => {
-    if (joystickPointer !== null || !acceptsCombatInput() || event.button !== 0) return;
-    event.preventDefault();
-    joystickPointer = event.pointerId;
-    joy.setPointerCapture(joystickPointer);
-    updateStick(event);
-  });
-  joy.addEventListener('pointermove', event => {
-    if (event.pointerId === joystickPointer) updateStick(event);
-  });
-  for (const type of ['pointerup','pointercancel','lostpointercapture']) {
-    joy.addEventListener(type, event => { if (event.pointerId === joystickPointer) clearStick(); });
-  }
-
-  const heldActions = new Set(['guard','skill','skill2']);
-  function clearButton(button) {
-    const pointer = activeButtons.get(button);
-    if (pointer === undefined) return;
-    activeButtons.delete(button);
-    button.classList.remove('rf5521-held');
-    if (heldActions.has(button.dataset.act)) touchState[button.dataset.act] = false;
-    if (button.hasPointerCapture(pointer)) button.releasePointerCapture(pointer);
-  }
-  for (const button of pad.querySelectorAll('[data-act]')) {
-    const act = button.dataset.act;
-    button.addEventListener('pointerdown', event => {
-      if (!acceptsCombatInput() || activeButtons.has(button) || event.button !== 0) return;
-      event.preventDefault();
-      activeButtons.set(button, event.pointerId);
-      button.setPointerCapture(event.pointerId);
-      button.classList.add('rf5521-held');
-      if (act !== 'guard') edges[act] = true;
-      if (heldActions.has(act)) touchState[act] = true;
-    });
-    for (const type of ['pointerup','pointercancel','lostpointercapture']) {
-      button.addEventListener(type, event => {
-        if (activeButtons.get(button) === event.pointerId) clearButton(button);
-      });
-    }
-  }
-  resetTouch = () => {
-    clearStick();
-    for (const button of activeButtons.keys()) clearButton(button);
-  };
+  resetTouch = bindTouchControls(pad, touchState, edges, acceptsCombatInput);
 }
 
 // ---------- Screens ----------
@@ -1516,6 +1465,7 @@ function isScreen(id) {
 function show(id) {
   resetInput();
   const target = id ? document.getElementById(id) : null;
+  if (target && state.paused) setPaused(false);
   if (document.activeElement?.closest('.screen') !== target) document.activeElement?.blur?.();
   for (const screen of document.querySelectorAll('.screen')) {
     const visible = screen === target;
@@ -1539,6 +1489,11 @@ function show(id) {
   }
 }
 function goBackCurrent() {
+  const overlay = activeGameOverlay();
+  if (overlay) {
+    $(overlay.id === 'chat-panel' ? '#chat-btn' : '#world-close')?.click();
+    return;
+  }
   if (!$('#pause').hidden) {
     togglePause();
     return;
@@ -2231,11 +2186,10 @@ function goTitle() {
   state.online = null;
   state.duel = null;
   state.duelWait = null;
-  $('#world-panel').hidden = true;
+  closeWorldPanel();
   $('#world-req').hidden = true;
-  state.paused = false;
+  setPaused(false);
   state.dialogue = null;
-  $('#pause').hidden = true;
   playTrack('title');
   refreshTitle();
   show('scr-title');
@@ -2796,8 +2750,7 @@ function showResult(title, text, reward, retry, next) {
   show('scr-result');
 }
 function returnFromBattle(){
-  state.paused=false;
-  $('#pause').hidden=true;
+  setPaused(false);
   if(state.mode==='story'){goTitle();return;}
   if(state.mode==='castle'){castleRealm.retreat();return;}
   if(state.mode==='adventure'){gaizorgAdventure.back();return;}
@@ -3595,8 +3548,7 @@ async function onInvaded(e) {
     return;
   }
   state.invaded = true;
-  state.paused = false;
-  $('#pause').hidden = true;
+  setPaused(false);
   const p = state.worldPeers?.[e.from];
   if (apiEnabled() && p?.fk && ['udaijin','fujiwara_nobuyori'].includes(p.fk)) await verifyPeer(p);
   const apexOk = !apiEnabled() || tr === 'chief' || tr === 'op';
@@ -3896,7 +3848,7 @@ async function startDuel(peer, challenger) {
   if(state.battleLoading)return;
   const w = state.world;
   if (!w || !canDuelNow()) return;
-  $('#world-panel').hidden = true;
+  closeWorldPanel();
   const ch = STORY[state.chapter];
   setStage(stageById(ch.stage));
   if (arena) arena.visible = true;
@@ -3922,20 +3874,31 @@ async function startDuel(peer, challenger) {
   ui.banner({ name: '— 決闘 —' }, `${myName()} vs ${peer.name}`);
   } catch(error) { rfBattleStartError(error); }
 }
+function closeWorldPanel(restoreFocus = false) {
+  $('#world-panel').hidden = true;
+  const button = $('#btn-world');
+  button.setAttribute('aria-expanded', 'false');
+  if (restoreFocus) button.focus({preventScroll: true});
+}
 $('#btn-world').addEventListener('click', async () => {
   sfx('ui');
-  const pnl = $('#world-panel');
-  pnl.hidden = !pnl.hidden;
-  if (!pnl.hidden) {
-    $('#world-name').value = myName();
-    renderWorldPanel();
-    await ensureWorld();
-    renderWorldPanel();
+  const panel = $('#world-panel');
+  if (!panel.hidden) {
+    closeWorldPanel();
+    return;
   }
+  resetInput();
+  panel.hidden = false;
+  $('#btn-world').setAttribute('aria-expanded', 'true');
+  $('#world-name').value = myName();
+  renderWorldPanel();
+  if (!isTouch) $('#world-close').focus({preventScroll: true});
+  await ensureWorld();
+  if (!panel.hidden) renderWorldPanel();
 });
 $('#world-close').addEventListener('click', () => {
   sfx('ui');
-  $('#world-panel').hidden = true;
+  closeWorldPanel(true);
 });
 $('#world-name').addEventListener('change', () => {
   save.uname = [...$('#world-name').value.replace(/[<>&"']/g, '').trim()].slice(0, 10).join('');
@@ -3947,6 +3910,20 @@ $('#world-req-yes').addEventListener('click', () => answerReq(true));
 $('#world-req-no').addEventListener('click', () => answerReq(false));
 
 // ---------- Pause ----------
+let pauseFocus = null;
+function setPaused(paused, restoreFocus = false) {
+  state.paused = paused;
+  $('#pause').hidden = !paused;
+  $('#hud').inert = paused;
+  $('#touch').inert = paused;
+  if (!paused) {
+    const previous = pauseFocus;
+    pauseFocus = null;
+    if (restoreFocus && previous?.isConnected && previous !== document.body && previous.getClientRects().length) {
+      previous.focus({preventScroll: true});
+    }
+  }
+}
 function togglePause() {
   if (state.mode==='ranked' && state.battle?.ranked) { void ranked.askRetire(); return; }
   if ((!state.battle && !state.field && !state.adventureRest) || document.querySelector('.screen.on')) {
@@ -3956,14 +3933,12 @@ function togglePause() {
     ui.banner({ name: '— いまは止まれない —' }, state.mode==='event-coop'?'協力戦は一時停止できません':'乱入中');
     return;
   }
-  state.paused = !state.paused;
+  if (!state.paused) pauseFocus = document.activeElement;
+  setPaused(!state.paused, true);
   resetInput();
-  $('#pause').hidden = !state.paused;
   orbitControls.refresh();
   $('#pause-note').textContent = state.online ? '遠い相手の時間は止まりません。' : '';
-  if (state.paused && !isTouch) {
-    $('#btn-resume').focus();
-  }
+  if (state.paused) $('#btn-resume').focus({preventScroll: true});
 }
 $('#btn-pause').addEventListener('click', togglePause);
 $('#btn-resume').addEventListener('click', togglePause);
@@ -4602,7 +4577,7 @@ $('#op-form').addEventListener('submit', async (e) => {
 refreshRole();
 
 // ---------- Gamepad (Standard mapping: Xbox / PlayStation / Switch Pro / 汎用) ----------
-const pad = { prev: [], navT: 0 };
+const pad = { prev: [], navT: 0, index: null };
 window.addEventListener('gamepadconnected', (e) => {
   $('#pad-status').textContent = `ゲームパッド：${e.gamepad.id.slice(0, 40)} と手を結びました`;
 });
@@ -4622,12 +4597,20 @@ function pollPad(dt) {
   padState.mx = padState.mz = 0;
   padState.guard = false;
   padState.skill = padState.skill2 = false;
+  if (document.hidden) return;
   const g = activePad();
   if (!g) {
     pad.prev = [];
+    pad.index = null;
     return;
   }
-  const btn = (i) => !!(g.buttons[i] && (g.buttons[i].pressed || g.buttons[i].value > 0.5));
+  if (pad.index !== g.index) {
+    pad.index = g.index;
+    pad.prev = [];
+    padNeedsNeutral = true;
+  }
+  const pressed = g.buttons.map(b => b.pressed || b.value > 0.5);
+  const btn = i => !!pressed[i];
   const down = (i) => btn(i) && !pad.prev[i];
   let mx = Math.abs(g.axes[0] || 0) > 0.2 ? g.axes[0] : 0;
   let mz = Math.abs(g.axes[1] || 0) > 0.2 ? g.axes[1] : 0;
@@ -4635,11 +4618,17 @@ function pollPad(dt) {
   if (btn(15)) mx = 1;
   if (btn(12)) mz = -1;
   if (btn(13)) mz = 1;
-  const anyDown = g.buttons.some((_, i) => down(i));
   const dialog = activeModal();
-  if (isScreen('scr-press') && !dialog) {
-    if (anyDown) $('#press-start').click();
+  const overlay = activeGameOverlay();
+  if (isScreen('scr-press') && !dialog && !overlay) {
+    if (pressed.some((_, i) => down(i))) $('#press-start').click();
   } else if (acceptsCombatInput()) {
+    const turn = g.mapping === 'standard' ? g.axes[2] || 0 : 0;
+    if (padNeedsNeutral) {
+      padNeedsNeutral = pressed.some(Boolean) || Math.hypot(mx, mz) > .2 || Math.abs(turn) > .2;
+      pad.prev = pressed;
+      return;
+    }
     padState.mx = mx;
     padState.mz = mz;
     padState.guard = btn(4) || btn(6) || btn(7);
@@ -4651,25 +4640,26 @@ function pollPad(dt) {
     if (down(3)) edges.over = true;
     if (down(1)) edges.jump = true;
     if (down(10)) edges.heal = true;
-    const turn = g.mapping === 'standard' ? g.axes[2] || 0 : 0;
     if (Math.abs(turn) > .2) orbitControls.rotate(turn * dt * 2.6);
     if (g.mapping === 'standard' && !$('#rf5520-orbit').hidden && down(11)) orbitControls.reset();
     if (down(9)) togglePause();
   } else {
-    const root = dialog || (state.paused ? $('#pause') : document.querySelector('.screen.on'));
-    const items = root ? [...root.querySelectorAll('button:not([disabled]), a[href], input, #story-box')].filter((b) => b.offsetParent !== null) : [];
+    const root = dialog || overlay || (state.paused ? $('#pause') : document.querySelector('.screen.on'));
+    const items = root ? [...root.querySelectorAll('button:not([disabled]), a[href], input:not([disabled]), select:not([disabled]), #story-box')]
+      .filter(el => el.tabIndex >= 0 && !el.closest('[hidden], [inert]') && el.getClientRects().length) : [];
     pad.navT -= dt;
     if (items.length && pad.navT <= 0 && (Math.abs(mx) > 0.5 || Math.abs(mz) > 0.5)) {
       pad.navT = 0.18;
-      let i = items.indexOf(document.activeElement);
-      i = (i + (mz > 0.5 || mx > 0.5 ? 1 : -1) + items.length) % items.length;
+      const current = items.indexOf(document.activeElement);
+      const step = mz > .5 || mx > .5 ? 1 : -1;
+      const i = current < 0 ? (step > 0 ? 0 : items.length - 1) : (current + step + items.length) % items.length;
       items[i].focus();
       items[i].scrollIntoView({ block: 'nearest' });
     }
     if (down(0)) {
       unlockAudio();
       const el = document.activeElement;
-      if (!dialog && isScreen('scr-story') && (!el || el === document.body || el.id === 'story-box')) {
+      if (!dialog && !overlay && isScreen('scr-story') && (!el || el === document.body || el.id === 'story-box')) {
         advanceDialogue();
       } else if (el && items.includes(el)) {
         el.click();
@@ -4678,15 +4668,19 @@ function pollPad(dt) {
       }
     }
     if (down(1) || down(8)) {
-      if (dialog instanceof HTMLDialogElement) dialog.close();
-      else if (dialog) dialog.querySelector('button[aria-label="閉じる"]')?.click();
-      else goBackCurrent();
+      if (dialog instanceof HTMLDialogElement) {
+        if (typeof dialog.requestClose === 'function') dialog.requestClose();
+        else if (dialog.dispatchEvent(new Event('cancel', {cancelable: true}))) dialog.close();
+      } else if (dialog) {
+        const close = dialog.querySelector('button[aria-label="閉じる"], button[data-rf-dialog-cancel]');
+        close?.click();
+      } else goBackCurrent();
     }
-    if (!dialog && down(9) && state.paused) {
+    if (!dialog && !overlay && down(9) && state.paused) {
       togglePause();
     }
   }
-  pad.prev = g.buttons.map((b) => b.pressed || b.value > 0.5);
+  pad.prev = pressed;
 }
 
 // GAIZORG-ADVENTURE-INSTALLED-v20261108b
@@ -4761,14 +4755,17 @@ renderer.setAnimationLoop((time) => {
   const dt = Math.min(0.05, Math.max(0, rawDt));
   const t = time / 1000;
   pollPad(dt);
+  const allowInput = acceptsCombatInput();
+  if (!allowInput && combatInputWasAllowed) resetInput();
+  combatInputWasAllowed = allowInput;
   worldTick(dt);
   if (state.battle?.ranked) {
-    ranked.tick(dt,acceptsCombatInput()?readInput():null);
+    ranked.tick(dt,allowInput ? readInput() : null);
     rfV12HudClock+=rawDt;
     if(rfV12HudClock>=.09){rfV12HudClock=0;updateHud();}
   } else if (state.battle && (!state.paused || isLive())) {
     try {
-      state.battle.update(dt, state.paused ? { mx: 0, mz: 0 } : readInput());
+      state.battle.update(dt, allowInput ? readInput() : { mx: 0, mz: 0 });
       netTick(dt);
       rfV12HudClock += rawDt;
       if (rfV12HudClock >= 0.09) { rfV12HudClock = 0; updateHud(); }
@@ -4777,10 +4774,10 @@ renderer.setAnimationLoop((time) => {
       return;
     }
   } else if (state.adventureRest && !state.battle) {
-    gaizorgAdventure.update(dt, state.paused ? { mx:0,mz:0 } : readInput());
+    gaizorgAdventure.update(dt, allowInput ? readInput() : { mx: 0, mz: 0 });
   } else if (state.field && !state.battle) {
     const live = !state.paused && !document.querySelector('.screen.on');
-    state.field.update(live ? dt : 0, live ? readInput() : null, camera);
+    state.field.update(live ? dt : 0, live ? (allowInput ? readInput() : { mx: 0, mz: 0 }) : null, camera);
     updateFieldHud();
   } else if (!state.battle) {
     camera.position.set(Math.sin(t * 0.1) * 16, 7, Math.cos(t * 0.1) * 16);

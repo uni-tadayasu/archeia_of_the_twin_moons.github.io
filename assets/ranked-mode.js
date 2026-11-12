@@ -501,6 +501,7 @@ export function createRankedMode({
     resetMatch();el.live.hidden=true;el.refresh.disabled=false;
   }
   function tick(dt,input) {
+    if(!input)edges=0;
     if(!view)return;
     view.tick(dt);
     if(last?.phase!=='fight'||!socket||socket.readyState!==WebSocket.OPEN)return;

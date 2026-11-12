@@ -6,7 +6,7 @@
 (() => {
   'use strict';
   // Existing portal navigation and startup recovery are preserved.
-  function jumpTo(id) {
+  function jumpTo(id, focusSection) {
     const section = document.getElementById(id);
     if (!section) return;
     const scroller = document.getElementById('scr-title');
@@ -15,17 +15,18 @@
       const padding = Number.parseFloat(getComputedStyle(scroller).paddingTop) || 0;
       const clearance = (header?.getBoundingClientRect().height || 0) + padding + 10;
       const top = scroller.scrollTop + section.getBoundingClientRect().top - scroller.getBoundingClientRect().top;
+      if (focusSection) section.focus({ preventScroll: true });
       scroller.scrollTo({ top: Math.max(0, top - clearance),
         behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth' });
     }
   }
   document.addEventListener('click', (event) => {
     const button = event.target.closest?.('[data-portal-jump]');
-    if (button) jumpTo(button.dataset.portalJump);
+    if (button) jumpTo(button.dataset.portalJump, event.detail === 0);
   });
   const bootStatus = document.getElementById('loading');
   const bootRetry = () => {
-    if (window.__arkeiaBootOk || !bootStatus || document.getElementById('arkeia-boot-retry')) return;
+    if (window.__arkeiaBootOk || window.__riftfallGraphicsUnavailable || !bootStatus || document.getElementById('arkeia-boot-retry')) return;
     bootStatus.textContent = '起動を確認できません。通信状況をご確認ください。';
     const retry = document.createElement('button');
     retry.type = 'button'; retry.id = 'arkeia-boot-retry'; retry.className = 'back';
