@@ -58,6 +58,7 @@
   <link rel="stylesheet" href="./assets/rf569-ui-refresh.css?v=55.21">
   <link rel="stylesheet" href="./assets/rf5523/site.css?v=55.23">
   <link rel="stylesheet" href="./assets/rf5525/site.css?v=55.25">
+  <link rel="stylesheet" href="./assets/rf5526/guide.css?v=55.26">
 </head>
 <body class="rf5525 rf25-guide rf5521-guide">
   <header class="guide-cover">
@@ -69,16 +70,23 @@
     </div>
   </header>
   <nav class="guide-nav" aria-label="目次">
-    <a href="#modes" data-rf25-icon="sword">出撃先</a><a href="#ranked" data-rf25-icon="trophy">ランクマッチ</a><a href="#controls" data-rf25-icon="gamepad">操作一覧</a><a href="#camera" data-rf25-icon="map">視点</a><a href="#save" data-rf25-icon="sync">セーブと映像</a>
+    <a href="#modes" data-rf25-icon="sword">出撃先</a><a href="#ranked" data-rf25-icon="trophy">ランクマッチ</a><a href="#controls" data-rf25-icon="gamepad">操作一覧</a><a href="#camera" data-rf25-icon="map">視点</a><a href="#save" data-rf25-icon="sync">セーブ・画質・音</a>
   </nav>
   <main class="guide-main">
     <section id="modes">
       <h2>出撃先</h2>
+      <p>初めてなら「ひとりで対戦」で操作を試せます。ゲームを始め、出撃先から自分の戦士、相手、舞台を順に選んでください。</p>
       <dl class="guide-modes">
-        <div><dt>ストーリー</dt><dd>灯脈を辿り、街や建物を探索します。戦闘を終えると、次の場面へ物語が続きます。</dd></div>
-        <div><dt>無限天守</dt><dd>広間や回廊で敵を探し、全員倒してから階段に進みます。残りHPを次の階へ持ち越し、到達階とタイムを競います。</dd></div>
-        <div><dt>拠点攻城戦</dt><dd>メニューの「双月領国・拠点」から入れます。拠点の持ち主は防衛ボスを階ごとに設定でき、攻撃側は闘技場でそのボスと戦います。</dd></div>
-        <div><dt>対戦と協力</dt><dd>CPU戦、オンライン対戦、オンライン協力から選択できます。期間イベントの協力戦は最大4人で出撃できます。</dd></div>
+        <div><dt><span class="rf25-image-icon" data-rf25-icon="story" aria-hidden="true"></span>物語を進める</dt><dd>灯脈を辿って街や建物を探索します。戦闘を終えると、次の場面へ物語が続きます。</dd></div>
+        <div><dt><span class="rf25-image-icon" data-rf25-icon="tower" aria-hidden="true"></span>無限天守</dt><dd>広間と回廊の敵を全員倒してから階段に進みます。残りHPを次の階へ持ち越し、到達階とタイムを競います。</dd></div>
+        <div><dt><span class="rf25-image-icon" data-rf25-icon="trophy" aria-hidden="true"></span>ランクマッチ</dt><dd>世界の戦士との一対一。戦績に応じてランクが上がります。<a href="#ranked">参加条件とルール</a></dd></div>
+        <div><dt><span class="rf25-image-icon" data-rf25-icon="sword" aria-hidden="true"></span>ひとりで対戦</dt><dd>自分と相手の戦士、舞台を選び、CPUと一対一で戦います。</dd></div>
+        <div><dt><span class="rf25-image-icon" data-rf25-icon="duo" aria-hidden="true"></span>仲間と二対二</dt><dd>CPUの相棒と組み、二人の相手と戦います。自分の戦士と舞台を選べます。</dd></div>
+        <div><dt><span class="rf25-image-icon" data-rf25-icon="duel" aria-hidden="true"></span>オンライン対戦</dt><dd>戦士を選んで対戦の部屋へ進みます。同じ合言葉を使って相手と合流します。</dd></div>
+        <div><dt><span class="rf25-image-icon" data-rf25-icon="coop" aria-hidden="true"></span>オンライン協力</dt><dd>同じ合言葉を使って合流し、仲間と一緒に敵を討伐します。</dd></div>
+        <div><dt><span class="rf25-image-icon" data-rf25-icon="event" aria-hidden="true"></span>期間イベント</dt><dd>週替わりの試練です。一人で出撃するか、部屋を作って最大4人で挑めます。</dd></div>
+        <div><dt><span class="rf25-image-icon" data-rf25-icon="adventure" aria-hidden="true"></span>アドベンチャー</dt><dd>休憩所を経由しながら10ステージと最終ボスに挑みます。開始時に最初からか続きからかを選べます。</dd></div>
+        <div><dt><span class="rf25-image-icon" data-rf25-icon="castle" aria-hidden="true"></span>拠点攻城戦</dt><dd>「双月領国・拠点」から入ります。拠点の持ち主は防衛ボスを階ごとに設定でき、攻撃側は闘技場でそのボスと戦います。</dd></div>
       </dl>
     </section>
     <section id="ranked">
@@ -111,9 +119,13 @@
       <p>キーボードの <kbd>Q</kbd>・<kbd>E</kbd>、画面の回転ボタン、または視点欄を横にドラッグすると手動視点になります。ゲームパッドは右スティックを横に倒して回します。<kbd>R</kbd>、画面の「自動」、または右スティックの押し込みで自動視点に戻ります。</p>
     </section>
     <section id="save">
-      <h2>セーブ・音量・映像の調整</h2>
-      <p>別の端末へ移るときは「旅支度・設定」の同期コードで記録を引き継げます。「旅支度・設定」では音量と映像品質を個別に調整できます。タッチ操作のボタン位置も端末に合わせて変更できます。</p>
-      <p>「藤原信頼の専用BGM」のチェックを外すと、その場面に合うBGMが流れます。設定は端末のブラウザに保存されます。ランクマッチでは全戦士がランク戦の曲を使用します。</p>
+      <h2>セーブ・画質・音</h2>
+      <dl class="rf26-setting-notes">
+        <div><dt>端末を変える</dt><dd>「旅支度・設定」で「この端末の記録を預ける」を選びます。新しい端末で同じ同期コードを入れて記録を受け取ります。</dd></div>
+        <div><dt>戦闘の映像が重い</dt><dd>「画質・操作レイアウト」で「軽量」「標準」「高画質」を選べます。動きが途切れるときは「軽量」に切り替えてください。</dd></div>
+        <div><dt>タッチ操作を調整する</dt><dd>「ボタン配置を編集」でボタンを動かせます。ボタンの大きさや、端末を縦・横にしたときの配置も調整できます。</dd></div>
+        <div><dt>BGMと効果音を調整する</dt><dd>最初のクリック・タップ・キー操作で音が有効になります。「音量とBGM」で各音量を調整できます。「藤原信頼の専用BGM」を切ると通常の場面曲が流れます。ランクマッチでは専用のランク戦BGMが流れます。</dd></div>
+      </dl>
     </section>
     <p class="rf5523-related"><a href="./world-guide.html" data-rf25-icon="map">舞台案内</a><a href="./tenshi.html" data-rf25-icon="profile">天子の人物・技ガイド</a></p>
     <a class="guide-play" href="./" data-rf25-icon="start">ゲームを始める</a>

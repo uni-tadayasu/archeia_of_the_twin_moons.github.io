@@ -18,6 +18,7 @@ const errorLabels={
   rank_unavailable:'ランクマッチのサーバー準備中です。',
   rank_session:'接続の有効期限が切れました。もう一度お試しください。',
   rank_fighter:'その戦士はランクマッチで選べません。',
+  rank_join_unknown:'検索の受付を確認できませんでした。状態を再確認しています。',
   limit:'少し時間をおいてからお試しください。',
   'not found':'ランクマッチのサーバー準備中です。'
 };
@@ -193,11 +194,19 @@ export function createRankedMode({
   }
   async function post(action,payload={}) {
     let auth=await authorize();
-    let r=await api('/rank/'+action,{...payload,token:auth.token});
+    const send=async()=>{
+      try {
+        return await api('/rank/'+action,{...payload,token:auth.token});
+      } catch(error) {
+        if(action==='join')throw Error('rank_join_unknown');
+        throw error;
+      }
+    };
+    let r=await send();
     if (r.status===401) {
       if(session===auth)session=null;
       auth=await authorize();
-      r=await api('/rank/'+action,{...payload,token:auth.token});
+      r=await send();
     }
     if (!r.ok) throw Error(r.error||'rank_unavailable');
     return r;
@@ -264,12 +273,12 @@ export function createRankedMode({
         setText(el.wait,r.waited+'秒');
         notice(r.waited>=60?'対戦相手を検索中です。候補がいない場合はボット戦の抽選が行われます。':'世界の対戦相手を検索しています。');
       } else {
-        if(queue)notice('検索の有効期限が切れました。もう一度検索できます。');
+        if(queue)notice('検索は終了しました。もう一度検索できます。');
         queue=false;
       }
     } catch(error) {
       if(!active||version!==generation||cancelling)return;
-      if(action==='join')queue=false;
+      if(action==='join'&&error?.message!=='rank_join_unknown')queue=false;
       notice(label(error));
     } finally {
       if (request===pending) request=null;
@@ -370,7 +379,7 @@ export function createRankedMode({
     socket=ws;
     ws.addEventListener('open',()=>{
       if(socket!==ws)return;
-      disconnectAt=0;saidReady=false;seq=0;edges=0;
+      disconnectAt=0;saidReady=false;retryWanted=false;seq=0;edges=0;
       setText(el.connection,'');
     });
     ws.addEventListener('message',event=>{
@@ -384,6 +393,7 @@ export function createRankedMode({
       socket=null;finishing=false;disconnectAt ||= Date.now();
       if(event.code===4001)return returnToLobby('この対戦は別のタブまたは端末で開かれました。');
       if(Date.now()-disconnectAt>27000)return returnToLobby('対戦への再接続ができませんでした。');
+      if(last?.phase==='result')el.retry.disabled=true;
       setText(el.connection,'サーバーに再接続しています…');
       notice('サーバーに再接続しています…');
       clearTimeout(reconnect);reconnect=setTimeout(startSocket,850);

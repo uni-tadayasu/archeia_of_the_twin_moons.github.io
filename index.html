@@ -37,7 +37,7 @@
     <meta name="referrer" content="strict-origin-when-cross-origin" />
     <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' https://esm.sh https://storage.googleapis.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob: https:; media-src 'self' blob: https:; connect-src 'self' data: blob: https://www.gstatic.com https://esm.sh https://api.instantdb.com wss://api.instantdb.com https://*.instantdb.com wss://*.instantdb.com https://storage.googleapis.com https://*.workers.dev https://api.kasai-solutions-inc.com wss://arkeia-api.kasai-solutions-inc.workers.dev wss://api.kasai-solutions-inc.com; worker-src 'self' blob:; object-src 'none'; frame-src 'none'; manifest-src 'self'; script-src-attr 'none'; base-uri 'self'; form-action 'none'; upgrade-insecure-requests" />
     <script type="application/ld+json">
-      {"@context":"https://schema.org","@graph":[{"@type":"WebSite","@id":"https://www.kasai-solutions-inc.com/#website","url":"https://www.kasai-solutions-inc.com/","name":"双月のアルケイア","alternateName":"Riftfall Arena","inLanguage":"ja"},{"@type":"VideoGame","@id":"https://www.kasai-solutions-inc.com/#game","url":"https://www.kasai-solutions-inc.com/","name":"双月のアルケイア","alternateName":"Riftfall Arena","description":"双つの月の下を旅する和風3DアクションRPG。物語、無限天守、拠点攻城戦、世界ランクマッチをPC・スマホで無料プレイ。神属性の天子と舞台の情報も掲載。","image":"https://www.kasai-solutions-inc.com/assets/rf5525/moonkeep-share.jpg","genre":["Action","Fighting","Fantasy","RPG"],"gamePlatform":["Web browser","PC","Mobile"],"playMode":["https://schema.org/SinglePlayer","https://schema.org/MultiPlayer","https://schema.org/CoOp"],"applicationCategory":"Game","operatingSystem":"Web browser","inLanguage":"ja","softwareVersion":"55.25","isAccessibleForFree":true,"offers":{"@type":"Offer","price":"0","priceCurrency":"JPY"},"publisher":{"@type":"Organization","name":"KASAI SOLUTIONS INC."},"isPartOf":{"@id":"https://www.kasai-solutions-inc.com/#website"}}]}
+      {"@context":"https://schema.org","@graph":[{"@type":"WebSite","@id":"https://www.kasai-solutions-inc.com/#website","url":"https://www.kasai-solutions-inc.com/","name":"双月のアルケイア","alternateName":"Riftfall Arena","inLanguage":"ja"},{"@type":"VideoGame","@id":"https://www.kasai-solutions-inc.com/#game","url":"https://www.kasai-solutions-inc.com/","name":"双月のアルケイア","alternateName":"Riftfall Arena","description":"双つの月の下を旅する和風3DアクションRPG。物語、無限天守、拠点攻城戦、世界ランクマッチをPC・スマホで無料プレイ。神属性の天子と舞台の情報も掲載。","image":"https://www.kasai-solutions-inc.com/assets/rf5525/moonkeep-share.jpg","genre":["Action","Fighting","Fantasy","RPG"],"gamePlatform":["Web browser","PC","Mobile"],"playMode":["https://schema.org/SinglePlayer","https://schema.org/MultiPlayer","https://schema.org/CoOp"],"applicationCategory":"Game","operatingSystem":"Web browser","inLanguage":"ja","softwareVersion":"55.26","isAccessibleForFree":true,"offers":{"@type":"Offer","price":"0","priceCurrency":"JPY"},"publisher":{"@type":"Organization","name":"KASAI SOLUTIONS INC."},"isPartOf":{"@id":"https://www.kasai-solutions-inc.com/#website"}}]}
     </script>
     <link rel="preconnect" href="https://esm.sh" crossorigin>
     <meta name="author" content="KASAI SOLUTIONS INC." />
@@ -74,7 +74,7 @@
           "./game.js?v=55.21": "./game.js?v=55.23",
           "./assets/riftfall-effects-v5521.js": "./assets/riftfall-effects-v5521.js?v=55.23",
           "./assets/riftfall-motion-v5521.js": "./assets/riftfall-motion-v5521.js?v=55.23",
-          "./assets/ranked-mode.js?v=55.22": "./assets/ranked-mode.js?v=55.23",
+          "./assets/ranked-mode.js?v=55.22": "./assets/ranked-mode.js?v=55.26",
           "./castle-realm-v50.js?v=55.20": "./castle-realm-v50.js?v=55.23",
           "./gaizorg-adventure.js?v=55.20": "./gaizorg-adventure.js?v=55.23"
         }
@@ -391,6 +391,7 @@
   <link rel="stylesheet" href="./assets/ranked-mode.css?v=55.22">
   <link rel="stylesheet" href="./assets/rf5523/site.css?v=55.23">
   <link rel="stylesheet" href="./assets/rf5525/site.css?v=55.25">
+  <link rel="stylesheet" href="./assets/rf5526/interface.css?v=55.26">
 </head>
   <body class="rf5520 rf5521 rf5523 rf5525">
     <noscript>
@@ -402,7 +403,7 @@
         <li>3段コンボ・技・奥義・覚醒・秘奥義・追加技による爽快なバトル</li>
         <li>100種の武器と防具、強化と限界突破</li>
         <li>オンライン対戦・協力、世界チャット、ギルド、週替わりイベント</li>
-        <li>端末間の常時同期</li>
+        <li>同期コードを使った端末間のセーブ引き継ぎ</li>
       </ul>
       <p>プレイにはJavaScriptを有効にしてください。© KASAI SOLUTIONS INC.</p>
     </noscript>
@@ -454,9 +455,9 @@
             <nav class="portal-modes" aria-label="ゲームモード">
               <button type="button" class="mode-tile rf25-feature-mode" data-go="story"><span class="rf25-image-icon" data-rf25-icon="story" aria-hidden="true"></span><span class="mode-main"><b>物語を進める</b><small>灯脈の旅路</small></span><span class="tile-arrow" aria-hidden="true">›</span></button>
               <button type="button" class="mode-tile rf25-feature-mode" data-go="infinite"><span class="rf25-image-icon" data-rf25-icon="tower" aria-hidden="true"></span><span class="mode-main"><b>無限天守</b><small>木造の城を踏破・HP持ち越し</small></span><span class="tile-arrow" aria-hidden="true">›</span></button>
-              <button type="button" class="mode-tile rf25-feature-mode" id="btn-ranked"><span class="rf25-image-icon" data-rf25-icon="trophy" aria-hidden="true"></span><span class="mode-main"><b>ランクマッチ</b><small>世界の戦士と一対一</small></span><span class="tile-arrow" aria-hidden="true">›</span></button>
+              <button type="button" class="mode-tile rf25-feature-mode" id="btn-ranked" style="--rf25-tile-image: url(./assets/rf5526/moon-arena-960.webp)"><span class="rf25-image-icon" data-rf25-icon="trophy" aria-hidden="true"></span><span class="mode-main"><b>ランクマッチ</b><small>世界の戦士と一対一</small></span><span class="tile-arrow" aria-hidden="true">›</span></button>
               <button type="button" class="mode-tile" data-go="cpu"><span class="rf25-image-icon" data-rf25-icon="sword" aria-hidden="true"></span><span class="mode-main"><b>ひとりで対戦</b><small>CPUとの一対一</small></span><span class="tile-arrow" aria-hidden="true">›</span></button>
-              <button type="button" class="mode-tile" data-go="duo"><span class="rf25-image-icon" data-rf25-icon="duo" aria-hidden="true"></span><span class="mode-main"><b>仲間と二対二</b><small>相棒との共闘</small></span><span class="tile-arrow" aria-hidden="true">›</span></button>
+              <button type="button" class="mode-tile" data-go="duo"><span class="rf25-image-icon" data-rf25-icon="duo" aria-hidden="true"></span><span class="mode-main"><b>仲間と二対二</b><small>CPUの相棒との共闘</small></span><span class="tile-arrow" aria-hidden="true">›</span></button>
               <button type="button" class="mode-tile" data-go="online-vs"><span class="rf25-image-icon" data-rf25-icon="duel" aria-hidden="true"></span><span class="mode-main"><b>オンライン対戦</b><small>合言葉で決闘</small></span><span class="tile-arrow" aria-hidden="true">›</span></button>
               <button type="button" class="mode-tile" data-go="online-coop"><span class="rf25-image-icon" data-rf25-icon="coop" aria-hidden="true"></span><span class="mode-main"><b>オンライン協力</b><small>力を合わせて討伐</small></span><span class="tile-arrow" aria-hidden="true">›</span></button>
               <button type="button" class="mode-tile" data-go="event"><span class="rf25-image-icon" data-rf25-icon="event" aria-hidden="true"></span><span class="mode-main"><b>期間イベント</b><small>今週の試練</small></span><span class="tile-arrow" aria-hidden="true">›</span></button>
@@ -487,7 +488,7 @@
           <section class="portal-section portal-world" id="portal-world">
             <div class="section-heading"><div><h2>双つの月の舞台</h2></div><a class="rf5521-guide-link" href="./world-guide.html" data-rf25-icon="map">舞台を巡る <span aria-hidden="true">›</span></a></div>
             <div class="world-gallery rf5523-gallery">
-              <a href="./world-guide.html#moon-arena"><img src="./assets/rf5523/moon-court.webp" alt="紅葉と朱塗りの灯籠が並ぶ石造りの闘技場" loading="lazy" width="960" height="540" decoding="async"><span>双月の闘技場 <small>対戦・ランクマッチ</small></span></a>
+              <a href="./world-guide.html#moon-arena"><img src="./assets/rf5526/moon-arena-960.webp" srcset="./assets/rf5526/moon-arena-960.webp 960w, ./assets/rf5526/moon-arena.webp 1440w" sizes="(max-width: 700px) 82vw, 360px" alt="朱塗りの灯籠と紅葉の向こうに、二つの月が浮かぶ山あいの闘技場" loading="lazy" width="960" height="540" decoding="async"><span>双月の闘技場 <small>対戦・ランクマッチ</small></span></a>
               <a href="./world-guide.html#tenshu"><img src="./assets/rf562/japanese-palace.webp" alt="木造天守の梁と奥へ続く大広間" loading="lazy" width="1672" height="941" decoding="async"><span>無限天守 <small>大広間と長い回廊</small></span></a>
               <a href="./world-guide.html#river"><img src="./assets/rf5523/river-path.webp" alt="竹と杉の森を抜ける青い水辺の参道" loading="lazy" width="960" height="540" decoding="async"><span>鳴かぬ竹林 <small>月影の水辺</small></span></a>
             </div>
@@ -508,7 +509,7 @@
             </div>
           </section>
           <details class="portal-controls"><summary data-rf25-icon="gamepad">基本操作を確認する</summary><p>WASD：移動 ／ J：斬る ／ K：技A ／ U：技B ／ L：奥義 ／ Shift：構え ／ Space：跳ぶ ／ Esc：戻る・休む</p><p>移動中に技を出すと派生。技の直後に同じ技を押すと追加技。覚醒中の奥義は秘奥義に変化します。</p></details>
-          <footer class="portal-footer"><span>双月のアルケイア · V55.25</span><nav aria-label="サイト案内"><a href="./play-guide.html" data-rf25-icon="guide">操作</a><a href="./world-guide.html" data-rf25-icon="map">舞台</a><a href="./tenshi.html" data-rf25-icon="profile">天子</a></nav><span>© <span id="copy-year">2026</span> KASAI SOLUTIONS INC.</span></footer>
+          <footer class="portal-footer"><span>双月のアルケイア · V55.26</span><nav aria-label="サイト案内"><a href="./play-guide.html" data-rf25-icon="guide">操作</a><a href="./world-guide.html" data-rf25-icon="map">舞台</a><a href="./tenshi.html" data-rf25-icon="profile">天子</a></nav><span>© <span id="copy-year">2026</span> KASAI SOLUTIONS INC.</span></footer>
         </div>
       </section>
 
@@ -766,7 +767,7 @@
     <script type="module" src="./assets/rf563-spatial.js?v=55.21"></script>
      <script type="module" src="./assets/rf564-world-life.js?v=55.21"></script>
     <script type="module" src="./assets/rf566-story-flow.js?v=55.21"></script>
-    <script type="module" src="main.js?v=55.24"></script>
+    <script type="module" src="main.js?v=55.26"></script>
 <script defer src="./assets/rf-ui-safe-v34.js?v=rf-responsive-v45-20261110"></script>
 <script id="rf46-responsive-js" defer src="./assets/rf-responsive-v46.js?v=rf-responsive-v46-20261111"></script>
 <script id="rf49-js" defer src="./assets/rf-responsive-v49.js?v=rf556-20261112"></script>

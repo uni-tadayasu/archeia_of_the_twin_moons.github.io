@@ -48,6 +48,7 @@ import { createEventCoopV552 } from './rf-event-coop-v552.js?v=rf553-chief-cpu-2
 import { createInfiniteDungeonV552 } from './rf-infinite-dungeon-v552.js?v=55.20';
 import { apiEnabled, api, verifyToken } from './api.js';
 import { createOrbitControls } from './assets/rf-camera-v5520.js?v=55.21';
+import { createContactShadows, createRenderBudget, createStageReflections } from './assets/rf5526/graphics.js?v=55.26';
 
 const $ = (s) => document.querySelector(s);
 // RF_MAOU_INSTALL_V6
@@ -78,122 +79,99 @@ try {
 renderer.setClearColor(0x000000,0);
 renderer.outputColorSpace=THREE.SRGBColorSpace;
 renderer.toneMapping=THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure=1.08;
-renderer.setPixelRatio(rf45UI.pixelRatio());
-renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.toneMappingExposure=1.05;
 renderer.shadowMap.enabled = false;
-renderer.shadowMap.type = THREE.PCFShadowMap;
 container.appendChild(renderer.domElement);
 
 const scene = new THREE.Scene();
 scene.background = null;
+scene.environmentIntensity = .62;
 scene.fog = new THREE.Fog(0x2a2850, 30, 80);
-const camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.1, 300);
+const camera = new THREE.PerspectiveCamera(50, 1, 0.1, 300);
 camera.position.set(0, 9, 14);
 
-function onResize() {
-  renderer.setSize(window.innerWidth, window.innerHeight);
-  camera.aspect = window.innerWidth / window.innerHeight;
-  camera.updateProjectionMatrix();
+const renderBudget = createRenderBudget();
+let canvasWidth = 0;
+let canvasHeight = 0;
+function resizeRenderer(resetQuality = false) {
+  const width = Math.max(1, window.innerWidth);
+  const height = Math.max(1, window.innerHeight);
+  const ratio = renderBudget.resize(width, height, rf45UI.pixelRatio(), resetQuality);
+  if (Math.abs(renderer.getPixelRatio() - ratio) > .001) renderer.setPixelRatio(ratio);
+  if (width !== canvasWidth || height !== canvasHeight) {
+    canvasWidth = width;
+    canvasHeight = height;
+    renderer.setSize(width, height);
+    camera.aspect = width / height;
+    camera.updateProjectionMatrix();
+  }
 }
+resizeRenderer(true);
+const onResize = () => resizeRenderer();
 window.addEventListener('resize', onResize);
 window.visualViewport?.addEventListener('resize', onResize);
-// Explicit user quality changes override the adaptive ceiling without restarting the game.
-document.addEventListener('riftfall-quality-change',()=>{
-  const ratio=rf45UI.pixelRatio();
-  renderer.setPixelRatio(ratio);
-  if(adaptQ){adaptQ.pr=ratio;adaptQ.max=ratio;}
-  onResize();
-});
+document.addEventListener('riftfall-quality-change', () => resizeRenderer(true));
 
-const hemi = new THREE.HemisphereLight(0xcfd8ff, 0x3a2a40, 0.9);
+const hemi = new THREE.HemisphereLight(0xcfd8ff, 0x3a2a40, 1.18);
 scene.add(hemi);
-const moon = new THREE.DirectionalLight(0xfff0d8, 2.2);
+const moon = new THREE.DirectionalLight(0xfff0d8, 1.95);
 moon.position.set(8, 16, 6);
-moon.castShadow = false;
-moon.shadow.mapSize.set(1024, 1024);
-Object.assign(moon.shadow.camera, { left: -16, right: 16, top: 16, bottom: -16 });
 scene.add(moon);
 scene.add(moon.target);
+const edgeLight = new THREE.DirectionalLight(0xa9d7ff, .68);
+edgeLight.position.set(-10, 7, -10);
+scene.add(edgeLight);
 
 const texLoader = new THREE.TextureLoader();
 const floorTex = texLoader.load('assets/arena-floor.webp');
 floorTex.colorSpace = THREE.SRGBColorSpace;
 floorTex.wrapS = floorTex.wrapT = THREE.RepeatWrapping;
 floorTex.repeat.set(6, 6);
+floorTex.anisotropy = Math.min(8, renderer.capabilities?.getMaxAnisotropy?.() || 1);
 
 // ---------- Stages ----------
-const skyCache = {};
-let wantSky = '';
-function setSky(url) {
-  wantSky = url;
-  const apply = (tex) => {
-    if (wantSky === url) {
-      scene.background = null;
-      scene.environment = tex;
-    }
-  };
-  if (skyCache[url]) {
-    apply(skyCache[url]);
-    return;
-  }
-  texLoader.loadAsync(url).then((tex) => {
-    tex.mapping = THREE.EquirectangularReflectionMapping;
-    tex.colorSpace = THREE.SRGBColorSpace;
-    skyCache[url] = tex;
-    apply(tex);
-  }).catch(() => {});
-}
-
-let arena = null;
-let crystals = [];
+const setReflections = createStageReflections(THREE, scene, texLoader);
+const updateContactShadows = createContactShadows(THREE, scene, ARENA_R);
+const arena = new THREE.Group();
+arena.name = 'Colosseum (13 m)';
+const floor = new THREE.Mesh(new THREE.CircleGeometry(ARENA_R, 96), new THREE.MeshStandardMaterial({ map: floorTex, roughness: .89 }));
+floor.rotation.x = -Math.PI / 2;
+const rim = new THREE.Mesh(new THREE.TorusGeometry(ARENA_R, .14, 10, 96), new THREE.MeshStandardMaterial({ metalness: .56, roughness: .34, emissiveIntensity: .16 }));
+rim.rotation.x = Math.PI / 2;
+rim.position.y = .055;
+const foundation = new THREE.Mesh(new THREE.CylinderGeometry(ARENA_R, ARENA_R - .24, .38, 96, 1, true), new THREE.MeshStandardMaterial({ roughness: .94 }));
+foundation.position.y = -.18;
+const inlay = new THREE.Mesh(new THREE.RingGeometry(ARENA_R - .42, ARENA_R - .385, 96), new THREE.MeshStandardMaterial({ metalness: .28, roughness: .6 }));
+inlay.rotation.x = -Math.PI / 2;
+inlay.position.y = .009;
+arena.add(floor, rim, foundation, inlay);
+scene.add(arena);
+const whiteLight = new THREE.Color(0xfff5e7);
+const shadowColor = new THREE.Color(0x171823);
 let currentStage = null;
-function pillarGeo(shape, h) {
-  if (shape === 'box') return new THREE.BoxGeometry(1.1, h, 1.1);
-  if (shape === 'spire') return new THREE.ConeGeometry(0.9, h * 1.5, 6);
-  if (shape === 'bamboo') return new THREE.CylinderGeometry(0.16, 0.18, h * 2.4, 8);
-  return new THREE.CylinderGeometry(0.5, 0.65, h, 8);
-}
-function crystalGeo(shape) {
-  if (shape === 'ico') return new THREE.IcosahedronGeometry(0.45, 0);
-  if (shape === 'torus') return new THREE.TorusGeometry(0.45, 0.1, 6, 20);
-  return new THREE.OctahedronGeometry(0.45);
-}
 function setStage(st) {
   if (currentStage === st) {
+    setReflections(st.sky);
     return;
   }
   currentStage = st;
-  if (arena) {
-    scene.remove(arena);
-    arena.traverse((o) => {
-      o.geometry?.dispose();
-      o.material?.dispose();
-    });
-  }
-  arena = new THREE.Group();
-  // RF53: CG-illustrated stage backdrop.
-  crystals = [];
-  const outer = ARENA_R;
-  const floor = new THREE.Mesh(new THREE.CircleGeometry(outer, Math.max(96,st.seg)), new THREE.MeshStandardMaterial({ map: floorTex, color: st.floor, roughness: 0.9 }));
-  floor.rotation.x = -Math.PI / 2;
-  floor.receiveShadow = true;
-  arena.add(floor);
-  const rim = new THREE.Mesh(new THREE.TorusGeometry(outer,0.16,12,Math.max(96,st.seg)), new THREE.MeshStandardMaterial({ color: st.rim, metalness: 0.7, roughness: 0.3, emissive: st.crystal, emissiveIntensity: 0.25 }));
-  rim.rotation.x = Math.PI / 2;
-  rim.position.y = 0.06;
-  arena.add(rim);
-  // Low-poly pillars and crystals are replaced by the existing CG illustrations.
+  arena.visible = true;
+  floor.material.color.set(st.floor).multiplyScalar(.83);
+  rim.material.color.set(st.rim);
+  rim.material.emissive.set(st.crystal);
+  foundation.material.color.set(st.floor).lerp(shadowColor, .72);
+  inlay.material.color.set(st.rim).lerp(whiteLight, .25);
   const art=stageIllustration(st,0);
-  container.style.backgroundImage='linear-gradient(180deg,rgba(9,10,25,.12),rgba(9,10,25,.30)),url("'+art+'")';
+  container.style.backgroundImage='linear-gradient(180deg,rgba(9,10,25,.08),rgba(9,10,25,.24)),url("'+art+'")';
   container.style.backgroundSize='cover';
   container.style.backgroundPosition='center center';
 
-  scene.add(arena);
   scene.fog.color.set(st.fog);
   hemi.color.set(st.hemi);
-  moon.color.set(st.sun);
-  setSky(st.sky);
+  hemi.groundColor.set(st.floor).lerp(shadowColor, .77);
+  moon.color.set(st.sun).lerp(whiteLight, .18);
+  edgeLight.color.set(st.crystal).lerp(whiteLight, .48);
+  setReflections(st.sky);
 }
 const stageById = (id) => STAGES.find((s) => s.id === id) || STAGES[0];
 setStage(STAGES[0]);
@@ -825,15 +803,20 @@ function refreshGlobalValgardBgm() {
 
 // ---------- Audio ----------
 const FUJIWARA_BGM_SETTING = 'arkeia-fujiwara-bgm';
+function savedVolume(channel, defaultPercent) {
+  const saved = localStorage.getItem(`arkeia-${channel}-volume`);
+  const percent = saved?.trim() ? Number(saved) : defaultPercent;
+  return Math.max(0, Math.min(100, Number.isFinite(percent) ? percent : defaultPercent)) / 100;
+}
 const audio = {
   muted: localStorage.getItem('arkeia-muted') === '1',
   fujiwaraBgm: localStorage.getItem(FUJIWARA_BGM_SETTING) !== '0',
   tracks: {}, current: null, currentKey: null, wanted: 'title', pools: {}, ctx: null,
   unlocked: false,
-  volume: Math.max(0, Math.min(100, +(localStorage.getItem('arkeia-bgm-volume') ?? 70))) / 100,
-  sfxVolume: Math.max(0, Math.min(100, +(localStorage.getItem('arkeia-sfx-volume') ?? 80))) / 100,
-  voiceVolume: Math.max(0, Math.min(100, +(localStorage.getItem('arkeia-voice-volume') ?? 75))) / 100,
-  uiVolume: Math.max(0, Math.min(100, +(localStorage.getItem('arkeia-ui-volume') ?? 65))) / 100,
+  volume: savedVolume('bgm', 70),
+  sfxVolume: savedVolume('sfx', 80),
+  voiceVolume: savedVolume('voice', 75),
+  uiVolume: savedVolume('ui', 65),
   fadeId: 0
 };
 // データで指定した音楽を実際に再生する。旧式の自動生成曲は使わない。
@@ -2168,6 +2151,7 @@ function openPartySelect(done) {
 // 自前の背景絵を使用するステージ選択。3Dのポリゴン床はカード表示に使わない。
 function stageIllustration(st, index) {
   const id = st.id || '';
+  if (id === 'moon') return 'assets/rf5526/moon-arena.webp';
   let category = 'moon';
   if (['moon', 'desert', 'frost', 'bamboo', 'heaven', 'ember', 'void'].includes(id)) category = id;
   else {
@@ -4770,35 +4754,13 @@ const castleRealm=initCastleRealm({startBattle:startCastleBattle,endBattle,save,
 // ---------- Loop ----------
 setupTouch();
 const timer = new THREE.Timer();
-var adaptQ = null;
-let rfV12RenderClock = 0;
 let rfV12HudClock = 0;
 renderer.setAnimationLoop((time) => {
   timer.update(time);
   const rawDt = timer.getDelta();
   const dt = Math.min(0.05, Math.max(0, rawDt));
   const t = time / 1000;
-  // 軽量化：重い端末では描画解像度を自動で下げ、余裕があれば戻す
-  {
-    const q = (adaptQ ||= { avg: 1 / 60, t: 0, pr: renderer.getPixelRatio(), max: rf45UI.pixelRatio() });
-    q.max=rf45UI.pixelRatio();
-    q.avg += (Math.min(0.2, rawDt) - q.avg) * 0.05;
-    q.t += rawDt;
-    if (q.t > 2) {
-      q.t = 0;
-      const floor = Math.min(0.5, q.max);
-      const next = q.avg > 1 / 34 ? Math.max(floor, q.pr - 0.13) : q.avg < 1 / 55 ? Math.min(q.max, q.pr + 0.08) : q.pr;
-      if (Math.abs(next - q.pr) > 0.01) {
-        q.pr = next;
-        renderer.setPixelRatio(next);
-      }
-    }
-  }
   pollPad(dt);
-  crystals.forEach((c, i) => {
-    c.position.y += Math.sin(t * 1.5 + i) * 0.004;
-    c.rotation.y += dt;
-  });
   worldTick(dt);
   if (state.battle?.ranked) {
     ranked.tick(dt,acceptsCombatInput()?readInput():null);
@@ -4824,10 +4786,12 @@ renderer.setAnimationLoop((time) => {
     camera.position.set(Math.sin(t * 0.1) * 16, 7, Math.cos(t * 0.1) * 16);
     camera.lookAt(0, 2, 0);
   }
-  const frameInterval=1/rf45UI.fps();
-  rfV12RenderClock += rawDt;
-  if(rfV12RenderClock>=frameInterval){
-    rfV12RenderClock=Math.min(frameInterval,rfV12RenderClock-frameInterval);
+  const active = !state.paused && Boolean(state.battle || state.field || state.adventureRest);
+  const maxFps = rf45UI.fps();
+  if (renderBudget.frame(rawDt, active ? maxFps : Math.min(30, maxFps), !document.hidden, active)) {
+    const ratio = renderBudget.ratio;
+    if (Math.abs(renderer.getPixelRatio() - ratio) > .001) renderer.setPixelRatio(ratio);
+    updateContactShadows(state.battle, arena.visible);
     renderer.render(scene,camera);
   }
 });

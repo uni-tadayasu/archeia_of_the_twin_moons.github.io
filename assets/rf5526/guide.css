@@ -1,0 +1,132 @@
+body.rf25-guide {
+  --guide-ink: #f4ead8;
+  --guide-panel: #172a33;
+  --guide-link: #ffe0a8;
+  --guide-rule: #607780;
+}
+
+body.rf25-guide .guide-main {
+  color: var(--guide-ink);
+  line-height: 1.78;
+  overflow-wrap: anywhere;
+}
+
+body.rf25-guide .guide-main section {
+  background: var(--guide-panel);
+  border-color: var(--guide-rule);
+  padding: clamp(16px, 3vw, 32px);
+  margin-block: clamp(14px, 2vw, 22px);
+}
+
+body.rf25-guide .guide-main :is(section[id], article[id]) {
+  scroll-margin-block-start: 16px;
+}
+
+body.rf25-guide .guide-main h2 {
+  padding-block-end: 8px;
+  border-color: var(--guide-rule);
+  line-height: 1.36;
+}
+
+body.rf25-guide .guide-main a:not(.guide-play) {
+  color: var(--guide-link);
+}
+
+body.rf25-guide :is(.guide-main, .guide-nav, .guide-cover) a:focus-visible {
+  outline: 2px solid #fff1a8;
+  outline-offset: 3px;
+}
+
+body.rf25-guide .guide-modes {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+body.rf25-guide .guide-modes > div {
+  background: #213743;
+  border-color: #91b8c4;
+  border-radius: 5px;
+  padding: 13px 15px;
+}
+
+body.rf25-guide .guide-modes > div:nth-child(3n + 2) {
+  background: #3b3031;
+  border-color: #d8a68b;
+}
+
+body.rf25-guide .guide-modes > div:nth-child(3n + 3) {
+  background: #273a35;
+  border-color: #a5c5a1;
+}
+
+body.rf25-guide .guide-modes dt {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 29px;
+  color: #fff2d9;
+}
+
+body.rf25-guide .guide-modes dt .rf25-image-icon {
+  --rf25-glyph: 27px;
+}
+
+body.rf25-guide .guide-modes dd a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  margin-inline-start: 0.3em;
+  text-decoration: underline;
+}
+
+body.rf25-guide .rf26-setting-notes {
+  margin: 0;
+}
+
+body.rf25-guide .rf26-setting-notes > div + div {
+  border-top: 1px solid var(--guide-rule);
+  margin-top: 12px;
+  padding-top: 12px;
+}
+
+body.rf25-guide .rf26-setting-notes dt {
+  color: #f9dca8;
+  font-weight: 750;
+}
+
+body.rf25-guide .rf26-setting-notes dd {
+  margin: 3px 0 0;
+  max-width: 70ch;
+}
+
+body.rf25-guide .guide-controls {
+  font-size: clamp(13px, 1.65vw, 16px);
+}
+
+body.rf25-guide .guide-controls caption {
+  padding-bottom: 8px;
+  color: #d4e2e3;
+}
+
+body.rf25-guide .guide-main kbd {
+  padding: 0.1em 0.45em;
+  border: 1px solid #9baeb0;
+  border-radius: 4px;
+  background: #233a43;
+  color: #fff2d7;
+  white-space: nowrap;
+}
+
+@media (max-width: 620px) {
+  body.rf25-guide :is(.guide-main, .guide-nav, .guide-footer) {
+    width: calc(100% - 24px);
+  }
+
+  body.rf25-guide .guide-modes {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  body.rf25-guide .guide-controls :is(th, td) {
+    padding: 6px 4px;
+  }
+}

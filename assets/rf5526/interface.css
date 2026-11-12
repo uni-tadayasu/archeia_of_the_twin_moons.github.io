@@ -1,0 +1,323 @@
+/* Battle controls share the same lacquer, metal and ink finishes as the menus. */
+html body.rf5525.rf5521 #ui {
+  --rf26-hud-top: max(8px, env(safe-area-inset-top));
+  --rf26-hud-side: max(8px, env(safe-area-inset-right));
+  --rf26-ivory: #fff2df;
+  --rf26-trim: #9ca9a1;
+  --rf26-gold: #f3cd91;
+}
+
+html body.rf5525.rf5521 #ui #hud .hud-side {
+  width: min(260px, calc(50vw - 62px));
+  max-width: calc(50vw - 62px);
+  scrollbar-color: #92a7a7 transparent;
+  overscroll-behavior-y: contain;
+}
+
+html body.rf5525.rf5521 #ui #hud .plate {
+  --rf26-team: #9bcad7;
+  border-color: #82999c !important;
+  border-radius: 5px !important;
+  background: linear-gradient(110deg, #1a333def, #111f2bee) !important;
+  box-shadow: 0 2px 5px #0610199e, inset 2px 0 var(--rf26-team) !important;
+}
+
+html body.rf5525.rf5521 #ui #hud-right .plate {
+  --rf26-team: #ecaa98;
+  background: linear-gradient(250deg, #43303aee, #231f2cee) !important;
+  box-shadow: 0 2px 5px #0610199e, inset -2px 0 var(--rf26-team) !important;
+}
+
+html body.rf5525.rf5521 #ui #hud .plate i {
+  height: 7px !important;
+  overflow: hidden;
+  border: 1px solid #9aa7a2 !important;
+  border-radius: 2px !important;
+  background: #0a121a !important;
+  transform: none;
+}
+
+html body.rf5525.rf5521 #ui #hud .plate u {
+  border-radius: 0 !important;
+  background: linear-gradient(90deg, #5c9eb9, var(--rf26-team)) !important;
+  box-shadow: none !important;
+}
+
+html body.rf5525.rf5521 #ui #hud-right .plate u {
+  background: linear-gradient(90deg, #bb6d68, var(--rf26-team)) !important;
+}
+
+html body.rf5525.rf5521 #ui #hud .plate.down {
+  opacity: .64;
+}
+
+html body.rf5525.rf5521 #ui #hud #btn-pause {
+  top: var(--rf26-hud-top);
+  min-width: 60px;
+  min-height: 36px !important;
+  color: var(--rf26-ivory) !important;
+  background: #243841f5 !important;
+  border: 1px solid #9aa9a3 !important;
+  border-radius: 5px !important;
+  font: 700 clamp(11px, 1.6vmin, 14px)/1.25 var(--rf25-sans);
+  letter-spacing: .02em;
+}
+
+html body.rf5525.rf5521 #ui #hud #gauges {
+  top: calc(var(--rf26-hud-top) + 42px);
+  gap: 3px;
+  padding: 0 !important;
+  color: var(--rf26-ivory) !important;
+  background: transparent !important;
+  border: 0 !important;
+  box-shadow: none !important;
+  pointer-events: none;
+}
+
+html body.rf5525.rf5521 #ui #hud #gauges > div {
+  padding: 3px 5px 4px;
+  color: var(--rf26-ivory);
+  background: #152631f5;
+  border: 1px solid #83989a;
+  border-radius: 4px;
+  font: 700 clamp(10px, 1.5vmin, 13px)/1.15 var(--rf25-sans);
+}
+
+html body.rf5525.rf5521 #ui #hud #gauges i {
+  margin-top: 2px;
+  overflow: hidden;
+  height: 5px;
+  background: #0a121a;
+  border-color: #6d8087;
+  border-radius: 2px !important;
+}
+
+html body.rf5525.rf5521 #ui #hud #flux u { background: #8ed2e0; }
+html body.rf5525.rf5521 #ui #hud #over u { background: #f0c07c; }
+html body.rf5525.rf5521 #ui #hud #awk u { background: #e3a6d0 !important; }
+html body.rf5525.rf5521 #ui #hud #awk.on b { color: #ffcfeb; }
+html body.rf5525.rf5521 #ui #hud #over.full { border-color: #edc37e; }
+
+@media (pointer: coarse) {
+  html body.rf5525.rf5521 #ui #hud #btn-pause { min-height: 44px !important; }
+  html body.rf5525.rf5521 #ui #hud #gauges { top: calc(var(--rf26-hud-top) + 50px); }
+}
+
+/* Keep the timer, connection message, exit and meters in distinct rows. */
+html body.rf5525.rf-ranked-playing #ui #hud:not([hidden]) {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding-top: var(--rf26-hud-top);
+}
+
+html body.rf5525.rf5521.rf-ranked-playing #ui #hud .hud-side {
+  width: min(260px, calc(50vw - 70px));
+  max-width: calc(50vw - 70px);
+}
+
+html body.rf5525.rf5521.rf-ranked-playing #ui #hud :is(#ranked-live,#btn-pause,#gauges) {
+  position: relative;
+  inset: auto;
+  transform: none;
+  flex: none;
+  margin: 0;
+}
+
+html body.rf5525.rf5521.rf-ranked-playing #ui #hud #ranked-live {
+  box-sizing: border-box;
+  width: max-content;
+  max-width: min(110px, 29vw);
+  min-width: 60px;
+  padding: 3px 5px;
+  color: var(--rf26-ivory);
+  background: #29243af5;
+  border: 1px solid #baa8c7;
+  border-radius: 5px;
+  font-size: clamp(12px, 2.4vmin, 17px);
+}
+
+html body.rf5525.rf5521.rf-ranked-playing #ui #hud #ranked-connection {
+  color: #ffe5ac;
+  font-size: 10px;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+
+html body.rf5525.rf5521.rf-ranked-playing #ui #hud #btn-pause {
+  background: #462c36f5 !important;
+  border-color: #bb939b !important;
+}
+
+html body.rf5525.rf5521.rf-ranked-playing #ui #skillname {
+  top: clamp(168px, 28dvh, 221px);
+}
+
+/* Control appearance is independent of the player's saved touch layout. */
+html body.rf5525.rf5521 #ui #touch #joy {
+  background: radial-gradient(circle, #14263091 32%, #79999b47 34% 35%, #152a38a6 37%) !important;
+  border-color: #a8c5c0 !important;
+  box-shadow: 0 3px 9px #071018a6, inset 0 0 0 2px #111c28 !important;
+}
+
+html body.rf5525.rf5521 #ui #touch #knob {
+  background: radial-gradient(circle at 39% 32%, #d9e7de, #729591) !important;
+  border: 1px solid #e7f0de;
+  box-shadow: 0 2px 6px #0a161caa !important;
+}
+
+html body.rf5525.rf5521 #ui #touch #tbtns button {
+  --rf26-action: #294752;
+  --rf26-action-edge: #9fbac4;
+  color: #fff6e4 !important;
+  background: linear-gradient(150deg, var(--rf26-action), #14232dec) !important;
+  border-color: var(--rf26-action-edge) !important;
+  box-shadow: 0 2px 6px #0b141ea0, inset 0 1px #fff3 !important;
+  text-shadow: 0 1px 2px #111b22;
+}
+
+html body.rf5525.rf5521 #ui #touch #tbtns [data-act="guard"] { --rf26-action: #2f625d; --rf26-action-edge: #a6cfbf; }
+html body.rf5525.rf5521 #ui #touch #tbtns [data-act="skill"] { --rf26-action: #425b84; --rf26-action-edge: #b1c7ef; }
+html body.rf5525.rf5521 #ui #touch #tbtns [data-act="skill2"] { --rf26-action: #684d76; --rf26-action-edge: #d3b3df; }
+html body.rf5525.rf5521 #ui #touch #tbtns [data-act="jump"] { --rf26-action: #406879; --rf26-action-edge: #a3cfe0; }
+html body.rf5525.rf5521 #ui #touch #tbtns [data-act="over"] { --rf26-action: #7b5634; --rf26-action-edge: #f1ca8f; }
+html body.rf5525.rf5521 #ui #touch #tbtns [data-act="attack"] { --rf26-action: #823d48; --rf26-action-edge: #edb4a4; }
+html body.rf5525.rf5521 #ui #touch #tbtns [data-act="heal"] { --rf26-action: #476745; --rf26-action-edge: #b6d7a8; }
+html body.rf5525.rf5521 #ui #touch #tbtns button:is(:active,.rf5521-held) {
+  box-shadow: inset 0 0 0 2px #fff0cd, 0 0 10px #070e16 !important;
+  filter: brightness(1.25);
+}
+
+/* The map and its social action use the canvas's actual aspect ratio. */
+html body.rf5525.rf5521.field-mode #ui #field-hud {
+  --rf26-map-width: clamp(68px, 15vmin, 104px);
+}
+
+html body.rf5525.rf5521.field-mode #ui #field-info {
+  top: var(--rf26-hud-top);
+  max-width: min(420px, calc(50vw - 44px));
+  color: var(--rf26-ivory);
+  background: linear-gradient(90deg, #172833f5 76%, #172833b8);
+  border-left: 3px solid #b9d1c2;
+  border-radius: 0 4px 4px 0;
+  padding: 6px 9px;
+}
+
+html body.rf5525.rf5521.field-mode #ui #field-info span { color: #f5d8a2; }
+html body.rf5525.rf5521.field-mode #ui #field-info small { color: #dce7e5; opacity: 1; }
+
+html body.rf5525.rf5521.field-mode #ui #field-map {
+  top: var(--rf26-hud-top);
+  right: var(--rf26-hud-side);
+  width: var(--rf26-map-width);
+  max-width: none;
+  box-sizing: border-box;
+  border: 1px solid #b7c7b9;
+  border-radius: 5px;
+  background: #11232f;
+  box-shadow: 0 2px 8px #0a111ab5;
+}
+
+html body.rf5525.rf5521.field-mode #ui #btn-world {
+  top: calc(var(--rf26-hud-top) + var(--rf26-map-width) * (228 / 104) + 6px);
+  right: var(--rf26-hud-side);
+  min-width: var(--rf26-map-width);
+  min-height: 44px;
+  color: #fff3dc !important;
+  background: #264238f2 !important;
+  border: 1px solid #aac5b2 !important;
+  border-radius: 5px !important;
+}
+
+@media (orientation: landscape) and (max-height: 480px) {
+  html body.rf5525.rf5521.field-mode #ui #btn-world {
+    top: var(--rf26-hud-top);
+    right: calc(var(--rf26-hud-side) + var(--rf26-map-width) + 6px);
+  }
+}
+
+html body.rf5525.rf5521 #ui :is(#world-panel,#world-req) {
+  color: var(--rf26-ivory);
+  background: #192a33f7;
+  border: 1px solid var(--rf26-trim);
+  border-radius: 6px;
+  box-shadow: 0 10px 32px #090f18bb;
+}
+
+html body.rf5525.rf5521 #ui #world-panel .wp-head {
+  flex-wrap: wrap;
+  padding-bottom: 8px;
+  border-bottom: 1px solid #657d7e;
+}
+
+html body.rf5525.rf5521 #ui #world-panel :is(.wp-head small,.wp-row small,.wp-empty) {
+  color: #d1e0df;
+  opacity: 1;
+}
+
+html body.rf5525.rf5521 #ui #world-panel h4 { color: var(--rf26-gold); }
+html body.rf5525.rf5521 #ui #world-panel .wp-name.off { color: #b7c4c7; }
+html body.rf5525.rf5521 #ui #world-panel .wp-name.on { color: #b6e4c7; }
+
+html body.rf5525.rf5521 #ui #world-panel input {
+  min-height: 36px;
+  color: var(--rf26-ivory);
+  background: #101e28;
+  border: 1px solid #92a6a5;
+  border-radius: 4px;
+  font-size: 16px;
+}
+
+html body.rf5525.rf5521 #ui :is(#world-panel,#world-req) button {
+  min-height: 44px;
+  min-width: 44px;
+  color: var(--rf26-ivory);
+  background: #29414a;
+  border-color: #8fa8a6;
+}
+
+html body.rf5525.rf5521 #ui #world-req-yes { background: #335548; border-color: #a2c0a9; }
+
+/* Secondary screens retain their existing flow and message content. */
+html body.rf5525.rf5521 #ui #pause:not([hidden]) {
+  z-index: 32;
+  justify-content: safe center;
+  background: radial-gradient(ellipse at 50% 35%, #243842f2, #101b27fa 75%) !important;
+}
+
+html body.rf5525.rf5521 #ui #pause :is(.label,#pause-note,.menu) { width: min(420px, 100%); }
+html body.rf5525.rf5521 #ui #pause :is(.label,#pause-note) { text-align: center; }
+html body.rf5525.rf5521 #ui #pause #pause-note:empty { display: none; }
+html body.rf5525.rf5521 #ui #pause .menu button { min-height: 44px; }
+
+html body.rf5525.rf5521 #ui #story-box {
+  border-color: #9aa8a6 !important;
+  border-left-color: #efcb94 !important;
+  background: linear-gradient(108deg, #253941f7, #172630f7) !important;
+}
+
+html body.rf5525.rf5521 #ui #story-who {
+  color: var(--rf26-gold);
+  font-weight: 800;
+}
+
+html body.rf5525.rf5521 #ui #story-line {
+  color: var(--rf26-ivory);
+  font-size: clamp(14px, 2vmin, 18px);
+  line-height: 1.65;
+}
+
+html body.rf5525.rf5521 #ui #scr-ranked .ranked-board th { color: #f7e0bd; }
+html body.rf5525.rf5521 #ui #scr-ranked .ranked-board td:nth-child(4) { font-weight: 700; }
+html body.rf5525.rf5521 #ui #scr-ranked .ranked-board summary { min-height: 44px; padding-block: 11px; }
+
+html body.rf5525.rf5521 #ui :is(#btn-pause,#btn-world,#world-panel button,#world-req button,#world-name,#story-box,#scr-ranked summary):focus-visible {
+  outline: 2px solid #ffe4a8 !important;
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html body.rf5525.rf5521 #ui #hud .plate u { transition: none; }
+  html body.rf5525.rf5521 #ui #hud :is(#over.full i,#awk.on u) { animation: none; }
+}
