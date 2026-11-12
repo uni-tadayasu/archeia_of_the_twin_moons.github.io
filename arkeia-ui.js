@@ -11,7 +11,11 @@
     if (!section) return;
     const scroller = document.getElementById('scr-title');
     if (scroller?.classList.contains('on')) {
-      scroller.scrollTo({ top: section.offsetTop - 74,
+      const header = scroller.querySelector('.portal-header');
+      const padding = Number.parseFloat(getComputedStyle(scroller).paddingTop) || 0;
+      const clearance = (header?.getBoundingClientRect().height || 0) + padding + 10;
+      const top = scroller.scrollTop + section.getBoundingClientRect().top - scroller.getBoundingClientRect().top;
+      scroller.scrollTo({ top: Math.max(0, top - clearance),
         behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth' });
     }
   }
