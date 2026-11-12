@@ -8,7 +8,6 @@
   if(window.__rf564AudioLifecycle) return;
   const media=new Set();
   const contexts=new Set();
-  const NativeAudio=window.Audio;
   const mediaProto=window.HTMLMediaElement?.prototype;
   const nativePlay=mediaProto?.play;
   const nativePause=mediaProto?.pause;
@@ -22,9 +21,16 @@
       else element.pause();
     }
   }catch{}};
+  function releaseMedia(event){
+    const el=event.currentTarget;
+    if(event.type==='pause' && !el.paused)return;
+    media.delete(el);
+    el.removeEventListener('pause',releaseMedia);
+    el.removeEventListener('ended',releaseMedia);
+    el.removeEventListener('error',releaseMedia);
+  }
   if(mediaProto && typeof nativePlay==='function'){
     mediaProto.play=function(...args){
-      media.add(this);
       if(isBlocked()){
         prevented++;
         safePause(this);
@@ -32,28 +38,17 @@
         return Promise.resolve();
       }
       const result=nativePlay.apply(this,args);
+      if(!media.has(this)){
+        media.add(this);
+        this.addEventListener('pause',releaseMedia);
+        this.addEventListener('ended',releaseMedia);
+        this.addEventListener('error',releaseMedia);
+      }
       if(result && typeof result.then==='function')result.then(()=>{
-        // A play() promise may resolve AFTER the app has been backgrounded.
         if(isBlocked())safePause(this);
-      },()=>{});
+      },()=>{if(this.paused)releaseMedia({currentTarget:this,type:'pause'});});
       return result;
     };
-  }
-  if(typeof NativeAudio==='function'){
-    function GuardedAudio(...args){
-      // The original game's title and story-intro BGM use one shared MP3.
-      // Redirect that one title file to the user-supplied menu theme without
-      // replacing the main.js module or affecting battle/field/boss tracks.
-      if(typeof args[0]==='string' && /(?:^|\/)title-theme\.mp3(?:[?#]|$)/i.test(args[0])){
-        args[0]='assets/audio/aishiteirukara.mp3?v=20261112-v564b-menu-20261112';
-      }
-      const el=new NativeAudio(...args);
-      media.add(el);
-      return el;
-    }
-    GuardedAudio.prototype=NativeAudio.prototype;
-    try{Object.setPrototypeOf(GuardedAudio,NativeAudio)}catch{}
-    window.Audio=GuardedAudio;
   }
   const wired=new Set();
   for(const name of ['AudioContext','webkitAudioContext']){
@@ -86,7 +81,7 @@
   }
   function halt(reason){
     blocked=true;
-    for(const el of document.querySelectorAll?.('audio,video')||[])media.add(el);
+    for(const el of document.querySelectorAll?.('audio,video')||[])safePause(el);
     for(const el of media)safePause(el);
     for(const ctx of contexts){
       if(ctx.state==='closed'||ctx.state==='suspended')continue;
@@ -127,7 +122,7 @@
   // this also handles delayed play() calls and tab discard suspensions.
   window.addEventListener('beforeunload',()=>{closed=true;halt('beforeunload')},{capture:true});
   document.addEventListener('pointerdown',()=>{if(!document.hidden)wake();},{capture:true,passive:true});
-  window.__rf564AudioLifecycle={version:'55.18',halt,wake,
+  window.__rf564AudioLifecycle={version:'55.30',halt,wake,
     get paused(){return isBlocked()},get registeredMedia(){return media.size},
     get registeredContexts(){return contexts.size},get preventedPlays(){return prevented}};
   if(isBlocked())halt('initial-hidden');

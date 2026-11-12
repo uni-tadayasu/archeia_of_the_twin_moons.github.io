@@ -236,10 +236,10 @@ export function createRankedMode({
     'profile','tier','points','progress','next','stats','board','top','empty','refresh','history','history-wrap',
     'result','heading','delta','reason','retry','leave','vote','live','timer','connection','opponents'
   ].map(key=>[key,key==='screen'?$('scr-ranked'):$('ranked-'+key)]));
-  let active=false, generation=0, session=null, selected='', queue=false, busy=false, cancelling=false;
+  let active=false, generation=0, session=null, sessionRequest=null, selected='', queue=false, busy=false, cancelling=false;
   let request=null, timer=0, reconnect=0, connectionDeadline=0, socket=null, match=null, last=null, view=null, loadStarted=false, battleMounted=false;
   let sendClock=0, seq=0, edges=0, saidReady=false, pendingLeave=false, retireFromFight=false, finishing=false, retryWanted=false;
-  let recentBoard=null, boardGeneration=0;
+  let recentBoard=null, boardGeneration=0, boardPending=false;
   const notice=text=>setText(el.status,text);
   function lobby() {
     show('scr-ranked');playTrack('ranked');
@@ -267,26 +267,38 @@ export function createRankedMode({
     if (!apiEnabled()) throw Error('rank_unavailable');
     const syncCode=code(), nickname=name(), role=roleToken?.()||'';
     if (syncCode.length!==12) throw Error('nosync');
-    if (session?.code===syncCode&&session.name===nickname&&session.role===role&&session.expires>Date.now()+60000) return session;
-    const r=await api('/rank/session',{code:syncCode,name:nickname,role});
-    if (!r.ok) throw Error(r.error||'rank_session');
-    const fighters=r.fighters.filter(key=>FIGHTERS[key]?.model);
-    session={code:syncCode,name:nickname,role,token:r.token,expires:r.expires,fighters};
-    if (!fighters.includes(selected)) selected=fighters[0]||'';
-    return session;
+    const sameIdentity=candidate=>candidate?.code===syncCode&&candidate.name===nickname&&candidate.role===role;
+    if (sameIdentity(session)&&session.expires>Date.now()+60000) return session;
+    if (sameIdentity(sessionRequest)) return sessionRequest.promise;
+    const identity={code:syncCode,name:nickname,role};
+    const pending={...identity};
+    sessionRequest=pending;
+    pending.promise=(async()=>{
+      const r=await api('/rank/session',identity);
+      if (!r.ok) throw Error(r.error||'rank_session');
+      const fighters=r.fighters.filter(key=>FIGHTERS[key]?.model);
+      const authenticated={...identity,token:r.token,expires:r.expires,fighters};
+      if (sessionRequest===pending&&code()===syncCode&&name()===nickname&&(roleToken?.()||'')===role) {
+        session=authenticated;
+        if (!fighters.includes(selected)) selected=fighters[0]||'';
+      }
+      return authenticated;
+    })();
+    try { return await pending.promise; }
+    finally { if(sessionRequest===pending)sessionRequest=null; }
   }
-  async function post(action,payload={}) {
-    let auth=await authorize();
+  async function post(action,payload={},auth) {
+    if (auth===undefined)auth=await authorize();
     const send=async()=>{
       try {
-        return await api('/rank/'+action,{...payload,token:auth.token});
+        return await api('/rank/'+action,auth?{...payload,token:auth.token}:payload);
       } catch(error) {
         if(action==='join')throw Error('rank_join_unknown');
         throw error;
       }
     };
     let r=await send();
-    if (r.status===401) {
+    if (r.status===401&&auth) {
       if(session===auth)session=null;
       auth=await authorize();
       r=await send();
@@ -320,22 +332,25 @@ export function createRankedMode({
       (p.change>0?'+':'')+p.change+' pt'
     ],true)));
   }
-  async function refreshBoard() {
+  async function refreshBoard(newResult=false) {
+    if(!active||(boardPending&&!newResult))return;
     const version=++boardGeneration;
+    boardPending=true;
     el.refresh.disabled=true;
     try {
       if (!apiEnabled()) throw Error('rank_unavailable');
       let auth=null;
       if(code().length===12) {
-        try { auth=await authorize(); } catch(error) { if(active&&!match&&!queue)notice(label(error)); }
+        try { auth=await authorize(); }
+        catch(error) { if(active&&version===boardGeneration&&!match&&!queue)notice(label(error)); }
       }
-      const r=await api('/rank/board',auth?{token:auth.token}:{});
-      if (!r.ok) throw Error(r.error||'rank_unavailable');
+      if(!active||version!==boardGeneration)return;
+      const r=await post('board',{},auth);
       if (active&&version===boardGeneration) renderBoard(r);
     } catch(error) {
       if(active&&version===boardGeneration&&!match&&!queue)notice(label(error));
     } finally {
-      if(version===boardGeneration){el.refresh.disabled=false;if(active)ui();}
+      if(version===boardGeneration){boardPending=false;el.refresh.disabled=false;if(active)ui();}
     }
   }
   function planPoll() {
@@ -447,7 +462,7 @@ export function createRankedMode({
       if (prior?.phase!=='result') {
         finishing=false;
         lobby();
-        void refreshBoard();
+        void refreshBoard(true);
       }
       renderResult(message);
     }
@@ -550,6 +565,7 @@ export function createRankedMode({
     lobby();ui();notice('ランクマッチを確認しています…');
     const version=generation;
     busy=true;ui();
+    void refreshBoard();
     try {
       if (code().length===12) {
         await authorize();
@@ -560,7 +576,7 @@ export function createRankedMode({
     } catch(error) {
       if(active&&version===generation)notice(label(error));
     } finally {
-      if(active&&version===generation){busy=false;ui();void refreshBoard();}
+      if(active&&version===generation){busy=false;ui();}
     }
   }
   async function askRetire() {
@@ -593,7 +609,7 @@ export function createRankedMode({
   el.leave.addEventListener('click',()=>void askRetire());
   function close() {
     active=false;generation++;boardGeneration++;
-    busy=false;cancelling=false;request=null;
+    busy=false;cancelling=false;request=null;boardPending=false;
     resetMatch();el.live.hidden=true;el.refresh.disabled=false;
   }
   function tick(dt,input) {

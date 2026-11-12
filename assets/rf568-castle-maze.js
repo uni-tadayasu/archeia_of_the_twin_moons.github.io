@@ -1,9 +1,9 @@
-/* Riftfall Arena V55.19 — Sengoku-style wooden tenshu interior for Infinite Castle.
- * Real indoor castle floors, timber halls and ceilings, lighter sight-lines, AABB collision,
- * navigation, floor-local enemies and stairs. This module does NOT affect normal battles.
+/* Riftfall Arena — enclosed timber keep for Infinite Castle.
+ * Continuous corridors connect the main keep, halls, side rooms and the ascent.
  */
 import * as THREE from 'three';
 import { approachYaw } from './rf-camera-v5520.js';
+import { buildCastleArchitecture, castleInstances, castlePalette, castleTextures } from './rf5530/castle-art.js?v=55.30';
 const N=13, CELL=7.2, HALF=N*CELL/2, CEILING=13.5;
 const D=[[-1,0,1,4],[0,1,2,8],[1,0,4,1],[0,-1,8,2]]; // N/E/S/W: dr,dc,wall,opposite
 const rngFor=seed=>()=>{seed^=seed<<13;seed^=seed>>>17;seed^=seed<<5;return (seed>>>0)/4294967296;};
@@ -37,8 +37,8 @@ export function generateCastleLayout(floor,seed){
  }
  openRoom(0,3,4,8);
  openRoom(4,8,4,8);
- openRoom(5,7,0,12);
- openRoom(1,12,5,7);
+ openRoom(6,6,0,12);
+ openRoom(1,12,6,6);
  for(const [r0,r1,c0,c1] of [[0,2,0,2],[0,2,10,12],[10,12,0,2],[10,12,10,12]])openRoom(r0,r1,c0,c1);
  const start=at(1,1);
  function route(startIndex,endIndex){
@@ -70,7 +70,7 @@ export function generateCastleLayout(floor,seed){
   if(inStair(i))return '階段室';
   if(r<=3&&c>=4&&c<=8)return '本丸';
   if(r>=4&&r<=8&&c>=4&&c<=8)return '大広間';
-  if((r>=5&&r<=7)||(c>=5&&c<=7))return '長回廊';
+  if(r===6||c===6)return '長回廊';
   return '脇の間';
  }
  for(let i=enemyCells.length-1;i>0;i--){const j=Math.floor(random()*(i+1));[enemyCells[i],enemyCells[j]]=[enemyCells[j],enemyCells[i]];}
@@ -92,7 +92,6 @@ function canvasTexture(canvas,repeatX=1,repeatY=1){
  t.wrapS=t.wrapT=THREE.RepeatWrapping;t.repeat.set(repeatX,repeatY);
  t.anisotropy=2;return t;
 }
-function makeMaterial(color,opts={}){return new THREE.MeshStandardMaterial({color,roughness:.83,metalness:.015,...opts});}
 function makeNavigationUI(layout){
  const root=document.createElement('div');root.id='rf568-maze-map';root.setAttribute('aria-label','無限天守・迷路地図');
  const title=document.createElement('div');title.className='rf568-map-title';title.textContent='天守 城内図';
@@ -106,136 +105,25 @@ export class CastleMazeWorld {
  constructor(battle,{floor=1,seed=1,arena=null}={}){
   this.battle=battle;this.scene=battle.scene;this.layout=null;this.group=null;this.owned=[];this.walls=[];
   this.visited=new Uint8Array(N*N);this.stair=null;this.arena=arena;this.arenaWasVisible=arena?.visible;this.map=null;this.fog=this.scene.fog?.clone();
+  this.textures=castleTextures(THREE,N);
+  this.outdoorLights=this.scene.children.filter(light=>light.isDirectionalLight||light.isHemisphereLight).map(light=>[light,light.intensity]);
+  this.outdoorEnvironment=this.scene.environmentIntensity;
+  for(const [light,intensity] of this.outdoorLights)light.intensity=intensity*.32;
+  this.scene.environmentIntensity=this.outdoorEnvironment*.40;
   if(arena)arena.visible=false;
-  this.build(floor,seed);
+  try{this.build(floor,seed);}catch(error){this.destroy();throw error;}
  }
  build(floor,seed){
   this.clearLevel();
   this.battle.rfCastleCameraReady=false;
-  if(this.scene.fog){this.scene.fog.color.set(0x382825);this.scene.fog.near=17;this.scene.fog.far=61;}
-  this.layout=generateCastleLayout(floor,seed);this.visited=new Uint8Array(N*N);
-  const l=this.layout;const low=/Android|iPhone|iPad/i.test(navigator.userAgent||'')||(navigator.deviceMemory||8)<=4;
+  if(this.scene.fog){this.scene.fog.color.set(castlePalette(floor).fog);this.scene.fog.near=13;this.scene.fog.far=55;}
+  this.layout=generateCastleLayout(floor,seed);
+  this.visited=new Uint8Array(N*N);
+  const l=this.layout;
+  const low=/Android|iPhone|iPad/i.test(navigator.userAgent||'')||(navigator.deviceMemory||8)<=4;
   const group=new THREE.Group();group.name='RF568_InfiniteCastle_Enclosed_Maze';this.scene.add(group);this.group=group;
-  const own=x=>(this.owned.push(x),x);
-  const random=rngFor(0x552020);
-  function paintGrain(g,w,h,count){
-   for(let i=0;i<count;i++){
-    const x=random()*w,y=random()*h,len=16+random()*w*.46;
-    g.strokeStyle=i%3?'rgba(58,25,15,.16)':'rgba(254,216,166,.15)';
-    g.lineWidth=.6+random();
-    g.beginPath();g.moveTo(x,y);g.bezierCurveTo(x+len*.3,y-3,x+len*.7,y+3,x+len,y);g.stroke();
-   }
-  }
-  const floorTex=own(canvasTexture(makeCanvas(512,512,(g,w,h)=>{
-   const shades=['#775039','#916444','#84573a','#9a6b47','#6b462f','#815137','#986d49','#77513c'];
-   for(let i=0;i<16;i++){
-    const y=i*32,grad=g.createLinearGradient(0,y,0,y+32);
-    grad.addColorStop(0,'#422b20');grad.addColorStop(.09,shades[i%8]);
-    grad.addColorStop(.92,shades[i%8]);grad.addColorStop(1,'#523624');
-    g.fillStyle=grad;g.fillRect(0,y,w,32);
-    g.fillStyle='#4c3228';g.fillRect(i*197%w,y,2,31);
-   }
-   paintGrain(g,w,h,1250);
-  }),N*1.1,N*1.1));
-  const roofTex=own(canvasTexture(makeCanvas(384,384,(g,w,h)=>{
-   g.fillStyle='#4f3427';g.fillRect(0,0,w,h);
-   for(let y=0;y<h;y+=96)for(let x=0;x<w;x+=96){
-    const grad=g.createLinearGradient(x,y,x+96,y+96);
-    grad.addColorStop(0,'#89684c');grad.addColorStop(1,'#473123');
-    g.fillStyle=grad;g.fillRect(x+5,y+5,86,86);
-    g.strokeStyle='#a47954';g.strokeRect(x+9,y+9,78,78);
-   }
-   paintGrain(g,w,h,500);
-  }),N,N));
-  const paperTex=own(canvasTexture(makeCanvas(256,256,(g,w,h)=>{
-   const grad=g.createLinearGradient(0,0,0,h);
-   grad.addColorStop(0,'#f6e8ca');grad.addColorStop(.65,'#e3c596');grad.addColorStop(1,'#ab7953');
-   g.fillStyle=grad;g.fillRect(0,0,w,h);
-   for(let i=0;i<5000;i++){g.fillStyle=i%2?'#fbf0ce36':'#77493122';g.fillRect(random()*w,random()*h,1+random()*2,1);}
-   g.fillStyle='#543f31';
-   for(let x=0;x<=w;x+=64)g.fillRect(x?x-2:x,0,4,h);
-   for(let y=0;y<h;y+=54)g.fillRect(0,y,w,4);
-  })));
-  const matFloor=own(makeMaterial(0xf8e3c9,{map:floorTex}));
-  const matCeil=own(makeMaterial(0xd8bc96,{map:roofTex,side:THREE.BackSide}));
-  const matWall=own(makeMaterial(0xbb9676));
-  const matWood=own(makeMaterial(floor%10===0?0x512c2b:0x563627));
-  const matPlaster=own(makeMaterial(0xf7e5ca,{map:paperTex,roughness:.95,emissive:0x644224,emissiveIntensity:.16}));
-  const matLacquer=own(makeMaterial(0x843d30,{roughness:.55}));
-  const matTatami=own(makeMaterial(0x777456,{map:floorTex,roughness:1}));
-  this.woodMaterial=matWood;
-  const matGold=own(makeMaterial(0xb88b4a,{metalness:.45,roughness:.4}));
-  const matLamp=own(makeMaterial(0xffd38b,{emissive:0xffa63d,emissiveIntensity:2.4}));
-  const whole=N*CELL;
-  const plane=own(new THREE.PlaneGeometry(whole+1.5,whole+1.5));
-  const floorMesh=new THREE.Mesh(plane,matFloor);floorMesh.rotation.x=-Math.PI/2;floorMesh.position.y=.025;group.add(floorMesh);
-  const ceil=new THREE.Mesh(own(new THREE.PlaneGeometry(whole+1.5,whole+1.5)),matCeil);
-  ceil.rotation.x=-Math.PI/2;ceil.position.y=CEILING;group.add(ceil);
-  const addInstanced=(geometry,material,rows)=>{
-   if(!rows.length)return;
-   const geo=own(geometry);const m=new THREE.InstancedMesh(geo,material,rows.length);
-   const dummy=new THREE.Object3D();rows.forEach(([x,y,z,sx,sy,sz],i)=>{
-    dummy.position.set(x,y,z);dummy.scale.set(sx,sy,sz);dummy.updateMatrix();m.setMatrixAt(i,dummy.matrix);
-   });m.instanceMatrix.needsUpdate=true;m.frustumCulled=false;group.add(m);return m;
-  };
-  const outerPanels=[],innerPanels=[],frame=[],beams=[],caps=[],lattice=[];
-  const outerH=CEILING,innerH=4.2,wallD=.55;
-  const pushWall=(x,z,w,d,outer=false)=>{
-   const h=outer?outerH:innerH;
-   this.walls.push({x,z,w,d,h});
-   (outer?outerPanels:innerPanels).push([x,h/2,z,w,h,d]);
-   frame.push([x,.65,z,w,.34,d+.05]);
-   frame.push([x,h-.22,z,w,.28,d+.06]);
-   // Continuous carved timber columns at each panel end.
-   if(w>d){frame.push([x-w/2,h/2,z,.31,h,d+.08],[x+w/2,h/2,z,.31,h,d+.08]);}
-   else{frame.push([x,h/2,z-d/2,w+.08,h,.31],[x,h/2,z+d/2,w+.08,h,.31]);}
-   if(!outer){
-    lattice.push([x,h+.46,z,w,.12,d+.02]);
-    lattice.push([x,h+1.0,z,w,.10,d+.02]);
-   }
-  };
-  // Boundary walls + every real closed passage; interior partitions stay lower so the player can see.
-  for(let r=0;r<N;r++)for(let c=0;c<N;c++){
-   const v=l.tiles[at(r,c)],p=l.centerOf(at(r,c));
-   if(v&2)pushWall(p.x+CELL/2,p.z,wallD,CELL+.04,c===N-1);
-   if(v&4)pushWall(p.x,p.z+CELL/2,CELL+.04,wallD,r===N-1);
-   if(c===0&&(v&8))pushWall(p.x-CELL/2,p.z,wallD,CELL+.04,true);
-   if(r===0&&(v&1))pushWall(p.x,p.z-CELL/2,CELL+.04,wallD,true);
-  }
-  addInstanced(new THREE.BoxGeometry(1,1,1),matWall,outerPanels);
-  addInstanced(new THREE.BoxGeometry(1,1,1),matPlaster,innerPanels);
-  addInstanced(new THREE.BoxGeometry(1,1,1),matWood,frame);
-  addInstanced(new THREE.BoxGeometry(1,1,1),matWood,lattice);
-  for(let r=0;r<=N;r++){const z=r*CELL-HALF;beams.push([0,CEILING-.35,z,whole,.48,.44]);}
-  for(let c=0;c<=N;c++){const x=c*CELL-HALF;beams.push([x,CEILING-.64,0,.48,.5,whole]);}
-  addInstanced(new THREE.BoxGeometry(1,1,1),matWood,beams);
-  const posts=[],mats=[],lanterns=[],bases=[];
-  for(let r=0;r<4;r++)for(let c=4;c<=8;c++){
-   const p=l.centerOf(at(r,c));mats.push([p.x,.04,p.z,CELL-.1,.02,CELL-.1]);
-  }
-  for(const r of [3,8,11]){
-   const z=l.centerOf(at(r,6)).z;
-   caps.push([0,6.8,z,CELL*2.8,.55,.48]);
-   posts.push([-CELL*1.4,3.5,z,.58,7,.58],[CELL*1.4,3.5,z,.58,7,.58]);
-  }
-  for(const [r,c] of [[4,4],[4,8],[8,4],[8,8],[1,4],[1,8],[5,1],[7,1],[5,11],[7,11]]){
-   const p=l.centerOf(at(r,c));posts.push([p.x-CELL*.43,CEILING/2,p.z-CELL*.43,.62,CEILING,.62]);
-  }
-  addInstanced(new THREE.BoxGeometry(1,1,1),matLacquer,posts);
-  addInstanced(new THREE.BoxGeometry(1,1,1),matTatami,mats);
-  addInstanced(new THREE.BoxGeometry(1,1,1),matWood,caps);
-  for(let r=1;r<N-1;r+=2)for(let c=1;c<N-1;c+=3){
-   const p=l.centerOf(at(r,c)),y=l.roomAt(at(r,c))==='大広間'?8.4:6.9;
-   bases.push([p.x,y+.38,p.z,1.1,.16,1.1],[p.x,y-.36,p.z,1.1,.13,1.1],[p.x,(y+CEILING)/2,p.z,.075,CEILING-y,.075]);
-   lanterns.push([p.x,y,p.z,.96,.72,.96]);
-  }
-  addInstanced(new THREE.BoxGeometry(1,1,1),matWood,bases);
-  addInstanced(new THREE.BoxGeometry(1,1,1),matLamp,lanterns);
-  group.add(new THREE.HemisphereLight(0xffe0ae,0x755356,1.08));
-  for(const [x,z,power] of [[0,0,105],[-CELL*3,-CELL*3,75],[CELL*3,CELL*3,80]]){
-   const light=new THREE.PointLight(0xffbc78,low?power*.65:power,35,2);
-   light.position.set(x,6.3,z);group.add(light);
-  }
+  const own=resource=>(this.owned.push(resource),resource);
+  this.architecture=buildCastleArchitecture(THREE,group,own,l,this.textures,this.walls,CEILING,low);
   this.setStair(false);
   this.indexWalls();
   if(!this.map)this.map=makeNavigationUI(l);
@@ -294,14 +182,25 @@ export class CastleMazeWorld {
   return p;
  }
  clipCamera(look,target){
-  target.set(clamp(-HALF+.6,HALF-.6,target.x),clamp(2.5,CEILING-1.1,target.y),clamp(-HALF+.6,HALF-.6,target.z));
-  const dx=target.x-look.x,dy=target.y-look.y,dz=target.z-look.z;
-  const count=Math.max(1,Math.ceil(Math.hypot(dx,dy,dz)/.35));
+  const maxY=CEILING-1.1;
+  target.set(clamp(-HALF+.6,HALF-.6,target.x),clamp(2.5,maxY,target.y),clamp(-HALF+.6,HALF-.6,target.z));
+  const dx=target.x-look.x,dz=target.z-look.z;
+  const count=Math.max(1,Math.ceil(Math.hypot(dx,target.y-look.y,dz)/.35));
   for(let i=1;i<=count;i++){
-   const t=i/count,x=look.x+dx*t,y=look.y+dy*t,z=look.z+dz*t;
-   if(!this.buckets[this.layout.cellOf({x,z})].some(w=>y<w.h+.28&&Math.abs(x-w.x)<w.w/2+.32&&Math.abs(z-w.z)<w.d/2+.32))continue;
+   const t=i/count,x=look.x+dx*t,z=look.z+dz*t;
+   let clearance=0;
+   for(const wall of this.buckets[this.layout.cellOf({x,z})]){
+    if(Math.abs(x-wall.x)<wall.w/2+.32&&Math.abs(z-wall.z)<wall.d/2+.32)clearance=Math.max(clearance,wall.h+.32);
+   }
+   const y=look.y+(target.y-look.y)*t;
+   if(y>=clearance)continue;
+   const raisedY=look.y+(clearance-look.y)/t;
+   if(raisedY<=maxY){
+    target.y=raisedY;
+    continue;
+   }
    const k=(i-1)/count;
-   target.set(look.x+dx*k,Math.max(2.5,look.y+dy*k),look.z+dz*k);
+   target.set(look.x+dx*k,Math.max(2.5,look.y+(target.y-look.y)*k),look.z+dz*k);
    break;
   }
  }
@@ -309,26 +208,43 @@ export class CastleMazeWorld {
   const p=this.exitPoint();
   if(!this.stair){
    const g=new THREE.Group();g.name='Infinite Castle stair room';g.position.set(p.x,0,p.z);
-   const gold=makeMaterial(0xc9a56c,{metalness:.45});this.owned.push(gold);
-   const box=(w,h,d,mat,x,y,z)=>{
-    const mesh=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),mat);
-    this.owned.push(mesh.geometry);mesh.position.set(x,y,z);g.add(mesh);return mesh;
-   };
-   for(let i=0;i<9;i++){
-    const h=.34+i*.29;
-    box(4.5,h,.51,this.woodMaterial,0,h/2,2-i*.51);
-    box(4.56,.05,.1,gold,0,h,2.24-i*.51);
-    if(i%2===0)for(const side of [-1,1])box(.2,.95,.2,this.woodMaterial,side*2.35,h+.48,2-i*.51);
+   const route=this.layout.route(this.layout.start,this.layout.exit);
+   const entrance=this.layout.centerOf(route[route.length-2]);
+   g.rotation.y=Math.atan2(entrance.x-p.x,entrance.z-p.z);
+   const own=resource=>(this.owned.push(resource),resource);
+   const box=own(new THREE.BoxGeometry(1,1,1));
+   const quad=own(new THREE.PlaneGeometry(1,1));
+   const {wood,gold,lacquer,lamp}=this.architecture;
+   const steps=[],nosings=[],posts=[],flames=[];
+   for(let i=0;i<14;i++){
+    const height=.33+i*.31,z=2.65-i*.42;
+    steps.push([0,height/2,z,4.1,height,.43]);
+    nosings.push([0,height+.012,z+.19,4.12,.031,.065]);
+    if(i%4===0)for(const side of [-1,1]){
+     posts.push([side*2.2,height+.63,z,.19,1.26,.19]);
+     if(i%8===0)flames.push([side*2.2,height+1.56,z,.75,1.06,1,side*.18]);
+    }
    }
-   for(const side of [-1,1])box(.17,.16,5.05,this.woodMaterial,side*2.35,2.36,-.04).rotation.x=Math.atan2(.29,.51);
-   const gate=box(4.9,2.9,.28,this.woodMaterial,0,1.46,2.75);
-   const tex=canvasTexture(makeCanvas(256,128,g=>{
-    g.fillStyle='#211814';g.fillRect(12,14,232,100);
-    g.strokeStyle='#d1ad6b';g.lineWidth=4;g.strokeRect(14,15,228,96);
-    g.font='bold 36px serif';g.textAlign='center';g.fillStyle='#fff1cb';g.fillText('上階への階段',128,78);
-   }));
-   const material=new THREE.SpriteMaterial({map:tex,transparent:true,depthWrite:false});this.owned.push(tex,material);
-   const sign=new THREE.Sprite(material);sign.position.set(0,4.6,0);sign.scale.set(5.8,2.9,1);g.add(sign);
+   for(const side of [-1,1])posts.push([side*2.2,3.15,-.08,.16,.16,7.06,0,Math.atan2(.31,.42)]);
+   for(const z of [2.9,-2.75]){
+    const h=z>0?5.22:8.01;
+    posts.push([-2.48,h/2,z,.43,h,.47],[2.48,h/2,z,.43,h,.47],[0,h,z,5.45,.53,.57]);
+   }
+   castleInstances(THREE,g,own,'Cedar stair treads',box,wood,steps);
+   castleInstances(THREE,g,own,'Stair nosing',box,gold,nosings);
+   castleInstances(THREE,g,own,'Stair portal and handrails',box,lacquer,posts);
+   castleInstances(THREE,g,own,'Stair torches',quad,lamp,flames);
+   const gate=new THREE.Group();gate.name='Locked stair gate';
+   const bars=[[0,.32,3.14,4.83,.48,.37],[0,3.7,3.14,4.83,.48,.37],[0,1.97,3.14,4.83,.15,.36]];
+   for(let i=-4;i<=4;i++)bars.push([i*.49,2,3.14,.16,3.60,.28]);
+   castleInstances(THREE,gate,own,'Locked stair gate bars',box,wood,bars);g.add(gate);
+   const tex=own(canvasTexture(makeCanvas(256,128,g=>{
+    g.fillStyle='#241d22';g.fillRect(12,17,232,92);
+    g.strokeStyle='#bd9a67';g.lineWidth=3;g.strokeRect(15,20,226,86);
+    g.font='bold 33px serif';g.textAlign='center';g.fillStyle='#fff1cb';g.fillText('上階への階段',128,76);
+   })));
+   const material=own(new THREE.SpriteMaterial({map:tex,transparent:true,depthWrite:false}));
+   const sign=new THREE.Sprite(material);sign.position.set(0,5.8,2.9);sign.scale.set(4.55,2.27,1);g.add(sign);
    this.group.add(g);this.stair={gate,sign,open:false};
   }
   this.stair.open=show;this.stair.gate.visible=!show;this.stair.sign.visible=show;
@@ -361,13 +277,17 @@ export class CastleMazeWorld {
  startPoint(){return this.layout.centerOf(this.layout.start);}
  exitPoint(){return this.layout.centerOf(this.layout.exit);}
  clearLevel(){
-  this.stair=null;
+  this.stair=null;this.architecture=null;
   if(this.group)this.group.removeFromParent();this.group=null;
   for(const item of this.owned)try{item.dispose?.()}catch{}
   this.owned=[];this.walls=[];this.buckets=[];
  }
  destroy(){this.clearLevel();
   if(this.arena?.parent)this.arena.visible=this.arenaWasVisible;
+  for(const [light,intensity] of this.outdoorLights)light.intensity=intensity;
+  this.scene.environmentIntensity=this.outdoorEnvironment;
+  for(const map of Object.values(this.textures||{}))map.dispose();
+  this.textures=null;
   if(this.fog&&this.scene.fog){this.scene.fog.color.copy(this.fog.color);this.scene.fog.near=this.fog.near;this.scene.fog.far=this.fog.far;}
   this.map?.root?.remove();this.map=null;document.body.classList.remove('rf568-infinite-maze');
  }
