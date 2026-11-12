@@ -10,6 +10,7 @@ import { applyCharacterVariant, disposeCharacterVariant } from './character-vari
 import { finishIllustratedModel } from './assets/rf5520-illustrated-material.js?v=55.21';
 import { FIGHTERS } from './data.js?v=rf-minamoto-v48-20261111';
 import { makeGear, animGear, removeGear } from './gear.js';
+import { landscapePalette, terrainGeometry, roadRibbon, buildRelief, woodlandCrown, pondSurface, frostSurface, partitionInstances, gabledRoof } from './assets/rf5530/overworld.js?v=55.30';
 
 function rng(seed) {
   let a = seed >>> 0;
@@ -107,6 +108,7 @@ export class Field {
     const L = (this.L = Math.floor(o.chapter / BIOMES.length) % 10);
     const cols = 6 + ((L * 3 + o.chapter) % 5), rows = 4 + ((L + o.chapter) % 3);
     DUN = { x0: -(cols * 10) / 2 + ((L % 3) - 1) * 30, z0: -470, cols, rows, cell: 10 };
+    this.dungeonBounds = DUN;
     this.houseN = 6 + ((L * 7 + o.chapter) % 5);
     this.treeMul = B.trees * (0.75 + (L % 4) * 0.15);
     this.pondN = 1 + ((L + o.chapter) % 5);
@@ -114,14 +116,35 @@ export class Field {
     this.fieldName = pick(SYL) + pick(SYL) + pick(B.field);
     this.dunName = pick(SYL) + pick(SYL) + pick(B.dun);
     this.st = o.stage;
+    this.landscape = landscapePalette(o.chapter);
+    this.compact = globalThis.matchMedia?.('(pointer: coarse)').matches ||
+      Number(globalThis.navigator?.deviceMemory || 8) <= 4;
     this.buildGround();
+    this.worldEnvironment = { background: scene.background, fog: scene.fog };
     this.buildRoad();
     this.buildTown();
     this.buildDungeon();
     this.buildRoutes();
+    const wildStart = this.group.children.length;
+    this.wildTiles = [];
+    this.wildClock = 0;
     this.buildWilds();
+    for (const node of this.group.children.slice(wildStart)) {
+      if (!node.isInstancedMesh) continue;
+      const tiles = partitionInstances(node, this.compact ? 64 : 76);
+      if (tiles[0] !== node) {
+        node.removeFromParent();
+        node.dispose();
+        this.group.add(...tiles);
+        this.wildTiles.push(...tiles);
+      }
+      this.own.push(...tiles);
+    }
     this.buildActors();
+    this.updateWildVisibility(0, this.player.pos);
+    this.addLocalLights();
     this.buildMapImage();
+    this.updateLandscapeHaze(1);
   }
 
   geo(g) { this.own.push(g); return g; }
@@ -136,31 +159,59 @@ export class Field {
   }
 
   buildGround() {
-    const st = this.st;
     const w = BOUNDS.maxX - BOUNDS.minX + 40, d = BOUNDS.maxZ - BOUNDS.minZ + 40;
     const B = this.B;
-    const g = new THREE.Mesh(this.geo(new THREE.PlaneGeometry(w, d)), this.std(new THREE.Color(B.tint).lerp(new THREE.Color(st.floor), 0.1), { map: this.tex(B.ground, w / 7, d / 7), roughness: 0.95 }));
+    const terrain = this.geo(terrainGeometry(BOUNDS, this.landscape, this.o.chapter, this.compact));
+    const groundMap = B.name === '雪原' ? frostSurface(w / 7, d / 7) : this.tex(B.ground, w / 7, d / 7);
+    if (B.name === '雪原') this.own.push(groundMap);
+    const g = new THREE.Mesh(terrain, this.std(0xffffff, {
+      vertexColors: true, map: groundMap, roughness: .95
+    }));
+    g.name = 'Overworld layered ground';
     g.rotation.x = -Math.PI / 2;
     g.position.set(0, 0, (BOUNDS.maxZ + BOUNDS.minZ) / 2);
     g.receiveShadow = true;
     this.group.add(g);
-    // 空と大地の照り返しで色を鮮やかに
-    this.group.add(new THREE.HemisphereLight(B.sky, B.gnd, 1.1));
+    this.group.add(new THREE.HemisphereLight(B.sky, B.gnd, .93));
+    buildRelief(this, BOUNDS, this.landscape, this.compact);
     this.lights = [];
+    this.localLightClock = 0;
     this.anims = [];
   }
   pointLight(color, intensity, dist, x, y, z, flicker) {
-    const l = new THREE.PointLight(color, intensity, dist, 1.6);
-    l.position.set(x, y, z);
-    l.userData.base = intensity;
-    l.userData.flicker = flicker;
-    this.group.add(l);
-    this.lights.push(l);
-    return l;
+    this.lights.push({ color, intensity, dist, x, y, z, flicker });
+  }
+
+  addLocalLights() {
+    const group = new THREE.Group();
+    group.name = 'Overworld local lights';
+    const count = Math.min(this.lights.length, this.compact ? 4 : 6);
+    this.localLights = Array.from({ length: count }, () => new THREE.PointLight(0xffffff, 0, 12, 1.6));
+    group.add(...this.localLights);
+    this.group.add(group);
+    this.updateLocalLights(0, this.player.pos);
+  }
+
+  updateLocalLights(dt, pos) {
+    this.localLightClock -= dt;
+    if (this.localLightClock > 0) return;
+    this.localLightClock = .12;
+    for (const lamp of this.lights) lamp.depth = (lamp.x - pos.x) ** 2 + (lamp.z - pos.z) ** 2;
+    this.lights.sort((a, b) => a.depth - b.depth);
+    for (const [index, light] of this.localLights.entries()) {
+      const lamp = this.lights[index];
+      light.position.set(lamp.x, lamp.y, lamp.z);
+      light.color.set(lamp.color);
+      light.distance = lamp.dist;
+      light.intensity = lamp.depth <= (lamp.dist + 12) ** 2
+        ? lamp.intensity * (1 + Math.sin(this.t * 7.4 + lamp.x * .22 + lamp.z) * lamp.flicker)
+        : 0;
+    }
   }
   // 色ちがいの球を一括配置（花・果物・ベリーなど）
   dots(list, radius, colors, emissive = 0) {
     const geo = this.geo(new THREE.IcosahedronGeometry(radius, 0));
+    geo.type = 'BufferGeometry';
     const im = new THREE.InstancedMesh(geo, this.std(0xffffff, { roughness: 0.6, emissive: 0xffffff, emissiveIntensity: emissive }), list.length);
     const m = new THREE.Matrix4(), q = new THREE.Quaternion(), s = new THREE.Vector3(), p = new THREE.Vector3(), c = new THREE.Color();
     list.forEach(([x, y, z, k = 1], i) => {
@@ -185,44 +236,32 @@ export class Field {
     }
     pts.push([ex, DUN.z0 + 8], [ex, DUN.z0 - 1]);
     this.road = pts;
-    const mat = this.std(0xffffff, { map: this.tex('tex-dirt-road', 1, 1) });
-    const geo = this.geo(new THREE.PlaneGeometry(1, 1));
-    const disc = this.geo(new THREE.CircleGeometry(2.6, 16));
+    this.routeSegments = [];
+    this.roadMaterial = this.std(this.landscape.road.clone().lerp(new THREE.Color(0xffffff), .38), {
+      map: this.tex('tex-dirt-road', 1, 1), vertexColors: true, roughness: .93
+    });
+    this.paintRoad(pts, 5.2);
     const edgeStones = [];
     for (let i = 0; i < pts.length - 1; i++) {
       const [ax, az] = pts[i], [bx, bz] = pts[i + 1];
       const len = Math.hypot(bx - ax, bz - az);
-      const segMat = this.std(0xffffff, { map: this.tex('tex-dirt-road', 1, len / 5.2) });
-      const m = new THREE.Mesh(geo, segMat);
-      // 道の縁石
       const nx = (bz - az) / (len || 1), nz = -(bx - ax) / (len || 1);
       for (let t = 0; t < len; t += 2.2) {
         const px = ax + ((bx - ax) * t) / len, pz = az + ((bz - az) * t) / len;
         for (const sd of [-1, 1]) if (r() < 0.55) edgeStones.push([px + nx * 2.8 * sd, 0.08, pz + nz * 2.8 * sd, 0.18 + r() * 0.2]);
       }
-      m.scale.set(5.2, len, 1);
-      m.rotation.set(-Math.PI / 2, 0, Math.atan2(bx - ax, bz - az));
-      m.position.set((ax + bx) / 2, 0.02, (az + bz) / 2);
-      m.receiveShadow = true;
-      this.group.add(m);
-      const j = new THREE.Mesh(disc, mat);
-      j.rotation.x = -Math.PI / 2;
-      j.position.set(bx, 0.021, bz);
-      this.group.add(j);
     }
     this.dots(edgeStones, 1, [0x9a9488, 0xb8b0a0, 0x7a7468, 0xa89880]);
   }
   roadDist(x, z) {
-    let best = 1e9;
-    for (const p of [this.road, ...(this.branches || [])]) {
-      for (let i = 0; i < p.length - 1; i++) {
-        const [ax, az] = p[i], [bx, bz] = p[i + 1];
-        const dx = bx - ax, dz = bz - az;
-        const t = Math.max(0, Math.min(1, ((x - ax) * dx + (z - az) * dz) / (dx * dx + dz * dz || 1)));
-        best = Math.min(best, Math.hypot(x - (ax + dx * t), z - (az + dz * t)));
-      }
+    let best = Infinity;
+    for (const [ax, az, dx, dz, spanSquared] of this.routeSegments) {
+      const u = x - ax, v = z - az;
+      const t = Math.max(0, Math.min(1, (u * dx + v * dz) / spanSquared));
+      const px = u - dx * t, pz = v - dz * t;
+      best = Math.min(best, px * px + pz * pz);
     }
-    return best;
+    return Math.sqrt(best);
   }
   // 拠点（村・遺跡）の中か
   inSite(x, z, pad = 0) {
@@ -231,22 +270,16 @@ export class Field {
   }
   // 脇道を敷く
   paintRoad(pts, width) {
-    const geo = this.geo(new THREE.PlaneGeometry(1, 1));
-    const disc = this.geo(new THREE.CircleGeometry(width / 2, 14));
-    const dm = this.std(0xffffff, { map: this.tex('tex-dirt-road', 1, 1) });
-    for (let i = 0; i < pts.length - 1; i++) {
-      const [ax, az] = pts[i], [bx, bz] = pts[i + 1];
-      const len = Math.hypot(bx - ax, bz - az);
-      const m = new THREE.Mesh(geo, this.std(0xffffff, { map: this.tex('tex-dirt-road', 1, len / width) }));
-      m.scale.set(width, len, 1);
-      m.rotation.set(-Math.PI / 2, 0, Math.atan2(bx - ax, bz - az));
-      m.position.set((ax + bx) / 2, 0.019, (az + bz) / 2);
-      m.receiveShadow = true;
-      const j = new THREE.Mesh(disc, dm);
-      j.rotation.x = -Math.PI / 2;
-      j.position.set(bx, 0.018, bz);
-      this.group.add(m, j);
+    for (let i = 1; i < pts.length; i++) {
+      const [ax, az] = pts[i - 1];
+      const dx = pts[i][0] - ax, dz = pts[i][1] - az;
+      this.routeSegments.push([ax, az, dx, dz, dx * dx + dz * dz || 1]);
     }
+    const strip = this.geo(roadRibbon(pts, width, pts === this.road ? .026 : .018, this.o.chapter));
+    const road = new THREE.Mesh(strip, this.roadMaterial);
+    road.name = pts === this.road ? 'Overworld main route' : 'Overworld side route';
+    road.receiveShadow = true;
+    this.group.add(road);
   }
 
   // ---- 経路・村・遺跡：章ごとに数も形も変わる ----
@@ -506,7 +539,7 @@ export class Field {
       const g = new THREE.Group();
       const body = new THREE.Mesh(this.geo(new THREE.BoxGeometry(w, h, d)), this.std(wallCols[Math.floor(r() * wallCols.length)], { map: this.tex('tex-house-wall', w / 4, h / 4) }));
       body.position.y = h / 2;
-      const roof = new THREE.Mesh(this.geo(new THREE.ConeGeometry(Math.max(w, d) * 0.78, 2.6, 4)), this.std(new THREE.Color(roofCols[Math.floor(r() * roofCols.length)]).multiply(roofTint), { map: this.tex('tex-roof', 4, 2) }));
+      const roof = new THREE.Mesh(this.geo(gabledRoof(w, d, 1.85 + w * .11)), this.std(new THREE.Color(roofCols[Math.floor(r() * roofCols.length)]).multiply(roofTint), { map: this.tex('tex-roof', 4, 2) }));
       // 窓辺の花箱
       for (const sx of [-w / 3, w / 3]) {
         const lx = sx, lz = d / 2 + 0.25;
@@ -519,9 +552,7 @@ export class Field {
       const base = new THREE.Mesh(this.geo(new THREE.BoxGeometry(w + 0.3, 0.5, d + 0.3)), this.std(0x8a8478));
       base.position.y = 0.25;
       g.add(base);
-      roof.rotation.y = Math.PI / 4;
-      roof.scale.set(w / Math.max(w, d), 1, d / Math.max(w, d));
-      roof.position.y = h + 1.3;
+      roof.position.y = h;
       const door = new THREE.Mesh(this.geo(new THREE.BoxGeometry(1.2, 2, 0.1)), this.std(0x4a3020));
       door.position.set(0, 1, d / 2 + 0.05);
       const winMat = this.mat(new THREE.MeshStandardMaterial({ color: 0xffd890, emissive: 0xffb040, emissiveIntensity: 0.9 }));
@@ -851,15 +882,15 @@ export class Field {
     }
     const leaf = new THREE.Color(0x2f6a3a).lerp(new THREE.Color(st.crystal), 0.18);
     const trunkM = new THREE.InstancedMesh(this.geo(new THREE.CylinderGeometry(0.22, 0.32, 1.8, 6)), this.std(0x5a3e28), trees.length);
-    const leafA = new THREE.InstancedMesh(this.geo(new THREE.ConeGeometry(1.6, 2.8, 7)), this.std(new THREE.Color(0xffffff).lerp(leaf, 0.25)), trees.length);
-    const leafB = new THREE.InstancedMesh(this.geo(new THREE.ConeGeometry(1.1, 2.2, 7)), this.std(new THREE.Color(0xffffff).lerp(leaf, 0.2)), trees.length);
+    const leafA = new THREE.InstancedMesh(this.geo(woodlandCrown(1.65, 2.9, true)), this.std(new THREE.Color(0xffffff).lerp(leaf, .42)), trees.length);
+    const leafB = new THREE.InstancedMesh(this.geo(woodlandCrown(1.13, 2.35, true)), this.std(new THREE.Color(0xffffff).lerp(leaf, .38)), trees.length);
     const m = new THREE.Matrix4(), q = new THREE.Quaternion(), s = new THREE.Vector3(), p = new THREE.Vector3();
     const tc = new THREE.Color();
     trees.forEach(([x, z, k], i) => {
       trunkM.setMatrixAt(i, m.compose(p.set(x, 0.9 * k, z), q, s.set(k, k, k)));
       leafA.setMatrixAt(i, m.compose(p.set(x, 2.8 * k, z), q, s.set(k, k, k)));
       leafB.setMatrixAt(i, m.compose(p.set(x, 4.1 * k, z), q, s.set(k, k, k)));
-      tc.setHSL(B.hue + (r() - 0.5) * 0.1, 0.45 + r() * 0.3, 0.55 + r() * 0.25);
+      tc.setHSL(B.hue + (r() - 0.5) * 0.08, .28 + r() * .24, .27 + r() * .22);
       leafA.setColorAt(i, tc);
       leafB.setColorAt(i, tc.offsetHSL(0.02, 0, 0.08));
       this.circles.push({ x, z, r: 0.55 * k });
@@ -873,13 +904,13 @@ export class Field {
     }
     const crownCols = B.crowns;
     const rTrunk = new THREE.InstancedMesh(this.geo(new THREE.CylinderGeometry(0.2, 0.34, 2.4, 6)), this.std(0x6a4630), rounds.length);
-    const rCrown = new THREE.InstancedMesh(this.geo(new THREE.IcosahedronGeometry(1.7, 1)), this.std(0xffffff, { roughness: 0.8 }), rounds.length);
-    const rCrown2 = new THREE.InstancedMesh(this.geo(new THREE.IcosahedronGeometry(1.1, 1)), this.std(0xffffff, { roughness: 0.8 }), rounds.length);
+    const rCrown = new THREE.InstancedMesh(this.geo(woodlandCrown(1.8, 3.05, false)), this.std(0xffffff, { roughness: 0.86 }), rounds.length);
+    const rCrown2 = new THREE.InstancedMesh(this.geo(woodlandCrown(1.16, 1.95, false)), this.std(0xffffff, { roughness: 0.85 }), rounds.length);
     rounds.forEach(([x, z, k], i) => {
       rTrunk.setMatrixAt(i, m.compose(p.set(x, 1.2 * k, z), q, s.set(k, k, k)));
       rCrown.setMatrixAt(i, m.compose(p.set(x, 3.3 * k, z), q, s.set(k * 1.15, k * 0.95, k * 1.15)));
       rCrown2.setMatrixAt(i, m.compose(p.set(x + 0.8 * k, 4.2 * k, z + 0.3 * k), q, s.set(k, k, k)));
-      tc.set(crownCols[Math.floor(r() * crownCols.length)]).offsetHSL(0, 0, (r() - 0.5) * 0.1);
+      tc.set(crownCols[Math.floor(r() * crownCols.length)]).lerp(this.landscape.shade, .32).offsetHSL(0, -.09, (r() - 0.5) * .1);
       rCrown.setColorAt(i, tc);
       rCrown2.setColorAt(i, tc.offsetHSL(0, 0, 0.07));
       this.circles.push({ x, z, r: 0.5 * k });
@@ -919,7 +950,15 @@ export class Field {
     }
     this.dots(shrooms, 1, [0x40f0ff, 0xff60e0, 0x80ff80], 1.2);
     // 池（睡蓮つき）
-    const waterMat = this.mat(new THREE.MeshStandardMaterial({ color: B.water, emissive: new THREE.Color(B.water).multiplyScalar(0.4), emissiveIntensity: 0.45, roughness: 0.05, metalness: 0.3, transparent: true, opacity: 0.88 }));
+    const waterTexture = pondSurface();
+    this.own.push(waterTexture);
+    const waterMat = this.std(new THREE.Color(B.water).lerp(this.landscape.haze, .42), {
+      map: waterTexture, roughness: .26, metalness: .13,
+      emissive: new THREE.Color(B.water).multiplyScalar(.18), emissiveIntensity: .4
+    });
+    const bankMat = this.std(this.landscape.road.clone().lerp(this.landscape.shade, .52), {
+      map: this.roadMaterial.map, roughness: .96
+    });
     this.ponds = [];
     const pads = [];
     for (let i = 0, made = 0; i < 900 && made < this.pondN * 3; i++) {
@@ -931,7 +970,10 @@ export class Field {
       w.rotation.x = -Math.PI / 2;
       w.position.set(x, 0.07, z);
       w.receiveShadow = true;
-      this.group.add(w);
+      const bank = new THREE.Mesh(this.geo(new THREE.CircleGeometry(pr * 1.065, 32)), bankMat);
+      bank.rotation.x = -Math.PI / 2;
+      bank.position.set(x, .013, z);
+      this.group.add(bank, w);
       this.ponds.push(w);
       const rim = [];
       for (let a = 0; a < Math.PI * 2; a += 0.35) rim.push([x + Math.cos(a) * (pr + 0.2), 0.12, z + Math.sin(a) * (pr + 0.2), 0.35 + r() * 0.25]);
@@ -981,11 +1023,16 @@ export class Field {
     q.identity();
     const NG = Math.round(2600 * AREA);
     const grass = new THREE.InstancedMesh(this.geo(new THREE.ConeGeometry(0.16, 0.7, 4)), this.std(0xffffff), NG);
+    let grassCount = 0;
     for (let i = 0; i < NG; i++) {
       const [x, z] = rnd();
-      grass.setMatrixAt(i, m.compose(p.set(x, 0.3, z), q, s.set(1, 0.6 + r(), 1)));
-      grass.setColorAt(i, tc.setHSL(B.hue + (r() - 0.5) * 0.1, 0.6, 0.35 + r() * 0.2));
+      const h = .6 + r();
+      tc.setHSL(B.hue + (r() - .5) * .1, .32, .24 + r() * .18);
+      if (inTown(x, z) || inDun(x, z) || this.inSite(x, z) || this.roadDist(x, z) < 3.35) continue;
+      grass.setMatrixAt(grassCount, m.compose(p.set(x, .20, z), q, s.set(1, h, 1)));
+      grass.setColorAt(grassCount++, tc);
     }
+    grass.count = grassCount;
     this.group.add(grass);
     // 水晶と廃墟の柱
     const cMat = this.mat(new THREE.MeshStandardMaterial({ color: st.crystal, emissive: st.crystal, emissiveIntensity: 1, roughness: 0.2 }));
@@ -1195,9 +1242,9 @@ export class Field {
     const g = c.getContext('2d');
     const sx = 1, sz = 1;
     this.toMap = (x, z) => [(x - BOUNDS.minX) * sx, (BOUNDS.maxZ - z) * sz];
-    g.fillStyle = 'rgba(30,50,30,0.85)';
+    g.fillStyle = '#' + this.landscape.shade.clone().multiplyScalar(.67).getHexString();
     g.fillRect(0, 0, W, Hh);
-    g.fillStyle = 'rgba(20,70,30,0.9)';
+    g.fillStyle = '#' + this.landscape.field.clone().multiplyScalar(.52).getHexString();
     for (const [x, z] of this.treePts) {
       const [a, b] = this.toMap(x, z);
       g.fillRect(a - 0.8, b - 0.8, 1.6, 1.6);
@@ -1220,7 +1267,7 @@ export class Field {
       g.arc(a, b, s.r * 0.8, 0, Math.PI * 2);
       g.fill();
     }
-    g.strokeStyle = '#d8c090';
+    g.strokeStyle = '#e4c28d';
     g.lineWidth = 4;
     g.beginPath();
     this.road.forEach(([x, z], i) => {
@@ -1361,12 +1408,50 @@ export class Field {
     pos.z = Math.max(BOUNDS.minZ, Math.min(BOUNDS.maxZ, pos.z));
   }
 
+  updateWildVisibility(dt, pos) {
+    if (this.__rf563Story?.mode) return;
+    this.wildClock -= dt;
+    if (this.wildClock > 0) return;
+    this.wildClock = .18;
+    const range = this.compact ? 76 : 104;
+    for (const tile of this.wildTiles) {
+      const { center, radius } = tile.boundingSphere;
+      const distanceSquared = (center.x - pos.x) ** 2 + (center.z - pos.z) ** 2;
+      tile.visible = distanceSquared <= (range + radius + (tile.visible ? 6 : 0)) ** 2;
+    }
+  }
+
+  setWorldVisible(visible) {
+    this.group.visible = visible;
+    const environment = visible ? this.worldEnvironment : this.__rf556Env;
+    if (environment) {
+      this.scene.background = environment.background;
+      this.scene.fog = environment.fog;
+    }
+  }
+
+  updateLandscapeHaze(dt) {
+    const fog = this.scene.fog;
+    if (!fog?.isFogExp2 || !this.group.visible) return;
+    const p = this.player.pos;
+    const indoors = this.__rf563Story?.mode || this.isDungeonAt(p.x, p.z);
+    const haze = indoors ? .012 : (this.B.name === '沼地' ? .0105 : .0072);
+    fog.density = THREE.MathUtils.damp(fog.density, haze, 2.8, dt);
+    fog.color.lerp(this.landscape.haze, 1 - Math.exp(-2.8 * dt));
+  }
+
+  isDungeonAt(x, z) {
+    const d = this.dungeonBounds;
+    return z <= d.z0 + 2 && z >= d.z0 - d.rows * d.cell - 2 &&
+      x >= d.x0 - 2 && x <= d.x0 + d.cols * d.cell + 2;
+  }
+
   regionAt(z, x) {
     if (z > TOWN.z + 40) return `${this.townName}へ続く旅路`;
     const site = this.inSite(x, z);
     if (site) return site.name;
     if (z > -10 && Math.hypot(x - TOWN.x, z - TOWN.z) < 38) return this.townName;
-    if (z < DUN.z0) return this.dunName;
+    if (this.isDungeonAt(x, z)) return this.dunName;
     return this.fieldName;
   }
 
@@ -1380,6 +1465,8 @@ export class Field {
   update(dt, inp, camera) {
     this.t += dt;
     const p = this.player;
+    this.updateLandscapeHaze(dt);
+    this.updateWildVisibility(dt, p.pos);
     this.inv = Math.max(0, this.inv - dt);
     if (!this.frozen && inp) {
       const len = Math.hypot(inp.mx, inp.mz);
@@ -1446,6 +1533,9 @@ export class Field {
     // 町の人：うろうろ・近づくとこちらを向く
     for (const n of this.npcs) {
       const d = n.pos.distanceTo(p.pos);
+      n.far = d > 105;
+      n.root.visible = !n.far;
+      if (n.far) continue;
       let moving = false;
       if (d < 3.5) {
         n.facing = Math.atan2(p.pos.x - n.pos.x, p.pos.z - n.pos.z);
@@ -1479,9 +1569,9 @@ export class Field {
       s.root.visible = !s.far;
       if (s.far) continue;
       let mx = 0, mz = 0, sp = 0;
-      if (this.inv > 0 && d < 10) {
+      if (this.inv > 0 && d > .0001 && d < 10) {
         mx = -dx / d; mz = -dz / d; sp = 3; // 戦闘直後は逃げる
-      } else if (d < 9 && !this.frozen) {
+      } else if (d > .0001 && d < 9 && !this.frozen) {
         mx = dx / d; mz = dz / d; sp = 4.6;
       } else {
         const w = s.wander;
@@ -1515,7 +1605,7 @@ export class Field {
     // 演出
     for (const s of this.spinners) s.rotation.y += dt;
     for (const f of this.flames) f.scale.set(1, 0.8 + Math.random() * 0.5, 1);
-    for (const l of this.lights) l.intensity = l.userData.base * (1 - l.userData.flicker + Math.random() * l.userData.flicker * 2);
+    this.updateLocalLights(dt, p.pos);
     for (let i = 0; i < this.flags.length; i++) {
       const f = this.flags[i];
       f.rotation.y = Math.sin(this.t * 2.4 + i) * 0.35;
@@ -1540,9 +1630,11 @@ export class Field {
       at.needsUpdate = true;
       pt.pts.material.opacity = 0.55 + Math.sin(this.t * 3) * 0.35;
     }
-    for (const w of this.ponds) w.material.emissiveIntensity = 0.4 + Math.sin(this.t * 1.5) * 0.12;
+    if (this.ponds.length) this.ponds[0].material.emissiveIntensity = .4 + Math.sin(this.t * 1.5) * .1;
     this.goalRune.rotation.z += dt;
     this.goalPillar.material.opacity = 0.22 + Math.sin(this.t * 2) * 0.08;
+    this.boss.far = this.boss.pos.distanceToSquared(p.pos) > 105 ** 2;
+    this.boss.root.visible = !this.boss.far;
     this.boss.facing = Math.atan2(p.pos.x - this.boss.pos.x, p.pos.z - this.boss.pos.z);
     // 反映
     for (const a of [p, ...this.followers, ...this.npcs, ...this.syms, this.boss]) {
@@ -1696,9 +1788,11 @@ export class Field {
 
   // 戦闘から戻る
   resume(sym, won) {
-    if (sym && won) {
-      this.syms = this.syms.filter((s) => s !== sym);
+    if (sym && won && this.syms.includes(sym)) {
+      this.syms = this.syms.filter(s => s !== sym);
       this.group.remove(sym.root);
+      disposeCharacterVariant(sym.model);
+      disposeModel(sym.instance, sym.mixer);
     }
     if (!won && sym) {
       this.player.pos.set(0, 0, 22);

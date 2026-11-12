@@ -1,117 +1,162 @@
-// Arkeia combat exclamations. Short generated vocal effects replace robotic
-// long-form speech synthesis; audio stays separate from BGM / combat SFX.
-// No voice is synthesized from private player text.
+// Short combat clips. This channel is mixed separately from music and SFX.
 const VOICE_ROOT = './assets/voices/';
-// Dedicated, pre-rendered low male synthetic lines for Valgard's spell calls.
-// No device-dependent browser speech synthesis; respect the existing voice mixer.
+const FALLBACK_ROOT = './assets/rf5530/voices/';
 const VALGARD_CLIPS = Object.freeze({
   astral: './assets/audio/valgard-judgment-voice.mp3',
   other: './assets/audio/valgard-other-voice.mp3',
   spear: './assets/audio/valgard-shining-spear-voice.mp3'
 });
-let lastValgardLineAt = -Infinity;
-function playValgardLine(line = 'other', actor = null) {
-  if (!enabled || muted || channelVolume <= 0 || typeof Audio === 'undefined') return false;
-  const now = timeNow();
-  if (now - lastValgardLineAt < 320) return false;
-  const url = VALGARD_CLIPS[line === 'astral' ? 'astral' : line === 'spear' ? 'spear' : 'other'];
-  const sound = new Audio(url);
-  sound.preload = 'auto';
-  sound.volume = Math.min(1, (actor?.isPlayer === false ? 0.7 : 1.0) * channelVolume);
-  sound.playbackRate = 1; // Permanently processed low-pitch masculine MP3; never OS TTS.
-  sound.preservesPitch = true;
-  sound.onended = () => active.delete(sound);
-  sound.onerror = () => active.delete(sound);
-  // Prevent overlapping Valgard lines while keeping other fighters' voices.
-  for (const prev of [...active]) if (prev.__arkeiaValgardLine) stopElement(prev);
-  sound.__arkeiaValgardLine = true;
-  active.add(sound);
-  lastValgardLineAt = now;
-  lastGlobal = now;
-  Promise.resolve(sound.play()).catch(() => active.delete(sound));
-  return true;
-}
-// The ice seal and ice echo are actions added by arkeia-ui.js, not skill slots.
-// Expose a narrow, voice-settings-aware call for those two special actions.
-if (typeof window !== 'undefined') {
-  window.__arkeiaPlayValgardOther = (fighter) => playValgardLine('other', fighter);
-}
-
-const CLIPS = {
+const CLIPS = Object.freeze({
   attack: 3, skill: 3, over: 2, hurt: 2, pinch: 2,
   ko: 2, summon: 2, awaken: 2, hi: 2
-};
-const active = new Set();
-const lastByCharacter = new Map();
-let muted = false;
-let channelVolume = 0.75;
-let enabled = true;
-let lastGlobal = 0;
+});
+const PRIORITY = Object.freeze({
+  attack: 0, hurt: 0, skill: 1, pinch: 1, summon: 2,
+  awaken: 2, ko: 2, over: 3, hi: 4
+});
 const MAX_ACTIVE = 4;
-const globalGap = { attack: 90, skill: 130, over: 260, hi: 280, hurt: 100, ko: 120, pinch: 260, summon: 240, awaken: 220 };
+const MAX_IDLE = 12;
+const idle = [];
+const active = new Map();
+const lastByActor = new WeakMap();
+let channelVolume = .75;
+let muted = false;
+let useOpus;
+let lastQuietCue = -Infinity;
+
 function hash(text) {
-  let x = 2166136261;
-  for (const c of String(text || '')) x = Math.imul((x ^ c.charCodeAt(0)) >>> 0, 16777619) >>> 0;
-  return x >>> 0;
+  let value = 2166136261;
+  for (const char of text) value = Math.imul(value ^ char.charCodeAt(0), 16777619);
+  return value >>> 0;
 }
-const timeNow = () => typeof performance === 'undefined' ? Date.now() : performance.now();
-const styleFor = (f) => {
-  const key = f?.key || f?.def?.name || f?.name || 'unknown';
-  const label = `${f?.def?.title || ''} ${f?.def?.name || ''}`;
+function voiceFamily(actor, key) {
+  const label = `${actor.def?.title || ''} ${actor.def?.name || ''}`;
   if (key === 'valgard' || /魔王|獣|竜王|魔神|覇王|大蛇|血魔/.test(label)) return 'v5';
-  if (/女|妃|姫|巫|天后|魔女|聖女|女性|少女/.test(label)) return (hash(key) % 2) ? 'v1' : 'v2';
+  if (/女|妃|姫|巫|天后|魔女|聖女/.test(label)) return hash(key) % 2 ? 'v1' : 'v2';
   if (/老|重装|巨|斧鬼|豪|王/.test(label)) return 'v4';
-  return (hash(key) % 3) ? 'v3' : 'v2';
-};
-function stopElement(el) {
-  try { el.pause(); el.currentTime = 0; } catch {}
-  active.delete(el);
+  return hash(key) % 3 ? 'v3' : 'v2';
 }
+function available() {
+  return !muted && channelVolume > 0 && typeof Audio !== 'undefined' &&
+    (typeof document === 'undefined' || !document.hidden);
+}
+function acquire(url) {
+  const index = idle.findIndex(slot => slot.url === url);
+  if (index !== -1) return idle.splice(index, 1)[0].element;
+  const element = new Audio();
+  element.preload = 'none';
+  element.src = url;
+  return element;
+}
+function release(element, ticket, keep = true) {
+  if (active.get(element) !== ticket) return;
+  active.delete(element);
+  element.onended = null;
+  element.onerror = null;
+  element.pause();
+  try { element.currentTime = 0; } catch {}
+  if (keep) {
+    if (idle.length >= MAX_IDLE) idle.shift();
+    idle.push({ url: ticket.url, element });
+  }
+}
+function play(url, actor, priority, gain, rate) {
+  const previous = [...active].find(([, slot]) => slot.actor === actor);
+  if (previous) {
+    const [element, slot] = previous;
+    if (slot.priority >= priority) return false;
+    release(element, slot);
+  }
+  if (active.size >= MAX_ACTIVE) {
+    const weakest = [...active].reduce((a, b) => a[1].priority <= b[1].priority ? a : b);
+    if (weakest[1].priority >= priority) return false;
+    release(...weakest);
+  }
+  const element = acquire(url);
+  const ticket = { url, actor, priority, gain };
+  active.set(element, ticket);
+  element.volume = Math.min(1, gain * channelVolume);
+  element.playbackRate = rate;
+  element.preservesPitch = true;
+  if ('webkitPreservesPitch' in element) element.webkitPreservesPitch = true;
+  element.onended = () => release(element, ticket);
+  element.onerror = () => release(element, ticket, false);
+  try {
+    Promise.resolve(element.play()).catch(() => release(element, ticket, !element.error));
+  } catch {
+    release(element, ticket, !element.error);
+    return false;
+  }
+  return true;
+}
+
 export function setVoiceVolume(value) {
   channelVolume = Math.min(1, Math.max(0, Number(value) || 0));
   if (channelVolume <= 0) stopVoices();
+  for (const [element, slot] of active) element.volume = Math.min(1, slot.gain * channelVolume);
 }
 export function setVoiceMuted(value) {
-  muted = !!value;
+  muted = Boolean(value);
   if (muted) stopVoices();
 }
 export function stopVoices() {
-  for (const el of [...active]) stopElement(el);
+  for (const [element, ticket] of active) release(element, ticket);
 }
-export function sayBattle(f, kind = 'skill', _attackName = '', important = false) {
-  if (!enabled || muted || channelVolume <= 0 || typeof Audio === 'undefined' || !f) return;
-  const cue = Object.prototype.hasOwnProperty.call(CLIPS, kind) ? kind : 'skill';
-  const owner = String(f.key || f.def?.name || f.name || 'player');
-  if (owner === 'valgard' && (cue === 'skill' || cue === 'over' || cue === 'hi' || cue === 'summon')) {
-    const name = String(_attackName || '');
-    const isAstral = /アストラル[・･\s]*ジャッジメント|蒼天雷裁|astral[\s-]*judgment/i.test(name);
-    const isSpear = /光牢剣陣|ルミナス[・･\s]*レギオン|シャイニング[・･\s]*スピア|凍牙・光槍封陣|shining[\s-]*spear/i.test(name);
-    playValgardLine(isAstral ? 'astral' : isSpear ? 'spear' : 'other', f);
+
+const systemValgard = {};
+function playValgardLine(line, actor = systemValgard, priority = 3) {
+  if (!available()) return false;
+  const now = performance.now();
+  const previous = lastByActor.get(actor);
+  if (previous && now - previous.at < 320 && priority <= previous.priority) return false;
+  const player = actor.isPlayer !== false;
+  if (!play(VALGARD_CLIPS[line], actor, priority + Number(player), player ? .92 : .62, 1)) return false;
+  lastByActor.set(actor, { at: now, cue: line, priority });
+  return true;
+}
+if (typeof window !== 'undefined') {
+  // The ice seal and echo also use the dedicated Valgard recording.
+  window.__arkeiaPlayValgardOther = actor => playValgardLine('other', actor || systemValgard);
+  window.addEventListener('rf564:audio-paused', stopVoices);
+}
+
+export function sayBattle(actor, kind = 'skill', attackName = '', important = false) {
+  if (!available() || !actor) return;
+  const cue = Object.hasOwn(CLIPS, kind) ? kind : 'skill';
+  const key = String(actor.key || actor.def?.name || actor.name || 'player');
+  const player = Boolean(actor.isPlayer);
+  const weight = PRIORITY[cue];
+  if (key === 'valgard' && ['skill', 'over', 'hi', 'summon'].includes(cue)) {
+    const name = String(attackName);
+    const astral = /アストラル[・･\s]*ジャッジメント|蒼天雷裁|astral[\s-]*judgment/i.test(name);
+    const spear = /光牢剣陣|ルミナス[・･\s]*レギオン|シャイニング[・･\s]*スピア|凍牙・光槍封陣|shining[\s-]*spear/i.test(name);
+    playValgardLine(astral ? 'astral' : spear ? 'spear' : 'other', actor, weight + 2);
     return;
   }
-  const now = timeNow();
-  const player = !!f.isPlayer;
-  const minGap = (important ? 110 : 230) + (cue === 'attack' ? 50 : 0);
-  const prev = lastByCharacter.get(owner);
-  if (prev && now - prev.t < minGap) return;
-  if (!important && now - lastGlobal < (globalGap[cue] || 160)) return;
-  if (!player && ['hurt', 'attack'].includes(cue) && ((hash(owner) + Math.floor(now / 200)) % 3) === 0) return;
-  if (active.size >= MAX_ACTIVE) {
-    if (!important) return;
-    stopElement(active.values().next().value);
+
+  const priority = weight * 2 + Number(player) + Number(important);
+  const now = performance.now();
+  const previous = lastByActor.get(actor);
+  const gap = cue === 'attack' ? 290 : important ? 150 : 220;
+  if (previous && now - previous.at < gap && priority <= previous.priority) return;
+  if (!weight && now - lastQuietCue < (player ? 105 : 210)) return;
+  if (!weight && !player && [...active.values()].some(slot => slot.priority >= 5)) return;
+
+  if (useOpus === undefined) {
+    const probe = new Audio();
+    useOpus = Boolean(probe.canPlayType?.('audio/ogg; codecs="opus"'));
   }
-  const variant = prev ? (prev.i + 1 + (hash(owner + cue) % (CLIPS[cue] - 1 || 1))) % CLIPS[cue] : hash(owner + cue) % CLIPS[cue];
-  const family = styleFor(f);
-  const clip = `${VOICE_ROOT}${family}/${cue}-${variant}.ogg`;
-  const element = new Audio(clip);
-  element.preload = 'auto';
-  element.volume = Math.min(1, (player ? 0.54 : important ? 0.32 : 0.22) * (cue === 'ko' ? 1.04 : 1) * channelVolume);
-  element.playbackRate = 0.91 + (hash(owner) % 19) / 100 + (cue === 'over' || cue === 'hi' ? -0.04 : 0);
-  element.preservesPitch = false;
-  element.onended = () => active.delete(element);
-  element.onerror = () => active.delete(element);
-  active.add(element);
-  lastByCharacter.set(owner, { t: now, i: variant });
-  lastGlobal = now;
-  Promise.resolve(element.play()).catch(() => active.delete(element));
+  const count = CLIPS[cue];
+  const signature = hash(key + cue);
+  const variant = previous?.cue === cue
+    ? (previous.variant + 1 + signature % (count - 1)) % count
+    : signature % count;
+  const root = useOpus ? VOICE_ROOT : FALLBACK_ROOT;
+  const url = `${root}${voiceFamily(actor, key)}/${cue}-${variant}.${useOpus ? 'ogg' : 'mp3'}`;
+  const gain = player ? (weight > 1 ? .64 : .51) : (weight > 1 ? .35 : .23);
+  const rate = (weight >= 3 ? .96 : 1) + (hash(key) % 11 - 5) / 100;
+  if (play(url, actor, priority, gain, rate)) {
+    lastByActor.set(actor, { at: now, cue, variant, priority });
+    if (!weight) lastQuietCue = now;
+  }
 }

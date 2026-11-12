@@ -39,7 +39,7 @@ import { installNepterionCombat } from './nepterion-water.js?v=rf-v18-20261109';
 import { installActorMotion } from './character-motion.js?v=rf-v18-20261109';
 import { installNepterionFixedSeven } from './nepterion-fixed-seven.js?v=rf-v18-20261109';
 import { FIGHTERS, spellCastTime, STORY, ROSTER, UPGRADES, MAX_LV, STAGES, BGM, APEX_BGM, ENEMY_ROSTER, UPG_CAP, LB_MAX, lbMaxLv, lbMul, lbCost, WEAPONS, ARMORS, SUMMONS, STAT_LABEL, SPECIAL_KEYS, BOSS_ROSTER, currentEvent, sanitizeEvent, EV_FOE_KINDS } from './data.js?v=rf-minamoto-v48-20261111';
-import { sayBattle, setVoiceMuted, setVoiceVolume, stopVoices } from './voice.js?v=audio-cast-20261107d';
+import { sayBattle, setVoiceMuted, setVoiceVolume, stopVoices } from './voice.js?v=55.30';
 import { initSocial, uiConfirm } from './social.js?v=55.27';
 import { initMailbox } from './mailbox.js?v=audio-cast-20261107d';
 import { OPERATOR_KEY_SHA256, CHIEF_KEY_SHA256, MAX_KEY_ATTEMPTS, LOCKOUT_MS, SHOP_ITEMS } from './config.js';
@@ -49,8 +49,9 @@ import { createInfiniteDungeonV552 } from './rf-infinite-dungeon-v552.js?v=55.20
 import { apiEnabled, api, verifyToken } from './api.js';
 import { createOrbitControls } from './assets/rf-camera-v5520.js?v=55.21';
 import { activeInputModal, activateGamepadControl, adjustGamepadValue, bindTouchControls, EDITABLE_CONTROL, gamepadMenuItems } from './assets/rf5527/controls.js?v=55.28';
-import { createContactShadows, createRenderBudget, createStageReflections } from './assets/rf5526/graphics.js?v=55.26';
+import { createContactShadows, createRenderBudget, createStageReflections } from './assets/rf5526/graphics.js?v=55.30';
 import { createBattleCountdown } from './assets/rf5528/battle-countdown.js?v=55.28';
+import { STORY_II, readStoryII, configureStoryIIBattle, createStoryIIStage } from './assets/rf5530/story-ii.js?v=55.30';
 
 const $ = (s) => document.querySelector(s);
 // RF_MAOU_INSTALL_V6
@@ -125,18 +126,15 @@ edgeLight.position.set(-10, 7, -10);
 scene.add(edgeLight);
 
 const texLoader = new THREE.TextureLoader();
-const floorTex = texLoader.load('assets/arena-floor.webp');
-floorTex.colorSpace = THREE.SRGBColorSpace;
-floorTex.wrapS = floorTex.wrapT = THREE.RepeatWrapping;
-floorTex.repeat.set(6, 6);
-floorTex.anisotropy = Math.min(8, renderer.capabilities?.getMaxAnisotropy?.() || 1);
+let floorTex;
 
 // ---------- Stages ----------
 const setReflections = createStageReflections(THREE, scene, texLoader);
 const updateContactShadows = createContactShadows(THREE, scene, ARENA_R);
 const arena = new THREE.Group();
 arena.name = 'Colosseum (13 m)';
-const floor = new THREE.Mesh(new THREE.CircleGeometry(ARENA_R, 96), new THREE.MeshStandardMaterial({ map: floorTex, roughness: .89 }));
+arena.visible = false;
+const floor = new THREE.Mesh(new THREE.CircleGeometry(ARENA_R, 96), new THREE.MeshStandardMaterial({ roughness: .89 }));
 floor.rotation.x = -Math.PI / 2;
 const rim = new THREE.Mesh(new THREE.TorusGeometry(ARENA_R, .14, 10, 96), new THREE.MeshStandardMaterial({ metalness: .56, roughness: .34, emissiveIntensity: .16 }));
 rim.rotation.x = Math.PI / 2;
@@ -155,6 +153,15 @@ function setStage(st) {
   if (currentStage === st) {
     setReflections(st.sky);
     return;
+  }
+  if (!floorTex) {
+    floorTex = texLoader.load('assets/arena-floor.webp');
+    floorTex.colorSpace = THREE.SRGBColorSpace;
+    floorTex.wrapS = floorTex.wrapT = THREE.RepeatWrapping;
+    floorTex.repeat.set(6, 6);
+    floorTex.anisotropy = Math.min(8, renderer.capabilities?.getMaxAnisotropy?.() || 1);
+    floor.material.map = floorTex;
+    floor.material.needsUpdate = true;
   }
   currentStage = st;
   arena.visible = true;
@@ -176,15 +183,12 @@ function setStage(st) {
   setReflections(st.sky);
 }
 const stageById = (id) => STAGES.find((s) => s.id === id) || STAGES[0];
-setStage(STAGES[0]);
-
 // ---------- キャラクター3Dモデル：元のGLB・骨格・衣装を使う（棒状代替は禁止） ----------
 const assets = {};
 const modelUrls = [...new Set(Object.values(FIGHTERS).map((d) => d.model))];
 const byUrl = {};
 const modelErrors = new Map();
 let loadedModels = 0;
-let loadPromise;
 
 function updateModelStatus() {
   const progress = `${loadedModels}/${modelUrls.length}`;
@@ -192,7 +196,7 @@ function updateModelStatus() {
   if (el) {
     el.textContent = modelErrors.size
       ? `3Dモデル読込失敗 ${modelErrors.size}件（準備済み ${progress}）。再試行できます。`
-      : loadedModels ? `3Dモデル準備済み ${progress}（残りは必要時に読込）` : '3Dモデルの初期化中';
+      : loadedModels ? `3Dモデル準備済み ${progress}（残りは必要時に読込）` : '戦士の3Dモデルは必要な場面で読み込みます';
     el.title = [...modelErrors].map(([url, error]) => `${url}: ${error?.message || error}`).join('\n');
   }
 }
@@ -306,12 +310,7 @@ async function ensureAllModelsReady(requiredKeys = null, { signal, onCancel } = 
   window.RiftfallLoading?.end(loadToken);
   return true;
 }
-// Preload the first character for a responsive title, then load others only
-// when needed by the current field/battle. This avoids 20 simultaneous
-// downloads and expensive animation parses on mobile browsers.
-const firstModel = FIGHTERS.rowen?.model || modelUrls[0];
-loadPromise = firstModel ? retrieveModel(firstModel) : Promise.resolve(true);
-
+// Character previews and battles request their own models on demand.
 updateModelStatus();
 
 // ---------- Save ----------
@@ -325,6 +324,7 @@ function loadSave() {
     raw = {};
   }
   const s = { shards: clampInt(raw.shards, 0, 999999), chapter: clampInt(raw.chapter, 0, STORY.length), upg: {}, lb: {} };
+  s.story2 = readStoryII(raw.story2);
   for (const k of Object.keys(FIGHTERS)) {
     const lb = clampInt(raw.lb?.[k], 0, LB_MAX);
     if (lb) s.lb[k] = lb;
@@ -481,6 +481,7 @@ function mergeSaves(local, remote, baseShards) {
   // 設定・編成などの端末で選んだ値も引き継ぐ。進行と所持品は下で個別に合流する。
   const out = { ...remote, ...local };
   out.chapter = Math.max(+local.chapter || 0, +remote.chapter || 0);
+  out.story2 = { chapter: Math.max(readStoryII(local.story2).chapter, readStoryII(remote.story2).chapter) };
   out.upg = { ...(remote.upg || {}) };
   for (const [k, m] of Object.entries(local.upg || {})) {
     out.upg[k] = { ...(out.upg[k] || {}) };
@@ -654,11 +655,15 @@ async function autoPull() {
       // サーバーは購入キャラ(chars)を保存しないため、端末側の分を残す
       const uni = (a, b) => [...new Set([...(Array.isArray(a) ? a : []), ...(Array.isArray(b) ? b : [])])];
       remote.chars = uni(remote.chars, save.chars);
+      const remoteStoryII = readStoryII(remote.story2).chapter;
+      const localStoryII = readStoryII(save.story2).chapter;
+      remote.story2 = { chapter: Math.max(remoteStoryII, localStoryII) };
       if (remote.pid == null && save.pid) remote.pid = save.pid;
       json = JSON.stringify(remote);
       localStorage.setItem(SAVE_KEY, json);
       setPend(null);
       markSynced(ver, Number(remote.syncAt) || Date.now(), +remote.shards || 0);
+      if (localStoryII > remoteStoryII) localStorage.setItem('arkeia-sync-dirty', '1');
       location.reload();
     }
   } catch {
@@ -834,8 +839,8 @@ const audio = {
 // RF_FUJIWARA_BGM_PRIORITY_V37 — Highest BGM priority (chief-only character)
 const MUSIC_FILES = {
   fujiwara: 'fujiwara-nobuyori-theme.mp3',
-  title: 'title-theme.mp3',
-  story: 'title-theme.mp3',  // メニュー／物語導入は実在するタイトル音源を使用
+  title: 'aishiteirukara.mp3',
+  story: 'aishiteirukara.mp3',
   field: 'field-theme.mp3',
   battle: 'battle-theme.mp3',
   event: 'event-theme.mp3',
@@ -849,9 +854,9 @@ for (const [name, file] of Object.entries(MUSIC_FILES)) {
   // RF_BGM_EXCLUSIVE_V10: avoid two Audio players for the same physical MP3.
   const originalKey = Object.keys(audio.tracks).find(k => MUSIC_FILES[k] === file);
   if (originalKey) { audio.tracks[name] = audio.tracks[originalKey]; continue; }
-  const a = new Audio('assets/audio/' + file + '?v=20261107-valgard1');
+  const a = new Audio();
   a.loop = true;
-  a.preload = name === 'title' ? 'metadata' : 'none';
+  a.preload = 'none';
   a.volume = audio.volume * .6;
   a.addEventListener('error', () => {
     console.warn(`[BGM] 再生ファイルを確認してください: assets/audio/${file}`);
@@ -955,6 +960,10 @@ function syncMusicTrack(fromGesture=false){
   if(fromGesture)musicBlocked.delete(next);
   if(musicBlocked.has(next))return;
   try{
+    if(!next.src){
+      const version=key==='title'||key==='story'?'20261112-v564b-menu-20261112':'20261107-valgard1';
+      next.src='assets/audio/'+MUSIC_FILES[key]+'?v='+version;
+    }
     const attempt=Promise.resolve(next.play());
     musicAttempts.set(next,attempt);
     void attempt.catch(error=>{
@@ -1455,7 +1464,7 @@ function setupTouch() {
 }
 
 // ---------- Screens ----------
-const state = { mode: null, returnFromBattle: null, myKey: null, oppKey: null, chapter: 0, battle: null, paused: false, net: null, online: null, dialogue: null, lastWin: false };
+const state = { mode: null, returnFromBattle: null, myKey: null, oppKey: null, chapter: 0, storyIIChapter: 0, battle: null, paused: false, net: null, online: null, dialogue: null, lastWin: false };
 let offlineLaunch = null;
 function cancelOfflineLaunch() {
   if (!offlineLaunch) return;
@@ -1759,6 +1768,11 @@ function refreshTitle() {
   social?.refresh();
   const ch = save.chapter % STORY.length;
   $('#story-sub').textContent = save.chapter >= STORY.length ? '旅は終わった。もう一度、最初の灯から' : `続きから：${STORY[ch].title}`;
+  const storyIIProgress = $('#story2-progress');
+  if (storyIIProgress) {
+    const cleared = readStoryII(save.story2).chapter;
+    storyIIProgress.textContent = cleared ? `${cleared} / ${STORY_II.length} 章踏破` : '横視点で一対一の章を進む';
+  }
 }
 function enterTitle() {
   state.battleLoading = false;
@@ -1801,6 +1815,7 @@ document.querySelectorAll('[data-go]').forEach((b) => b.addEventListener('click'
     openPartySelect(() => runStoryChapter());
     return;
   }
+  if (state.mode === 'story2') { openStoryIISelect(); return; }
   // RF552_MODES — Event solo / 2–4 friends, plus the independent endless challenge.
   if (state.mode === 'event') { openEventPlayChoiceV552(); return; }
   if (state.mode === 'infinite') {
@@ -2203,7 +2218,7 @@ function goTitle() {
   ranked.close();
   endBattle();
   leaveField();
-  setStage(STAGES[0]);
+  if (currentStage) setStage(STAGES[0]);
   state.mode = null;
   state.returnFromBattle=null;
   orbitControls.reset();
@@ -2228,7 +2243,7 @@ function goTitle() {
 const ui = {
   sfx,
   popup(pos, val, color) {
-    const v = new THREE.Vector3(pos.x, 2.2, pos.z).project(camera);
+    const v = new THREE.Vector3(pos.x, 2.2, pos.z).project(state.battle?.storyII?.camera || camera);
     const el = document.createElement('span');
     el.className = 'pop';
     el.textContent = val;
@@ -2350,9 +2365,14 @@ function endBattle() {
   if (state.battle) {
     // 覚醒の蓄積ダメージは次の戦いへ持ち越す（覚醒中に終わったらリセット）
     const me = state.battle.fighters.find((f) => f.isPlayer && !f.remoteAuth);
-    if (me && !state.battle.siege && !state.battle.ranked) {
+    if (me && !state.battle.siege && !state.battle.ranked && !state.battle.storyII) {
       save.awk = me.awakened > 0 ? 0 : Math.max(0, Math.min(99, Math.round(me.awk)));
       persist();
+    }
+    if (state.battle.storyII) {
+      state.battle.storyII.stage?.dispose();
+      arena.visible = true;
+      document.body.classList.remove('rf-story2-battle');
     }
     state.battle.dispose();
     state.battle = null;
@@ -2653,6 +2673,7 @@ function onBattleEnd(won) {
   if (state.mode === 'castle') { castleRealm.onBattleEnd(); return; }
   if (state.mode === 'adventure') { gaizorgAdventure.finish(won); return; }
   if (state.mode === 'infinite') { infiniteDungeon.onEnd(won); return; }
+  if (state.mode === 'story2') { finishStoryIIBattle(won); return; }
   if (state.mode === 'event-coop') eventCoop.finished();
   state.lastWin = won;
   if (state.mode === 'invade') {
@@ -2762,7 +2783,7 @@ function showResult(title, text, reward, retry, next) {
   $('#btn-retry').hidden = !retry;
   $('#btn-next').hidden = !next;
   $('#result-back').textContent=state.mode==='story'?'分かれ道へ':'出撃前の画面へ戻る';
-  playTrack(state.mode === 'story' ? 'story' : 'title');
+  playTrack(state.mode === 'story' || state.mode === 'story2' ? 'story' : 'title');
   show('scr-result');
 }
 function returnFromBattle(){
@@ -2789,13 +2810,16 @@ $('#btn-retry').addEventListener('click', () => {
   if (state.mode === 'story') {
     if (state.field) startChapterBattle();
     else runStoryChapter();
+  } else if (state.mode === 'story2') {
+    void startStoryIIBattle();
   } else {
     startOffline();
   }
 });
 $('#btn-next').addEventListener('click', () => {
   sfx('ui');
-  runStoryChapter();
+  if (state.mode === 'story2') runStoryIIChapter();
+  else runStoryChapter();
 });
 
 // ---------- Story ----------
@@ -2831,8 +2855,94 @@ $('#story-skip').addEventListener('click', () => {
 });
 $('#story-back').addEventListener('click', () => {
   sfx('ui');
-  goTitle();
+  if (state.mode === 'story2') returnFromBattle();
+  else goTitle();
 });
+
+function openStoryIISelect() {
+  const cleared = readStoryII(save.story2).chapter;
+  state.storyIIChapter = cleared === STORY_II.length ? 0 : cleared;
+  state.returnFromBattle = openStoryIISelect;
+  const chapter = STORY_II[state.storyIIChapter];
+  const restart = cleared === STORY_II.length ? '全章踏破・最初から再演 ／ ' : '';
+  openSelect('月渡りの戦士を選ぶ', `ストーリーモードⅡ › ${restart}${chapter.title}`, key => {
+    if (state.battleLoading) return;
+    state.myKey = key;
+    runStoryIIChapter();
+  });
+}
+
+function runStoryIIChapter() {
+  const chapter = STORY_II[state.storyIIChapter];
+  if (state.mode !== 'story2' || !chapter) return;
+  $('#story-chapter').textContent = `ストーリーモードⅡ　月渡り › ${chapter.title}`;
+  playTrack('story');
+  setStage(stageById(chapter.stage));
+  playDialogue(chapter.before, () => { void startStoryIIBattle(); });
+}
+
+async function startStoryIIBattle() {
+  const chapter = STORY_II[state.storyIIChapter];
+  const key = state.myKey;
+  if (state.mode !== 'story2' || state.battleLoading || !chapter) return;
+  if (!canUse(key)) { openStoryIISelect(); return; }
+  const launch = new AbortController();
+  offlineLaunch = launch;
+  try {
+    const ready = await ensureAllModelsReady([key, chapter.opponent], {
+      signal: launch.signal,
+      onCancel: () => {
+        if (offlineLaunch !== launch) return;
+        cancelOfflineLaunch();
+        openStoryIISelect();
+      },
+    });
+    if (launch.signal.aborted || state.mode !== 'story2') return;
+    offlineLaunch = null;
+    if (!ready) {
+      showResult('戦士の準備ができませんでした', '通信を確認して、同じ戦いにもう一度出撃できます。', '', true, false);
+      return;
+    }
+    const stage = stageById(chapter.stage);
+    setStage(stage);
+    const battle = makeBattle(null);
+    battle.add(key, { team: 0, player: true, pos: [-2.8, 0], facing: Math.PI / 2, upg: upgFor(key), gear: gearFor(key) });
+    battle.add(chapter.opponent, { team: 1, cpu: foeCpu(chapter.cpu), hpMul: foeHp(chapter.hp), atkMul: chapter.attack, pos: [2.8, 0], facing: -Math.PI / 2 });
+    const sideView = configureStoryIIBattle(THREE, battle);
+    sideView.stage = createStoryIIStage(THREE, stage);
+    scene.add(sideView.stage.group);
+    arena.visible = false;
+    document.body.classList.add('rf-story2-battle');
+    beginBattle(!!chapter.boss);
+  } catch (error) {
+    if (launch.signal.aborted) return;
+    launch.abort();
+    offlineLaunch = null;
+    rfBattleStartError(error);
+  }
+}
+
+function finishStoryIIBattle(won) {
+  if (!state.battle?.storyII) return;
+  endBattle();
+  const chapter = STORY_II[state.storyIIChapter];
+  if (!won) {
+    showResult('ここで足を止めた', '同じ戦士で、この関門に再挑戦できます。', '', true, false);
+    return;
+  }
+  const completed = state.storyIIChapter + 1;
+  if (completed > readStoryII(save.story2).chapter) {
+    save.story2 = {chapter: completed};
+    persist();
+  }
+  playTrack('story');
+  playDialogue(chapter.after, () => {
+    state.storyIIChapter = completed;
+    const next = STORY_II[completed];
+    showResult(next ? '関門を越えた' : '月渡り、踏破', next ? `次は「${next.title}」。` : '二つの月の下に、帰り道の灯がともった。',
+      `踏破記録 ${readStoryII(save.story2).chapter} / ${STORY_II.length} 章`, false, !!next);
+  });
+}
 
 function runStoryChapter() {
   const ch = STORY[state.chapter];
@@ -2864,7 +2974,7 @@ function buildStoryBattle(foes, boss) {
   const ch = STORY[state.chapter];
   setStage(stageById(ch.stage));
   if (arena) arena.visible = true;
-  if (state.field) state.field.group.visible = false;
+  if (state.field) state.field.setWorldVisible(false);
   document.body.classList.remove('field-mode');
   resetFieldLight();
   const b = makeBattle(null);
@@ -3009,7 +3119,7 @@ function returnToField(sym, won) {
     return;
   }
   if (arena) arena.visible = false;
-  f.group.visible = true;
+  f.setWorldVisible(true);
   f.resume(sym, won);
   scene.fog.near = 45;
   scene.fog.far = 130;
@@ -3868,7 +3978,7 @@ async function startDuel(peer, challenger) {
   const ch = STORY[state.chapter];
   setStage(stageById(ch.stage));
   if (arena) arena.visible = true;
-  state.field.group.visible = false;
+  state.field.setWorldVisible(false);
   state.field.frozen = true;
   document.body.classList.remove('field-mode');
   resetFieldLight();
@@ -4805,11 +4915,13 @@ renderer.setAnimationLoop((time) => {
   }
   const active = !state.paused && Boolean(state.battle || state.field || state.adventureRest);
   const maxFps = rf45UI.fps();
-  if (renderBudget.frame(rawDt, active ? maxFps : Math.min(30, maxFps), !document.hidden, active)) {
+  if ((currentStage || active) && renderBudget.frame(rawDt, active ? maxFps : Math.min(30, maxFps), !document.hidden, active)) {
     const ratio = renderBudget.ratio;
     if (Math.abs(renderer.getPixelRatio() - ratio) > .001) renderer.setPixelRatio(ratio);
-    updateContactShadows(state.battle, arena.visible);
-    renderer.render(scene,camera);
+    const sideView = state.battle?.storyII;
+    if (sideView && state.paused) sideView.updateCamera(dt);
+    updateContactShadows(state.battle, arena.visible || !!sideView);
+    renderer.render(scene, sideView?.camera || camera);
   }
 });
 
@@ -4817,5 +4929,8 @@ renderer.setAnimationLoop((time) => {
 initChiefCharacterEditor({ FIGHTERS, isChief:()=>chiefUnlocked(), roleToken:()=>roleState.tok, inBattle:()=>!!state.battle, getState:()=>state, Fighter:MaouFighter });
 $('#press-start').disabled = false;
 show('scr-press');
+const titleMayAutoplay = navigator.userActivation?.hasBeenActive ||
+  navigator.getAutoplayPolicy?.(audio.tracks.title) === 'allowed';
+if (titleMayAutoplay && !navigator.connection?.saveData) unlockAudio();
 window.__arkeiaBootOk = true;
 window.dispatchEvent(new Event('arkeia-boot-ready'));

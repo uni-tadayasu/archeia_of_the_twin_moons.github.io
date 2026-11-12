@@ -838,6 +838,7 @@ export class Fighter {
   }
 
   update(dt, inp) {
+    const sideView = this.battle.storyII;
     this.motionDt = dt;
     if (this.mixer) {
       if (this.isPlayer || this.remoteAuth) {
@@ -892,6 +893,7 @@ export class Fighter {
       if (this.awakened <= 0) this.endAwaken();
     }
     const st = this.status;
+    if (sideView && !this.action && this.stun <= 0) this.facing = sideView.facing(this);
     this.flux = Math.min(100, this.flux + (st.para ? 0 : this.fluxRate) * dt);
     this.guard = false;
     // Valdarion: 30 seconds of sparkles, 50% damage, no stagger/knockback.
@@ -949,7 +951,7 @@ export class Fighter {
         const sp = this.def.speed * Math.min(1, len) * (st.slow ? 0.55 : st.para ? 0.65 : 1);
         this.vel.x = (inp.mx / len) * sp;
         this.vel.z = (inp.mz / len) * sp;
-        this.facing = Math.atan2(inp.mx, inp.mz);
+        this.facing = sideView ? sideView.facing(this) : Math.atan2(inp.mx, inp.mz);
         moving = true;
       }
       if (inp.jump && this.y <= 0) {
@@ -981,7 +983,9 @@ export class Fighter {
     if (this.y === 0) {
       this.vy = Math.max(0, this.vy);
     }
-    if (this.battle.rf568Maze) {
+    if (sideView) {
+      sideView.resolve(this);
+    } else if (this.battle.rf568Maze) {
       this.battle.rf568Maze.resolve(this.pos, this.radius, rf568Before);
     } else {
       // All non-infinite modes retain their original circular combat bounds.
@@ -1441,6 +1445,7 @@ export class Battle {
   meleeHit(f, range, dmg, stun, kb, hitSet, spec, omni) {
     const fw = f.forward();
     for (const e of this.enemiesOf(f)) {
+      if (this.storyII && Math.abs(e.y - f.y) > .95) continue;
       if (hitSet && hitSet.has(e)) {
         continue;
       }
@@ -2798,6 +2803,7 @@ export class Battle {
   }
 
   update(rawDt, playerInput) {
+    const sideView = this.storyII;
     this.slowmo -= rawDt;
     if (this.intro > 0 && !this.introCountdown) this.intro -= rawDt;
     const dt = rawDt * (this.slowmo > 0 ? 0.4 : 1);
@@ -2823,7 +2829,7 @@ export class Battle {
           }
         }
       }
-      f.update(dt, inp);
+      f.update(dt, sideView ? sideView.input(inp) : inp);
     }
     for (let i = 0; i < this.fighters.length; i++) {
       for (let j = i + 1; j < this.fighters.length; j++) {
@@ -2832,16 +2838,22 @@ export class Battle {
         if (a.dead || b.dead) {
           continue;
         }
+        if (sideView && Math.abs(a.y - b.y) > .9) continue;
         const dx = b.pos.x - a.pos.x;
         const dz = b.pos.z - a.pos.z;
         const d = Math.hypot(dx, dz);
         const min = a.radius + b.radius;
-        if (d < min && d > 1e-4) {
+        if (d < min && (d > 1e-4 || sideView)) {
           const push = (min - d) / 2;
+          const alongX = d > 1e-4 ? dx / d : 1;
+          const alongZ = d > 1e-4 ? dz / d : 0;
           for (const [fighter, direction] of [[a,-1],[b,1]]) {
             if(fighter.remoteAuth)continue;
-            const x=fighter.pos.x+direction*dx/d*push,z=fighter.pos.z+direction*dz/d*push;
-            if(this.rf568Maze){
+            const x=fighter.pos.x+direction*alongX*push,z=fighter.pos.z+direction*alongZ*push;
+            if(sideView){
+              fighter.pos.x=x;
+              sideView.resolve(fighter);
+            }else if(this.rf568Maze){
               if(!this.rf568Maze.collision(x,z,Math.min(1.05,fighter.radius)))fighter.pos.set(x,0,z);
             }else{
               const scale=Math.min(1,ARENA_R/Math.max(.001,Math.hypot(x,z)));
@@ -2879,6 +2891,11 @@ export class Battle {
       }
     }
     this.siege?.update();
+    if (sideView) for (const fighter of this.fighters) {
+      sideView.resolve(fighter);
+      fighter.root.position.x = fighter.pos.x;
+      fighter.root.position.z = 0;
+    }
     this.presentation?.tick(rawDt);
     this.updateCamera(rawDt);
     if (!this.ended) {
@@ -2900,6 +2917,10 @@ export class Battle {
   }
 
   updateCamera(dt) {
+    if (this.storyII) {
+      this.storyII.updateCamera(dt);
+      return;
+    }
     const c = (this._rfCamVector ||= new THREE.Vector3()).set(0, 0, 0);
     let w = 0;
     for (const f of this.fighters) {
