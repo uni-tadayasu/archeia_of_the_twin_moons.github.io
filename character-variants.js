@@ -1,22 +1,25 @@
 // 同じGLBから派生した戦士に、固有の体形と骨に追従する衣装を生成する。
 // 基本モデル・アニメーションは共有し、変更する頂点と材質だけを各役者が所有する。
 import * as THREE from 'three';
+import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
+const RF564_MOBILE = typeof navigator !== 'undefined' && (/Android|iPhone|iPad/i.test(navigator.userAgent) || (navigator.deviceMemory||8)<=4);
+const RF564_RADIAL = RF564_MOBILE ? 16 : 26;
 
 const OWN = new WeakMap();
 const G = {
-  sphere: new THREE.SphereGeometry(1, 14, 10),
-  half: new THREE.SphereGeometry(1, 16, 8, 0, Math.PI * 2, 0, Math.PI / 2),
-  box: new THREE.BoxGeometry(1, 1, 1),
-  cyl: new THREE.CylinderGeometry(1, 1, 1, 12),
-  cone: new THREE.ConeGeometry(1, 1, 12),
-  taper: new THREE.CylinderGeometry(0.74, 1, 1, 14),
-  ring: new THREE.TorusGeometry(1, 0.055, 6, 28),
-  arc: new THREE.TorusGeometry(1, 0.065, 6, 22, Math.PI * 1.45),
+  sphere: new THREE.SphereGeometry(1, RF564_RADIAL, RF564_MOBILE ? 12 : 20),
+  half: new THREE.SphereGeometry(1, RF564_RADIAL, RF564_MOBILE ? 12 : 18, 0, Math.PI * 2, 0, Math.PI / 2),
+  box: new RoundedBoxGeometry(1, 1, 1, RF564_MOBILE ? 2 : 3, 0.095),
+  cyl: new THREE.CylinderGeometry(1, 1, 1, RF564_RADIAL),
+  cone: new THREE.ConeGeometry(1, 1, RF564_RADIAL),
+  taper: new THREE.CylinderGeometry(0.74, 1, 1, RF564_RADIAL),
+  ring: new THREE.TorusGeometry(1, 0.055, 10, RF564_MOBILE ? 32 : 52),
+  arc: new THREE.TorusGeometry(1, 0.065, 10, RF564_MOBILE ? 30 : 50, Math.PI * 1.45),
   oct: new THREE.OctahedronGeometry(1),
-  plate: new THREE.CylinderGeometry(1, 0.86, 1, 20, 1, true),
-  panel: new THREE.CylinderGeometry(0.86, 1.14, 1, 14, 4, true, -0.65, 1.3),
-  cape: new THREE.CylinderGeometry(0.78, 1.26, 1, 18, 4, true, Math.PI - 0.95, 1.9),
-  fan: new THREE.CircleGeometry(1, 14, Math.PI * 0.12, Math.PI * 0.76)
+  plate: new THREE.CylinderGeometry(1, 0.86, 1, RF564_RADIAL, 1, true),
+  panel: new THREE.CylinderGeometry(0.86, 1.14, 1, RF564_RADIAL, 4, true, -0.65, 1.3),
+  cape: new THREE.CylinderGeometry(0.78, 1.26, 1, RF564_RADIAL, 4, true, Math.PI - 0.95, 1.9),
+  fan: new THREE.CircleGeometry(1, RF564_RADIAL, Math.PI * 0.12, Math.PI * 0.76)
 };
 const V = new THREE.Vector3();
 const clamp = (n, a, b) => Math.min(b, Math.max(a, n));
@@ -213,7 +216,7 @@ function reshape(model, profile, bounds, owned) {
       if (!original) return original;
       const material = original.clone();
       // Keep painted faces readable; cloth and armor are separate shaped meshes.
-      material.color?.lerp(new THREE.Color(profile.colors[3]), 0.12);
+      material.color?.lerp(new THREE.Color(profile.colors[3]), material.map ? 0.055 : 0.11);
       material.roughness = Math.max(material.roughness || 0.5, 0.62);
       material.userData.appearanceId = profile.id;
       owned.resources.add(material);

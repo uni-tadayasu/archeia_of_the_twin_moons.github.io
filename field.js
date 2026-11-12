@@ -4,8 +4,8 @@
 // 魔物は姿が見える「シンボルエンカウント」。触れると戦闘、目的地の祭壇で章の決戦。
 import * as THREE from 'three';
 import { attachValgardMotion } from './valgard-motion.js?v=20261108-grand-four-v3';
-import { instantiateModel } from './model-runtime.js?v=rf-mobile-v7-20261109';
-import { FIGHTERS } from './data.js?v=rf-v9-2-20261109';
+import { instantiateModel } from './model-runtime.js?v=rf-minamoto-v48-20261111';
+import { FIGHTERS } from './data.js?v=rf-minamoto-v48-20261111';
 import { makeGear, animGear, removeGear } from './gear.js';
 
 function rng(seed) {

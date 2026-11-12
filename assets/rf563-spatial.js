@@ -146,7 +146,7 @@ if (!window.__rf563Spatial) {
     const markers = [];
     const owned=[];
     const portalMat = new THREE.MeshStandardMaterial({color:0xaedaff,emissive:0x398ad2,emissiveIntensity:1.05,metalness:.5,roughness:.36});owned.push(portalMat);
-    for(const [i,h] of field.houses.slice(0,Math.min(4,field.houses.length)).entries()){
+    for(const [i,h] of field.houses.entries()){
       const dx=-h.x,dz=10-h.z;
       let px=h.x,pz=h.z;
       if(Math.abs(dx)>Math.abs(dz))px+=Math.sign(dx||1)*(h.w/2+2.1);
@@ -155,7 +155,7 @@ if (!window.__rf563Spatial) {
       const frame = new THREE.Mesh(new THREE.TorusGeometry(.77,.095,10,32),portalMat);frame.position.y=1.55;
       const plinth=new THREE.Mesh(new THREE.CylinderGeometry(.95,.95,.10,24),portalMat);plinth.position.y=.07;
       g.add(frame,plinth);field.group.add(g); owned.push(frame.geometry,plinth.geometry);
-      markers.push({x:px,z:pz,index:i,root:g,name:['民家','工房','古書の館','旅籠'][i%4]});
+      markers.push({x:px,z:pz,index:i,root:g,name:['民家','工房','古書の館','旅籠','茶屋','薬屋','鍛冶屋','研究所','集会所','宿屋'][i%10]});
     }
     const center={x:102,z:94};
     const room=new THREE.Group();room.name='RF563_Story_Interior';room.position.set(center.x,0,center.z);room.visible=false;
@@ -185,7 +185,7 @@ if (!window.__rf563Spatial) {
     room.add(new THREE.AmbientLight(0xc9d5ff,.72));
     const lamp=new THREE.PointLight(0xffc67b,low?1.6:2.5,15);lamp.position.set(0,5,-3);room.add(lamp);
     owned.push(...C.own);
-    field.__rf563Story={room,owned,markers,center,lever,gate,chest,mode:null,locked:true,opened:false,delay:0,outside:null,visibility:null};
+    field.__rf563Story={room,owned,markers,center,lever,gate,chest,back,lamp,mode:null,locked:true,opened:false,delay:0,outside:null,visibility:null};
   }
   // Enhance the existing procedural maze with overhead cross-beams and
   // warm/cool wayfinding lights. The maze walls, paths, enemies and collision stay unchanged.
@@ -254,10 +254,12 @@ if (!window.__rf563Spatial) {
     for(const f of field.followers||[])f.pos.copy(p.pos);
     a.room.visible=true;a.gate.visible=true;a.chest.visible=false;a.lever.rotation.z=-.3;
     document.body.classList.add('rf563-story-interior');
+    try{window.RF564Interiors?.onEnter?.(field,marker)}catch(e){console.warn('[RF564 interior enter]',e)}
     updateInteriorUi(`${marker.name}へ入った`, a.opened?'宝箱は回収済み。室内を探索して出口へ戻ろう':'レバーを操作して隠し扉を開こう');
   }
   function leaveRoom(field){
     const a=field.__rf563Story;if(!a?.mode)return;
+    try{window.RF564Interiors?.onLeave?.(field)}catch(e){console.warn('[RF564 interior exit]',e)}
     a.room.visible=false;
     for(const [child,visible] of a.visibility||[])if(child.parent===field.group)child.visible=visible;
     field.player.pos.copy(a.outside);
@@ -310,6 +312,7 @@ if (!window.__rf563Spatial) {
       updateInteriorUi(null);
       this.__rf563Story=null;
     }
+    try{window.RF564Interiors?.onDispose?.(this)}catch(e){console.warn('[RF564 interior cleanup]',e)}
     return oldDisposeField.apply(this,args);
   };
   window.RF563Spatial={active:true,version:'55.13',enterableBuildings:4,stageRadius:MAX_R};

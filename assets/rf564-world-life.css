@@ -1,0 +1,92 @@
+/* Riftfall Arena V55.14: smooth CG battle/world, readable town-life UI,
+   transition overlays and responsive iPhone/Android/PC fixes. */
+:root{--rf564-safe-bottom:env(safe-area-inset-bottom,0px);--rf564-safe-top:env(safe-area-inset-top,0px)}
+html,body{max-width:100%;overflow-x:hidden;overscroll-behavior-x:none}
+html{min-height:100%;min-height:100dvh}
+body{min-height:100%;min-height:100dvh}
+#game-container{isolation:isolate}
+/* CGI painted distant landscape behind alpha-transparent WebGL. Real characters,
+   floors and structures remain interactive 3D on the foreground canvas. */
+body.field-mode #game-container{
+ background-image:linear-gradient(180deg,rgba(12,20,37,.08),rgba(12,20,35,.04) 50%,rgba(10,15,30,.45)),url('./rf555/world-grove.webp')!important;
+ background-position:center center!important;
+ background-size:cover!important;
+ background-repeat:no-repeat!important;
+}
+body.field-mode[data-rf564-biome="雪原"] #game-container,
+body.field-mode[data-rf564-biome="水晶"] #game-container{
+ background-image:linear-gradient(180deg,rgba(18,27,54,.06),rgba(18,27,54,.35)),url('./rf555/world-frost.webp')!important}
+body.field-mode[data-rf564-biome="天空"] #game-container,
+body.field-mode[data-rf564-biome="砂漠"] #game-container,
+body.field-mode[data-rf564-biome="火山"] #game-container{
+ background-image:linear-gradient(180deg,rgba(23,19,34,.05),rgba(12,18,40,.40)),url('./rf555/world-sky.webp')!important}
+body.field-mode[data-rf564-biome="夜光"] #game-container,
+body.field-mode[data-rf564-biome="沼地"] #game-container{
+ background-image:linear-gradient(180deg,rgba(15,20,38,.22),rgba(8,12,22,.62)),url('./rf555/world-grove.webp')!important}
+body.field-mode[data-rf564-period="3"] #game-container{background-blend-mode:multiply,normal}
+body.field-mode[data-rf564-period="3"] #game-container::after{
+ content:"";position:absolute;inset:0;pointer-events:none;z-index:0;
+ background:linear-gradient(180deg,rgba(6,10,31,.22),rgba(6,10,31,.07) 60%,rgba(6,10,31,.23))}
+body.rf564-life-indoor #game-container{background-image:linear-gradient(180deg,#192034,#0b1425)!important}
+#rf564-life-status{
+ position:fixed;z-index:5;top:calc(88px + var(--rf564-safe-top));left:max(8px,env(safe-area-inset-left));
+ max-width:min(310px,60vw);pointer-events:none;
+ font:600 clamp(10px,1.7vw,13px)/1.55 system-ui,"Yu Gothic",sans-serif;
+ color:#eff8ff;letter-spacing:.05em;overflow-wrap:anywhere;
+ padding:5px 10px;border-left:2px solid rgba(183,217,255,.75);
+ background:linear-gradient(100deg,rgba(8,18,35,.77),rgba(8,18,35,.25));
+ border-radius:3px 9px 9px 3px;text-shadow:0 1px 3px #000;
+ backdrop-filter:blur(7px)
+}
+body:not(.field-mode) #rf564-life-status{display:none}
+/* Genuine room-to-room transition rather than a hard instantaneous pop. */
+#rf564-room-transition{
+ position:fixed;inset:0;z-index:150;pointer-events:none;display:flex;align-items:center;justify-content:center;
+ opacity:0;transition:opacity .28s ease;
+ background:radial-gradient(circle at 50% 50%,rgba(17,32,55,.96),rgba(2,5,13,.985) 75%);
+ color:#f4e9d2;text-shadow:0 3px 14px rgba(0,0,0,.8);
+ font:700 clamp(18px,4vw,38px)/1.3 "Shippori Mincho",serif;letter-spacing:.14em;
+}
+#rf564-room-transition b{padding:20px 30px;border-top:1px solid rgba(238,211,151,.5);border-bottom:1px solid rgba(238,211,151,.5);text-align:center;max-width:92vw}
+#rf564-room-transition.rf564-transition-show{opacity:1}
+#rf564-room-transition.rf564-transition-show.rf564-transition-out{opacity:0;transition:opacity .48s ease}
+/* Existing interaction cards should not obscure the battle controls. */
+#rf563-interior-panel{width:min(560px,calc(100vw - 24px));box-sizing:border-box;max-height:30dvh;overflow:hidden;top:calc(104px + var(--rf564-safe-top));padding:9px 14px;z-index:47}
+#rf563-interior-panel span{line-height:1.55;overflow-wrap:anywhere}
+#rf563-space-label{max-width:min(72vw,550px);box-sizing:border-box}
+body.rf564-battle-live #rf563-space-label{border-color:rgba(228,198,128,.6);box-shadow:0 14px 35px rgba(2,7,20,.46)}
+/* Consistent cards, buttons, action/touch bars across small mobile viewports. */
+:where(#scr-title,#scr-options,#scr-select,#scr-castle) .inner{min-width:0;box-sizing:border-box;max-width:100%;overflow-wrap:anywhere}
+:where(#scr-title,#scr-options,#scr-select,#scr-castle) :is(.menu,.fpanel,.topbar,.frow,.cr-row){min-width:0;max-width:100%;box-sizing:border-box}
+#scr-select #select-grid{min-width:0;max-width:100%;box-sizing:border-box}
+#scr-options input,#scr-options select,#scr-castle input,#scr-castle select{font-size:max(16px,1rem)}
+#scr-castle #castle-content{max-width:100%;min-width:0}
+#scr-castle .cr-castle-scene,#scr-castle .rf561-raid-scene{max-width:100%;min-width:0;overflow:hidden}
+#rf561-infinite-theme,#rf562-variant-picker,#rf562-motion-panel{max-width:100%;box-sizing:border-box;min-width:0}
+@media(max-width:600px){
+ #rf564-life-status{top:calc(68px + var(--rf564-safe-top));font-size:10px;max-width:52vw;padding:4px 7px}
+ #rf563-interior-panel{top:calc(108px + var(--rf564-safe-top));padding:6px 9px;max-height:25dvh}
+ #rf563-interior-panel strong{font-size:clamp(12px,3vw,15px)}
+ #rf563-interior-panel span{font-size:clamp(10px,2.5vw,12px)}
+ #rf564-room-transition b{padding:12px 15px}
+ :where(#scr-options,#scr-select,#scr-castle) .inner{padding-inline:clamp(8px,2.5vw,14px)}
+ #touch :is(button,[role="button"]){touch-action:manipulation}
+}
+@media(max-width:390px){
+ #rf564-life-status{max-width:calc(48vw - 4px)}
+ #rf563-space-label{max-width:48vw}
+ #rf562-stage-select{min-width:0;width:100%}
+}
+@media(orientation:landscape) and (max-height:510px){
+ #rf564-life-status{top:calc(37px + var(--rf564-safe-top));font-size:9px;max-width:37vw}
+ #rf563-interior-panel{left:50%;top:calc(39px + var(--rf564-safe-top));max-width:48vw;max-height:24dvh;padding:5px 8px}
+ #rf563-interior-panel strong{font-size:11px}
+ #rf563-interior-panel span{font-size:10px}
+ #rf563-space-label{top:calc(42px + var(--rf564-safe-top));max-width:36vw}
+ #scr-castle .cr-castle-scene{max-height:28dvh}
+ #rf564-room-transition b{font-size:15px}
+}
+@media(prefers-reduced-motion:reduce){
+ #rf564-room-transition{transition-duration:.08s!important}
+ #rf561-scene-backdrop .rf561-bg{animation:none!important}
+}

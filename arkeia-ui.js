@@ -290,7 +290,7 @@
   const VISUAL_VERSION = 'painted-cg-20261107a';
   Promise.all([
     import('three'),
-    import('./game.js?v=rf-v9-2-20261109'),
+    import('./game.js?v=rf553-chief-cpu-20261111'),
     import('./field.js?v=rf-v9-2-20261109')
   ]).then(([THREE, battleModule, worldModule]) => {
     installPaintedEffects(THREE, battleModule.Battle);
@@ -643,8 +643,8 @@
    */
   Promise.all([
     import('three'),
-    import('./game.js?v=rf-v9-2-20261109'),
-    import('./data.js?v=rf-v9-2-20261109')
+    import('./game.js?v=rf553-chief-cpu-20261111'),
+    import('./data.js?v=rf-minamoto-v48-20261111')
   ]).then(([THREE,combat,data]) => {
     installAstralJudgment(THREE,combat.Battle,data.FIGHTERS);
   }).catch(error=>console.warn('[Arkeia] Original celestial judgment unavailable.',error));
@@ -1995,8 +1995,8 @@
    * It never changes the game's existing save format or battle network packets.
    */
   Promise.all([
-    import('./game.js?v=rf-v9-2-20261109'),
-    import('./data.js?v=rf-v9-2-20261109')
+    import('./game.js?v=rf553-chief-cpu-20261111'),
+    import('./data.js?v=rf-minamoto-v48-20261111')
   ]).then(([combat, data]) => {
     installCharacterProgression(combat.Battle, data.FIGHTERS);
   }).catch((error) => {
@@ -2327,7 +2327,7 @@
    * Echo is still an independent proxy, NEVER an extra core Fighter.
    * Ice seal / frozen enemies / 30s duration are unchanged.
    */
-  import('./game.js?v=rf-v9-2-20261109').then(combat => {
+  import('./game.js?v=rf553-chief-cpu-20261111').then(combat => {
     installValgardIceEcho(combat.Battle, combat.Fighter);
   }).catch(error => console.warn('[Arkeia] Valgard ice echo unavailable:', error));
 

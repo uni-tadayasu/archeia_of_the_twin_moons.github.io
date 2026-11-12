@@ -1,0 +1,29 @@
+{
+  "version": "V55.14",
+  "created": "2026-11-12",
+  "canonical_domain": "https://www.kasai-solutions-inc.com/",
+  "feature_summary": [
+    "smartphone audio lifecycle stop on background",
+    "custom menu music aishiteirukara.mp3",
+    "original Sengoku-inspired 3D battle scenery",
+    "enterable town interiors and life actions",
+    "character smoothing",
+    "responsive UI",
+    "unified game module imports",
+    "custom domain CORS for Worker"
+  ],
+  "checks": {
+    "javascript_syntax": "passed via node --check for all modified JS",
+    "audio_lifecycle_chromium": "passed (play while visible; pause+suspend hidden; deny hidden play; wake; pause on pagehide)",
+    "menu_bgm_constructor": "passed (title-theme maps to aishiteirukara.mp3; battle-theme untouched)",
+    "world_runtime_stub": "passed (9 houses, entry/exit, 3 interactions, combat decorations, cleanup)",
+    "layout_css_fixture": "passed on 320x568,360x640,375x812,390x844,430x932,480x320,844x390,1024x768,768x1024,1440x900",
+    "zip_integrity": "to be verified after creation"
+  },
+  "caveats": [
+    "real device playback and entire live gameplay not tested",
+    "menu theme also used by story introduction because current main.js aliases title/story audio",
+    "does not remove all polygons; refines perceived appearance",
+    "no GitHub commit, Worker deployment or live production smoke test performed"
+  ]
+}

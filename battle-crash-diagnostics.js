@@ -103,10 +103,10 @@
     try {
       const gameResource = performance.getEntriesByType('resource')
         .find(entry => /(?:^|\/)game\.js(?:\?|$)/i.test(new URL(entry.name).pathname + new URL(entry.name).search))?.name;
-      const gamePath = new URL('./game.js?v=rf-responsive-v45-20261110', document.baseURI).href;
+      const gamePath = new URL('./game.js?v=rf553-chief-cpu-20261111', document.baseURI).href;
       const dataResource = performance.getEntriesByType('resource')
         .find(entry => /(?:^|\/)data\.js(?:\?|$)/i.test(new URL(entry.name).pathname + new URL(entry.name).search))?.name;
-      const dataPath = dataResource || new URL('./data.js?v=rf-v9-2-20261109', document.baseURI).href;
+      const dataPath = dataResource || new URL('./data.js?v=rf-minamoto-v48-20261111', document.baseURI).href;
       const [game, THREE, data] = await Promise.all([import(gamePath), import('three'), import(dataPath)]);
       // Set the visible character definition as well as the transport redirect.
       // The transport file also covers model URL lists computed during boot.
