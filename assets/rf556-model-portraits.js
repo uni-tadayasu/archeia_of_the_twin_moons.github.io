@@ -176,7 +176,17 @@ if(!window.__rf556Portraits){
    renderer?.dispose();renderer?.forceContextLoss?.();renderer=null;
   });
   examine();
-  window.RF556Portraits={get:acquire,refresh:examine};
+  function retryFailed(){
+   const grid=document.getElementById('select-grid');if(!grid)return;
+   for(const card of grid.querySelectorAll('button.card')){
+    if(card.dataset.rf556Portrait==='fallback'){
+     delete card.dataset.rf556Portrait;
+     const key=keyOf(card);if(key){completed.delete(key);busyKeys.delete(key)}
+    }
+   }
+   lastFailure='';examine();drain();
+  }
+  window.RF556Portraits={get:acquire,refresh:examine,retryFailed};
  }
  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init,{once:true});else init();
 }

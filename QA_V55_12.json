@@ -1,0 +1,46 @@
+{
+  "version": "V55.12",
+  "base": "V55.11 visual/UI + V55.8 game",
+  "stages": {
+    "japanese": [
+      "城内広間",
+      "月光の大奥",
+      "奥御殿の廊下"
+    ],
+    "western": [
+      "騎士の大広間",
+      "月光の聖堂",
+      "王座の間"
+    ],
+    "cave": [
+      "結晶洞窟",
+      "氷晶洞",
+      "深炎洞"
+    ],
+    "ruins": [
+      "遺跡の回廊",
+      "光降る神殿",
+      "月影の祭壇"
+    ]
+  },
+  "note": "Some third variants are color-grade/reflection variants of earlier stage artwork, not wholly new 3D locations.",
+  "checks": {
+    "rf561-stage.js.syntax": "pass",
+    "rf561-appearance.js.syntax": "pass",
+    "rf556-model-portraits.js.syntax": "pass",
+    "rf562-stage-variations.js.syntax": "pass",
+    "rf562-model-audit.js.syntax": "pass",
+    "rf561-stage.css.parse": "pass",
+    "rf562-stage-variations.css.parse": "pass",
+    "webp.assets": "pass (12 stage backgrounds; 8 additions + 4 retained)",
+    "html.references": "pass (7 style/script references)",
+    "viewport.mode/raid.smoke": "PASS - Chromium inline fixture at 320x568, 390x844, 768x1024, 1280x800, 1920x1080",
+    "raid.recovery.note": "Server-side raid.style is not added by this patch; prior target preview is used; recovery edge case not fully solved"
+  },
+  "not_tested": [
+    "full production WebGL and GLB motion rendering",
+    "live game/online multiplayer and server write",
+    "real iPhone/Android",
+    "100 distinct full 3D GLB files"
+  ]
+}

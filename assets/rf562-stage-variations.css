@@ -1,0 +1,39 @@
+/* Riftfall Arena V55.12 — richer CG environment variants, non-interactive paint only */
+:root{--rf562-blend:.92;--rf562-float:10px}
+#rf561-scene-backdrop .rf561-bg{background-size:cover;background-position:50% 50%;will-change:auto}
+/* Variant 1 is the original V55.11 illustration. Variant 2 and 3 use different authored scenes. */
+body.rf562-japanese-2 #rf561-scene-backdrop .rf561-bg.japanese{background-image:url('./rf562/japanese-palace.webp')}
+body.rf562-japanese-3 #rf561-scene-backdrop .rf561-bg.japanese{background-image:url('./rf562/japanese-corridor.webp')}
+body.rf562-western-2 #rf561-scene-backdrop .rf561-bg.western{background-image:url('./rf562/western-cathedral.webp')}
+body.rf562-western-3 #rf561-scene-backdrop .rf561-bg.western{background-image:url('./rf562/western-throne.webp')}
+body.rf562-cave-2 #rf561-scene-backdrop .rf561-bg.cave{background-image:url('./rf562/cave-crystals.webp')}
+body.rf562-cave-3 #rf561-scene-backdrop .rf561-bg.cave{background-image:url('./rf562/cave-embers.webp')}
+body.rf562-ruins-2 #rf561-scene-backdrop .rf561-bg.ruins{background-image:url('./rf562/ruins-sunlight.webp')}
+body.rf562-ruins-3 #rf561-scene-backdrop .rf561-bg.ruins{background-image:url('./rf562/ruins-moonlit.webp')}
+#castle-content .rf561-raid-scene{margin:0;box-sizing:border-box;max-width:100%;}
+/* Castle raids are turn-based; every floor stays in the defender's Japanese or Western architecture. */
+#castle-content .rf561-raid-scene.wa[data-rf562-variant="2"]{background-image:url('./rf562/japanese-palace.webp')}
+#castle-content .rf561-raid-scene.wa[data-rf562-variant="3"]{background-image:url('./rf562/japanese-corridor.webp')}
+#castle-content .rf561-raid-scene.west[data-rf562-variant="2"]{background-image:url('./rf562/western-cathedral.webp')}
+#castle-content .rf561-raid-scene.west[data-rf562-variant="3"]{background-image:url('./rf562/western-throne.webp')}
+#rf561-infinite-theme{box-sizing:border-box;max-width:calc(100vw - 24px);min-width:0}
+#rf562-variant-picker{min-width:0;max-width:100%;box-sizing:border-box}
+#rf562-variant-picker{display:flex;flex-wrap:wrap;gap:9px;align-items:center;justify-content:flex-end;border-top:1px solid #bdd9ef25;padding-top:9px;margin-top:6px}
+#rf562-variant-picker label{color:#dce9f6;font:600 12px/1.4 system-ui,sans-serif}
+#rf562-stage-select,#rf562-motion-select{font:500 13px/1.4 system-ui,sans-serif;color:#ecf5ff;background:#18283d;border:1px solid #8fbdc65c;border-radius:9px;padding:9px 12px;min-width:160px;max-width:100%;min-height:40px}
+#rf562-variant-picker small{width:100%;flex:0 0 100%;text-align:right;color:#aebfcf}
+#rf562-stage-name{font-size:12px;letter-spacing:.04em;color:#b6d6f7;min-width:0}
+#rf562-motion-panel{display:flex;flex-wrap:wrap;gap:10px;align-items:center;padding:13px 15px;margin-top:14px;border-radius:13px;background:linear-gradient(130deg,#152a3ae5,#0d1729e5);border:1px solid #9abbe852;color:#eef6ff}
+#rf562-motion-panel strong{font-size:14px}
+#rf562-motion-panel small{flex-basis:100%;color:#b7cde3;font-size:11px}
+body.rf562-motion-on.rf561-scene-on #rf561-scene-backdrop .rf561-bg{animation:rf562-breath 15s ease-in-out infinite alternate}
+@keyframes rf562-breath{from{transform:translate3d(-.2%,0,0) scale(1.01)}to{transform:translate3d(.2%,-.35%,0) scale(1.035)}}
+body.rf562-motion-off #rf561-scene-backdrop .rf561-bg,body.rf562-motion-off #rf561-scene-backdrop::after{animation:none!important;transition:opacity .15s linear!important;filter:saturate(1.02) contrast(1.03)}
+html[data-rf556-ui-quality="low"] #rf561-scene-backdrop::after{display:none!important}
+html[data-rf556-ui-quality="low"] #rf561-scene-backdrop .rf561-bg{filter:saturate(1.02)!important;transition:none!important}
+/* Improved readability over bright illustration areas, including phone landscape. */
+#castle-content .rf561-raid-scene figcaption{padding:6px 9px;border-radius:9px;background:linear-gradient(90deg,#071329c4,#07132949);backdrop-filter:blur(6px)}
+#rf561-infinite-theme{position:relative;isolation:isolate}
+body.rf561-scene-on #rf552-endless-hud{color:#f2f9ff;text-shadow:0 1px 3px #06101c,0 1px 14px #06101c}
+@media(max-width:640px){#rf562-variant-picker{justify-content:flex-start}#rf562-stage-select{width:100%}#rf562-variant-picker small{text-align:left}#rf562-stage-name{display:block;width:100%}}
+@media(prefers-reduced-motion:reduce){#rf561-scene-backdrop .rf561-bg,#rf561-scene-backdrop::after{animation:none!important;transition:none!important}}
