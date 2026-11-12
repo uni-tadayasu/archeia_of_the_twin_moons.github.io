@@ -45,7 +45,7 @@
       // Redirect that one title file to the user-supplied menu theme without
       // replacing the main.js module or affecting battle/field/boss tracks.
       if(typeof args[0]==='string' && /(?:^|\/)title-theme\.mp3(?:[?#]|$)/i.test(args[0])){
-        args[0]='assets/audio/aishiteirukara.mp3?v=20261112-v564-menu';
+        args[0]='assets/audio/aishiteirukara.mp3?v=20261112-v564b-menu-20261112';
       }
       const el=new NativeAudio(...args);
       media.add(el);
