@@ -149,7 +149,7 @@ html body.rf-remake.classic-polish [hidden]{display:none!important}
   html body.rf-remake.classic-polish #ui #scr-title .portal-topnav{gap:14px;justify-content:space-between;flex-wrap:wrap;width:100%;order:3}
   html body.rf-remake.classic-polish #ui #scr-title .portal-topnav :is(button,a){font-size:10px;padding:9px 0;min-height:38px;white-space:normal}
   html body.rf-remake.classic-polish #ui #scr-title .portal-hero{min-height:385px!important;padding:48px 25px 56px!important}
-  html body.rf-remake.classic-polish #ui #scr-title .hero-center h2{font-size:38px;line-height:1.65}
+  html body.rf-remake.classic-polish #ui #scr-title .hero-center h2{font-size:clamp(25px,8.2vw,38px);line-height:1.55;letter-spacing:.06em;text-wrap:balance}
   html body.rf-remake.classic-polish #ui #scr-title .hero-center>p:not(.remake-eyebrow){font-size:12px;line-height:1.9}
   html body.rf-remake.classic-polish #ui #scr-title .remake-hero-actions{gap:16px;margin-top:24px}
   html body.rf-remake.classic-polish #ui #scr-title .classic-quick-access{padding:18px 0 21px;margin-bottom:18px}
