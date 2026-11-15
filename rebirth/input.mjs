@@ -3,6 +3,14 @@ export class InputController {
   constructor(canvas, {onPause=()=>{}}={}) {
     this.canvas=canvas; this.active=false; this.keys=new Set(); this.held=new Set(); this.pulses=new Set(); this.stick={x:0,z:0}; this.abort=new AbortController();
     const opts={signal:this.abort.signal};
+    // A connected mouse may make the primary pointer "fine" on a touch device.
+    // Keep touch controls available for any touchscreen, including hybrid laptops.
+    this.touchObserved=false;
+    this.touchQuery=window.matchMedia('(any-pointer: coarse)');
+    const updateTouch=()=>document.documentElement.classList.toggle('touch-input',this.touchObserved||navigator.maxTouchPoints>0||this.touchQuery.matches);
+    this.touchQuery.addEventListener('change',updateTouch,opts);
+    document.addEventListener('pointerdown',event=>{if(event.pointerType==='touch'){this.touchObserved=true;updateTouch();}},opts);
+    updateTouch();
     const keys={KeyJ:'attack',KeyK:'skill',KeyI:'skill2',KeyU:'skill2',KeyL:'over',KeyH:'heal',ShiftLeft:'guard',ShiftRight:'guard',Space:'dash'};
     window.addEventListener('keydown',e=>{
       if(!this.active || /^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName))return;

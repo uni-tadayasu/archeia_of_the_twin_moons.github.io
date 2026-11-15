@@ -27,4 +27,31 @@
 #stage-note{max-width:290px;line-height:1.6;text-align:right;font-size:9px}.world-caption #home-progress{font-family:var(--sans);font-size:8px;letter-spacing:.03em;margin-top:9px;color:#bbbbae}
 @media(max-width:680px){#stage-note{max-width:180px;font-size:8px}}
 
+/* Touch capability also covers devices whose primary pointer is a mouse. */
+.touch-input .touch-controls{display:block}
+.touch-input .play-view .skill-bar,.touch-input .keyboard-hint{display:none}
+.touch-input .battle-message{top:32%}
+.touch-input .joystick{bottom:max(38px,env(safe-area-inset-bottom));left:max(25px,env(safe-area-inset-left))}
+.touch-input .touch-buttons{bottom:max(24px,env(safe-area-inset-bottom));right:max(22px,env(safe-area-inset-right))}
+@media(max-width:480px){
+  .touch-input .joystick{width:111px;height:111px;bottom:54px;left:20px}
+  .touch-input .joystick-knob{width:44px;height:44px}
+  .touch-input .touch-buttons{right:18px;bottom:25px;grid-template-columns:repeat(3,48px);gap:6px}
+  .touch-input .touch-buttons button{width:48px;height:48px;font-size:14px}
+  .touch-input .touch-buttons .touch-small{width:37px;height:37px;font-size:12px}
+  .touch-input .touch-buttons .touch-attack{width:57px;height:57px;font-size:21px}
+  .touch-input .touch-buttons .touch-dash{grid-column:2}
+}
+
 .stage-card>span{display:flex;flex-direction:column;gap:4px;position:relative;z-index:2}.stage-card>span>b{display:block;font-family:var(--serif);font-size:15px;line-height:1.5}.stage-card>span>small{display:block;font-size:7px;letter-spacing:.05em;line-height:1.4}.stage-card:disabled{cursor:default;opacity:.62}.stage-card.selected:disabled{opacity:1}.stage-card>span>b{overflow-wrap:anywhere}
+
+/* Mobile mode descriptions remain fully visible at 320px and with long titles. */
+@media(max-width:680px){
+  .mode-grid{align-items:stretch}
+  .mode-card{height:auto;min-height:166px;padding:16px 12px 25px;display:flex;flex-direction:column;justify-content:flex-start}
+  .mode-card-copy{display:block;width:100%;min-width:0}
+  .mode-card h3,.mode-card strong{font-size:clamp(15px,4.6vw,19px);letter-spacing:.025em;line-height:1.5;margin:4px 0 7px;overflow-wrap:anywhere}
+  .mode-card p{font-size:9px;line-height:1.8;max-width:100%;overflow:visible}
+  .mode-card small,.mode-card .mode-kicker{font-size:7px;line-height:1.7;margin-bottom:7px}
+  .mode-card .mode-number{bottom:7px;line-height:1.4}
+}

@@ -192,17 +192,26 @@ try {
   await home(page);
   await expect(page.locator('#profile-name')).toHaveText('検証の旅人');
   assert.ok(await page.evaluate(() => JSON.parse(localStorage.getItem('arkeia.rebirth.v1')).favorites.includes('minase')));
-  for (const [stage, fighter, number] of [['river', 'minase', '04'], ['frost', 'garou', '05']]) {
+  for (const [stage, fighter, number] of [['river', 'minase', '04'], ['frost', 'garou', '05'], ['moon', 'harlan', '05b']]) {
     await chooseMode(page, 'duel');
     await page.locator(`[data-fighter="${fighter}"]`).click();
     await page.locator(`[data-stage="${stage}"]`).click();
     await expect(page.locator(`[data-stage="${stage}"]`)).toHaveAttribute('aria-pressed', 'true');
     await page.locator('#launch-button').click();
     await battleReady(page, `${stage} duel`);
-    await screenshot(page, `${number}-desktop-${stage}-battle`, false);
+    if (fighter === 'harlan') {
+      await page.locator('#world-canvas').focus();
+      await page.keyboard.down('KeyW');
+      await page.waitForTimeout(500);
+      await page.keyboard.up('KeyW');
+      await page.keyboard.down('KeyJ');
+      await page.waitForTimeout(400);
+      await screenshot(page, `${number}-desktop-${stage}-${fighter}-battle`, false);
+      await page.keyboard.up('KeyJ');
+    } else await screenshot(page, `${number}-desktop-${stage}-battle`, false);
     await quitBattle(page);
   }
-  note('Save reload succeeds; river and frost load different models and stages');
+  note('Save reload succeeds; river/frost stages and the Harlan runtime rig render in combat');
 
   await chooseMode(page, 'story');
   await page.locator('[data-fighter="rowen"]').click();
@@ -235,6 +244,13 @@ try {
   phone.setDefaultTimeout(15000);
   observe(phone, 'mobile');
   await phone.goto(origin, { waitUntil: 'networkidle', timeout: 45000 });
+  logs.mobileCapabilities = await phone.evaluate(() => ({
+    maxTouchPoints: navigator.maxTouchPoints,
+    coarse: matchMedia('(pointer: coarse)').matches,
+    anyCoarse: matchMedia('(any-pointer: coarse)').matches,
+    touchClass: document.documentElement.classList.contains('touch-input'),
+    viewport: { width: innerWidth, height: innerHeight },
+  }));
   await home(phone);
   await noOverflow(phone, 'mobile home');
   await screenshot(phone, '09-mobile-home');
@@ -248,6 +264,12 @@ try {
   await phone.locator('[data-stage="moon"]').tap();
   await phone.locator('#launch-button').tap();
   await battleReady(phone, 'Mobile battle');
+  logs.mobileControls = await phone.evaluate(() => ({
+    view: document.body.dataset.view,
+    touchClass: document.documentElement.classList.contains('touch-input'),
+    display: getComputedStyle(document.getElementById('touch-controls')).display,
+    bounds: document.getElementById('touch-controls').getBoundingClientRect().toJSON(),
+  }));
   await expect(phone.locator('#touch-controls')).toBeVisible();
   await expect(phone.locator('#joystick')).toBeVisible();
   const beforeEnergy = await phone.locator('#energy-fill').evaluate(node => parseFloat(node.style.width));

@@ -68,7 +68,7 @@ async function begin(index=0,carry=null){
   $('objective').textContent=encounter.title;$('player-name').textContent=chosen.name;$('pause-button').disabled=false;
   $('battle-message').innerHTML=`<span>${escape(encounter.title)}</span><small>${mode==='duel'?'相手の攻撃予告を見極めよう':'灯を繋ぎ、この道を切り拓け'}</small>`;
   setTimeout(()=>{if(view==='play'&&!loading)$('battle-message').classList.remove('visible');},2200);
-  loading=false;input.setActive(true);last=performance.now();hudTime=0;cancelAnimationFrame(raf);frame(last);
+  loading=false;input.setActive(true);if(document.hidden)pause();last=performance.now();hudTime=0;cancelAnimationFrame(raf);frame(last);
  }catch(error){
   console.error('Rebirth launch failed',error);loading=false;sim=null;renderer?.dispose();renderer=null;show('select');toast(/WebGL/i.test(error.message)?'3D描画を利用できません。ブラウザのハードウェアアクセラレーションを確認してください。':'読み込みに失敗しました。通信を確認して、もう一度出撃してください。');
   const n=$('stage-note');if(n)n.textContent=/WebGL/i.test(error.message)?'このブラウザではWebGL 2が無効です。ハードウェアアクセラレーションを有効にして再起動するか、別の対応ブラウザでお試しください。':`読み込みエラー: ${String(error.message||error).slice(0,180)}`;

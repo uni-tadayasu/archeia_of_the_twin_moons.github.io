@@ -3,6 +3,7 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js';
 import { clone as cloneSkeleton } from 'three/addons/utils/SkeletonUtils.js';
 import { MeshoptDecoder } from '../assets/vendor/meshopt_decoder.module.js';
+import { createProceduralRig, captureProceduralRig, animateProceduralRig } from './rig.mjs';
 
 const ROOT = new URL('../', import.meta.url);
 const asset = path => new URL(String(path).replace(/^\.\//, ''), ROOT).href;
@@ -109,6 +110,16 @@ function lanternTexture() {
     ctx.fillRect(99,110,57,3);
   });
 }
+function earthTexture(stage) {
+  return paintedTexture(512,(ctx,n)=>{
+    const rnd=randomFrom(9941);ctx.fillStyle=stage==='frost'?'#8daab5':stage==='river'?'#263b37':'#26302d';ctx.fillRect(0,0,n,n);
+    for(let i=0;i<11000;i++){
+      ctx.globalAlpha=.06+rnd()*.14;ctx.fillStyle=stage==='frost'?(i%2?'#e9fbff':'#405766'):(i%3?'#728269':'#231f1e');
+      const x=rnd()*n,y=rnd()*n,r=1+rnd()*4;ctx.beginPath();ctx.ellipse(x,y,r,r*.4,rnd()*3,0,TAU);ctx.fill();
+    }
+    ctx.globalAlpha=1;
+  });
+}
 function woodTexture() {
   return paintedTexture(512, (ctx, n) => {
     const rnd = randomFrom(855);ctx.fillStyle='#6d493d';ctx.fillRect(0,0,n,n);
@@ -129,10 +140,10 @@ export class WorldRenderer {
     this.canvas = canvas; this.reducedMotion = reducedMotion;this.quality = QUALITY[quality] ? quality : 'balanced';
     this.renderer = new THREE.WebGLRenderer({canvas, antialias:quality !== 'low', alpha:false, powerPreference:'high-performance'});
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
-    this.renderer.toneMapping = THREE.ACESFilmicToneMapping;this.renderer.toneMappingExposure=1.28;
+    this.renderer.toneMapping = THREE.ACESFilmicToneMapping;this.renderer.toneMappingExposure=1.16;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     this.scene = new THREE.Scene();
-    this.camera = new THREE.PerspectiveCamera(43,1,.1,180);
+    this.camera = new THREE.PerspectiveCamera(48,1,.1,180);
     this.camera.position.set(0,20,19);this.camera.lookAt(0,0,0);
     this.environment = new THREE.Group();this.characters = new THREE.Group();this.effects = new THREE.Group();
     this.scene.add(this.environment,this.characters,this.effects);
@@ -142,8 +153,8 @@ export class WorldRenderer {
     this.glow = this.own(glowTexture());this.ring = this.own(ringTexture());this.slash = this.own(slashTexture());this.environmentOwned=new Set();
     this.draco = new DRACOLoader().setDecoderPath(asset('assets/vendor/draco/')).setWorkerLimit(2);
     this.loader = new GLTFLoader().setDRACOLoader(this.draco).setMeshoptDecoder(MeshoptDecoder);
-    this.hemi = new THREE.HemisphereLight(0xc3d6ff,0x665143,2.1);this.scene.add(this.hemi);
-    this.sun = new THREE.DirectionalLight(0xffe2c6,3.25);this.sun.position.set(-12,24,12);this.sun.castShadow=true;
+    this.hemi = new THREE.HemisphereLight(0xc3d6ff,0x665143,1.55);this.scene.add(this.hemi);
+    this.sun = new THREE.DirectionalLight(0xffe2c6,2.65);this.sun.position.set(-12,24,12);this.sun.castShadow=true;
     this.sun.shadow.mapSize.set(1024,1024);this.sun.shadow.camera.left=-24;this.sun.shadow.camera.right=24;
     this.sun.shadow.camera.top=24;this.sun.shadow.camera.bottom=-24;this.sun.shadow.camera.near=1;this.sun.shadow.camera.far=75;
     this.sun.shadow.bias=-.0006;this.sun.shadow.normalBias=.025;this.scene.add(this.sun,this.sun.target);
@@ -180,6 +191,7 @@ export class WorldRenderer {
           const gltf=await this.loader.loadAsync(asset(path));
           if(this.disposed||generation!==this.preparation){this.disposeTemplate(gltf);return;}
           if(!gltf.scene)throw new Error('モデルのシーンが空です');
+          const autoRig=!(gltf.animations?.length)&&!!createProceduralRig(gltf.scene);
           gltf.scene.updateMatrixWorld(true);
           const box=new THREE.Box3().setFromObject(gltf.scene,true);
           if(!Number.isFinite(box.max.y)||box.max.y-box.min.y<.001)throw new Error('モデルの形状を確認できません');
@@ -191,7 +203,7 @@ export class WorldRenderer {
             }
             return copy;
           });
-          this.models.set(path,{scene:gltf.scene,box,clips});
+          this.models.set(path,{scene:gltf.scene,box,clips,autoRig});
         } catch(error) {throw new Error(`戦士の読込に失敗しました（${String(path).split('/').pop()}）。通信を確認して再試行してください。`,{cause:error});}
       }
       onProgress(.15 + (++complete/paths.length)*.85,`戦士を準備しています ${complete} / ${paths.length}`);
@@ -208,15 +220,23 @@ export class WorldRenderer {
     this.stage=stage;this.stagePalette=STAGES[stage];const palette=this.stagePalette;
     for(const object of [...this.environment.children])this.environment.remove(object);
     this.clearEffects();
-    this.scene.background=new THREE.Color(palette.fog);this.scene.fog=new THREE.FogExp2(palette.fog,.017);
+    this.scene.background=new THREE.Color(palette.fog);this.scene.fog=new THREE.FogExp2(palette.fog,.012);
     this.sun.color.setHex(palette.light);
     const [floorMap,skyMap]=await Promise.all([this.texture('assets/arena-floor.webp'),this.texture(palette.sky)]);
     if(this.disposed)return;
     const floorTexture=stage==='keep'?this.own(woodTexture()):floorMap.clone();
     if(stage!=='keep')this.own(floorTexture);
-    floorTexture.wrapS=floorTexture.wrapT=THREE.RepeatWrapping;floorTexture.repeat.set(stage==='keep'?8:12,stage==='keep'?15:20);floorTexture.needsUpdate=true;
+    floorTexture.wrapS=floorTexture.wrapT=THREE.RepeatWrapping;floorTexture.repeat.set(stage==='keep'?8:4,stage==='keep'?15:18);floorTexture.needsUpdate=true;
     const ground=this.own(new THREE.MeshStandardMaterial({map:floorTexture,color:palette.ground,roughness:.91,metalness:.03}));
-    const floor=new THREE.Mesh(this.own(new THREE.PlaneGeometry(68,94)),ground);floor.rotation.x=-Math.PI/2;floor.position.y=-.025;floor.receiveShadow=true;this.environment.add(floor);
+    const earth=this.own(earthTexture(stage));earth.wrapS=earth.wrapT=THREE.RepeatWrapping;earth.repeat.set(7,10);
+    const earthMaterial=this.own(new THREE.MeshStandardMaterial({map:earth,roughness:1,color:0xc2cbd2}));
+    const groundPlane=new THREE.Mesh(this.own(new THREE.PlaneGeometry(90,110)),earthMaterial);groundPlane.rotation.x=-Math.PI/2;groundPlane.position.y=-.05;groundPlane.receiveShadow=true;this.environment.add(groundPlane);
+    const floor=new THREE.Mesh(this.own(new THREE.PlaneGeometry(stage==='keep'?48:18,86)),ground);floor.rotation.x=-Math.PI/2;floor.position.y=-.025;floor.receiveShadow=true;this.environment.add(floor);
+    this.stoneMap=floorMap;
+    if(stage!=='keep'){
+      const trim=this.own(new THREE.MeshStandardMaterial({map:floorMap,color:0x656c71,roughness:.94}));
+      for(const x of [-9.3,9.3]){const border=new THREE.Mesh(this.own(new THREE.BoxGeometry(.5,.13,86)),trim);border.position.set(x,.015,0);border.receiveShadow=true;this.environment.add(border);}
+    }
     // An authored CG panorama is framed behind a freely traversable 3D foreground.
     const backdrop=new THREE.Mesh(this.own(new THREE.PlaneGeometry(142,68)),this.own(new THREE.MeshBasicMaterial({map:skyMap,color:0xb2b7bf,fog:false})));
     backdrop.position.set(0,23,-63);this.environment.add(backdrop);
@@ -259,24 +279,61 @@ export class WorldRenderer {
   }
   updateObstacles(obstacles=[]) {
     const signature=JSON.stringify(obstacles);
-    if(signature===this.obstacleSignature)return;this.obstacleSignature=signature;this.obstacleGroup.clear();
-    const material=this.own(new THREE.MeshStandardMaterial({color:this.stage==='keep'?0x765341:0x637078,roughness:.9}));
+    if(signature===this.obstacleSignature)return;this.obstacleSignature=signature;
+    const oldResources=new Set();this.obstacleGroup.traverse(node=>{if(node.geometry)oldResources.add(node.geometry);if(node.material)oldResources.add(node.material);});
+    for(const resource of oldResources){resource.dispose();this.resources.delete(resource);this.environmentOwned.delete(resource);}
+    this.obstacleGroup.clear();if(!obstacles.length)return;
+    const own=value=>{this.own(value);this.environmentOwned.add(value);return value;};
+    const stone=own(new THREE.MeshStandardMaterial({map:this.stoneMap,color:this.stage==='frost'?0xabc1ce:0x747d77,roughness:.94}));
+    const timber=own(new THREE.MeshStandardMaterial({color:0x592e29,roughness:.79}));
+    const brass=own(new THREE.MeshStandardMaterial({color:0xb18b51,metalness:.42,roughness:.53}));
+    const lamp=own(new THREE.MeshBasicMaterial({color:0xffd792}));
+    const box=(group,w,h,d,x,y,z,material)=>{const mesh=new THREE.Mesh(own(new THREE.BoxGeometry(w,h,d)),material);mesh.position.set(x,y,z);mesh.castShadow=true;mesh.receiveShadow=true;group.add(mesh);return mesh;};
+    const rnd=randomFrom(5831);
     for(const obstacle of obstacles) {
       const x=obstacle.x??((obstacle.minX??0)+(obstacle.maxX??0))/2;
       const z=obstacle.z??((obstacle.minZ??0)+(obstacle.maxZ??0))/2;
-      const radius=obstacle.radius??obstacle.r;
-      const w=obstacle.width??obstacle.w??((obstacle.maxX??x+1)-(obstacle.minX??x-1));
-      const d=obstacle.depth??obstacle.h??((obstacle.maxZ??z+1)-(obstacle.minZ??z-1));
-      const geometry=radius?new THREE.IcosahedronGeometry(radius,2):new THREE.BoxGeometry(Math.max(.2,w),1.1,Math.max(.2,d));
-      const mesh=new THREE.Mesh(this.own(geometry),material);mesh.position.set(x,radius?radius*.45:.55,z);if(radius)mesh.scale.y=.75;mesh.castShadow=true;mesh.receiveShadow=true;this.obstacleGroup.add(mesh);
+      const radius=obstacle.radius??obstacle.r??1.1;
+      const group=new THREE.Group();group.position.set(x,0,z);this.obstacleGroup.add(group);
+      if(this.stage==='river') {
+        const geometry=own(new THREE.IcosahedronGeometry(radius,3));const position=geometry.getAttribute('position');
+        // A rugged, textured bank rock follows the same circular collider.
+        for(let i=0;i<position.count;i++){
+          const px=position.getX(i),py=position.getY(i),pz=position.getZ(i);
+          const variation=.83+.13*Math.sin(px*13+pz*9)*Math.cos(py*11);
+          position.setXYZ(i,px*variation,py*.66*variation,pz*variation);
+        }
+        geometry.computeVertexNormals();const rock=new THREE.Mesh(geometry,stone);rock.position.y=radius*.46;rock.rotation.y=rnd()*TAU;rock.castShadow=true;rock.receiveShadow=true;group.add(rock);
+        const small=new THREE.Mesh(own(new THREE.IcosahedronGeometry(radius*.4,2)),stone);small.scale.set(1,.45,.75);small.position.set(radius*.5,.15,radius*.2);group.add(small);
+      } else if(this.stage==='keep') {
+        const width=obstacle.width??2.2,depth=obstacle.depth??2.2;
+        box(group,width,.35,depth,0,.175,0,stone);
+        box(group,width*.64,7.7,depth*.64,0,4.15,0,timber);
+        for(const y of [.75,6.9])box(group,width*.69,.2,depth*.69,0,y,0,brass);
+        box(group,width*1.1,.45,depth*1.1,0,7.9,0,timber);
+        const glow=new THREE.Sprite(own(new THREE.SpriteMaterial({map:this.glow,color:0xffb65c,transparent:true,depthWrite:false,blending:THREE.AdditiveBlending})));glow.position.set(0,3.6,.84);glow.scale.set(1.4,1.4,1);group.add(glow);
+      } else {
+        // Tōrō lanterns make every solid obstacle intentional and readable.
+        box(group,radius*1.8,.32,radius*1.8,0,.16,0,stone);
+        box(group,radius*1.3,.22,radius*1.3,0,.43,0,stone);
+        box(group,.5,1.05,.5,0,1.05,0,stone);
+        box(group,1.35,.2,1.35,0,1.67,0,stone);
+        box(group,.81,.67,.81,0,2.1,0,lamp);
+        for(const px of [-.48,.48])for(const pz of [-.48,.48])box(group,.15,.8,.15,px,2.1,pz,stone);
+        box(group,1.2,.15,1.2,0,2.55,0,stone);
+        const roof=new THREE.Mesh(own(new THREE.CylinderGeometry(.1,1.05,.45,4)),stone);roof.rotation.y=Math.PI/4;roof.position.y=2.85;roof.castShadow=true;group.add(roof);
+        box(group,.18,.32,.18,0,3.22,0,brass);
+        const glow=new THREE.Sprite(own(new THREE.SpriteMaterial({map:this.glow,color:0xffbc69,transparent:true,depthWrite:false,blending:THREE.AdditiveBlending,opacity:.48})));glow.position.y=2.1;glow.scale.set(3.6,3.6,1);group.add(glow);
+      }
     }
   }
+
   actor(entity,isPlayer) {
     if(this.actors.has(entity.id))return this.actors.get(entity.id);
     const def=entity.def||{};const template=this.models.get(def.model);
     if(!template)throw new Error(`戦士 ${def.name||entity.key} のモデルが準備されていません。再試行してください。`);
     const group=new THREE.Group();const orient=new THREE.Group();const model=cloneSkeleton(template.scene);
-    const size=template.box.getSize(new THREE.Vector3());const height=clamp(Number(def.height)||1.85,1.3,3.2);const scale=height/size.y;
+    const size=template.box.getSize(new THREE.Vector3());const height=clamp((Number(def.height)||1.85)*1.18,1.55,3.2);const scale=height/size.y;
     const inner=new THREE.Group();inner.scale.setScalar(scale);
     model.position.x-= (template.box.min.x+template.box.max.x)*.5;
     model.position.y-= template.box.min.y;
@@ -293,10 +350,11 @@ export class WorldRenderer {
     const ring=new THREE.Mesh(this.own(new THREE.RingGeometry(.66,.72,64)),this.own(new THREE.MeshBasicMaterial({color:isPlayer?0xe5d7a6:0xdb7565,transparent:true,opacity:.8,side:THREE.DoubleSide,depthWrite:false})));
     ring.rotation.x=-Math.PI/2;ring.position.y=.035;group.add(ring);
     const hpCanvas=document.createElement('canvas');hpCanvas.width=128;hpCanvas.height=16;
-    const hpTexture=this.own(new THREE.CanvasTexture(hpCanvas));const hpSprite=new THREE.Sprite(this.own(new THREE.SpriteMaterial({map:hpTexture,depthTest:false,transparent:true})));
+    const hpTexture=this.own(new THREE.CanvasTexture(hpCanvas));hpTexture.colorSpace=THREE.SRGBColorSpace;const hpSprite=new THREE.Sprite(this.own(new THREE.SpriteMaterial({map:hpTexture,depthTest:false,transparent:true})));
     hpSprite.scale.set(1.7,.21,1);hpSprite.position.y=height+.38;group.add(hpSprite);
     const mixer=new THREE.AnimationMixer(model);const clips=new Map(template.clips.map(clip=>[clip.name,mixer.clipAction(clip)]));
-    const actor={group,orient,model,mixer,clips,materials,ring,hpCanvas,hpTexture,hpSprite,isPlayer,lastHp:-1,lastState:'',activeAction:null,previous:new THREE.Vector2(entity.x,entity.z),height,death:0};
+    const procedural=template.autoRig?captureProceduralRig(model):null;
+    const actor={procedural,group,orient,model,mixer,clips,materials,ring,hpCanvas,hpTexture,hpSprite,isPlayer,lastHp:-1,lastState:'',activeAction:null,previous:new THREE.Vector2(entity.x,entity.z),height,death:0};
     this.actors.set(entity.id,actor);return actor;
   }
   animate(actor,entity,dt) {
@@ -317,6 +375,7 @@ export class WorldRenderer {
       action.fadeIn(.13).play();if(actor.activeAction)actor.activeAction.fadeOut(.13);actor.activeAction=action;actor.lastState=key;
     }
     actor.mixer.update(dt);
+    if(actor.procedural)animateProceduralRig(actor.procedural,state,{dt,moving:moved>.002,actionTime:entity.actionTime});
     const facing=typeof entity.facing==='number'?entity.facing:Math.atan2(entity.facing?.x||0,entity.facing?.z||1);
     const delta=Math.atan2(Math.sin(facing-actor.orient.rotation.y),Math.cos(facing-actor.orient.rotation.y));
     actor.orient.rotation.y+=delta*Math.min(1,dt*16);
@@ -360,10 +419,10 @@ export class WorldRenderer {
     this.updateEffects(combat);
     const player=combat.player;
     if(player) {
-      const desired=new THREE.Vector3(player.x,0,player.z-2);
+      const desired=new THREE.Vector3(player.x,0,player.z-3.5);
       if(!this.cameraReady){this.focus.copy(desired);this.cameraReady=true;}else this.focus.lerp(desired,1-Math.exp(-dt*5));
-      const portrait=this.camera.aspect<.8;const distance=portrait?1.28:1;
-      this.camera.position.set(this.focus.x,14*distance,this.focus.z+12*distance);this.camera.lookAt(this.focus.x,.3,this.focus.z);
+      const portrait=this.camera.aspect<.8;const distance=portrait?1.5:1;
+      this.camera.position.set(this.focus.x,7.7*distance,this.focus.z+14*distance);this.camera.lookAt(this.focus.x,1.2,this.focus.z);
       this.sun.position.set(this.focus.x-12,24,this.focus.z+12);this.sun.target.position.set(this.focus.x,0,this.focus.z);
     }
     if(this.ambientParticles&&!this.reducedMotion){const position=this.ambientParticles.geometry.attributes.position;for(let i=0;i<position.count;i++){position.array[i*3+1]-=dt*(this.stage==='frost'?.5:.08);if(position.array[i*3+1]<.2)position.array[i*3+1]=10;}position.needsUpdate=true;}
