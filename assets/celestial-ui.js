@@ -101,6 +101,15 @@
     }
     function enhanceControl(el) {
       if (el.matches(SKIP) || el.closest('svg')) return;
+      // Legacy utilities prefix labels with pictographs. Keep the Japanese text
+      // while replacing only those decorative marks with the original SVGs.
+      if (el.matches('#rift-utility button,#chat-btn,#rift-floating-back')) {
+        for (const node of el.childNodes) {
+          if (node.nodeType !== Node.TEXT_NODE) continue;
+          const clean = node.data.replace(/^\s*(?:🎁|⌕|▦|✦|↑|‹|💬)\s*/u, '');
+          if (clean !== node.data) node.data = clean;
+        }
+      }
       if (el.matches('.remake-mode')) {
         const key = el.dataset.go || (el.id === 'btn-ranked' ? 'ranked' : 'adventure');
         el.dataset.celestialArt = key;
