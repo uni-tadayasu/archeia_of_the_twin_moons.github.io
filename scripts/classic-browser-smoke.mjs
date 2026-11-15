@@ -8,7 +8,7 @@ import { mkdir, writeFile } from 'node:fs/promises';
 import { once } from 'node:events';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
-import { chromium, expect } from '@playwright/test';
+import { chromium, expect, request as playwrightRequest } from '@playwright/test';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const output = path.join(root, 'artifacts/classic-smoke');
@@ -16,7 +16,7 @@ const origin = 'http://127.0.0.1:4173';
 const logs = { startedAt: new Date().toISOString(), steps: [], console: [], pageErrors: [], networkErrors: [], blockedNetwork: [], screenshots: [], server: [], inputDiagnostics: [], inputSamples: [], portraits: [], battleLayouts: [] };
 const staticHosts = new Set(['esm.sh', 'fonts.googleapis.com', 'fonts.gstatic.com', 'www.gstatic.com', 'storage.googleapis.com']);
 await mkdir(output, { recursive: true });
-let browser, server, currentPage, failure;
+let browser, server, currentPage, failure, staticClient;
 const note = message => { logs.steps.push({ at: new Date().toISOString(), message }); console.log(message); };
 
 async function offlineContext(options, name) {
@@ -26,7 +26,15 @@ async function offlineContext(options, name) {
     if (url.origin === origin || ['data:', 'blob:'].includes(url.protocol)) return route.continue();
     // Only static CDN reads may leave CI. This also refuses future API hosts and
     // remote form submissions, regardless of which original script initiates it.
-    if (['GET', 'HEAD'].includes(request.method()) && staticHosts.has(url.hostname)) return route.continue();
+    if (['GET', 'HEAD'].includes(request.method()) && staticHosts.has(url.hostname)) {
+      // Managed computers may supply a proxy CA to Node but not Chromium's
+      // certificate store. Use that verified client for allowed static reads;
+      // certificate checks remain enabled and live APIs are still refused.
+      if (staticClient) return route.fulfill({ response: await staticClient.fetch(request.url(), {
+        method: request.method(), headers: request.headers(), timeout: 30000,
+      }) });
+      return route.continue();
+    }
     logs.blockedNetwork.push({ page: name, url: request.url(), method: request.method(), type: request.resourceType() });
     return route.fulfill({ status: 200, contentType: 'application/json', headers: {
       'access-control-allow-origin': origin,
@@ -52,13 +60,74 @@ async function shot(page, name, fullPage = true) {
   logs.screenshots.push(`${name}.png`);
 }
 async function fits(page, label) {
-  const layout = await page.evaluate(() => ({ viewport: innerWidth, document: document.documentElement.scrollWidth, body: document.body.scrollWidth }));
-  assert.ok(layout.document <= layout.viewport + 2 && layout.body <= layout.viewport + 2, `${label}: horizontal overflow ${JSON.stringify(layout)}`);
+  const layout = await page.evaluate(() => ({ viewport: innerWidth, document: document.documentElement.scrollWidth, body: document.body.scrollWidth, screen: document.querySelector('.screen.on')?.scrollWidth || 0 }));
+  assert.ok(Object.entries(layout).every(([key, width]) => key === 'viewport' || width <= layout.viewport + 2), `${label}: horizontal overflow ${JSON.stringify(layout)}`);
+}
+async function openingLayout(page, label) {
+  await fits(page, label);
+  const layout = await page.evaluate(() => {
+    const bounds = selector => document.querySelector(selector).getBoundingClientRect().toJSON();
+    const size = selector => parseFloat(getComputedStyle(document.querySelector(selector)).fontSize);
+    return { art: bounds('.opening-art'), image: bounds('.opening-art img'), title: bounds('.opening-copy h1'),
+      titleSize: size('.opening-copy h1>span:last-child'), prefixSize: size('.opening-title-small') };
+  });
+  assert.ok(layout.titleSize >= 44 && layout.titleSize > layout.prefixSize * 1.8, `${label}: full-sized title must survive legacy heading styles`);
+  assert.ok(Math.abs(layout.image.height - layout.art.height) <= 1 && Math.abs(layout.image.width - layout.art.width) <= 1, `${label}: opening image covers its full hero`);
+  assert.ok(layout.title.right <= page.viewportSize().width, `${label}: title fits viewport`);
+  await expect(page.locator('#ticker')).toBeHidden();
+  await expect(page.locator('#chat-btn')).toBeHidden();
+}
+async function menuPolish(page, label) {
+  await expect(page.locator('.classic-community-bar #chat-btn')).toBeVisible();
+  await expect(page.locator('.classic-community-bar #ticker')).toHaveCount(1);
+  await page.locator('.classic-community-bar #chat-btn').click();
+  await expect(page.locator('#chat-btn')).toHaveAttribute('aria-expanded', 'true');
+  await expect(page.locator('#classic-chat-close')).toBeFocused();
+  await page.locator('#classic-chat-close').click();
+  await expect(page.locator('#chat-btn')).toHaveAttribute('aria-expanded', 'false');
+  await expect(page.locator('#chat-btn')).toBeFocused();
+  await page.locator('[data-portal-jump="portal-play"]').click();
+  const navigation = await page.evaluate(() => {
+    const section = document.querySelector('#portal-play').getBoundingClientRect();
+    const header = document.querySelector('#scr-title .portal-header');
+    const pinned = ['sticky', 'fixed'].includes(getComputedStyle(header).position);
+    return { top: section.top, expected: pinned ? header.getBoundingClientRect().height + 10 : 10 };
+  });
+  assert.ok(Math.abs(navigation.top - navigation.expected) < 3, `${label}: menu navigation clears only a pinned header`);
+  const search = page.locator('#classic-mode-search');
+  await search.fill('天守');
+  await expect(page.locator('.portal-modes > button:visible')).toHaveCount(1);
+  await page.locator('[data-mode-filter="multi"]').click();
+  await expect(page.locator('.classic-mode-empty')).toBeVisible();
+  await search.focus();
+  await search.press('Escape');
+  await expect(search).toHaveValue('');
+  await expect(page.locator('.classic-mode-empty')).toBeHidden();
+  await page.locator('[data-mode-filter="all"]').click();
+  await expect(page.locator('.portal-modes > button:visible')).toHaveCount(10);
+  if (page.viewportSize().width <= 600) {
+    const rows = await page.locator('.portal-topnav button').evaluateAll(buttons => buttons.map(button => button.getBoundingClientRect().top));
+    assert.ok(Math.max(...rows) - Math.min(...rows) <= 1, `${label}: compact navigation remains in one row`);
+    const widths = await page.locator('.portal-modes > button').evaluateAll(buttons => buttons.map(button => button.getBoundingClientRect().width));
+    assert.ok(widths.every(width => width > 250), `${label}: mobile mode descriptions have a full-width card`);
+  }
+  await fits(page, `${label} filtered menu`);
+  await shot(page, `${label}-modes`);
+  note(`${label}: search, category filters, keyboard reset, community chat and responsive layout verified`);
 }
 async function boot(page, label) {
   await page.goto(origin, { waitUntil: 'domcontentloaded', timeout: 60000 });
   await expect(page.locator('#press-start')).toBeVisible({ timeout: 90000 });
   await expect(page.locator('#press-start')).toBeEnabled({ timeout: 90000 });
+  await openingLayout(page, `${label} opening`);
+  if (label === '01-desktop') {
+    for (const [width, height] of [[320, 568], [768, 1024], [844, 390]]) {
+      await page.setViewportSize({ width, height });
+      await openingLayout(page, `opening ${width}x${height}`);
+      await shot(page, `opening-${width}x${height}`, false);
+    }
+    await page.setViewportSize({ width: 1440, height: 900 });
+  }
   await shot(page, `${label}-start`);
   await page.locator('#press-start').click();
   await expect(page.locator('.rf51-overlay')).toBeVisible();
@@ -74,6 +143,7 @@ async function boot(page, label) {
   for (const id of ['btn-castle', 'btn-forge', 'btn-shop', 'btn-mailbox', 'btn-options']) await expect(page.locator(`#${id}`)).toBeVisible();
   await fits(page, `${label} original menu`);
   await shot(page, `${label}-menu`);
+  await menuPolish(page, label);
   note(`${label}: original start confirmation, all 10 modes, and service entries are available`);
 }
 async function configureLocalDisplay(page) {
@@ -117,6 +187,7 @@ async function selectDuel(page, label) {
   assert.ok(await page.locator('.stage-tile').count() > 3, 'Original stage catalogue is available');
   await page.locator('.stage-tile[data-search~="moon"]').click();
   await expect(page.locator('#hud')).toBeVisible({ timeout: 120000 });
+  await expect(page.locator('body > #chat-btn')).toHaveCount(1);
   await expect(page.locator('#hud-left .plate')).toHaveCount(1);
   await expect(page.locator('#hud-right .plate')).toHaveCount(1);
   await expect(page.locator('#hud-left')).toContainText('ロウエン');
@@ -169,7 +240,23 @@ async function pressUntilGaugeFalls(page, key, selector, message, timeout = 3000
   // follow-up; it never retries an initial press rejected during a melee action
   // or stun. Issue new, real presses, just as a player reattempts an action.
   await expect.poll(async () => {
-    await page.keyboard.press(key, { delay: 60 });
+    await page.keyboard.down(key);
+    try {
+      // Software WebGL can render more slowly than a 60ms tap. Keep the real
+      // key down through two rendered frames so gameplay can observe it.
+      await page.evaluate(() => new Promise((resolve, reject) => {
+        let frame = 0;
+        const timeout = setTimeout(() => {
+          cancelAnimationFrame(frame);
+          reject(new Error('Game frames stalled while a keyboard action was held'));
+        }, 15000);
+        frame = requestAnimationFrame(() => {
+          frame = requestAnimationFrame(() => { clearTimeout(timeout); resolve(); });
+        });
+      }));
+    } finally {
+      await page.keyboard.up(key);
+    }
     const after = await gauge(page, selector);
     inputSample(key, before, after);
     return after;
@@ -180,9 +267,30 @@ async function keyboardCombat(page) {
   await page.locator('#game-container canvas').first().click();
   await inputDiagnostic(page, 'desktop before keyboard skill');
   await pressUntilGaugeFalls(page, 'KeyK', '#flux u', 'Original keyboard skill spends real energy');
+  // Spending energy starts a chant. Movement during that action is ignored;
+  // wait for its real HUD to finish before approaching the opponent.
+  await expect(page.locator('#spell-chant-progress')).toBeHidden({ timeout: 60000 });
   await page.keyboard.down('KeyW'); await page.keyboard.down('KeyD');
-  await page.waitForTimeout(650);
-  await page.keyboard.up('KeyW'); await page.keyboard.up('KeyD');
+  try {
+    await page.evaluate(() => new Promise((resolve, reject) => {
+      let previous = performance.now(), elapsed = 0, request = 0;
+      const timeout = setTimeout(() => {
+        cancelAnimationFrame(request);
+        reject(new Error('Game frames stalled while approaching the opponent'));
+      }, 30000);
+      const frame = now => {
+        // Match the game's 50ms frame cap: a delayed software-render frame
+        // must not count as hundreds of milliseconds of actual movement.
+        elapsed += Math.min(.05, Math.max(0, (now - previous) / 1000));
+        previous = now;
+        if (elapsed >= .65) { clearTimeout(timeout); resolve(); }
+        else request = requestAnimationFrame(frame);
+      };
+      request = requestAnimationFrame(frame);
+    }));
+  } finally {
+    await page.keyboard.up('KeyW'); await page.keyboard.up('KeyD');
+  }
   await pressUntilGaugeFalls(page, 'KeyJ', '#hud-right .plate u', 'Original melee combat damages the actual CPU fighter', 60000);
   await inputDiagnostic(page, 'desktop after successful skill and melee');
   await page.keyboard.press('Space');
@@ -195,6 +303,16 @@ async function keyboardCombat(page) {
   await page.locator('#btn-resume').click();
   await expect(page.locator('#pause')).toBeHidden();
   await expect.poll(() => page.locator('#hud .plate u, #flux u, #over u').evaluateAll(elements => elements.map(element => element.style.width).join('|')), { timeout: 20000, message: 'Resume restarts actual combat/resources' }).not.toBe(frozen.join('|'));
+  await page.evaluate(() => window.dispatchEvent(new Event('blur')));
+  await expect(page.locator('#pause')).toBeVisible();
+  await expect(page.locator('#pause-note')).toContainText('画面を離れたため');
+  const background = await page.locator('#hud .plate u, #flux u, #over u').evaluateAll(elements => elements.map(element => element.style.width));
+  await page.evaluate(() => window.dispatchEvent(new Event('focus')));
+  await page.waitForTimeout(1000);
+  await expect(page.locator('#pause')).toBeVisible();
+  assert.deepEqual(await page.locator('#hud .plate u, #flux u, #over u').evaluateAll(elements => elements.map(element => element.style.width)), background, 'Backgrounded solo combat stays paused after focus returns');
+  await page.locator('#btn-resume').click();
+  await expect(page.locator('#pause')).toBeHidden();
   note('Desktop: original keyboard movement, skill energy, CPU damage, jump, pause and resume verified');
 }
 async function leaveBattle(page) {
@@ -249,12 +367,15 @@ async function serverReady() {
   throw new Error('Preview server did not start');
 }
 try {
+  const proxy = process.env.HTTPS_PROXY || process.env.https_proxy;
+  if (proxy && process.env.NODE_EXTRA_CA_CERTS) staticClient = await playwrightRequest.newContext({ proxy: { server: proxy } });
   server = spawn(process.execPath, ['scripts/serve.mjs', '--port', '4173', '--host', '127.0.0.1'], { cwd: root, stdio: ['ignore', 'pipe', 'pipe'] });
   server.stdout.on('data', chunk => logs.server.push(chunk.toString()));
   server.stderr.on('data', chunk => logs.server.push(chunk.toString()));
   server.on('error', error => logs.server.push(error.message));
   await serverReady();
   browser = await chromium.launch({ headless: true, args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] });
+  logs.browser = browser.version();
   const desktop = await offlineContext({ viewport: { width: 1440, height: 900 }, deviceScaleFactor: 1 }, 'desktop');
   const page = currentPage = await desktop.newPage(); page.setDefaultTimeout(20000); observe(page, 'desktop');
   await boot(page, '01-desktop');
@@ -289,6 +410,7 @@ try {
   if (currentPage && !currentPage.isClosed()) try { await inputDiagnostic(currentPage, 'failure'); await shot(currentPage, 'failure', false); } catch (captureError) { logs.failure.screenshot = captureError.message; }
 } finally {
   await browser?.close().catch(() => {});
+  await staticClient?.dispose().catch(() => {});
   if (server && server.exitCode === null) {
     const exited = once(server, 'exit'); server.kill('SIGTERM');
     await Promise.race([exited, new Promise(resolve => setTimeout(resolve, 2000))]);
