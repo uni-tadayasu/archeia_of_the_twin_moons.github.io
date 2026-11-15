@@ -223,3 +223,209 @@ html body.rf-remake.classic-polish [hidden]{display:none!important}
 html body.rf-remake.classic-polish:has(#hud:not([hidden])) #ticker{display:none!important}
 html body.rf-remake.classic-polish:has(#hud:not([hidden])) #chat-btn{top:max(180px,calc(24dvh + env(safe-area-inset-top)))!important;right:max(12px,env(safe-area-inset-right))!important;bottom:auto!important;min-height:40px!important;height:auto!important;padding:8px 12px!important;border:1px solid #bda66f88!important;border-radius:3px!important;background:#132331e6!important;line-height:1.7!important;box-shadow:0 3px 14px #0003!important}
 html body.rf-remake.classic-polish #ui #scr-select .rift-filter-tools button[aria-pressed="true"]{color:#182127!important;background:linear-gradient(100deg,#c7aa73,#e6d09a)!important;border-color:#e4ca8f!important;font-weight:600!important}
+
+/* 56.2: keep legacy global heading/image rules out of the illustrated opening. */
+html body.rf-remake.classic-polish #ui #scr-press .opening-copy h1 {
+  font-family:var(--remake-serif)!important;
+  text-align:left!important;
+  line-height:1.22;
+  letter-spacing:.025em;
+  margin-block:24px 18px;
+}
+html body.rf-remake.classic-polish #ui #scr-press .opening-copy h1>span {
+  font:inherit;
+  color:inherit;
+  letter-spacing:inherit;
+  margin:0;
+  text-align:inherit;
+}
+html body.rf-remake.classic-polish #ui #scr-press .opening-copy h1>.opening-title-small {
+  font-size:.47em;
+  color:#dfc695;
+  letter-spacing:.18em;
+  margin-bottom:12px;
+}
+html body.rf-remake.classic-polish #ui :is(.opening-art,.portal-hero-art)>img {
+  position:absolute;
+  inset:0;
+  width:100%!important;
+  height:100%!important;
+  max-width:none;
+  max-height:none;
+  object-fit:cover;
+}
+html body.rf-remake.classic-polish #ui #scr-press .opening-hero {
+  min-height:max(740px,calc(100svh - 90px));
+  padding-block:65px 115px;
+}
+html body.rf-remake.classic-polish #ui #scr-press .opening-tagline {margin-top:26px}
+html body.rf-remake.classic-polish #ui #scr-press .opening-start {margin-top:30px}
+html body.rf-remake.classic-polish:has(#scr-press.on) :is(#ticker,#chat-btn) {display:none!important}
+html body.rf-remake.classic-polish #ui #scr-press :is(.opening-header nav a,.remake-footer nav a) {
+  display:inline-flex;
+  align-items:center;
+  min-height:44px;
+}
+/* A dedicated community row keeps announcements and chat clear of navigation. */
+.classic-polish .classic-community-bar {
+  display:flex;
+  align-items:center;
+  gap:16px;
+  min-height:58px;
+  padding-block:7px;
+  border-bottom:1px solid var(--classic-line);
+  margin-block:0 24px;
+}
+.classic-polish .classic-community-bar>span {
+  flex:none;
+  color:var(--classic-brass);
+  font:500 11px/1.6 var(--remake-sans);
+  letter-spacing:.08em;
+}
+html body.rf-remake.classic-polish .classic-community-bar #ticker {
+  position:relative!important;
+  inset:auto!important;
+  flex:1;
+  min-width:0;
+  height:28px;
+  background:none!important;
+  border:0;
+  z-index:auto;
+}
+html body.rf-remake.classic-polish .classic-community-bar #ticker .tk-track {
+  font:400 12px/28px var(--remake-sans);
+  color:#c7d0ce;
+}
+html body.rf-remake.classic-polish .classic-community-bar #chat-btn {
+  position:static!important;
+  flex:none;
+  height:auto;
+  min-height:44px;
+  padding:10px 16px;
+  max-width:45%;
+  border:1px solid #bca77766;
+  border-radius:2px;
+  background:#192936;
+  color:#ead9b4;
+  font:500 12px/1.6 var(--remake-sans);
+  z-index:auto;
+}
+/* Reserve space for the existing fixed utility controls, including safe areas. */
+html body.rf-remake.classic-polish #ui #scr-title .remake-footer {padding-bottom:calc(88px + env(safe-area-inset-bottom))}
+html body.rf-remake.classic-polish #ui .screen:not(#scr-press):not(#scr-title):not(#scr-story) {padding-bottom:calc(84px + env(safe-area-inset-bottom))!important;scroll-padding-bottom:90px}
+html body.rf-remake.classic-polish #rift-utility {
+  padding:7px;
+  border:1px solid #bca77755;
+  background:#0b1623f5;
+  border-radius:5px;
+  gap:5px;
+  backdrop-filter:blur(12px);
+  bottom:max(10px,env(safe-area-inset-bottom));
+}
+html body.rf-remake.classic-polish #rift-utility button {min-height:44px;font:500 11px/1.5 var(--remake-sans);padding:10px 12px}
+@media(max-width:900px) {
+  html body.rf-remake.classic-polish #ui #scr-title .portal-topnav {display:flex!important;flex-wrap:nowrap;gap:10px}
+  html body.rf-remake.classic-polish #ui #scr-title .portal-topnav button {flex:1;min-width:0;min-height:44px;justify-content:center}
+}
+@media(max-width:600px) {
+  html body.rf-remake.classic-polish #ui #scr-press .opening-hero {
+    min-height:max(620px,calc(100svh - 76px));
+    padding:55px 27px 110px;
+    align-items:center;
+  }
+  html body.rf-remake.classic-polish #ui #scr-press .opening-copy h1 {font-size:clamp(46px,12.8vw,74px);margin-block:23px 16px}
+  html body.rf-remake.classic-polish #ui #scr-press .opening-tagline {font-size:18px;margin-top:24px;line-height:1.9}
+  html body.rf-remake.classic-polish #ui #scr-press .opening-start {margin-top:27px}
+  html body.rf-remake.classic-polish #ui #scr-press .opening-hero::before {
+    background:linear-gradient(90deg,#080f14db,#080f1465 78%),linear-gradient(0deg,#0b1012 0%,transparent 34%,#08111a22);
+  }
+  html body.rf-remake.classic-polish #ui #scr-press .opening-header nav a:not(:last-child) {display:none}
+  html body.rf-remake.classic-polish #ui #scr-press .opening-bottom {left:27px;right:27px;bottom:25px}
+  html body.rf-remake.classic-polish #ui #scr-title .portal-header {position:relative!important}
+  html body.rf-remake.classic-polish #ui #scr-title .portal-topnav {gap:6px}
+  html body.rf-remake.classic-polish #ui #scr-title .portal-topnav button {font-size:11px;padding:10px 3px}
+  html body.rf-remake.classic-polish #ui #scr-title .portal-modes {grid-template-columns:1fr!important;gap:14px!important}
+  html body.rf-remake.classic-polish #ui #scr-title .remake-mode {min-height:205px!important;padding:22px 24px 30px!important}
+  html body.rf-remake.classic-polish #ui #scr-title .mode-topline {flex-wrap:nowrap;margin-bottom:18px}
+  html body.rf-remake.classic-polish #ui #scr-title .mode-topline>span {font-size:9px}
+  html body.rf-remake.classic-polish #ui #scr-title .mode-topline i {font-size:10px}
+  html body.rf-remake.classic-polish #ui #scr-title .mode-main b {font-size:24px!important;line-height:1.55!important}
+  html body.rf-remake.classic-polish #ui #scr-title .mode-main small {font-size:12px!important;line-height:1.85!important}
+  html body.rf-remake.classic-polish #ui #scr-title .mode-caption {font-size:11px}
+  .classic-polish .classic-community-bar {gap:10px}
+  .classic-polish .classic-community-bar>span {font-size:10px}
+  html body.rf-remake.classic-polish .classic-community-bar #chat-btn {font-size:11px;padding-inline:10px}
+  html body.rf-remake.classic-polish #rift-utility {left:8px;right:8px;width:auto;max-width:none;padding:5px}
+  html body.rf-remake.classic-polish #rift-utility button {min-width:0;flex:1;padding:9px 5px;font-size:10px}
+}
+@media(max-width:360px) {
+  html body.rf-remake.classic-polish #ui #scr-press .opening-hero {padding-inline:23px;padding-top:38px;min-height:570px}
+  html body.rf-remake.classic-polish #ui #scr-press .opening-copy h1 {font-size:45px}
+  html body.rf-remake.classic-polish #ui #scr-press .opening-roman {font-size:7px;letter-spacing:.14em}
+  html body.rf-remake.classic-polish #ui #scr-press .opening-tagline {font-size:17px;margin-top:20px}
+  html body.rf-remake.classic-polish #ui #scr-press .opening-bottom {left:23px;right:23px}
+  html body.rf-remake.classic-polish #ui #scr-title .mode-main b {font-size:22px!important}
+}
+@media(max-height:520px) and (min-width:601px) {
+  html body.rf-remake.classic-polish #ui #scr-press .opening-hero {min-height:510px;padding:35px 65px 90px}
+  html body.rf-remake.classic-polish #ui #scr-press .opening-copy h1 {font-size:64px;margin-block:12px}
+  html body.rf-remake.classic-polish #ui #scr-press .opening-tagline {font-size:16px;line-height:1.65;margin-top:12px}
+  html body.rf-remake.classic-polish #ui #scr-press .opening-start {margin-top:18px}
+  html body.rf-remake.classic-polish #ui #scr-title .portal-header {position:relative!important}
+}
+html body.rf-remake.classic-polish #chat-panel #classic-chat-close {
+  display:block;
+  margin:6px 6px 6px auto;
+  min-width:44px;
+  min-height:44px;
+  padding:8px 14px;
+  border:1px solid #bca77788;
+  border-radius:2px;
+  background:#172736;
+  color:#f0dfb9;
+  font:500 12px/1.5 var(--remake-sans);
+  cursor:pointer;
+}
+@media(prefers-reduced-motion:reduce) {
+  html body.rf-remake.classic-polish .classic-community-bar #ticker .tk-track {transform:none!important}
+}
+html body.rf-remake.classic-polish #chat-panel .classic-chat-heading {
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:12px;
+  padding:6px 12px;
+  border-bottom:1px solid #bca77744;
+  background:#101d29;
+  color:#ead9b4;
+  font:500 13px/1.6 var(--remake-serif);
+}
+html body.rf-remake.classic-polish #chat-panel .classic-chat-heading #classic-chat-close {margin:0}
+/* Render directional marks as typography on platforms with color emoji fonts. */
+html body.rf-remake.classic-polish :is(.remake-opening,.remake-portal) {font-variant-emoji:text}
+html body.rf-remake.classic-polish #ui :is(.tile-arrow,.button-arrow,.classic-quick-button>i,.remake-text-link>span,.remake-text-link>i,.opening-header nav a>span) {font-family:"Segoe UI Symbol","Apple Symbols","Noto Sans Symbols 2","DejaVu Sans",sans-serif!important;font-variant-emoji:text}
+/* Legacy column flex-wrap pushed the count and favorites control off phones. */
+html body.rf-remake.classic-polish #ui #scr-select .select-tools {
+  display:grid!important;
+  grid-template-columns:minmax(0,1fr) auto auto;
+  align-items:end;
+  height:auto!important;
+  max-height:none!important;
+}
+html body.rf-remake.classic-polish #ui #scr-select .select-tools>* {min-width:0;max-width:100%;width:auto}
+html body.rf-remake.classic-polish #ui #scr-select .select-tools #select-counter {justify-self:start;align-self:center;padding:0}
+html body.rf-remake.classic-polish #ui #scr-select #rf53-favorite-manager {
+  min-height:44px;
+  margin:0;
+  padding:10px 13px;
+  border:1px solid #b7ad875c;
+  border-radius:3px;
+  background:#162635;
+  color:#ead9b4;
+  font:500 11px/1.6 var(--remake-sans);
+  white-space:normal;
+}
+@media(max-width:720px) {
+  html body.rf-remake.classic-polish #ui #scr-select .select-tools {grid-template-columns:minmax(0,1fr) auto;align-items:center}
+  html body.rf-remake.classic-polish #ui #scr-select .select-search-label {grid-column:1/-1}
+}

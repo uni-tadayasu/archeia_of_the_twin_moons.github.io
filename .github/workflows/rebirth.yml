@@ -113,21 +113,27 @@ jobs:
               .write();
 
   pages:
-    name: Request Pages rebuild
+    name: Publish and verify Pages
     needs: merge
     if: needs.merge.outputs.merged == 'true'
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 15
     permissions:
       contents: read
       pages: write
     steps:
       # GITHUB_TOKEN merges do not trigger branch-based Pages builds by themselves.
-      - name: Request publication of the merged main branch
+      - name: Publish the merged commit and wait for completion
         uses: actions/github-script@v7
+        env:
+          EXPECTED_COMMIT: ${{ needs.merge.outputs.commit }}
         with:
           script: |
             const { owner, repo } = context.repo;
+            const expectedCommit = process.env.EXPECTED_COMMIT;
+            if (!/^[a-f0-9]{40}$/i.test(expectedCommit || '')) {
+              throw new Error('The merge job did not provide a valid commit to publish.');
+            }
             const { data: pages } = await github.request('GET /repos/{owner}/{repo}/pages', { owner, repo });
             if (pages.build_type === 'workflow') {
               throw new Error('Pages now uses a custom workflow. Configure that deployment workflow for the automated merge before relying on automatic publication.');
@@ -135,9 +141,48 @@ jobs:
             if (pages.source?.branch !== 'main') {
               throw new Error('Pages does not publish main. Check the Pages source setting.');
             }
+            const { data: main } = await github.rest.git.getRef({ owner, repo, ref: 'heads/main' });
+            if (main.object.sha !== expectedCommit) {
+              throw new Error('main changed after the automatic merge. Publication of this exact commit cannot be requested.');
+            }
+            const { data: previousBuilds } = await github.request('GET /repos/{owner}/{repo}/pages/builds', {
+              owner, repo, per_page: 10
+            });
+            const previousBuildUrls = new Set(previousBuilds.map(candidate => candidate.url));
             const { data: build } = await github.request('POST /repos/{owner}/{repo}/pages/builds', { owner, repo });
+            // Some responses use /latest, which is not a stable build identity.
+            const requestedBuildId = build.url?.match(/\/pages\/builds\/(\d+)$/)?.[1];
             core.info(`Pages build requested: ${build.status || 'queued'}`);
-            await core.summary
-              .addHeading('Pages build requested')
-              .addRaw(`GitHub Pages accepted the build request. Publication status is available in the repository deployment history.\n\n${pages.html_url || ''}`)
-              .write();
+
+            // A successful request only means queued. Wait for a build of the
+            // merged SHA; previous builds must not pass or fail a retry.
+            for (let attempt = 0; attempt < 60; attempt++) {
+              let published;
+              if (requestedBuildId) {
+                ({ data: published } = await github.request('GET /repos/{owner}/{repo}/pages/builds/{build_id}', {
+                  owner, repo, build_id: requestedBuildId
+                }));
+                if (published.commit && published.commit !== expectedCommit) {
+                  throw new Error('The requested Pages build targets a different commit. Check whether main changed during publication.');
+                }
+              } else {
+                const { data: builds } = await github.request('GET /repos/{owner}/{repo}/pages/builds', {
+                  owner, repo, per_page: 10
+                });
+                published = builds.find(candidate => candidate.commit === expectedCommit && !previousBuildUrls.has(candidate.url));
+              }
+              if (published?.commit === expectedCommit && published.status === 'built') {
+                core.info(`Pages published commit ${expectedCommit}.`);
+                await core.summary
+                  .addHeading('GitHub Pages publication verified')
+                  .addRaw(`Published commit: ${expectedCommit}\n\n${pages.html_url || ''}`)
+                  .write();
+                return;
+              }
+              if (published && ['errored', 'error', 'failed', 'cancelled'].includes(published.status)) {
+                throw new Error(`Pages did not publish ${expectedCommit}: ${published.error?.message || published.status}`);
+              }
+              core.info(`Waiting for Pages (${attempt + 1}/60): ${published?.status || 'queued'}`);
+              await new Promise(resolve => setTimeout(resolve, 10000));
+            }
+            throw new Error(`Timed out waiting for Pages to publish ${expectedCommit}. Inspect the Pages build and rerun the failed job.`);

@@ -54,6 +54,73 @@
     const hero = menu.querySelector('.portal-hero');
     if (hero) hero.insertAdjacentElement('afterend', quick);
     else menu.querySelector('.portal-wrap')?.prepend(quick);
+
+    // Keep the existing social controls and their handlers. They belong in the
+    // menu flow here, but return to their original positions for every other view.
+    const community = document.createElement('section');
+    community.className = 'classic-community-bar remake-contained';
+    community.setAttribute('aria-label', 'お知らせと交流');
+    community.hidden = true;
+    const communityLabel = document.createElement('span');
+    communityLabel.className = 'classic-community-label';
+    communityLabel.textContent = '旅人の広場';
+    community.append(communityLabel);
+    quick.insertAdjacentElement('afterend', community);
+    const socialSlots = new Map();
+    const enhancedChatButtons = new WeakSet();
+    const syncCommunity = () => {
+      const docked = menu.classList.contains('on');
+      for (const id of ['ticker', 'chat-btn']) {
+        const node = document.getElementById(id);
+        const slot = socialSlots.get(id);
+        if (docked && node && node.parentElement !== community) {
+          slot?.marker.remove();
+          const marker = document.createComment(`classic original ${id}`);
+          node.before(marker);
+          socialSlots.set(id, { node, marker });
+          community.append(node);
+        } else if (!docked && slot) {
+          if (slot.node.isConnected && slot.node.parentElement === community) {
+            if (slot.marker.isConnected) slot.marker.replaceWith(slot.node);
+            else document.body.append(slot.node);
+          } else slot.marker.remove();
+          socialSlots.delete(id);
+        }
+      }
+      community.hidden = !docked || !community.querySelector('#ticker, #chat-btn');
+      const chat = document.getElementById('chat-panel');
+      const trigger = document.getElementById('chat-btn');
+      if (chat && trigger && !enhancedChatButtons.has(trigger)) {
+        enhancedChatButtons.add(trigger);
+        trigger.setAttribute('aria-controls', 'chat-panel');
+        let close = chat.querySelector('#classic-chat-close');
+        if (!close) {
+          const heading = document.createElement('div');
+          heading.className = 'classic-chat-heading';
+          const title = document.createElement('strong');
+          title.textContent = '旅人のチャット';
+          close = document.createElement('button');
+          close.id = 'classic-chat-close';
+          close.type = 'button';
+          close.className = 'classic-chat-close';
+          close.textContent = '閉じる ×';
+          close.setAttribute('aria-label', 'チャットを閉じる');
+          close.addEventListener('click', () => {
+            if (!chat.hidden) document.getElementById('chat-btn')?.click();
+          });
+          heading.append(title, close);
+          chat.prepend(heading);
+        }
+        trigger.addEventListener('click', () => {
+          if (!chat.hidden) close.focus({ preventScroll: true });
+          else if (trigger.getClientRects().length) trigger.focus({ preventScroll: true });
+        });
+      }
+    };
+    new MutationObserver(syncCommunity).observe(menu, { attributes: true, attributeFilter: ['class'] });
+    new MutationObserver(syncCommunity).observe(document.body, { childList: true });
+    syncCommunity();
+
     menu.addEventListener('click', event => {
       const button = event.target.closest('button');
       if (!button || button.disabled) return;

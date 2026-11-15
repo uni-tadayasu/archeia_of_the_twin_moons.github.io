@@ -13,7 +13,8 @@
     if (scroller?.classList.contains('on')) {
       const header = scroller.querySelector('.portal-header');
       const padding = Number.parseFloat(getComputedStyle(scroller).paddingTop) || 0;
-      const clearance = (header?.getBoundingClientRect().height || 0) + padding + 10;
+      const pinned = header && ['sticky', 'fixed'].includes(getComputedStyle(header).position);
+      const clearance = (pinned ? header.getBoundingClientRect().height : 0) + padding + 10;
       const top = scroller.scrollTop + section.getBoundingClientRect().top - scroller.getBoundingClientRect().top;
       if (focusSection) section.focus({ preventScroll: true });
       scroller.scrollTo({ top: Math.max(0, top - clearance),

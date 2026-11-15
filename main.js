@@ -51,6 +51,7 @@ import { createOrbitControls } from './assets/rf-camera-v5520.js?v=55.21';
 import { activeInputModal, activateGamepadControl, adjustGamepadValue, bindTouchControls, EDITABLE_CONTROL, gamepadMenuItems } from './assets/rf5527/controls.js?v=55.28';
 import { createContactShadows, createRenderBudget, createStageReflections } from './assets/rf5526/graphics.js?v=classic-56.1';
 import { createClassicSurfaceFinish } from './assets/classic-graphics.js?v=classic-56.1';
+import { installOfflineAutoPause } from './assets/classic-lifecycle.js?v=classic-56.2';
 import { createBattleCountdown } from './assets/rf5528/battle-countdown.js?v=55.28';
 import { STORY_II, readStoryII, configureStoryIIBattle, createStoryIIStage } from './assets/rf5530/story-ii.js?v=55.30';
 
@@ -4136,6 +4137,18 @@ function togglePause() {
 $('#btn-pause').addEventListener('click', togglePause);
 $('#btn-resume').addEventListener('click', togglePause);
 $('#btn-quit').addEventListener('click', returnFromBattle);
+installOfflineAutoPause({
+  window, document, getState: () => state,
+  isBlocked: () => Boolean(document.querySelector('.screen.on') || activeModal() || activeGameOverlay()),
+  pause() {
+    pauseFocus = document.activeElement;
+    setPaused(true);
+    resetInput();
+    orbitControls.refresh();
+    $('#pause-note').textContent = '画面を離れたため一時停止しました。「戦いに戻る」で再開できます。';
+  },
+  focusResume: () => $('#btn-resume').focus({ preventScroll: true })
+});
 
 // ---------- Options / operator key ----------
 async function sha256(text) {
