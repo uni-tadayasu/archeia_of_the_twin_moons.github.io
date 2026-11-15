@@ -492,6 +492,9 @@
       });
       return originalDispose.call(this);
     };
+    // The Celestial renderer owns generic layers and their GPU budget. Retain
+    // the character-specific teleport mechanics below without double painting.
+    if (!Battle.prototype.celestialCombatPresentation) {
     Battle.prototype.fxPop=function(pos,elem,slot,size,life,options={}){
       return spawn(this,pos,elem,slot,size,life,options);
     };
@@ -532,6 +535,7 @@
 
       return outcome;
     };
+    }
     function warpFx(b,pos,color,elem,arriving=false){
       if(!b?.fx||!pos)return;
       const p=pos.clone();

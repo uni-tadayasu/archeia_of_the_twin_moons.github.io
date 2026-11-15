@@ -1,7 +1,7 @@
 {
   "name": "archeia-classic",
   "private": true,
-  "version": "56.2.0",
+  "version": "56.3.0",
   "type": "module",
   "scripts": {
     "dev": "node scripts/serve.mjs",

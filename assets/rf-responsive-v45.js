@@ -8,7 +8,8 @@ const SIZE_KEY = 'rf45-touch-size-v1';
 const QUALITY = Object.freeze({
   low:      { label:'軽量', mobileDpr:0.65, desktopDpr:0.80, mobileFps:25, desktopFps:35, fx:28, sprites:22, threeD:3 },
   standard: { label:'標準', mobileDpr:0.90, desktopDpr:1.10, mobileFps:30, desktopFps:55, fx:75, sprites:48, threeD:6 },
-  high:     { label:'高画質', mobileDpr:1.30, desktopDpr:1.50, mobileFps:45, desktopFps:60, fx:150, sprites:85, threeD:10 }
+  high:     { label:'高画質', mobileDpr:1.30, desktopDpr:1.50, mobileFps:45, desktopFps:60, fx:150, sprites:85, threeD:10 },
+  ultra:    { label:'最高CG', mobileDpr:1.40, desktopDpr:2.00, mobileFps:45, desktopFps:60, fx:220, sprites:110, threeD:14 }
 });
 const ACTIONS = Object.freeze([
   ['joy','移動'], ['guard','構'], ['skill','技A'], ['skill2','技B'],
@@ -193,12 +194,12 @@ export function initResponsiveV45({ isTouch=false }={}){
     const section=make(`<section class="rf45-settings" id="rf45-settings" aria-label="表示とスマホ操作設定">
       <h3>画質・操作レイアウト</h3>
       <div class="rf45-settings-grid">
-      <label>画質<select id="rf45-quality"><option value="low">軽量（負荷を抑える）</option><option value="standard">標準（バランス）</option><option value="high">高画質（演出重視）</option></select></label>
+      <label>画質<select id="rf45-quality"><option value="low">軽量（負荷を抑える）</option><option value="standard">標準（バランス）</option><option value="high">高画質（精細モデル・豊かな演出）</option><option value="ultra">最高CG（高性能PC向け）</option></select></label>
       <label>操作ボタンの大きさ <output id="rf45-size-label">100%</output><input type="range" id="rf45-size" min="80" max="120" step="5" value="100"></label>
       </div>
       <p id="rf45-quality-status" class="rf45-quality-status" aria-live="polite"></p>
       <div class="rf45-settings-actions"><button type="button" id="rf45-edit-layout">ボタン配置を編集</button><button type="button" id="rf45-reset-layout">縦・横の配置を初期化</button></div>
-      <small>設定はこの端末に保存されます。PCのキーボード操作、ゲームパッド、キャラクター能力・モデル・セーブは変更しません。</small>
+      <small>高画質・最高CGではモデルの輪郭、素材の光、戦闘と舞台の演出を精細化します。重く感じるときは標準・軽量に切り替えられます。設定はこの端末に保存され、キャラクターの能力・衣装・進行は変わりません。</small>
     </section>`);
     const diff=target.querySelector('#opt-diff');if(diff)diff.insertAdjacentElement('afterend',section);else target.prepend(section);
     const select=section.querySelector('#rf45-quality');select.value=selected;
