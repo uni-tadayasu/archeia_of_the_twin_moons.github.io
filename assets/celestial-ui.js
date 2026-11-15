@@ -125,7 +125,9 @@
         if (glyph && !glyph.querySelector('.celestial-icon')) { glyph.textContent = ''; decorate(el, MODE_ICONS[key] || key, glyph); }
         artwork(el, key, 'celestial-quick-art');
       } else if (el.matches('.portal-services > button')) {
-        const key = ({'rf552-infinite-rank':'records','btn-castle':'castle','btn-forge':'forge','btn-shop':'shop','btn-mailbox':'mail','btn-options':'settings','btn-chief-mail':'mail','btn-evmaker':'event','btn-invade':'ranked'})[el.id];
+        const key = ({'rf552-infinite-rank':'records','btn-castle':'castle','btn-forge':'forge','btn-shop':'shop','btn-mailbox':'mail','btn-options':'settings','btn-chief-mail':'mail','btn-evmaker':'event','btn-invade':'ranked','btn-chief-character-editor':'settings','rf53-library-open':'records'})[el.id]
+          || ({forge:'forge',shop:'shop',crystal:'shop',mail:'mail',gift:'mail',castle:'castle',tower:'infinite',trophy:'records',star:'records',user:'records',event:'event',compass:'adventure'})[iconName(el)]
+          || 'settings';
         artwork(el, key);
         const holder = el.querySelector('.service-number') || el;
         if (holder !== el && !holder.querySelector('.celestial-icon')) holder.textContent = '';
