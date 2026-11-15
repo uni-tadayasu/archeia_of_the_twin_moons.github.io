@@ -49,7 +49,8 @@ import { createInfiniteDungeonV552 } from './rf-infinite-dungeon-v552.js?v=55.20
 import { apiEnabled, api, verifyToken } from './api.js';
 import { createOrbitControls } from './assets/rf-camera-v5520.js?v=55.21';
 import { activeInputModal, activateGamepadControl, adjustGamepadValue, bindTouchControls, EDITABLE_CONTROL, gamepadMenuItems } from './assets/rf5527/controls.js?v=55.28';
-import { createContactShadows, createRenderBudget, createStageReflections } from './assets/rf5526/graphics.js?v=55.30';
+import { createContactShadows, createRenderBudget, createStageReflections } from './assets/rf5526/graphics.js?v=classic-56.1';
+import { createClassicSurfaceFinish } from './assets/classic-graphics.js?v=classic-56.1';
 import { createBattleCountdown } from './assets/rf5528/battle-countdown.js?v=55.28';
 import { STORY_II, readStoryII, configureStoryIIBattle, createStoryIIStage } from './assets/rf5530/story-ii.js?v=55.30';
 
@@ -126,10 +127,12 @@ edgeLight.position.set(-10, 7, -10);
 scene.add(edgeLight);
 
 const texLoader = new THREE.TextureLoader();
+const classicSurfaces = createClassicSurfaceFinish(THREE, renderer, { isTouch, getQuality: rf45UI.getQuality });
+document.addEventListener('riftfall-quality-change', () => classicSurfaces.refresh());
 let floorTex;
 
 // ---------- Stages ----------
-const setReflections = createStageReflections(THREE, scene, texLoader);
+const setReflections = createStageReflections(THREE, scene, texLoader, { maxEntries: isTouch ? 2 : 3, textureWidth: isTouch ? 256 : 512 });
 const updateContactShadows = createContactShadows(THREE, scene, ARENA_R);
 const arena = new THREE.Group();
 arena.name = 'Colosseum (13 m)';
@@ -161,6 +164,7 @@ function setStage(st) {
     floorTex.repeat.set(6, 6);
     floorTex.anisotropy = Math.min(8, renderer.capabilities?.getMaxAnisotropy?.() || 1);
     floor.material.map = floorTex;
+    classicSurfaces.apply(floor.material);
     floor.material.needsUpdate = true;
   }
   currentStage = st;
@@ -4021,18 +4025,34 @@ async function startDuel(peer, challenger) {
   if(state.battleLoading)return;
   const w = state.world;
   if (!w || !canDuelNow()) return;
+  const field = state.field;
+  const chapter = state.chapter;
+  const myKey = state.myKey;
+  const duelKey = peerKeyOf(peer.id, peer.fk);
   closeWorldPanel();
-  const ch = STORY[state.chapter];
+  // Keep the exploration scene intact until both fighters can actually load.
+  try {
+    if (!(await ensureAllModelsReady([myKey, duelKey]))) return;
+  } catch (error) {
+    state.battleLoading = false;
+    console.warn('[Duel preparation]', error);
+    ui.banner({ name: '— 決闘の準備 —' }, '読み込みに失敗しました。探索を続けられます。');
+    return;
+  }
+  if (state.field !== field || state.world !== w || state.chapter !== chapter ||
+      state.myKey !== myKey || !canDuelNow()) {
+    state.battleLoading = false;
+    return;
+  }
+  const ch = STORY[chapter];
   setStage(stageById(ch.stage));
   if (arena) arena.visible = true;
-  state.field.setWorldVisible(false);
-  state.field.frozen = true;
+  field.setWorldVisible(false);
+  field.frozen = true;
   document.body.classList.remove('field-mode');
   resetFieldLight();
   state.duel = { id: peer.id, name: peer.name };
   state.encounter = null;
-  const duelKey=peerKeyOf(peer.id,peer.fk);
-  if(!(await ensureAllModelsReady([state.myKey,duelKey])))return;
   try {
   const b = makeBattle(w);
   const myPos = challenger ? [-4, 3] : [4, -3];

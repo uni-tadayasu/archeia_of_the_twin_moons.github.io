@@ -1,8 +1,8 @@
 # main への自動取り込み
 
-同じリポジトリの `codex/riftfall-*` ブランチから `main` 宛てに Pull Request を作成すると、`Riftfall Rebirth` が以下を実行します。
+同じリポジトリの `codex/riftfall-*` ブランチから `main` 宛てに Pull Request を作成すると、`Riftfall Quality` が以下を実行します。
 
-1. 提案されたマージ結果で `npm run check`・`npm test`・Chromium による `npm run test:browser` を実行。ブラウザテストの画像・診断結果は Actions の artifact に保存。
+1. 提案されたマージ結果で `npm run check`・`npm test`・従来ゲームを起動する Chromium の `npm run test:browser` を実行。ブラウザテストの画像・診断結果は Actions の artifact に保存。
 2. すべての成功後、テストしたブランチの SHA と現在の SHA が一致する場合に squash merge。
 3. `main` を公開元とする GitHub Pages の再ビルドを明示的に要求。
 

@@ -159,6 +159,8 @@
     <link rel="stylesheet" href="./assets/remake/game-ui.css?v=1">
     <link rel="stylesheet" href="./assets/remake/portal.css?v=1">
     <script defer src="./assets/remake/portal.js?v=1"></script>
+    <script defer src="./assets/classic-polish-ui.js?v=56.1"></script>
+    <link rel="stylesheet" href="./assets/classic-polish.css?v=56.1">
 
     <script src="./assets/rf564-audio-lifecycle.js?v=55.30" defer></script>
     <script defer src="./arkeia-ui.js?v=55.29"></script>
@@ -166,31 +168,36 @@
     <script type="importmap">
       {
         "imports": {
-          "three": "https://esm.sh/three@0.184.0",
-          "three/": "https://esm.sh/three@0.184.0/",
-          "@instantdb/core": "https://esm.sh/@instantdb/core@0.22.155",
-          "./data.js?v=rf-minamoto-v48-20261111": "./data.js?v=55.29",
-          "./model-runtime.js?v=rf-minamoto-v48-20261111": "./model-runtime.js?v=55.28",
-          "./game.js?v=55.21": "./game.js?v=55.32",
-          "./field.js?v=55.21": "./field.js?v=55.30",
-          "./field.js?v=rf-v9-2-20261109": "./field.js?v=55.30",
-          "./fujiwara-nobuyori.js?v=rf-fujiwara-v43-rainbow-totsuka-20261110": "./fujiwara-nobuyori.js?v=55.29",
-          "./assets/rf5520-illustrated-material.js?v=55.21": "./assets/rf5520-illustrated-material.js?v=55.27",
-          "./assets/riftfall-effects-v5521.js": "./assets/riftfall-effects-v5521.js?v=55.23",
-          "./assets/riftfall-motion-v5521.js": "./assets/riftfall-motion-v5521.js?v=55.23",
-          "./assets/ranked-mode.js?v=55.22": "./assets/ranked-mode.js?v=55.32",
-          "./net.js?v=rf-v552-coop-20261111": "./net.js?v=55.30",
-          "./net.js?v=valgard-ice-20261107": "./net.js?v=55.30",
-          "./data.js?v=rf-v9-2-20261109": "./data.js?v=55.29",
-          "./data.js?v=rf-mobile-v7-20261109": "./data.js?v=55.29",
-          "./model-runtime.js?v=rf-mobile-v7-20261109": "./model-runtime.js?v=55.28",
-          "./assets/rf-camera-v5520.js": "./assets/rf-camera-v5520.js?v=55.31",
-          "./assets/rf-camera-v5520.js?v=55.21": "./assets/rf-camera-v5520.js?v=55.31",
-          "./assets/rf568-castle-maze.js?v=55.20": "./assets/rf568-castle-maze.js?v=55.32",
-          "./castle-realm-v50.js?v=55.20": "./castle-realm-v50.js?v=55.32",
-          "./gaizorg-adventure.js?v=55.20": "./gaizorg-adventure.js?v=55.23"
+                "three": "./assets/vendor/three/three.module.min.js",
+                "three/addons/": "./assets/vendor/three/addons/",
+                "@instantdb/core": "https://esm.sh/@instantdb/core@0.22.155",
+                "./data.js?v=rf-minamoto-v48-20261111": "./data.js?v=55.29",
+                "./model-runtime.js?v=rf-minamoto-v48-20261111": "./model-runtime.js?v=classic-56.1",
+                "./game.js?v=55.21": "./game.js?v=classic-56.1",
+                "./field.js?v=55.21": "./field.js?v=55.30",
+                "./field.js?v=rf-v9-2-20261109": "./field.js?v=55.30",
+                "./fujiwara-nobuyori.js?v=rf-fujiwara-v43-rainbow-totsuka-20261110": "./fujiwara-nobuyori.js?v=55.29",
+                "./assets/rf5520-illustrated-material.js?v=55.21": "./assets/rf5520-illustrated-material.js?v=55.27",
+                "./assets/riftfall-effects-v5521.js": "./assets/riftfall-effects-v5521.js?v=55.23",
+                "./assets/riftfall-motion-v5521.js": "./assets/riftfall-motion-v5521.js?v=55.23",
+                "./assets/ranked-mode.js?v=55.22": "./assets/ranked-mode.js?v=55.32",
+                "./net.js?v=rf-v552-coop-20261111": "./net.js?v=55.30",
+                "./net.js?v=valgard-ice-20261107": "./net.js?v=55.30",
+                "./data.js?v=rf-v9-2-20261109": "./data.js?v=55.29",
+                "./data.js?v=rf-mobile-v7-20261109": "./data.js?v=55.29",
+                "./model-runtime.js?v=rf-mobile-v7-20261109": "./model-runtime.js?v=classic-56.1",
+                "./assets/rf-camera-v5520.js": "./assets/rf-camera-v5520.js?v=55.31",
+                "./assets/rf-camera-v5520.js?v=55.21": "./assets/rf-camera-v5520.js?v=55.31",
+                "./assets/rf568-castle-maze.js?v=55.20": "./assets/rf568-castle-maze.js?v=55.32",
+                "./castle-realm-v50.js?v=55.20": "./castle-realm-v50.js?v=55.32",
+                "./gaizorg-adventure.js?v=55.20": "./gaizorg-adventure.js?v=55.23",
+                "./game.js?v=rf553-chief-cpu-20261111": "./game.js?v=classic-56.1",
+                "./game.js?v=55.32": "./game.js?v=classic-56.1",
+                "./game.js": "./game.js?v=classic-56.1",
+                "./model-runtime.js?v=55.28": "./model-runtime.js?v=classic-56.1",
+                "./model-runtime.js": "./model-runtime.js?v=classic-56.1"
         }
-      }
+}
     </script>
 
 <script defer src="./loading-screen.js?v=55.28"></script>
@@ -203,7 +210,7 @@
     </style>
   </noscript>
 </head>
-  <body class="rf-remake">
+  <body class="rf-remake rf-classic-polish">
     <noscript>
       <main class="rf27-noscript">
         <h1>双月のアルケイア</h1>
@@ -557,7 +564,7 @@
     <script type="module" src="./assets/rf563-spatial.js?v=55.21"></script>
      <script type="module" src="./assets/rf564-world-life.js?v=55.21"></script>
     <script type="module" src="./assets/rf566-story-flow.js?v=55.21"></script>
-    <script type="module" src="main.js?v=56.0"></script>
+    <script type="module" src="main.js?v=classic-56.1"></script>
 <script defer src="./assets/rf-ui-safe-v34.js?v=rf-responsive-v45-20261110"></script>
 <script id="rf46-responsive-js" defer src="./assets/rf-responsive-v46.js?v=rf-responsive-v46-20261111"></script>
 <script id="rf49-js" defer src="./assets/rf-responsive-v49.js?v=rf556-20261112"></script>

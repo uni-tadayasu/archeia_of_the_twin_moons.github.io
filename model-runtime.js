@@ -71,17 +71,14 @@ function documentOf(buffer) {
 async function getDraco() {
   if (!decoderPromise) decoderPromise = (async () => {
     const { DRACOLoader } = await import('three/addons/loaders/DRACOLoader.js');
-    // The exported site does not contain assets/vendor/draco/; probing it
-    // causes 404, then the CDN used to fail because CSP blocked connect-src.
-    // Use the official version-pinned JavaScript decoder directly. index.html
-    // permits www.gstatic.com only as a fetch destination (not unsafe-eval).
-    const decoderPath = 'https://www.gstatic.com/draco/versioned/decoders/1.5.7/';
-    return new DRACOLoader().setDecoderPath(decoderPath).setDecoderConfig({ type: 'js' }).setWorkerLimit(2);
+    // The decoder ships with the game: loading models stays same-origin.
+    const decoderPath = new URL('./assets/vendor/draco/', import.meta.url).href;
+    return new DRACOLoader().setDecoderPath(decoderPath).setDecoderConfig({ type: 'wasm' }).setWorkerLimit(2);
   })().catch((error) => { decoderPromise = null; throw error; });
   return decoderPromise;
 }
 async function getMeshopt() {
-  if (!meshoptPromise) meshoptPromise = import('three/addons/libs/meshopt_decoder.module.js')
+  if (!meshoptPromise) meshoptPromise = import('./assets/vendor/meshopt_decoder.module.js')
     .then(async ({ MeshoptDecoder }) => { await MeshoptDecoder.ready; return MeshoptDecoder; })
     .catch((error) => { meshoptPromise = null; throw error; });
   return meshoptPromise;

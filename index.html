@@ -1,110 +1,587 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="ja">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>双月のアルケイア — Rebirth｜剣と灯の3DアクションRPG</title>
-<meta name="description" content="双つの月を仰ぎ、灯の消えた道をゆく。14人の戦士、4章の物語、10面の冒険、無限天守。PC・スマホで遊べる和風3DアクションRPG。">
-<meta name="theme-color" content="#080f19">
-<meta name="color-scheme" content="dark">
-<link rel="canonical" href="https://www.kasai-solutions-inc.com/">
-<meta property="og:type" content="website">
-<meta property="og:title" content="双月のアルケイア — Rebirth">
-<meta property="og:description" content="消えゆく灯に、もう一度、その剣を。双月の世界で紡ぐ3DアクションRPG。">
-<meta property="og:url" content="https://www.kasai-solutions-inc.com/">
-<meta property="og:image" content="https://www.kasai-solutions-inc.com/assets/rf5525/moonkeep-share.jpg">
-<meta name="twitter:card" content="summary_large_image">
-<link rel="icon" href="assets/rf5530/favicon-64.png" type="image/png">
-<link rel="apple-touch-icon" href="assets/apple-touch-icon.png">
-<link rel="manifest" href="manifest.webmanifest">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob:; connect-src 'self' data: blob:; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'none'">
-<link rel="preload" as="image" href="assets/rf5525/moonkeep-wide.webp">
-<link rel="stylesheet" href="rebirth/style.css?v=rebirth-1">
-<script type="importmap">{"imports":{"three":"./assets/vendor/three/three.module.min.js","three/addons/":"./assets/vendor/three/addons/"}}</script>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <title>双月のアルケイア｜無料3DアクションRPG・Riftfall Arena</title>
+    <meta name="description" content="双月のアルケイアは、PC・スマホで遊べる無料の和風3DアクションRPG。探索の物語、横視点のストーリーモードⅡ、無限天守、拠点攻城戦、世界ランクマッチを収録。" />
+    <meta name="theme-color" content="#0b1012" />
+    <meta name="robots" content="index,follow,max-image-preview:large" />
+    <meta name="application-name" content="双月のアルケイア" />
+    <meta name="apple-mobile-web-app-title" content="双月のアルケイア" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <!-- RF553_SOCIAL_ICON_OGP_20261111 : static social preview metadata (X / Discord / LINE) -->
+    <link rel="canonical" href="https://www.kasai-solutions-inc.com/" />
+    <meta property="og:url" content="https://www.kasai-solutions-inc.com/" />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="双月のアルケイア" />
+    <meta property="og:locale" content="ja_JP" />
+    <meta property="og:title" content="双月のアルケイア｜無料3DアクションRPG・Riftfall Arena" />
+    <meta property="og:description" content="双月のアルケイアは、PC・スマホで遊べる無料の和風3DアクションRPG。探索の物語、横視点のストーリーモードⅡ、無限天守、拠点攻城戦、世界ランクマッチを収録。" />
+    <meta property="og:image" content="https://www.kasai-solutions-inc.com/assets/rf5527/palace-share.jpg" />
+    <meta property="og:image:secure_url" content="https://www.kasai-solutions-inc.com/assets/rf5527/palace-share.jpg" />
+    <meta property="og:image:type" content="image/jpeg" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="双つの月の下、灯火がともる朱塗りの山城と紅葉" />
+    <meta name="twitter:description" content="双月のアルケイアは、PC・スマホで遊べる無料の和風3DアクションRPG。探索の物語、横視点のストーリーモードⅡ、無限天守、拠点攻城戦、世界ランクマッチを収録。" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:url" content="https://www.kasai-solutions-inc.com/" />
+    <meta name="twitter:title" content="双月のアルケイア｜無料3DアクションRPG・Riftfall Arena" />
+    <meta name="twitter:image" content="https://www.kasai-solutions-inc.com/assets/rf5527/palace-share.jpg" />
+    <meta name="twitter:image:alt" content="双つの月の下、灯火がともる朱塗りの山城と紅葉" />
+    <link rel="icon" type="image/png" sizes="64x64" href="assets/rf5530/favicon-64.png" />
+    <link rel="apple-touch-icon" sizes="180x180" href="assets/apple-touch-icon.png" />
+    <meta name="referrer" content="strict-origin-when-cross-origin" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' https://esm.sh https://storage.googleapis.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob: https:; media-src 'self' blob: https:; connect-src 'self' data: blob: https://www.gstatic.com https://esm.sh https://api.instantdb.com wss://api.instantdb.com https://*.instantdb.com wss://*.instantdb.com https://storage.googleapis.com https://*.workers.dev https://api.kasai-solutions-inc.com wss://arkeia-api.kasai-solutions-inc.workers.dev wss://api.kasai-solutions-inc.com; worker-src 'self' blob:; object-src 'none'; frame-src 'none'; manifest-src 'self'; script-src-attr 'none'; base-uri 'self'; form-action 'none'; upgrade-insecure-requests" />
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@graph": [
+          {
+            "@type": "WebSite",
+            "@id": "https://www.kasai-solutions-inc.com/#website",
+            "url": "https://www.kasai-solutions-inc.com/",
+            "name": "双月のアルケイア",
+            "alternateName": "Riftfall Arena",
+            "inLanguage": "ja",
+            "publisher": {
+              "@id": "https://www.kasai-solutions-inc.com/#publisher"
+            }
+          },
+          {
+            "@type": "VideoGame",
+            "@id": "https://www.kasai-solutions-inc.com/#game",
+            "url": "https://www.kasai-solutions-inc.com/",
+            "name": "双月のアルケイア",
+            "alternateName": "Riftfall Arena",
+            "description": "双月のアルケイアは、PC・スマホで遊べる無料の和風3DアクションRPG。探索の物語、横視点のストーリーモードⅡ、無限天守、拠点攻城戦、世界ランクマッチを収録。",
+            "image": {
+              "@id": "https://www.kasai-solutions-inc.com/#cover"
+            },
+            "genre": [
+              "Action",
+              "Fighting",
+              "Fantasy",
+              "RPG"
+            ],
+            "gamePlatform": [
+              "Web browser",
+              "PC",
+              "Mobile"
+            ],
+            "playMode": [
+              "https://schema.org/SinglePlayer",
+              "https://schema.org/MultiPlayer",
+              "https://schema.org/CoOp"
+            ],
+            "applicationCategory": "Game",
+            "operatingSystem": "Web browser",
+            "inLanguage": "ja",
+            "softwareVersion": "55.32",
+            "isAccessibleForFree": true,
+            "offers": {
+              "@type": "Offer",
+              "price": "0",
+              "priceCurrency": "JPY",
+              "url": "https://www.kasai-solutions-inc.com/"
+            },
+            "publisher": {
+              "@id": "https://www.kasai-solutions-inc.com/#publisher"
+            },
+            "isPartOf": {
+              "@id": "https://www.kasai-solutions-inc.com/#website"
+            },
+            "mainEntityOfPage": {
+              "@id": "https://www.kasai-solutions-inc.com/#webpage"
+            }
+          },
+          {
+            "@type": "WebPage",
+            "@id": "https://www.kasai-solutions-inc.com/#webpage",
+            "url": "https://www.kasai-solutions-inc.com/",
+            "name": "双月のアルケイア｜無料3DアクションRPG・Riftfall Arena",
+            "description": "双月のアルケイアは、PC・スマホで遊べる無料の和風3DアクションRPG。探索の物語、横視点のストーリーモードⅡ、無限天守、拠点攻城戦、世界ランクマッチを収録。",
+            "inLanguage": "ja",
+            "isPartOf": {
+              "@id": "https://www.kasai-solutions-inc.com/#website"
+            },
+            "mainEntity": {
+              "@id": "https://www.kasai-solutions-inc.com/#game"
+            },
+            "primaryImageOfPage": {
+              "@id": "https://www.kasai-solutions-inc.com/#cover"
+            },
+            "dateModified": "2026-11-15",
+            "relatedLink": [
+              "https://www.kasai-solutions-inc.com/battle-guide.html",
+              "https://www.kasai-solutions-inc.com/play-guide.html",
+              "https://www.kasai-solutions-inc.com/world-guide.html",
+              "https://www.kasai-solutions-inc.com/tenshi.html"
+            ]
+          },
+          {
+            "@type": "ImageObject",
+            "@id": "https://www.kasai-solutions-inc.com/#cover",
+            "contentUrl": "https://www.kasai-solutions-inc.com/assets/rf5527/palace-share.jpg",
+            "width": 1200,
+            "height": 630,
+            "caption": "双つの月の下、灯火がともる朱塗りの山城と紅葉"
+          },
+          {
+            "@type": "Organization",
+            "@id": "https://www.kasai-solutions-inc.com/#publisher",
+            "name": "KASAI SOLUTIONS INC."
+          }
+        ]
+      }
+    </script>
+    <link rel="preconnect" href="https://esm.sh" crossorigin>
+    <meta name="author" content="KASAI SOLUTIONS INC." />
+    <meta name="copyright" content="© KASAI SOLUTIONS INC. All rights reserved." />
+    <meta name="publisher" content="KASAI SOLUTIONS INC." />
+    <meta name="rating" content="general" />
+    <link rel="dns-prefetch" href="//api.instantdb.com" />
+    <link rel="dns-prefetch" href="//api.kasai-solutions-inc.com" />
+    <meta name="format-detection" content="telephone=no" />
+    <meta name="color-scheme" content="dark" />
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <!-- 軽量化：Webフォントは描画を止めずに後から適用（失敗時はOSの明朝体） -->
+    <link id="webfont" href="https://fonts.googleapis.com/css2?family=Shippori+Mincho:wght@500;600;800&amp;display=swap" rel="stylesheet" media="print">
+    <script>(function(l){if(l.sheet)l.media='all';else l.addEventListener('load',function(){l.media='all'});})(document.getElementById('webfont'));</script>
+    <noscript><link href="https://fonts.googleapis.com/css2?family=Shippori+Mincho:wght@500;600;800&amp;display=swap" rel="stylesheet"></noscript>
+    <link rel="manifest" href="manifest.webmanifest?v=55.25" />
+    <meta name="google" content="notranslate" />
+
+    <link rel="preload" as="image" href="./assets/rf5525/moonkeep-wide.webp" media="(min-width: 601px)">
+    <link rel="stylesheet" href="./assets/rf5530/site-base.css?v=55.30">
+    <link rel="stylesheet" href="./assets/remake/game-ui.css?v=1">
+    <link rel="stylesheet" href="./assets/remake/portal.css?v=1">
+    <script defer src="./assets/remake/portal.js?v=1"></script>
+    <script defer src="./assets/classic-polish-ui.js?v=56.1"></script>
+    <link rel="stylesheet" href="./assets/classic-polish.css?v=56.1">
+
+    <script src="./assets/rf564-audio-lifecycle.js?v=55.30" defer></script>
+    <script defer src="./arkeia-ui.js?v=55.29"></script>
+    <script src="./rosebud-game-defaults.js" defer></script>
+    <script type="importmap">
+      {
+        "imports": {
+                "three": "./assets/vendor/three/three.module.min.js",
+                "three/addons/": "./assets/vendor/three/addons/",
+                "@instantdb/core": "https://esm.sh/@instantdb/core@0.22.155",
+                "./data.js?v=rf-minamoto-v48-20261111": "./data.js?v=55.29",
+                "./model-runtime.js?v=rf-minamoto-v48-20261111": "./model-runtime.js?v=classic-56.1",
+                "./game.js?v=55.21": "./game.js?v=classic-56.1",
+                "./field.js?v=55.21": "./field.js?v=55.30",
+                "./field.js?v=rf-v9-2-20261109": "./field.js?v=55.30",
+                "./fujiwara-nobuyori.js?v=rf-fujiwara-v43-rainbow-totsuka-20261110": "./fujiwara-nobuyori.js?v=55.29",
+                "./assets/rf5520-illustrated-material.js?v=55.21": "./assets/rf5520-illustrated-material.js?v=55.27",
+                "./assets/riftfall-effects-v5521.js": "./assets/riftfall-effects-v5521.js?v=55.23",
+                "./assets/riftfall-motion-v5521.js": "./assets/riftfall-motion-v5521.js?v=55.23",
+                "./assets/ranked-mode.js?v=55.22": "./assets/ranked-mode.js?v=55.32",
+                "./net.js?v=rf-v552-coop-20261111": "./net.js?v=55.30",
+                "./net.js?v=valgard-ice-20261107": "./net.js?v=55.30",
+                "./data.js?v=rf-v9-2-20261109": "./data.js?v=55.29",
+                "./data.js?v=rf-mobile-v7-20261109": "./data.js?v=55.29",
+                "./model-runtime.js?v=rf-mobile-v7-20261109": "./model-runtime.js?v=classic-56.1",
+                "./assets/rf-camera-v5520.js": "./assets/rf-camera-v5520.js?v=55.31",
+                "./assets/rf-camera-v5520.js?v=55.21": "./assets/rf-camera-v5520.js?v=55.31",
+                "./assets/rf568-castle-maze.js?v=55.20": "./assets/rf568-castle-maze.js?v=55.32",
+                "./castle-realm-v50.js?v=55.20": "./castle-realm-v50.js?v=55.32",
+                "./gaizorg-adventure.js?v=55.20": "./gaizorg-adventure.js?v=55.23",
+                "./game.js?v=rf553-chief-cpu-20261111": "./game.js?v=classic-56.1",
+                "./game.js?v=55.32": "./game.js?v=classic-56.1",
+                "./game.js": "./game.js?v=classic-56.1",
+                "./model-runtime.js?v=55.28": "./model-runtime.js?v=classic-56.1",
+                "./model-runtime.js": "./model-runtime.js?v=classic-56.1"
+        }
+}
+    </script>
+
+<script defer src="./loading-screen.js?v=55.28"></script>
+  <script defer src="./battle-crash-diagnostics.js?v=55.21"></script>
+
+  <noscript>
+    <style>
+      body.rf-remake { overflow: auto !important; background: #111b24; color: #fff3df; }
+      #ui, #game-container { display: none !important; }
+    </style>
+  </noscript>
 </head>
-<body>
-<div class="app-shell">
-  <header class="site-header" id="site-header">
-    <a class="brand" href="./" aria-label="双月のアルケイア ホーム">
-      <svg class="brand-emblem" viewBox="0 0 48 48" fill="none" aria-hidden="true"><circle cx="24" cy="24" r="21" stroke="currentColor" stroke-width=".6"/><path d="M27 8a16 16 0 1 0 13 23A17 17 0 0 1 27 8Z" fill="currentColor"/><circle cx="33" cy="16" r="6" stroke="currentColor"/><path d="M24 1v7m0 32v7M1 24h7m32 0h7" stroke="currentColor"/></svg>
-      <span>双月のアルケイア<small>ARCHEIA OF THE TWIN MOONS</small></span>
-    </a>
-    <nav class="header-nav" aria-label="メインナビゲーション">
-      <button id="roster-button" class="nav-button" type="button">戦士名鑑</button>
-      <button id="records-button" class="nav-button" type="button">旅の記録</button>
-      <a href="classic.html" class="nav-button classic-link">オンライン・運営 <span aria-hidden="true">↗</span></a>
-    </nav>
-    <div class="header-status">
-      <div class="shards" title="新生版で獲得した灯晶"><span class="crystal" aria-hidden="true">◇</span><span id="shard-count">0</span><small>灯晶</small></div>
-      <span class="profile"><i aria-hidden="true"></i><span id="profile-name">旅人</span></span>
-      <button id="settings-button" class="icon-button" type="button" aria-label="設定"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m9 3-1 3-3 1-2 4 2 3v4l4 2 3-1 3 1 4-2v-4l2-3-2-4-3-1-1-3Z" stroke="currentColor" stroke-width="1.2"/><circle cx="12" cy="12" r="3.2" stroke="currentColor" stroke-width="1.2"/></svg></button>
-    </div>
-  </header>
-
-  <main>
-    <section id="home-view" class="view home-view" aria-labelledby="home-title">
-      <div class="hero-background" aria-hidden="true"><img id="hero-art" src="assets/rf5525/moonkeep-wide.webp" alt="" fetchpriority="high"></div>
-      <div class="hero-vignette" aria-hidden="true"></div>
-      <div class="home-orbit" aria-hidden="true"><i></i><span>二つの月が、再び巡る。</span></div>
-      <div class="home-content">
-        <div class="hero-copy">
-          <p class="eyebrow"><span class="gold-line"></span> REBIRTH · 剣と灯の物語</p>
-          <h1 id="home-title"><span class="title-prefix">双月の</span><span class="title-main">アルケイア</span></h1>
-          <p class="title-roman">ARCHEIA OF THE TWIN MOONS</p>
-          <div class="hero-rule"><span></span><i>✦</i><span></span></div>
-          <h2 id="hero-title">消えゆく灯に、<br>もう一度、その剣を。</h2>
-          <p id="hero-description">双つの月が照らす、忘れられた王国。<br>仲間と出会い、技を繋ぎ、物語の先へ。</p>
-          <div class="hero-actions">
-            <button disabled id="start-button" class="primary start-button" type="button"><span class="button-decoration" aria-hidden="true">✦</span><span>旅をはじめる</span><span class="button-arrow" aria-hidden="true">→</span></button>
-            <button id="continue-button" class="text-button" type="button">前回の旅を続ける <span aria-hidden="true">↗</span></button>
+  <body class="rf-remake rf-classic-polish">
+    <noscript>
+      <main class="rf27-noscript">
+        <h1>双月のアルケイア</h1>
+        <p>PC・スマホのブラウザから無料で遊べる和風3DアクションRPG。街道を旅する物語、横視点のストーリーモードⅡ、無限天守、拠点攻城戦、世界ランクマッチで遊べます。</p>
+        <p>プレイにはJavaScriptを有効にしてください。ゲームのルールと操作は以下のページから読めます。</p>
+        <nav aria-label="ゲーム案内">
+          <a href="./battle-guide.html" data-rf25-icon="sword">ゲームモードと対戦ルール</a>
+          <a href="./battle-guide.html#story-ii" data-rf25-icon="duel">横視点のストーリーモードⅡ</a>
+          <a href="./play-guide.html" data-rf25-icon="gamepad">PC・スマホの操作</a>
+          <a href="./world-guide.html" data-rf25-icon="map">闘技場と無限天守の舞台案内</a>
+        </nav>
+      </main>
+    </noscript>
+    <div id="game-container"></div>
+    <main id="ui">
+      <section id="scr-press" class="screen on" aria-label="はじまり">
+        <div class="remake-opening">
+          <a class="remake-skip" href="#opening-story" data-opening-jump="opening-story">作品紹介へ進む</a>
+          <header class="opening-header">
+            <a class="remake-brand" href="./" aria-label="双月のアルケイア ホーム"><img src="./assets/remake/emblem.svg" width="42" height="42" alt=""><span>双月のアルケイア<small>ARCHEIA OF THE TWIN MOONS</small></span></a>
+            <nav aria-label="作品案内"><a href="#opening-story" data-opening-jump="opening-story">物語のはじまり</a><a href="#opening-world" data-opening-jump="opening-world">双月の世界</a><a href="./play-guide.html">遊び方 <span aria-hidden="true">↗</span></a></nav>
+            <span class="opening-edition">FANTASY ACTION RPG <i></i> BROWSER EDITION</span>
+          </header>
+          <div class="opening-hero">
+            <picture class="opening-art"><source media="(max-width: 600px) and (orientation: portrait)" srcset="./assets/rf5525/moonkeep-portrait.webp" width="640" height="800"><img src="./assets/rf5525/moonkeep-wide.webp" srcset="./assets/rf5525/moonkeep-960.webp 960w, ./assets/rf5525/moonkeep-wide.webp 1672w" sizes="100vw" width="1672" height="941" alt="双つの月が照らす山城。朱の橋が、霧に包まれた渓谷を渡る。" fetchpriority="high"></picture>
+            <div class="opening-rail" aria-hidden="true"><span>THE CHRONICLES OF TWO MOONS</span><i></i><span>序 — THE BEGINNING</span></div>
+            <div class="opening-copy">
+              <p class="remake-eyebrow"><span></span> 月夜に紡ぐ、剣と魔法の物語</p>
+              <h1><span class="opening-title-small">双月の</span><span>アルケイア</span></h1>
+              <p class="opening-roman" lang="en">ARCHEIA OF THE TWIN MOONS</p>
+              <p class="opening-tagline">双つの月を仰ぎ、<br>灯の消えた道をゆく。</p>
+              <div class="opening-start">
+                <button type="button" id="press-start" class="remake-primary" disabled><span class="button-glyph" aria-hidden="true">✦</span> 無料で冒険を始める <span class="button-arrow" aria-hidden="true">→</span></button>
+                <p id="press-hint" class="press-hint">PC・スマホ対応 ／ ダウンロード不要</p>
+                <p id="loading" class="boot-status" role="status">冒険の準備をしています…</p>
+              </div>
+            </div>
+            <div class="opening-bottom"><span><b>剣を取る。技を繋ぐ。運命を拓く。</b><small>FREE TO PLAY · 3D ACTION RPG</small></span><a href="#opening-story" data-opening-jump="opening-story">この世界を知る <i aria-hidden="true">↓</i></a><span class="opening-scene">双月の山城<small>THE MOONLIT KEEP</small></span></div>
           </div>
-          <p class="start-note">PC・スマホ対応 <span>／</span> ブラウザで、そのまま冒険へ</p>
+          <section class="opening-story remake-contained" id="opening-story" tabindex="-1" aria-labelledby="opening-story-title">
+            <div class="remake-section-id"><span>01</span> PROLOGUE <i></i></div>
+            <div class="opening-story-layout"><div><p class="remake-eyebrow">灯脈を辿る旅路</p><h2 id="opening-story-title">その一閃が、<br>物語を灯す。</h2></div><div class="opening-story-text"><p>双つの月の下、灯脈を辿って街道へ。<br>街を巡り、戦士と出会い、剣と魔法で道を切り拓く。<br>あなたの歩みが、この世界の続きを紡いでゆく。</p><p>近づいて斬り、技を繋ぎ、奥義で決める。<br>物語を旅する日も、闘技場で腕を磨く日も。<br>ブラウザを開けば、そこが冒険の入口になる。</p><a class="remake-text-link" href="./battle-guide.html">戦いのかたちを知る <span aria-hidden="true">↗</span></a></div></div>
+          </section>
+          <section class="opening-world remake-contained" id="opening-world" tabindex="-1" aria-labelledby="opening-world-title">
+            <div class="remake-section-id"><span>02</span> THE WORLD <i></i></div>
+            <div class="remake-section-heading"><div><p class="remake-eyebrow">月明かりの、その先へ</p><h2 id="opening-world-title">双月の世界</h2></div><a class="remake-text-link" href="./world-guide.html">すべての舞台を見る <span aria-hidden="true">↗</span></a></div>
+            <div class="opening-world-grid">
+              <a class="opening-world-card" href="./world-guide.html#moon-arena"><img src="./assets/rf5526/moon-arena-960.webp" width="960" height="540" loading="lazy" decoding="async" alt="紅葉と朱の灯籠に彩られた双月の闘技場"><span><small>01 / MOON ARENA</small><b>双月の闘技場</b><em>剣を交え、己を知る。 <i aria-hidden="true">↗</i></em></span></a>
+              <a class="opening-world-card" href="./world-guide.html#tenshu"><img src="./assets/rf562/japanese-palace.webp" width="1672" height="941" loading="lazy" decoding="async" alt="灯火のともる木造天守の広間"><span><small>02 / ENDLESS KEEP</small><b>無限天守</b><em>一歩ずつ、まだ見ぬ高みへ。 <i aria-hidden="true">↗</i></em></span></a>
+              <a class="opening-world-card" href="./world-guide.html#river"><img src="./assets/rf5523/river-path.webp" width="960" height="540" loading="lazy" decoding="async" alt="竹と杉の森の間を流れる青い水辺"><span><small>03 / SILENT BAMBOO</small><b>鳴かぬ竹林</b><em>静寂に、旅の気配を聴く。 <i aria-hidden="true">↗</i></em></span></a>
+            </div>
+          </section>
+          <section class="opening-guide remake-contained" aria-label="初めての旅支度"><div><p class="remake-eyebrow">YOUR FIRST STEP</p><h2>はじめての旅に、道しるべを。</h2><p>キーボードでも、タッチでも。あなたのスタイルで遊ぼう。</p></div><a class="remake-outline" href="./play-guide.html#controls">操作ガイドを読む <span aria-hidden="true">↗</span></a></section>
+          <footer class="remake-footer"><a class="remake-brand" href="./"><img src="./assets/remake/emblem.svg" width="36" height="36" alt=""><span>双月のアルケイア<small>RIFTFALL ARENA</small></span></a><nav aria-label="サイト案内"><a href="./battle-guide.html">モード</a><a href="./play-guide.html">操作</a><a href="./world-guide.html">舞台</a><a href="./tenshi.html">天子</a></nav><small>© 2026 KASAI SOLUTIONS INC.</small></footer>
         </div>
-        <div class="world-caption"><span class="world-caption-line"></span><span>双月の山城<small>THE MOONLIT KEEP</small><small id="home-progress">まだ見ぬ物語が、あなたを待つ。</small></span><b aria-hidden="true">壱</b></div>
+      </section>
+
+      <section id="scr-title" class="screen" aria-label="ゲームメニュー">
+        <div class="portal-wrap remake-portal">
+          <header class="portal-header">
+            <button class="brand-button remake-brand" type="button" data-to="press" aria-label="始まりの画面に戻る"><img src="./assets/remake/emblem.svg" width="42" height="42" alt=""><span class="brand-type">双月のアルケイア<small>ARCHEIA OF THE TWIN MOONS</small></span></button>
+            <nav class="portal-topnav" aria-label="メニュー内の移動"><button type="button" data-portal-jump="portal-play">出撃先を選ぶ</button><button type="button" data-portal-jump="portal-world">世界を巡る</button><button type="button" data-portal-jump="portal-services">旅支度</button><a href="./play-guide.html">遊び方 <span aria-hidden="true">↗</span></a></nav>
+            <div class="portal-account"><span class="shards" id="title-shards">灯晶 0</span></div>
+          </header>
+          <section class="portal-hero" id="portal-start" aria-labelledby="rf5521-hero-title">
+            <picture class="portal-hero-art"><source media="(max-width: 600px) and (orientation: portrait)" srcset="./assets/rf5530/palace-portrait-640.webp" width="640" height="800"><img src="./assets/rf5527/palace.webp" srcset="./assets/rf5527/palace-960.webp 960w, ./assets/rf5527/palace.webp 1600w" sizes="100vw" width="1600" height="900" alt="月明かりに浮かぶ朱塗りの山城" decoding="async"></picture>
+            <div class="hero-center"><p class="remake-eyebrow">WELCOME, TRAVELER</p><h2 id="rf5521-hero-title">旅は、ここから。</h2><p>双つの月を仰ぎ、灯の消えた道をゆく。</p><div class="remake-hero-actions"><button class="remake-primary hero-cta" type="button" data-go="story">物語を始める <span aria-hidden="true">→</span></button><button class="hero-quick" type="button" data-go="cpu">ひとりで練習 <span aria-hidden="true">↗</span></button></div></div>
+            <span class="portal-hero-caption">灯脈の旅路 <i></i> THE JOURNEY AWAITS</span>
+          </section>
+          <section class="portal-overview remake-contained" id="portal-feature" aria-label="冒険の記録と催し">
+            <article class="overview-panel intro-news"><span class="remake-eyebrow">YOUR CHRONICLE</span><h2>旅の記録</h2><p>灯脈を辿り、双つの空へ。<br>物語は進めたところから再開できます。</p><button class="overview-link" type="button" data-go="story"><strong id="story-sub">旅を始める</strong><span>続きから旅立つ <i aria-hidden="true">→</i></span></button><small>セーブと端末同期は「旅支度」から。</small></article>
+            <article class="overview-panel featured-event"><span class="remake-eyebrow">THE CURRENT TRIAL</span><h2>現在の催し</h2><p id="event-sub">イベントの情報を読み込んでいます…</p><button id="btn-event" class="event-cta" type="button" data-go="event">イベントへ向かう <span aria-hidden="true">→</span></button></article>
+            <article class="overview-panel fighter-feature"><a href="./tenshi.html"><span class="remake-eyebrow">CHARACTER ARCHIVE</span><h2 id="rf5523-feature-title">天子</h2><p>双月の天儀を司る者</p><img src="./assets/rf5523/tenshi-standing.webp" width="640" height="900" alt="勲章を着け、白い手袋と燕尾服をまとった天子" loading="lazy" decoding="async"><span class="remake-text-link">人物と技を知る <i aria-hidden="true">↗</i></span></a></article>
+          </section>
+          <section class="portal-section remake-contained" id="portal-play" tabindex="-1" aria-labelledby="rf27-modes-heading">
+            <div class="remake-section-id"><span>01</span> CHOOSE YOUR PATH <i></i></div>
+            <div class="remake-section-heading"><div><p class="remake-eyebrow">今日は、どんな冒険へ。</p><h2 id="rf27-modes-heading">出撃先を選ぶ</h2></div><a class="remake-text-link" href="./battle-guide.html">各モードのルール <span aria-hidden="true">↗</span></a></div>
+            <div class="mode-toolbar"><div class="mode-filters" role="group" aria-label="ゲームモードを絞り込む"><button type="button" data-mode-filter="all" aria-pressed="true">すべて <small>10</small></button><button type="button" data-mode-filter="solo" aria-pressed="false">ひとりで遊ぶ</button><button type="button" data-mode-filter="multi" aria-pressed="false">オンライン</button></div><span class="mode-toolbar-note">あなたのペースで、この世界へ。</span><span id="mode-filter-status" class="remake-sr" role="status"></span></div>
+            <nav class="portal-modes" aria-label="ゲームモード"><button type="button" class="mode-tile remake-mode" data-mode-type="solo" data-go="story"><span class="mode-art"><img src="./assets/rf555/mode-story.webp" alt="" width="640" height="360" loading="lazy" decoding="async"></span><span class="mode-topline"><span>01 / STORY</span><i>ひとりで</i></span><span class="mode-main"><span class="mode-caption">灯脈の旅路</span><b>物語を進める</b><small>街道を巡り、出会いを重ねる。探索から始まる冒険。</small></span><span class="tile-arrow" aria-hidden="true">↗</span></button><button type="button" class="mode-tile remake-mode" data-mode-type="solo" data-go="story2" id="btn-story2"><span class="mode-art"><img src="./assets/rf555/mode-duel.webp" alt="" width="640" height="360" loading="lazy" decoding="async"></span><span class="mode-topline"><span>02 / STORY II</span><i>ひとりで</i></span><span class="mode-main"><span class="mode-caption">月渡り</span><b>ストーリーモードⅡ</b><small id="story2-progress">横視点の一対一。全4章の決闘を、その剣で越えよう。</small></span><span class="tile-arrow" aria-hidden="true">↗</span></button><button type="button" class="mode-tile remake-mode" data-mode-type="solo" data-go="infinite"><span class="mode-art"><img src="./assets/rf555/mode-endless.webp" alt="" width="640" height="360" loading="lazy" decoding="async"></span><span class="mode-topline"><span>03 / CHALLENGE</span><i>ひとりで</i></span><span class="mode-main"><span class="mode-caption">果てなき挑戦</span><b>無限天守</b><small>残りHPを持ち越し、広間と回廊を一階ずつ踏破。</small></span><span class="tile-arrow" aria-hidden="true">↗</span></button><button type="button" class="mode-tile remake-mode" data-mode-type="multi" id="btn-ranked"><span class="mode-art"><img src="./assets/rf555/mode-duel.webp" alt="" width="640" height="360" loading="lazy" decoding="async"></span><span class="mode-topline"><span>04 / RANKED</span><i>オンライン</i></span><span class="mode-main"><span class="mode-caption">世界の戦士と</span><b>ランクマッチ</b><small>一対一の真剣勝負。勝利を刻み、世界順位の高みへ。</small></span><span class="tile-arrow" aria-hidden="true">↗</span></button><button type="button" class="mode-tile remake-mode" data-mode-type="solo" data-go="cpu"><span class="mode-art"><img src="./assets/rf555/mode-duel.webp" alt="" width="640" height="360" loading="lazy" decoding="async"></span><span class="mode-topline"><span>05 / TRAINING</span><i>ひとりで</i></span><span class="mode-main"><span class="mode-caption">まずは腕試し</span><b>ひとりで対戦</b><small>相手と舞台を選んで、CPUとの一対一で腕を磨く。</small></span><span class="tile-arrow" aria-hidden="true">↗</span></button><button type="button" class="mode-tile remake-mode" data-mode-type="solo" data-go="duo"><span class="mode-art"><img src="./assets/rf555/mode-coop.webp" alt="" width="640" height="360" loading="lazy" decoding="async"></span><span class="mode-topline"><span>06 / TEAM BATTLE</span><i>ひとりで</i></span><span class="mode-main"><span class="mode-caption">背中を預ける</span><b>仲間と二対二</b><small>CPUの相棒と共闘。戦士の組み合わせで勝利を掴む。</small></span><span class="tile-arrow" aria-hidden="true">↗</span></button><button type="button" class="mode-tile remake-mode" data-mode-type="multi" data-go="online-vs"><span class="mode-art"><img src="./assets/rf555/mode-duel.webp" alt="" width="640" height="360" loading="lazy" decoding="async"></span><span class="mode-topline"><span>07 / ONLINE DUEL</span><i>オンライン</i></span><span class="mode-main"><span class="mode-caption">合言葉で、決闘</span><b>オンライン対戦</b><small>同じ合言葉で集い、仲間と剣を交える。</small></span><span class="tile-arrow" aria-hidden="true">↗</span></button><button type="button" class="mode-tile remake-mode" data-mode-type="multi" data-go="online-coop"><span class="mode-art"><img src="./assets/rf555/mode-coop.webp" alt="" width="640" height="360" loading="lazy" decoding="async"></span><span class="mode-topline"><span>08 / CO-OP</span><i>オンライン</i></span><span class="mode-main"><span class="mode-caption">ともに、立ち向かう</span><b>オンライン協力</b><small>仲間と力を合わせて、強敵の討伐へ。</small></span><span class="tile-arrow" aria-hidden="true">↗</span></button><button type="button" class="mode-tile remake-mode" data-mode-type="solo multi" data-go="event"><span class="mode-art"><img src="./assets/rf555/mode-event.webp" alt="" width="640" height="360" loading="lazy" decoding="async"></span><span class="mode-topline"><span>09 / EVENT</span><i>1–4人</i></span><span class="mode-main"><span class="mode-caption">新たな試練へ</span><b>期間イベント</b><small>一人でも、最大4人でも。週替わりの試練に挑む。</small></span><span class="tile-arrow" aria-hidden="true">↗</span></button><button type="button" class="mode-tile remake-mode" data-mode-type="solo" id="btn-adventure-mode"><span class="mode-art"><img src="./assets/rf555/mode-story.webp" alt="" width="640" height="360" loading="lazy" decoding="async"></span><span class="mode-topline"><span>10 / ADVENTURE</span><i>ひとりで</i></span><span class="mode-main"><span class="mode-caption">長い旅路へ</span><b>アドベンチャー</b><small>休憩所を経由し、全10ステージと最終ボスに挑む。</small></span><span class="tile-arrow" aria-hidden="true">↗</span></button></nav>
+          </section>
+          <section class="portal-section remake-contained" id="portal-world" tabindex="-1" aria-labelledby="rf27-world-heading">
+            <div class="remake-section-id"><span>02</span> BEYOND THE HORIZON <i></i></div>
+            <div class="remake-section-heading"><div><p class="remake-eyebrow">風景にも、物語が宿る。</p><h2 id="rf27-world-heading">双つの月の舞台</h2></div><a class="remake-text-link" href="./world-guide.html">舞台を巡る <span aria-hidden="true">↗</span></a></div>
+            <div class="world-gallery"><a href="./world-guide.html#moon-arena"><img src="./assets/rf5526/moon-arena-960.webp" alt="灯籠と紅葉に囲まれた双月の闘技場" loading="lazy" width="960" height="540" decoding="async"><span><small>THE MOON ARENA</small><b>双月の闘技場</b><em>対戦・ランクマッチ <i aria-hidden="true">↗</i></em></span></a><a href="./world-guide.html#tenshu"><img src="./assets/rf562/japanese-palace.webp" alt="無限天守の梁と大広間" loading="lazy" width="1672" height="941" decoding="async"><span><small>THE ENDLESS KEEP</small><b>無限天守</b><em>大広間と長い回廊 <i aria-hidden="true">↗</i></em></span></a><a href="./world-guide.html#river"><img src="./assets/rf5523/river-path.webp" alt="竹林を抜ける月影の水辺" loading="lazy" width="960" height="540" decoding="async"><span><small>THE SILENT BAMBOO</small><b>鳴かぬ竹林</b><em>月影の水辺 <i aria-hidden="true">↗</i></em></span></a></div>
+          </section>
+          <section class="portal-section remake-contained" id="portal-services" tabindex="-1" aria-labelledby="rf27-services-heading">
+            <div class="remake-section-id"><span>03</span> PREPARE FOR THE JOURNEY <i></i></div><div class="remake-section-heading"><div><p class="remake-eyebrow">次の一歩のために。</p><h2 id="rf27-services-heading">工房と旅支度</h2></div><p>戦士を育て、遊ぶ環境を整える。</p></div>
+            <div class="portal-services"><button type="button" id="rf552-infinite-rank"><span class="service-number">01</span><span><b>無限天守ランキング</b><small>到達階層と歴代の記録</small></span><i aria-hidden="true">↗</i></button><button type="button" id="btn-castle"><span class="service-number">02</span><span><b>双月領国・拠点</b><small>築城・防衛・攻城戦</small></span><i aria-hidden="true">↗</i></button><button type="button" id="btn-forge"><span class="service-number">03</span><span><b>鍛錬の工房</b><small>戦士の強化と限界突破</small></span><i aria-hidden="true">↗</i></button><button type="button" id="btn-shop"><span class="service-number">04</span><span><b>灯晶商店</b><small>装備と戦士の入手</small></span><i aria-hidden="true">↗</i></button><button type="button" id="btn-mailbox"><span class="service-number">05</span><span><b>受信箱 <span class="mail-badge" data-mail-badge></span></b><small>プレゼントとお知らせ</small></span><i aria-hidden="true">↗</i></button><button type="button" id="btn-options"><span class="service-number">06</span><span><b>旅支度・設定</b><small>音量・操作・セーブ同期</small></span><i aria-hidden="true">↗</i></button><button type="button" id="btn-chief-mail" hidden><b>運営長の配信管理</b><small>一斉配信・指定配信・送信履歴</small></button><button type="button" id="btn-evmaker" hidden><b>イベント作成</b><small>運営長専用</small></button><button type="button" id="btn-invade" hidden><b>乱入の窓</b><small>運営専用</small></button></div>
+            <details class="portal-controls"><summary>基本操作を確認する <span aria-hidden="true">＋</span></summary><p>WASD：移動 ／ J：斬る ／ K：技A ／ U：技B ／ L：奥義 ／ Shift：構え ／ Space：跳ぶ ／ Esc：戻る・休む</p><p>移動中の技で派生、技の直後に同じ技で追加技。覚醒中の奥義は秘奥義に変化します。</p><a href="./play-guide.html#controls">スマホ・ゲームパッドの操作を見る ↗</a></details>
+          </section>
+          <footer class="remake-footer portal-footer"><button class="brand-button remake-brand" type="button" data-to="press"><img src="./assets/remake/emblem.svg" width="36" height="36" alt=""><span>双月のアルケイア<small>RIFTFALL ARENA</small></span></button><nav aria-label="サイト案内"><a href="./battle-guide.html">モード</a><a href="./play-guide.html">操作</a><a href="./world-guide.html">舞台</a><a href="./tenshi.html">天子</a></nav><small>© <span id="copy-year">2026</span> KASAI SOLUTIONS INC.</small></footer>
+        </div>
+      </section>
+
+      <section id="scr-options" class="screen" aria-label="旅支度">
+        <div class="inner">
+          <div class="topbar"><button class="back" data-to="title">分かれ道へ</button><span class="crumb">旅支度</span></div>
+          <div class="label">旅支度</div>
+          <div class="menu rf25-options-grid">
+            <section class="rf25-settings-group" aria-labelledby="rf25-audio-heading">
+              <h2 id="rf25-audio-heading" data-rf25-icon="sound">音量とBGM</h2>
+            <button class="btn" id="opt-mute">音：鳴らす</button>
+            <label class="audio-volume-control" for="opt-bgm-volume" data-rf25-icon="sound"><span>BGM音量 <output id="opt-bgm-value">70%</output></span><input id="opt-bgm-volume" type="range" min="0" max="100" step="5" value="70" aria-label="BGM音量" /></label>
+            <label class="audio-volume-control audio-theme-toggle" for="opt-fujiwara-bgm" data-rf25-icon="sound"><span>藤原信頼の専用BGM</span><input id="opt-fujiwara-bgm" type="checkbox" checked></label>
+            <label class="audio-volume-control" for="opt-sfx-volume" data-rf25-icon="sound"><span>戦闘効果音 <output id="opt-sfx-value">80%</output></span><input id="opt-sfx-volume" type="range" min="0" max="100" step="5" value="80" aria-label="戦闘効果音の音量" /></label>
+            <label class="audio-volume-control" for="opt-voice-volume" data-rf25-icon="sound"><span>戦闘ボイス <output id="opt-voice-value">75%</output></span><input id="opt-voice-volume" type="range" min="0" max="100" step="5" value="75" aria-label="戦闘ボイスの音量" /></label>
+            <label class="audio-volume-control" for="opt-ui-volume" data-rf25-icon="sound"><span>ボタン操作音 <output id="opt-ui-value">65%</output></span><input id="opt-ui-volume" type="range" min="0" max="100" step="5" value="65" aria-label="ボタン操作音の音量" /><small>音量は端末に保存されます。初回再生はクリック・キー操作後に始まります。</small></label>
+            </section>
+            <section class="rf25-settings-group" aria-labelledby="rf25-display-heading">
+              <h2 id="rf25-display-heading" data-rf25-icon="gamepad">表示と操作</h2>
+            <button class="btn" id="opt-diff" type="button" disabled>全モードCPUの強さ：100％（運営長が設定）</button>
+            <a class="rf5521-guide-link" href="./play-guide.html#controls" data-rf25-icon="guide">キーボード・タッチ・ゲームパッドの操作ガイド</a>
+            <p class="foot" id="pad-status" style="text-align:left">ゲームパッド：まだ見つかっていません（ボタンを押すと気づきます）</p>
+            <p class="foot" style="text-align:left">パッド　スティック/十字：移動　A(×)：斬る　X(□)：技A　RB(R1)：技B　Y(△)：奥義　B(○)：跳ぶ　LB/LT/RT：構え　START：休む<br>メニュー　十字で選ぶ／A(×)で決める／B(○)で戻る</p>
+            </section>
+            <section class="rf25-settings-group" aria-labelledby="rf25-staff-heading">
+              <h2 id="rf25-staff-heading" data-rf25-icon="profile">運営の認証</h2>
+            <form id="op-form" class="field" style="width:100%">
+              <span id="op-state">運営の鍵 — 封じられた裁定者を解き放つ</span>
+              <input id="op-key" type="password" maxlength="128" autocomplete="off" aria-label="運営キー" placeholder="鍵の言葉">
+              <button type="submit" class="btn">鍵を差し込む</button>
+              <span id="op-msg"></span>
+            </form>
+            <div id="chief-panel" class="field" style="width:100%" hidden>
+              <!-- RF553_CHIEF_GLOBAL_CPU_20261111: edit access additionally verified by the Worker -->
+              <div id="rf553-cpu-chief-panel" class="field" style="width:100%" hidden>
+                <label for="rf553-cpu-strength">全モードCPUの強さ <output id="rf553-cpu-strength-value">100％</output></label>
+                <input id="rf553-cpu-strength" type="range" min="1" max="100" step="1" value="100" aria-label="全モードCPUの強さ" style="width:100%;min-height:44px">
+                <button id="rf553-cpu-submit" type="button" class="btn">CPU設定を全プレイヤーに適用</button>
+                <small id="rf553-cpu-note">運営長だけが変更できます。既存バランスは100％です。無限天守の世界ランキングは100％のときのみ記録されます。</small>
+              </div>
+              <span>運営長の間 — 1回だけ使える運営キーを発行して、信頼できる人に渡します</span>
+              <button type="button" class="btn" id="chief-issue">運営キーを発行する</button>
+              <input id="chief-code" readonly aria-label="発行された運営キー" placeholder="ここに表示されます">
+              <button id="chief-mail-center" type="button" class="btn" hidden>プレゼント・システムメールの配信管理</button>
+            </div>
+            </section>
+            <section class="rf25-settings-group" aria-labelledby="rf25-sync-heading">
+              <h2 id="rf25-sync-heading" data-rf25-icon="sync">セーブの同期</h2>
+            <div class="field" style="width:100%">
+              <span>端末間の同期 — 同じ同期コードで、別の端末に進み具合を引き継げます（一度設定すると以後は自動で常時同期されます）</span>
+              <button type="button" class="btn" id="sync-push">この端末の記録を預ける（同期コード発行・更新）</button>
+              <input id="sync-code" maxlength="32" autocomplete="off" aria-label="同期コード" placeholder="同期コード（例：ABCD-EFGH-JKLM）">
+              <button type="button" class="btn" id="sync-pull">同期コードで記録を受け取る</button>
+              <span id="sync-msg" class="foot"></span>
+            </div>
+            </section>
+          </div>
+        </div>
+      </section>
+
+      <section id="scr-forge" class="screen" aria-label="鍛錬の工房">
+        <div class="inner">
+          <div class="topbar"><button class="back" data-to="title">分かれ道へ</button><span class="shards" id="forge-shards"></span></div>
+          <div class="label">鍛錬の工房</div>
+          <div class="forge">
+            <div id="forge-list"></div>
+            <div class="fpanel"><b id="forge-name"></b><div id="forge-rows"></div></div>
+          </div>
+          <p class="foot">灯晶は戦いに勝つと手に入ります。一人につき五つの道、それぞれ五段まで。</p>
+        </div>
+      </section>
+
+      <section id="scr-shop" class="screen" aria-label="灯晶商店">
+        <div class="inner">
+          <div class="topbar"><button class="back" data-to="title">分かれ道へ</button><span class="crumb">灯晶商店</span></div>
+          <div class="label">灯晶商店</div>
+          <div id="shop-list" class="menu"></div>
+          <p class="foot" id="shop-msg"></p>
+        </div>
+      </section>
+
+      <section id="scr-invade" class="screen" aria-label="乱入の窓">
+        <div class="inner">
+          <div class="topbar"><button class="back" data-to="title">窓を閉じる</button><span class="crumb">乱入の窓</span></div>
+          <div class="label">いま物語を歩む者たち</div>
+          <button class="btn" id="invade-who">乱入する姿：セラフェル</button>
+          <p class="foot" id="invade-status">世界の灯を探しています…</p>
+          <div class="menu" id="invade-list"></div>
+        </div>
+      </section>
+
+      <section id="scr-select" class="screen" aria-label="戦士選び">
+        <div class="inner">
+          <div class="topbar"><button class="back" id="select-back">ひとつ戻る</button><span class="crumb" id="select-crumb"></span></div>
+          <div class="label" id="select-label"></div>
+          <div id="party-bar" hidden>
+            <div id="party-slots"></div>
+            <div id="party-quick-picker" class="party-quick-picker" hidden>
+              <div class="party-picker-top"><strong id="party-picker-title">変更する仲間を選択</strong><button type="button" id="party-picker-close" aria-label="変更を閉じる">閉じる ×</button></div>
+              <label class="party-picker-label" for="party-picker-search">名前・特徴で探す
+                <input type="search" id="party-picker-search" autocomplete="off" placeholder="例：ロウエン、氷、剣士" />
+              </label>
+              <div id="party-picker-results" class="party-picker-results"></div>
+              <small id="party-picker-note" aria-live="polite"></small>
+            </div>
+            <p class="foot">最大4人。各枠の「外す」で即解除、「変更」で別の仲間と入れ替え。「操作」で主人公（★）を指定できます。</p>
+            <button class="btn ghost" id="party-nohero" type="button" hidden>主人公：あり（★を自分で操作）</button>
+            <button class="btn" id="party-go">この顔ぶれで旅立つ</button>
+          </div>
+          <div class="select-tools"><label class="select-search-label" for="select-search">名前・特徴で探す<input id="select-search" type="search" placeholder="キャラクター名 / ステージ名" autocomplete="off" /></label><span id="select-counter" aria-live="polite"></span></div>
+          <div id="select-grid"></div>
+          <p id="select-empty" class="select-empty" hidden>一致する項目がありません。検索文字を変えてください。</p>
+        </div>
+      </section>
+
+      <section id="scr-lobby" class="screen" aria-label="待ち合わせ">
+        <div class="inner">
+          <div class="topbar"><button class="back" data-to="title">待つのをやめる</button><span class="crumb">待ち合わせ</span></div>
+          <div class="label" id="lobby-mode"></div>
+          <label class="field">呼び名<input id="lobby-name" maxlength="12" autocomplete="off" placeholder="旅人"></label>
+          <label class="field">合言葉（英数字）<input id="lobby-room" maxlength="12" autocomplete="off"></label>
+          <div class="menu"><button class="btn" id="btn-join">焚き火のそばへ</button></div>
+          <p id="lobby-status"></p>
+          <div id="rf552-event-coop" hidden>
+            <h3>イベント協力ルーム <span>最大4人</span></h3>
+            <ol id="rf552-coop-members" aria-live="polite"></ol>
+            <p id="rf552-coop-help">参加者が揃うと部屋主が出撃できます。</p>
+            <label for="rf552-coop-level">出撃段階（部屋主のみ）</label>
+            <select id="rf552-coop-level" aria-label="イベント協力で挑む段階"></select>
+            <button type="button" class="btn" id="rf552-coop-start" hidden>参加者全員で出撃</button>
+          </div>
+        </div>
+      </section>
+
+      <section id="scr-ranked" class="screen" aria-labelledby="ranked-title">
+        <div class="inner ranked-panel">
+          <div class="topbar"><button class="back" type="button" id="ranked-back">メニューへ戻る</button><a href="./battle-guide.html#ranked" data-rf25-icon="guide">ランク戦の遊び方</a></div>
+          <header class="ranked-heading"><h2 id="ranked-title">ランクマッチ</h2><p>世界の戦士と、双月の闘技場で一対一。</p></header>
+          <div id="ranked-profile" class="ranked-profile" data-tier="bronze">
+            <div><strong id="ranked-tier">ブロンズ</strong><b id="ranked-points">0 pt</b></div>
+            <progress id="ranked-progress" max="200" value="0" aria-label="次のランクまでの進み具合"></progress>
+            <p id="ranked-next">次のシルバーまで 200 pt</p>
+            <p id="ranked-stats">初戦の結果から世界順位が表示されます。</p>
+          </div>
+          <p id="ranked-status" role="status"></p>
+          <div id="ranked-setup" class="ranked-setup">
+            <img id="ranked-portrait" width="72" height="84" alt="" decoding="async" hidden>
+            <div><b id="ranked-fighter">戦士を選択</b><p>出撃戦士</p></div>
+            <div class="ranked-actions">
+              <button id="ranked-choose" class="btn" type="button" disabled>戦士を変更</button>
+              <button id="ranked-join" class="btn ranked-primary" type="button" disabled>対戦相手を探す</button>
+              <button id="ranked-sync" class="btn" type="button" hidden>セーブの同期へ</button>
+            </div>
+          </div>
+          <div id="ranked-queue" class="ranked-box" hidden>
+            <p id="ranked-opponents"></p><output id="ranked-wait" aria-label="検索経過"></output>
+            <button id="ranked-cancel" class="btn" type="button">検索を取り消す</button>
+          </div>
+          <div id="ranked-result" class="ranked-box ranked-result" hidden>
+            <h3 id="ranked-heading">試合終了</h3>
+            <p id="ranked-delta"></p><p id="ranked-reason"></p><p id="ranked-vote"></p>
+            <div class="ranked-actions">
+              <button type="button" class="btn ranked-primary" id="ranked-retry">再挑戦</button>
+              <button type="button" class="btn" id="ranked-leave">退出する</button>
+            </div>
+          </div>
+          <section id="ranked-board" class="ranked-board" aria-labelledby="ranked-board-title">
+            <div class="ranked-board-title"><h3 id="ranked-board-title">世界ランキング</h3><button id="ranked-refresh" type="button" class="btn">更新</button></div>
+            <p id="ranked-empty">まだ順位はありません。</p>
+            <table><thead><tr><th scope="col">順位</th><th scope="col">プレイヤー</th><th scope="col">ランク</th><th scope="col">ポイント</th><th scope="col">勝数</th></tr></thead><tbody id="ranked-top"></tbody></table>
+            <details id="ranked-history-wrap" hidden><summary>直近の対戦記録</summary>
+              <table><thead><tr><th scope="col">相手</th><th scope="col">結果</th><th scope="col">ポイント</th></tr></thead><tbody id="ranked-history"></tbody></table>
+            </details>
+          </section>
+        </div>
+      </section>
+
+      <section id="scr-story" class="screen" aria-label="物語">
+        <div class="inner" style="margin:0;height:100%;justify-content:flex-end">
+          <div class="topbar"><button class="back" id="story-back">本を閉じる</button><button class="back" id="story-skip" style="border-color:#6c6788">語りを飛ばす</button></div>
+          <div id="story-chapter"></div>
+          <div id="story-box" role="button" tabindex="0"><span id="story-who"></span><p id="story-line"></p></div>
+        </div>
+      </section>
+
+      <section id="scr-result" class="screen" aria-label="決着">
+        <div class="inner">
+          <div class="topbar"><button type="button" class="back" id="result-back">出撃前の画面へ戻る</button><span class="crumb">決着</span></div>
+          <div class="label" id="res-title"></div>
+          <p id="res-text" style="text-align:center;line-height:1.8;margin:0"></p>
+          <p class="shards" id="res-reward"></p>
+          <div class="menu">
+            <button class="btn" id="btn-retry">もう一度</button>
+            <button class="btn" id="btn-next" hidden>先へ進む</button>
+          </div>
+        </div>
+      </section>
+
+      <div id="hud" hidden>
+        <div id="hud-left" class="hud-side"></div>
+        <div id="hud-right" class="hud-side"></div>
+        <div id="ranked-live" hidden><output id="ranked-timer" aria-label="試合時間"></output><p id="ranked-connection" role="status"></p></div>
+        <button id="btn-pause" aria-label="休む">‖ 休む</button>
+        <div id="gauges"><div id="flux">灯力<i><u></u></i></div><div id="over"><b>奥義</b><i><u></u></i></div><div id="awk"><b>覚醒</b><i><u></u></i></div></div>
+        <div id="rf5520-orbit" role="group" aria-label="カメラの向き" hidden>
+          <button type="button" data-view="left" aria-label="視点を左に回す" title="視点を左に回す（Q）">↶</button>
+          <div class="rf5520-orbit-drag" title="横にドラッグして視点を回す"><output>自動視点</output><small>ドラッグ</small></div>
+          <button type="button" data-view="right" aria-label="視点を右に回す" title="視点を右に回す（E）">↷</button>
+          <button type="button" data-view="auto" aria-label="自動視点に戻す" aria-pressed="true" title="自動視点に戻す（R）">自動</button>
+        </div>
+        <div id="field-hud">
+          <div id="field-info"><b id="field-region"></b><span id="field-obj"></span><small>WASD／スティックで移動・Shiftで駆け足・赤い輪の魔物に触れると戦闘</small></div>
+          <canvas id="field-map" width="104" height="228" aria-label="地図"></canvas>
+          <div id="field-prompt" hidden></div>
+          <button id="btn-world" type="button" aria-label="世界の旅人とフレンド" aria-controls="world-panel" aria-expanded="false">旅人</button>
+          <div id="world-panel" hidden>
+            <div class="wp-head"><b>世界の旅人</b><small id="world-status"></small><button id="world-close" type="button" aria-label="閉じる">✕</button></div>
+            <label class="wp-namebox">あなたの名前 <input id="world-name" maxlength="10" autocomplete="off"><small>（最大10文字）</small></label>
+            <h4>近くの旅人（全世界）</h4>
+            <div id="world-near"></div>
+            <h4>フレンド</h4>
+            <div id="world-friends"></div>
+          </div>
+          <div id="world-req" hidden>
+            <p id="world-req-text"></p>
+            <div><button id="world-req-yes" type="button">受ける</button><button id="world-req-no" type="button">断る</button></div>
+          </div>
+        </div>
       </div>
-      <div class="mode-dock">
-        <div class="mode-dock-heading"><p class="eyebrow">YOUR NEXT CHAPTER</p><h2>今宵の旅を選ぶ</h2><span id="mode-label">物語</span></div>
-        <div id="mode-grid" class="mode-grid" role="group" aria-label="ゲームモード"></div>
-        <div class="home-footer"><span><i></i> 剣を振るい、技を繋ぐ。自由なアクションバトル。</span><span>RIFTFALL ARENA <b>／</b> REBIRTH EDITION</span></div>
+      <div id="pops"></div>
+      <div id="flash"></div>
+      <div id="cutin" hidden aria-hidden="true"><div class="ci-band"><img alt="" decoding="async"><div class="ci-text"><i class="ci-who"></i><b class="ci-title"></b><small class="ci-sub"></small></div></div></div>
+      <div id="banner"><i></i><b></b></div>
+      <div id="countdown" hidden></div>
+      <div id="skillname"><span class="sn-who"></span><b class="sn-name"></b><small class="sn-kind"></small></div>
+      <div id="touch" hidden>
+        <div id="joy"><div id="knob"></div></div>
+        <div id="tbtns">
+          <button type="button" data-act="guard" aria-label="構える・探索中は走る">構</button>
+          <button type="button" data-act="skill" aria-label="技A">技A</button>
+          <button type="button" data-act="skill2" aria-label="技B">技B</button>
+          <button type="button" data-act="jump" aria-label="跳ぶ">跳</button>
+          <button type="button" data-act="over" aria-label="奥義">奥</button>
+          <button type="button" data-act="attack" aria-label="斬る">斬</button>
+          <button type="button" data-act="heal" aria-label="回復">癒</button>
+        </div>
       </div>
-    </section>
-
-    <section id="select-view" class="view select-view" aria-labelledby="select-title" hidden>
-      <div class="view-heading"><button id="select-back" class="back-button" type="button"><span aria-hidden="true">←</span> 旅の入口へ</button><p class="eyebrow">PREPARE FOR THE JOURNEY</p><h1 id="select-title">出撃の支度</h1><p id="selection-mode">戦士と舞台を選び、双月の世界へ。</p></div>
-      <div class="selection-layout">
-        <div class="roster-panel"><div class="section-heading"><h2><span>01</span> 共に旅する戦士</h2><label class="search-label"><svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><circle cx="8.5" cy="8.5" r="5.5" stroke="currentColor"/><path d="m13 13 4 4" stroke="currentColor"/></svg><input id="character-search" type="search" placeholder="戦士を探す" aria-label="戦士を探す" autocomplete="off"></label></div><div id="character-grid" class="character-grid" role="group" aria-label="戦士選択"></div></div>
-        <aside id="character-detail" class="character-detail" aria-live="polite"></aside>
+      <div id="pause" hidden>
+        <div class="label">ひと息</div>
+        <p class="foot" id="pause-note"></p>
+        <div class="menu">
+          <button class="btn" id="btn-resume">戦いに戻る</button>
+          <button class="btn back" id="btn-quit">出撃前の画面へ戻る</button>
+        </div>
       </div>
-      <div class="departure-layout"><div class="stage-panel"><div class="section-heading"><h2><span>02</span> 戦いの舞台</h2><small id="stage-note">舞台を選択</small></div><div id="stage-grid" class="stage-grid" role="group" aria-label="ステージ選択"></div></div><div class="departure-panel"><label class="difficulty-label" for="difficulty">相手の強さ <output id="difficulty-value">50%</output></label><input id="difficulty" class="range" type="range" min="1" max="100" value="50"><div class="range-labels"><span>物語を楽しむ</span><span>手強い戦い</span></div><button id="launch-button" class="primary" type="button"><span>この戦士で出撃</span><span aria-hidden="true">→</span></button></div></div>
-    </section>
-
-    <section id="play-view" class="view play-view" aria-label="戦闘画面" hidden>
-      <canvas id="world-canvas" tabindex="0" aria-label="3D戦闘画面。WASDで移動、Jで攻撃、Kで技、Lで奥義。"></canvas>
-      <div id="battle-hud" class="battle-hud">
-        <div class="player-hud"><div class="player-hud-top"><span class="eyebrow">PLAYER</span><h2 id="player-name">ロウエン</h2><span id="hp-text">1000 / 1000</span></div><div class="gauge hp-gauge"><i id="hp-fill"></i></div><div class="sub-gauges"><label>灯力<div class="gauge energy-gauge"><i id="energy-fill"></i></div></label><label>奥義<div class="gauge ultimate-gauge"><i id="ultimate-fill"></i></div></label></div></div>
-        <div class="battle-objective"><p id="objective">敵をすべて倒せ</p><div><span id="enemy-count">残り 3体</span><span class="objective-dot">·</span><time id="battle-time">00:00</time></div></div>
-        <button id="pause-button" class="icon-button pause-button" type="button" aria-label="一時停止">Ⅱ</button>
-        <div class="minimap-wrap"><canvas id="minimap" width="144" height="144" aria-label="周辺の地図"></canvas><small>MAP</small></div>
-        <div id="combo-count" class="combo-count" aria-live="off"></div>
-        <div id="battle-message" class="battle-message" role="status"></div>
-        <div id="damage-numbers" class="damage-numbers" aria-hidden="true"></div>
-        <div id="skill-bar" class="skill-bar" aria-label="戦闘スキル"></div>
-        <div class="keyboard-hint"><kbd>W A S D</kbd> 移動 <span>·</span> <kbd>SHIFT</kbd> 防御 <span>·</span> <kbd>SPACE</kbd> 回避 <span>·</span> <kbd>ESC</kbd> 休憩</div>
-      </div>
-      <div id="touch-controls" class="touch-controls" aria-label="タッチ操作"><div id="joystick" class="joystick" aria-label="移動スティック"><div class="joystick-rim"></div><div id="joystick-knob" class="joystick-knob"></div></div><div class="touch-buttons"><button type="button" data-action="heal" class="touch-small" aria-label="回復">癒</button><button type="button" data-action="guard" class="touch-small" aria-label="防御">防</button><button type="button" data-action="over" class="touch-over" aria-label="奥義">奥</button><button type="button" data-action="skill2" aria-label="技B">技B</button><button type="button" data-action="skill" aria-label="技A">技A</button><button type="button" data-action="attack" class="touch-attack" aria-label="通常攻撃">斬</button><button type="button" data-action="dash" class="touch-small touch-dash" aria-label="回避">避</button></div></div>
-    </section>
-
-    <section id="dialogue-view" class="view dialogue-view" aria-labelledby="dialogue-chapter" hidden><div class="dialogue-art" aria-hidden="true"></div><div class="dialogue-top"><p id="dialogue-chapter" class="eyebrow">序章 · 双月の灯</p><button id="dialogue-skip" class="secondary" type="button">語りを飛ばす →</button></div><div class="dialogue-box"><div class="dialogue-ornament" aria-hidden="true">✦</div><h2 id="dialogue-name">語り手</h2><p id="dialogue-text"></p><button id="dialogue-next" class="text-button" type="button">物語を進める <span aria-hidden="true">→</span></button></div></section>
-
-    <section id="result-view" class="view result-view" aria-labelledby="result-title" hidden><div class="result-rays" aria-hidden="true"></div><div class="result-panel"><p class="eyebrow">THE CHRONICLE CONTINUES</p><div class="result-seal" aria-hidden="true">✦</div><h1 id="result-title">勝利</h1><p id="result-subtitle">あなたの剣が、道を切り拓いた。</p><div id="result-stats" class="result-stats"></div><div class="result-actions"><button id="result-next" class="primary" type="button">次の旅路へ →</button><button id="result-retry" class="secondary" type="button">もう一度挑む</button><button id="result-home" class="text-button" type="button">旅の入口へ戻る</button></div></div></section>
-  </main>
-</div>
-
-<dialog id="settings-dialog" class="modal settings-modal" aria-labelledby="settings-title"><div class="modal-heading"><div><p class="eyebrow">PREFERENCES</p><h2 id="settings-title">旅の設定</h2></div><button id="settings-close" class="icon-button" type="button" aria-label="設定を閉じる">×</button></div><div class="settings-fields"><label class="field-label" for="nickname-input">旅人の名前<input id="nickname-input" maxlength="16" autocomplete="off" placeholder="旅人"></label><label class="field-label" for="quality-select">描画品質<select id="quality-select"><option value="low">軽量 — スマートフォン向け</option><option value="balanced" selected>標準 — バランス重視</option><option value="high">高品質 — 光と影を豊かに</option></select></label><label class="field-label volume-field" for="volume-input">音量<input id="volume-input" class="range" type="range" min="0" max="1" step="0.01" value="0.5"></label><label class="check-label"><input id="motion-input" type="checkbox"><span>画面の揺れ・演出の動きを抑える</span></label><div class="save-settings"><h3>旅の記録を持ち運ぶ</h3><p>この新生版の進行状況を保存・読み込みできます。</p><div><button id="export-save" class="secondary" type="button">記録を書き出す</button><label class="secondary file-label">記録を読み込む<input id="import-save" type="file" accept="application/json,.json"></label></div></div><p id="settings-note" class="settings-note" role="status">閉じると設定が保存されます。</p></div></dialog>
-<dialog id="records-dialog" class="modal records-modal" aria-labelledby="records-title"><div class="modal-heading"><div><p class="eyebrow">YOUR CHRONICLE</p><h2 id="records-title">旅の記録</h2></div><button id="records-close" class="icon-button" type="button" aria-label="旅の記録を閉じる">×</button></div><div id="records-content" class="records-content"></div></dialog>
-<dialog id="pause-dialog" class="modal pause-modal" aria-labelledby="pause-title"><p class="eyebrow">A MOMENT OF REST</p><h2 id="pause-title">ひと息、月を仰ぐ。</h2><p>旅は、あなたを待っています。</p><div class="pause-actions"><button id="resume-button" class="primary" type="button">戦いに戻る →</button><button id="quit-button" class="secondary" type="button">旅の入口へ戻る</button></div></dialog>
-<div id="toast" class="toast" role="status" aria-live="polite"></div>
-
-<noscript><div style="position:fixed;inset:0;z-index:1000;background:#080f19;color:#eee;padding:10vw;font-family:serif"><h1>双月のアルケイア</h1><p>ゲームを始めるにはJavaScriptを有効にしてください。</p><a href="play-guide.html">従来版の遊び方</a></div></noscript>
-<script type="module" src="rebirth/app.mjs?v=rebirth-1"></script>
-</body></html>
+    <section id="scr-castle" class="screen" aria-label="双月領国"><div class="inner"><div class="topbar"><button type="button" class="back" id="castle-back">メニューへ戻る</button><span class="crumb">双月領国・城の管理</span></div><div id="castle-content"></div></div></section>
+</main>
+    <div id="rf552-endless-hud" hidden aria-live="off"></div>
+    <script defer src="./rf-mobile-input-v553.js?v=20261111-1"></script>
+    <script type="module" src="./assets/rf563-spatial.js?v=55.21"></script>
+     <script type="module" src="./assets/rf564-world-life.js?v=55.21"></script>
+    <script type="module" src="./assets/rf566-story-flow.js?v=55.21"></script>
+    <script type="module" src="main.js?v=classic-56.1"></script>
+<script defer src="./assets/rf-ui-safe-v34.js?v=rf-responsive-v45-20261110"></script>
+<script id="rf46-responsive-js" defer src="./assets/rf-responsive-v46.js?v=rf-responsive-v46-20261111"></script>
+<script id="rf49-js" defer src="./assets/rf-responsive-v49.js?v=rf556-20261112"></script>
+<script defer src="./rf-start-confirm-v51.js?v=55.28"></script>
+<!-- RF556_NEXTGEN_CINEMATIC_OVERHAUL_20261112: additive UI and CG modules; gameplay preserved -->
+<script type="module" src="./assets/rf556-cg-engine.js?v=55.21"></script>
+<script type="module" src="./assets/rf561-appearance.js?v=55.21"></script>
+<script type="module" src="./assets/rf564-character-materials.js?v=55.21"></script>
+<script type="module" src="./assets/rf556-model-portraits.js?v=55.21"></script>
+<script defer src="./assets/rf556-nextgen.js?v=56.0"></script>
+  <!-- V55.7 CG illustration layer: additive, preserves V55.6 / gameplay -->
+  <script type="module" src="./assets/rf557-cg-effects.js?v=55.21"></script>
+<script type="module" src="./assets/rf558-cg-render.js?v=55.21"></script>
+<script defer src="./assets/rf561-stage.js?v=20261112-v561"></script>
+<script defer src="./assets/rf562-stage-variations.js?v=20261112-v562"></script>
+<script type="module" src="./assets/rf562-model-audit.js?v=20261112-v562"></script>
+<script type="module" src="./assets/rf569-camera-field.js?v=55.30"></script>
+<script defer src="./assets/rf5525/menu-icons.js?v=55.25"></script>
+</body>
+</html>

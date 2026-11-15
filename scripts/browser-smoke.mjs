@@ -123,7 +123,7 @@ try {
   const page = currentPage = await desktop.newPage();
   page.setDefaultTimeout(15000);
   observe(page, 'desktop');
-  await page.goto(origin, { waitUntil: 'networkidle', timeout: 45000 });
+  await page.goto(`${origin}/rebirth.html`, { waitUntil: 'networkidle', timeout: 45000 });
   await home(page);
   await noOverflow(page, 'desktop home');
   await screenshot(page, '01-desktop-home');
@@ -243,7 +243,7 @@ try {
   const phone = currentPage = await mobile.newPage();
   phone.setDefaultTimeout(15000);
   observe(phone, 'mobile');
-  await phone.goto(origin, { waitUntil: 'networkidle', timeout: 45000 });
+  await phone.goto(`${origin}/rebirth.html`, { waitUntil: 'networkidle', timeout: 45000 });
   logs.mobileCapabilities = await phone.evaluate(() => ({
     maxTouchPoints: navigator.maxTouchPoints,
     coarse: matchMedia('(pointer: coarse)').matches,
