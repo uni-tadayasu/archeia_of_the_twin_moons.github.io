@@ -1,0 +1,387 @@
+/* ARCHEIA / Moonlit edition — game interfaces. Presentation only. */
+body.rf-remake {
+  --remake-ink: #0b1012;
+  --remake-panel: #121a1c;
+  --remake-paper: #f0ecdf;
+  --remake-muted: #9eaaa9;
+  --remake-brass: #c6ab76;
+  --remake-line: rgba(198, 171, 118, .25);
+  --remake-serif: 'Shippori Mincho', 'Yu Mincho', serif;
+  --remake-sans: -apple-system, BlinkMacSystemFont, 'Noto Sans JP', 'Hiragino Kaku Gothic ProN', 'Yu Gothic', sans-serif;
+}
+html[data-rift-theme=ember] body.rf-remake {
+  --remake-brass: #d4ab91;
+  --remake-line: rgba(212, 171, 145, .28);
+}
+html[data-rift-theme=royal] body.rf-remake {
+  --remake-brass: #c5b7d3;
+  --remake-line: rgba(197, 183, 211, .28);
+}
+
+/* Screen identity and spacing; visibility continues to be owned by the game. */
+html body.rf-remake #ui .screen:not(#scr-press):not(#scr-title) {
+  color: var(--remake-paper) !important;
+  background: linear-gradient(120deg, rgba(11, 16, 18, .97), rgba(11, 16, 18, .9)), url('../rf5525/moonkeep-wide.webp') center / cover !important;
+  padding: max(20px, env(safe-area-inset-top)) max(20px, env(safe-area-inset-right)) max(32px, env(safe-area-inset-bottom)) max(20px, env(safe-area-inset-left)) !important;
+  font-family: var(--remake-sans);
+  scrollbar-width: thin;
+  scrollbar-color: #685d46 #0b1012;
+  scroll-padding-top: 92px;
+  overscroll-behavior: contain;
+}
+html body.rf-remake #ui .screen:not(#scr-press):not(#scr-title) .inner {
+  width: min(1180px, 100%) !important;
+  min-width: 0;
+  max-width: 100%;
+  margin: 0 auto !important;
+  padding: 0 !important;
+  gap: 22px !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+html body.rf-remake #ui .screen:not(#scr-press):not(#scr-title) .topbar {
+  position: sticky !important;
+  top: -20px !important;
+  z-index: 180 !important;
+  gap: 16px;
+  padding: 12px 0 !important;
+  min-height: 64px;
+  border: 0 !important;
+  border-bottom: 1px solid var(--remake-line) !important;
+  border-radius: 0 !important;
+  background: #0b1012f5 !important;
+  box-shadow: none !important;
+  backdrop-filter: blur(12px) !important;
+}
+html body.rf-remake #ui .screen:not(#scr-press):not(#scr-title) .label {
+  align-self: flex-start;
+  margin: 12px 0 4px;
+  padding: 0 0 10px !important;
+  border: 0 !important;
+  font: 500 clamp(25px, 3.5vw, 42px) / 1.5 var(--remake-serif) !important;
+  color: var(--remake-paper) !important;
+  letter-spacing: .12em !important;
+  text-align: left !important;
+  text-shadow: none !important;
+}
+html body.rf-remake #ui .screen:not(#scr-press):not(#scr-title) .crumb {
+  font: 500 11px / 1.8 var(--remake-sans) !important;
+  color: var(--remake-muted) !important;
+  letter-spacing: .1em;
+}
+html body.rf-remake #ui .screen:not(#scr-press):not(#scr-title) :is(.btn, .menu button, .back, .chip) {
+  min-width: 0;
+  min-height: 46px;
+  padding: 13px 18px !important;
+  color: var(--remake-paper) !important;
+  font: 500 14px / 1.7 var(--remake-sans) !important;
+  letter-spacing: .035em;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  border: 1px solid var(--remake-line) !important;
+  border-radius: 2px !important;
+  background: #151e20 !important;
+  box-shadow: none !important;
+  text-shadow: none !important;
+  transform: none !important;
+  transition: background-color .2s, border-color .2s, color .2s !important;
+}
+html body.rf-remake #ui .screen:not(#scr-press):not(#scr-title) :is(.btn, .menu button, .back, .chip):not(:disabled):hover {
+  color: #fff8e7 !important;
+  border-color: var(--remake-brass) !important;
+  background: #242b28 !important;
+  box-shadow: none !important;
+  filter: none !important;
+  transform: none !important;
+}
+html body.rf-remake #ui .screen:not(#scr-press):not(#scr-title) .back {
+  min-height: 40px;
+  padding: 8px 12px !important;
+  border-color: transparent !important;
+  background: transparent !important;
+  color: var(--remake-brass) !important;
+  font-size: 12px !important;
+}
+html body.rf-remake #ui .screen:not(#scr-press):not(#scr-title) .back::before { color: inherit; }
+html body.rf-remake #ui .screen:not(#scr-press):not(#scr-title) :is(button, a, input, select, [tabindex]):focus-visible {
+  outline: 2px solid #e4c78f !important;
+  outline-offset: 4px !important;
+}
+html body.rf-remake #ui .screen:not(#scr-press):not(#scr-title) button:disabled { opacity: .48; cursor: not-allowed; }
+html body.rf-remake #ui .screen:not(#scr-press):not(#scr-title) :is(.foot, .select-empty) {
+  color: var(--remake-muted) !important;
+  font: 400 12px / 1.9 var(--remake-sans) !important;
+  text-shadow: none !important;
+}
+html body.rf-remake #ui .screen:not(#scr-press):not(#scr-title) :is(a, .shards) { color: var(--remake-brass); }
+html body.rf-remake #ui .screen:not(#scr-press):not(#scr-title) :is(input:not([type=range]):not([type=checkbox]), select, textarea) {
+  min-width: 0;
+  max-width: 100%;
+  min-height: 46px;
+  padding: 12px 14px !important;
+  border: 1px solid #52605c !important;
+  border-radius: 2px !important;
+  color: var(--remake-paper) !important;
+  background: #0c1315 !important;
+  font: 400 16px / 1.5 var(--remake-sans) !important;
+  color-scheme: dark;
+}
+html body.rf-remake #ui .screen:not(#scr-press):not(#scr-title) input::placeholder { color: #8f9c98; opacity: 1; }
+
+/* Character and arena collection. */
+html body.rf-remake #ui #scr-select #select-grid {
+  grid-template-columns: repeat(auto-fill, minmax(min(180px, 100%), 1fr)) !important;
+  gap: 16px !important;
+  width: 100%;
+}
+html body.rf-remake #ui #scr-select #select-grid .card {
+  display: flex;
+  flex-direction: column;
+  padding: 0 0 14px !important;
+  gap: 0 !important;
+  border: 1px solid var(--remake-line) !important;
+  border-radius: 3px !important;
+  overflow: hidden !important;
+  background: #141d1f !important;
+  color: var(--remake-paper) !important;
+  box-shadow: none !important;
+  text-align: left;
+  transform: none !important;
+  transition: border-color .2s, background-color .2s !important;
+}
+html body.rf-remake #ui #scr-select #select-grid .card:not(:disabled):hover { border-color: var(--remake-brass) !important; background: #1d2828 !important; box-shadow: none !important; filter: none !important; }
+html body.rf-remake #ui #scr-select #select-grid .card.picked { border-color: #e5c88d !important; outline: 2px solid var(--remake-brass) !important; outline-offset: 2px; }
+html body.rf-remake #ui #scr-select #select-grid .card img.face {
+  display: block;
+  width: 100% !important;
+  height: auto !important;
+  max-height: 260px !important;
+  aspect-ratio: 4 / 5 !important;
+  object-fit: contain !important;
+  object-position: center bottom !important;
+  margin: 0 0 12px !important;
+  border-radius: 0 !important;
+  background: radial-gradient(ellipse at 50% 80%, #34413e, #162023 75%) !important;
+}
+html body.rf-remake #ui #scr-select #select-grid .card :is(em, b, small) { padding-inline: 14px !important; text-shadow: none !important; }
+html body.rf-remake #ui #scr-select #select-grid .card em { color: var(--remake-brass) !important; font: 400 10px / 1.7 var(--remake-sans) !important; letter-spacing: .055em; padding-top: 0 !important; }
+html body.rf-remake #ui #scr-select #select-grid .card b { color: #f0ecdf !important; font: 600 clamp(18px, 2vw, 22px) / 1.65 var(--remake-serif) !important; padding-block: 3px !important; }
+html body.rf-remake #ui #scr-select #select-grid .card small { color: #aab6b0 !important; font: 400 11px / 1.8 var(--remake-sans) !important; padding-bottom: 0 !important; }
+html body.rf-remake #ui #scr-select #select-grid .card .sthumb { aspect-ratio: 16 / 10; border-radius: 0; margin-bottom: 12px; }
+html body.rf-remake #ui #scr-select .select-tools {
+  width: 100%;
+  padding: 16px 0 !important;
+  border: 0 !important;
+  border-block: 1px solid var(--remake-line) !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+}
+html body.rf-remake #ui #scr-select :is(.select-search-label, #select-counter) { color: #b3b9ab !important; font-family: var(--remake-sans); font-size: 11px; }
+html body.rf-remake #ui #scr-select .rift-filter-tools { width: 100%; max-width: none; margin: 0; padding: 12px; border-color: var(--remake-line); border-radius: 2px; background: #111a1b; }
+html body.rf-remake #ui #scr-select .rift-filter-tools :is(button, select) { color: #e6e1d4; border-color: #505a4d; border-radius: 2px; background: #1b2525; font-family: var(--remake-sans); min-height: 40px; }
+html body.rf-remake #ui #scr-select .rift-filter-tools button[aria-pressed=true] { color: #101715; background: var(--remake-brass); border-color: var(--remake-brass); }
+html body.rf-remake #ui #scr-select #select-grid .rift-card-favorite { width: 44px; height: 44px; min-width: 44px; min-height: 44px; padding: 0; color: #d7c49e !important; background: #132022ed !important; border-color: #c6ab7666 !important; border-radius: 2px !important; box-shadow: none !important; font-size: 20px; }
+html body.rf-remake #ui #scr-select #select-grid .rift-card-favorite[aria-pressed=true] { color: #ffe1a0 !important; background: #3b3b29 !important; }
+html body.rf-remake #ui #scr-select #party-bar { border: 1px solid var(--remake-line) !important; border-radius: 2px !important; background: #10191a !important; padding: 18px !important; gap: 14px; }
+html body.rf-remake #ui #scr-select #party-slots { width: 100%; gap: 10px; }
+html body.rf-remake #ui #scr-select #party-slots .party-slot { border-color: var(--remake-line); border-radius: 2px; background: #182224; box-shadow: none; }
+html body.rf-remake #ui #scr-select #party-slots .party-slot.main { border-color: var(--remake-brass); box-shadow: none; }
+html body.rf-remake #ui #scr-select #party-slots button { border-radius: 2px; border-color: #6a6c59; background: #152021; color: #ece7d8; min-height: 38px; }
+html body.rf-remake #ui #scr-select.screen #party-go.btn { width: min(440px, 100%); background: var(--remake-brass) !important; color: #0b1012 !important; border-color: var(--remake-brass) !important; text-align: center; font-weight: 700 !important; }
+html body.rf-remake #ui #scr-select #party-quick-picker { border-color: var(--remake-brass); border-radius: 2px; background: #101819; box-shadow: 0 16px 40px #0008; }
+html body.rf-remake #ui #scr-select .party-picker-choice { border-color: var(--remake-line); border-radius: 2px; background: #1b2626; }
+
+/* Settings, forge, shop and multiplayer waiting room. */
+html body.rf-remake #ui #scr-options .rf25-options-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); width: 100% !important; max-width: none !important; gap: 20px !important; }
+html body.rf-remake #ui #scr-options .rf25-settings-group { min-width: 0; padding: 24px !important; border: 1px solid var(--remake-line) !important; border-radius: 2px !important; background: #121b1d !important; box-shadow: none !important; }
+html body.rf-remake #ui #scr-options .rf25-settings-group h2 { margin: 0 0 22px; font: 500 21px / 1.6 var(--remake-serif); color: #e9dfc9; border-bottom: 1px solid var(--remake-line); padding-bottom: 14px; }
+html body.rf-remake #ui #scr-options .rf25-settings-group > .btn { width: 100%; margin-bottom: 12px; }
+html body.rf-remake #ui #scr-options .audio-volume-control { gap: 12px; padding: 16px 0 !important; border: 0 !important; border-bottom: 1px solid #87978325 !important; border-radius: 0 !important; background: transparent !important; color: #d7ddd2 !important; }
+html body.rf-remake #ui #scr-options .audio-volume-control > span { font-size: 13px; }
+html body.rf-remake #ui #scr-options .audio-volume-control output { color: var(--remake-brass); font-variant-numeric: tabular-nums; }
+html body.rf-remake #ui #scr-options .audio-volume-control input { accent-color: var(--remake-brass); min-height: 24px; }
+html body.rf-remake #ui #scr-options :is(.audio-volume-control small, .field > span) { color: #a5b0a9 !important; line-height: 1.9; font-size: 12px; }
+html body.rf-remake #ui #scr-options .field { padding: 0 !important; border: 0 !important; border-radius: 0 !important; background: transparent !important; gap: 12px; }
+html body.rf-remake #ui #scr-options .rf556-setting { padding: 18px 0 !important; margin: 8px 0 18px !important; color: #e4e2d6 !important; background: transparent !important; border: 0 !important; border-bottom: 1px solid var(--remake-line) !important; border-radius: 0 !important; }
+html body.rf-remake #ui #scr-options .rf556-setting label { display: block; margin-bottom: 10px; color: #d0b77f; font-size: 13px; }
+html body.rf-remake #ui #scr-options .rf556-setting p { color: #a5b0a9 !important; font: 400 11px / 1.9 var(--remake-sans); }
+html body.rf-remake #ui #scr-options .rf556-setting select { width: 100%; }
+html body.rf-remake #ui #scr-forge .forge { grid-template-columns: minmax(160px, .65fr) minmax(0, 2fr); gap: 24px; }
+html body.rf-remake #ui #scr-forge #forge-list { max-height: 65dvh; gap: 8px; padding-right: 8px; scrollbar-width: thin; scrollbar-color: #78674e #10191a; }
+html body.rf-remake #ui #scr-forge #forge-list .chip { font-size: 12px !important; }
+html body.rf-remake #ui #scr-forge #forge-list .chip.on { color: #eee3cb !important; border-color: var(--remake-brass) !important; background: #2b3027 !important; }
+html body.rf-remake #ui #scr-forge .fpanel { padding: 24px !important; color: #e4e4d7 !important; border: 1px solid var(--remake-line) !important; border-radius: 2px !important; background: #121b1d !important; }
+html body.rf-remake #ui #scr-forge #forge-name { font: 500 clamp(18px, 2vw, 25px) / 1.6 var(--remake-serif); color: #e9dfc9 !important; }
+html body.rf-remake #ui #scr-forge .ftabs { flex-wrap: wrap; gap: 6px; padding-bottom: 18px; border-bottom: 1px solid var(--remake-line); }
+html body.rf-remake #ui #scr-forge #forge-rows .ftabs .btn { flex: 1 1 auto; padding: 9px 12px !important; font-size: 12px !important; text-align: center; }
+html body.rf-remake #ui #scr-forge #forge-rows .ftabs .on { color: #101715 !important; background: var(--remake-brass) !important; border-color: var(--remake-brass) !important; outline: 0 !important; }
+html body.rf-remake #ui #scr-forge .frow { padding: 16px 0 !important; margin: 0 !important; gap: 6px 14px; border: 0 !important; border-bottom: 1px solid #a5b39f23 !important; border-radius: 0 !important; background: transparent !important; color: #e4e4d7; }
+html body.rf-remake #ui #scr-forge .frow i { color: var(--remake-brass) !important; font-size: 12px; }
+html body.rf-remake #ui #scr-forge .frow small { color: #aab4a8 !important; line-height: 1.8; }
+html body.rf-remake #ui #scr-forge #forge-rows .frow .btn { font-size: 12px !important; padding: 9px 12px !important; }
+html body.rf-remake #ui #scr-shop #shop-list { width: 100% !important; grid-template-columns: repeat(auto-fit, minmax(min(270px, 100%), 1fr)); gap: 18px !important; align-items: start; }
+html body.rf-remake #ui #scr-shop #shop-list > .card { border: 1px solid var(--remake-line) !important; border-radius: 2px !important; background: #141e20 !important; color: #eee7d9 !important; padding: 22px !important; gap: 12px; box-shadow: none !important; }
+html body.rf-remake #ui #scr-shop #shop-list .card :is(em, small) { color: #acb5a9 !important; line-height: 1.8; }
+html body.rf-remake #ui #scr-shop #shop-list .card b { color: #e7ddc8 !important; font-family: var(--remake-serif); }
+html body.rf-remake #ui #scr-shop #shop-list img.face { width: 100%; max-width: 100% !important; height: 230px; object-fit: contain; border-radius: 0; background: #0e181a; }
+html body.rf-remake #ui #scr-lobby .inner { max-width: 640px; }
+html body.rf-remake #ui #scr-lobby .field { width: 100%; gap: 8px; color: #c7c9ba; }
+html body.rf-remake #ui #scr-lobby .menu { width: 100%; }
+html body.rf-remake #ui #scr-lobby.screen #btn-join.btn { text-align: center; color: #101715 !important; background: var(--remake-brass) !important; border-color: var(--remake-brass) !important; }
+html body.rf-remake #ui #scr-lobby #rf552-event-coop { width: 100%; border-color: var(--remake-line); border-radius: 2px; background: #111c1d; }
+html body.rf-remake #ui #scr-lobby #rf552-coop-members li { border-color: #536153; border-radius: 2px; background: #1a2525; }
+
+/* Ranked play keeps tier colours and every live status intact. */
+html body.rf-remake #ui #scr-ranked .ranked-heading { width: 100%; padding: 14px 0 24px; border-color: var(--remake-line); }
+html body.rf-remake #ui #scr-ranked .ranked-heading h2 { color: #f0ecdf; font: 500 clamp(28px, 4vw, 44px) / 1.5 var(--remake-serif); margin: 0 0 12px; }
+html body.rf-remake #ui #scr-ranked :is(.ranked-profile, .ranked-setup, .ranked-box) { width: 100%; border: 1px solid var(--remake-line); border-radius: 2px; background: #141e20; padding: 22px; box-shadow: none; }
+html body.rf-remake #ui #scr-ranked :is(.ranked-heading p, .ranked-profile p, .ranked-setup p, .ranked-box p) { color: #aab6ae; font-size: 13px; line-height: 1.8; }
+html body.rf-remake #ui #scr-ranked :is(#ranked-setup, #ranked-result) .ranked-primary.btn { color: #101715 !important; background: var(--remake-brass) !important; border-color: var(--remake-brass) !important; }
+html body.rf-remake #ui #scr-ranked #ranked-progress { accent-color: var(--remake-brass); width: 100%; }
+html body.rf-remake #ui #scr-ranked .ranked-board { width: 100%; overflow-x: auto; }
+html body.rf-remake #ui #scr-ranked table { width: 100%; border-collapse: collapse; font-size: 13px; }
+html body.rf-remake #ui #scr-ranked :is(th, td) { padding: 15px 12px; border-bottom: 1px solid var(--remake-line); text-align: left; }
+html body.rf-remake #ui #scr-ranked th { color: var(--remake-brass); font-weight: 500; background: #11191b; }
+
+/* Estate management shares the same materials without changing its live scene. */
+html body.rf-remake #ui #scr-castle #castle-content { gap: 18px; }
+html body.rf-remake #ui #scr-castle #castle-content :is(.cr-heading, .cr-title) { color: #e7ddc5; font-family: var(--remake-serif); font-weight: 500; text-align: left; }
+html body.rf-remake #ui #scr-castle #castle-content :is(.cr-note, .cr-small) { color: #aab6ae; font-family: var(--remake-sans); line-height: 1.9; }
+html body.rf-remake #ui #scr-castle #castle-content :is(.cr-button, .cr-select) { color: #e8e4d6; background: #192526; border-color: #77765a; border-radius: 2px; min-height: 44px; font: 500 13px / 1.7 var(--remake-sans); }
+html body.rf-remake #ui #scr-castle #castle-content .cr-accent { color: #0b1012; background: var(--remake-brass); border-color: var(--remake-brass); }
+html body.rf-remake #ui #scr-castle #castle-content :is(.cr-target, .cr-log) { background: #141e20; color: #dadfd2; border-color: var(--remake-line); border-radius: 2px; padding: 18px; }
+html body.rf-remake #ui #scr-castle #castle-content .cr-castle-scene { border-color: #c6ab7666; border-radius: 3px; }
+html body.rf-remake #ui #scr-castle #castle-content .cr-meter-bg { border-color: #93927b; border-radius: 0; background: #0c1619; }
+html body.rf-remake #ui #scr-castle #castle-content .cr-meter-fill { background: linear-gradient(90deg, #648a7e, #c5cea0); border-radius: 0; }
+
+/* Story, results and pause: quiet, legible surfaces over the actual game. */
+html body.rf-remake #ui #scr-story.screen:not(#scr-title) {
+  background: linear-gradient(transparent 25%, rgba(7, 12, 13, .45) 60%, rgba(7, 12, 13, .92)) !important;
+  padding-bottom: max(24px, env(safe-area-inset-bottom)) !important;
+}
+html body.rf-remake #ui #scr-story .inner { height: 100%; justify-content: flex-end; }
+html body.rf-remake #ui #scr-story:not(#scr-title):not(#scr-press) .topbar { background: #0b1012c7 !important; }
+html body.rf-remake #ui #scr-story #story-chapter { color: #f0ecdf; font: 500 clamp(22px, 4vw, 36px) / 1.6 var(--remake-serif); letter-spacing: .18em; text-shadow: 0 2px 18px #000; }
+html body.rf-remake #ui #scr-story #story-box { width: min(940px, 100%); padding: 28px 34px 36px !important; background: #111a1bf5 !important; color: #eee9dc !important; border: 1px solid #b99c6666 !important; border-top: 2px solid var(--remake-brass) !important; border-radius: 2px !important; box-shadow: 0 20px 60px #0006 !important; }
+html body.rf-remake #ui #scr-story #story-who { color: #d7b981; border: 0; margin-bottom: 12px; font: 600 14px / 1.8 var(--remake-sans); letter-spacing: .12em; }
+html body.rf-remake #ui #scr-story #story-line { font: 500 clamp(16px, 2vw, 20px) / 2 var(--remake-serif); color: #f0ecdf; }
+html body.rf-remake #ui #scr-story #story-box::after { color: var(--remake-brass); right: 24px; bottom: 12px; }
+html body.rf-remake #ui #scr-result .inner { min-height: min(680px, 80dvh); justify-content: center; }
+html body.rf-remake #ui #scr-result .topbar { margin-bottom: auto; }
+html body.rf-remake #ui #scr-result #res-title { align-self: center; margin-top: 35px; font-size: clamp(36px, 6vw, 68px) !important; letter-spacing: .2em !important; }
+html body.rf-remake #ui #scr-result #res-text { color: #aab6ae; }
+html body.rf-remake #ui #scr-result .menu { margin-top: 20px; }
+html body.rf-remake #ui #scr-result .menu button { text-align: center; }
+html body.rf-remake #ui #pause { background: #0b1012e8 !important; backdrop-filter: blur(12px); gap: 20px; }
+html body.rf-remake #ui #pause .label { font: 500 clamp(30px, 5vw, 50px) / 1.6 var(--remake-serif); color: #f0ecdf; border: 0; text-shadow: none; letter-spacing: .16em; }
+html body.rf-remake #ui #pause .btn { min-height: 48px; padding: 14px 20px; border: 1px solid var(--remake-line); border-radius: 2px; color: #f0ecdf; font: 500 14px / 1.6 var(--remake-sans); background: #192223; transform: none; }
+html body.rf-remake #ui #pause #btn-resume { color: #101715; background: var(--remake-brass); border-color: var(--remake-brass); }
+
+/* Combat readability: trim decoration, retain the existing placement and inputs. */
+html body.rf-remake #ui #hud .hud-side .plate { padding: 5px 7px !important; background: #0b15162e !important; border: 0 !important; border-radius: 0 !important; box-shadow: none !important; filter: none !important; }
+html body.rf-remake #ui #hud .hud-side .plate b { color: #fff8e9 !important; font: 600 clamp(10px, 1.5vmin, 13px) / 1.5 var(--remake-sans) !important; letter-spacing: .06em; text-shadow: 0 1px 4px #000, 0 0 8px #000 !important; }
+html body.rf-remake #ui #hud .hud-side .plate i { border: 1px solid #cfccab6e !important; border-radius: 0 !important; height: 6px !important; background: #0a151c6e !important; transform: none !important; }
+html body.rf-remake #ui #hud .hud-side .plate u { opacity: 1 !important; border-radius: 0 !important; box-shadow: none !important; }
+html body.rf-remake #ui #hud #hud-left .plate u { background: linear-gradient(90deg, #447e83, #a8d7c8) !important; }
+html body.rf-remake #ui #hud #hud-right .plate u { background: linear-gradient(90deg, #99514e, #e0a181) !important; }
+html body.rf-remake #ui #hud #btn-pause { min-height: 36px; border: 1px solid #c6ab7670 !important; border-radius: 2px !important; color: #fff3db !important; background: #101c1e80 !important; font: 500 11px / 1.5 var(--remake-sans); letter-spacing: .08em; box-shadow: none !important; }
+html body.rf-remake #ui #hud #gauges { font: 500 10px / 1.6 var(--remake-sans); letter-spacing: .08em; color: #f0ecdf !important; }
+html body.rf-remake #ui #hud #gauges > div { border: 0 !important; border-radius: 0 !important; background: transparent !important; }
+html body.rf-remake #ui #hud #gauges i { border: 1px solid #a2b7aa6e !important; border-radius: 0 !important; background: #0d161b70 !important; }
+html body.rf-remake #ui #hud #flux u { background: #9fc8c0 !important; }
+html body.rf-remake #ui #hud #over u { background: #d7b774 !important; }
+html body.rf-remake #ui #hud #awk u { background: #d1c1df !important; }
+html body.rf-remake #ui #touch #tbtns button { color: #fff5e4 !important; background: #0d191b21 !important; border-color: #e9e0bf80 !important; box-shadow: none !important; font-family: var(--remake-serif); }
+html body.rf-remake #ui #touch #tbtns button[data-act=over] { border-color: #e8c17d !important; color: #ffe4aa !important; }
+html body.rf-remake #ui #touch #tbtns button[data-act=heal] { border-color: #93c9a7 !important; }
+html body.rf-remake #ui #touch #tbtns button:active { background: #c6ab7647 !important; }
+html body.rf-remake #ui #touch #joy { border-color: #dccca06b !important; background: #0d171927 !important; box-shadow: none !important; }
+html body.rf-remake #ui #touch #knob { border-color: #c5cdad8f !important; background: #c4c9ae5e !important; box-shadow: none !important; }
+html body.rf-remake #ui #field-hud #field-info { color: #f0ecdf; background: #0b1718a8; border-color: #c6ab7650; border-radius: 2px; }
+html body.rf-remake #ui #world-panel { border-color: #c6ab7670; border-radius: 2px; background: #101c1df5; color: #f0ecdf; }
+
+/* Native and scripted dialogs can be opened from any screen. */
+html body.rf-remake :is(.rf51-panel, .rf552-choice-panel, .rf552-board, .rift-gift-panel, #mailbox-dialog) { color: #f0ecdf !important; background: #121c1e !important; border: 1px solid #c6ab7680 !important; border-radius: 3px !important; box-shadow: 0 24px 90px #0009 !important; font-family: var(--remake-sans); }
+html body.rf-remake :is(.rf51-panel, .rf552-choice-panel, .rf552-board, .rift-gift-panel) :is(h2, .rf51-title) { font-family: var(--remake-serif); font-weight: 500; color: #eee4cf; }
+html body.rf-remake :is(.rf51-message, .rift-gift-panel p) { color: #aab6ae !important; line-height: 1.9; }
+html body.rf-remake :is(.rf51-option, .rf51-close, .rf552-choice-panel button, .rf552-board button, .rift-gift-close) { border-color: #8e815e !important; border-radius: 2px !important; background: #1d2928 !important; color: #f0ecdf !important; }
+html body.rf-remake .rf51-option.rf51-primary { color: #0b1012 !important; background: var(--remake-brass) !important; border-color: var(--remake-brass) !important; }
+html body.rf-remake .rf51-option.rf51-danger { background: #5d3630 !important; border-color: #b18171 !important; }
+html body.rf-remake #mailbox-dialog :is(.mb-head, .mb-tabs) { background: #162224; border-color: var(--remake-line); }
+html body.rf-remake #mailbox-dialog .mb-body { color: #e5e4d7; }
+html body.rf-remake :is(#rift-floating-back, .rift-utility button) { color: #e7dfcb !important; background: #172123f5 !important; border-color: #c6ab7666 !important; border-radius: 2px !important; box-shadow: 0 4px 16px #0004 !important; }
+html body.rf-remake #rift-floating-back { top: max(12px, env(safe-area-inset-top)); left: max(12px, env(safe-area-inset-left)); padding: 10px 13px; min-height: 40px; }
+html body.rf-remake [hidden] { display: none !important; }
+
+/* Preserve the existing display-density control, including small screens. */
+html[data-rift-density=compact] body.rf-remake #ui #scr-select #select-grid { grid-template-columns: repeat(auto-fill, minmax(min(132px, 100%), 1fr)) !important; gap: 8px !important; }
+html[data-rift-density=compact] body.rf-remake #ui #scr-select #select-grid .card img.face { aspect-ratio: 1 !important; max-height: 180px !important; margin-bottom: 8px !important; }
+html[data-rift-density=compact] body.rf-remake #ui #scr-select #select-grid .card { padding-bottom: 10px !important; }
+html[data-rift-density=compact] body.rf-remake #ui #scr-select #select-grid .card b { font-size: 17px !important; }
+
+@media (min-width: 1500px) {
+  html body.rf-remake #ui .screen:not(#scr-press):not(#scr-title) { padding-top: max(40px, env(safe-area-inset-top)) !important; }
+  html body.rf-remake #ui .screen:not(#scr-press):not(#scr-title) .topbar { top: -40px !important; }
+}
+@media (max-width: 720px) {
+  html body.rf-remake #ui .screen:not(#scr-press):not(#scr-title) { padding: max(12px, env(safe-area-inset-top)) max(14px, env(safe-area-inset-right)) max(28px, env(safe-area-inset-bottom)) max(14px, env(safe-area-inset-left)) !important; }
+  html body.rf-remake #ui .screen:not(#scr-press):not(#scr-title) .inner { gap: 16px !important; }
+  html body.rf-remake #ui .screen:not(#scr-press):not(#scr-title) .topbar { top: -12px !important; gap: 8px; min-height: 58px; padding: 10px 0 !important; }
+  html body.rf-remake #ui .screen:not(#scr-press):not(#scr-title) .label { font-size: 28px !important; margin-top: 6px; }
+  html body.rf-remake #ui #scr-select #select-grid { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; gap: 10px !important; }
+  html body.rf-remake #ui #scr-select #select-grid .card :is(em, b, small) { padding-inline: 10px !important; }
+  html body.rf-remake #ui #scr-select #select-grid .card img.face { max-height: 230px !important; }
+  html body.rf-remake #ui #scr-select #select-grid .card small { font-size: 10px !important; }
+  html body.rf-remake #ui #scr-select .select-tools { align-items: flex-end; gap: 8px; }
+  html body.rf-remake #ui #scr-select .select-search-label { width: 100%; }
+  html body.rf-remake #ui #scr-select #party-bar { padding: 12px !important; }
+  html body.rf-remake #ui #scr-select #party-slots { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  html body.rf-remake #ui #scr-options .rf25-options-grid { grid-template-columns: minmax(0, 1fr); gap: 16px !important; }
+  html body.rf-remake #ui #scr-options .rf25-settings-group { padding: 20px !important; }
+  html body.rf-remake #ui #scr-forge .forge { grid-template-columns: minmax(0, 1fr); gap: 16px; }
+  html body.rf-remake #ui #scr-forge #forge-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); max-height: 220px; padding-right: 4px; }
+  html body.rf-remake #ui #scr-forge .fpanel { padding: 16px !important; }
+  html body.rf-remake #ui #scr-forge .frow { grid-template-columns: minmax(0, 1fr) auto; }
+  html body.rf-remake #ui #scr-forge #forge-rows .frow .btn { max-width: 145px; }
+  html body.rf-remake #ui #scr-ranked :is(.ranked-profile, .ranked-setup, .ranked-box) { padding: 16px; }
+  html body.rf-remake #ui #scr-ranked .ranked-setup { flex-wrap: wrap; }
+  html body.rf-remake #ui #scr-ranked .ranked-actions { width: 100%; }
+  html body.rf-remake #ui #scr-ranked .ranked-actions button { flex: 1 1 auto; }
+  html body.rf-remake #ui #scr-story #story-box { padding: 20px 20px 32px !important; }
+  html body.rf-remake #ui #scr-story #story-line { line-height: 1.9; }
+}
+@media (max-width: 390px) {
+  html body.rf-remake #ui .screen:not(#scr-press):not(#scr-title) .back { font-size: 11px !important; padding-inline: 7px !important; }
+  html body.rf-remake #ui #scr-select #select-grid .card b { font-size: 17px !important; }
+  html body.rf-remake #ui #scr-select #select-counter { font-size: 10px; white-space: normal; text-align: right; }
+  html body.rf-remake #ui #scr-forge .frow { grid-template-columns: minmax(0, 1fr); }
+  html body.rf-remake #ui #scr-forge #forge-rows .frow .btn { justify-self: start; max-width: 100%; }
+}
+@media (max-height: 500px) and (orientation: landscape) {
+  html body.rf-remake #ui .screen:not(#scr-press):not(#scr-title) { padding-top: max(6px, env(safe-area-inset-top)) !important; }
+  html body.rf-remake #ui .screen:not(#scr-press):not(#scr-title) .topbar { top: -6px !important; min-height: 42px; padding-block: 4px !important; }
+  html body.rf-remake #ui .screen:not(#scr-press):not(#scr-title) .inner { gap: 12px !important; }
+  html body.rf-remake #ui .screen:not(#scr-press):not(#scr-title) .label { font-size: 24px !important; margin: 0; padding-bottom: 0 !important; }
+  html body.rf-remake #ui #scr-select #select-grid { grid-template-columns: repeat(auto-fill, minmax(145px, 1fr)) !important; }
+  html body.rf-remake #ui #scr-select #select-grid .card img.face { max-height: 160px !important; }
+  html body.rf-remake #ui #scr-story #story-box { max-height: 50dvh; padding: 14px 20px 24px !important; }
+  html body.rf-remake #ui #scr-story #story-who { margin-bottom: 4px; font-size: 12px; }
+  html body.rf-remake #ui #scr-story #story-line { font-size: 15px; line-height: 1.7; }
+  html body.rf-remake #ui #scr-result .inner { min-height: 0; }
+  html body.rf-remake #ui #scr-result #res-title { font-size: 36px !important; margin: 0; }
+  html body.rf-remake #ui #pause { gap: 10px; }
+  html body.rf-remake #ui #pause .label { font-size: 28px; }
+  html body.rf-remake #ui #hud .hud-side .plate { padding-block: 2px !important; }
+}
+@media (prefers-reduced-motion: reduce) {
+  html body.rf-remake #ui .screen:not(#scr-press):not(#scr-title) *,
+  html body.rf-remake #ui #pause *,
+  html body.rf-remake :is(.rf51-panel, .rf552-choice-panel, .rf552-board) * {
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

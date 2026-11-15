@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="theme-color" content="#111b24">
+  <meta name="theme-color" content="#0b1012">
   <title>ストーリーⅡ・ランクマッチ・無限天守｜双月のアルケイア</title>
   <meta name="description" content="双月のアルケイアの戦闘モードガイド。横視点のストーリーⅡ、ランクマッチの昇格と再挑戦、無限天守の階段、拠点攻城戦の防衛ボス設定を解説。">
   <meta name="robots" content="index,follow,max-image-preview:large">
@@ -35,7 +35,7 @@
           "name": "ストーリーⅡ・ランクマッチ・無限天守｜双月のアルケイア",
           "description": "双月のアルケイアの戦闘モードガイド。横視点のストーリーⅡ、ランクマッチの昇格と再挑戦、無限天守の階段、拠点攻城戦の防衛ボス設定を解説。",
           "inLanguage": "ja",
-          "dateModified": "2026-11-12",
+          "dateModified": "2026-11-16",
           "isPartOf": {"@id": "https://www.kasai-solutions-inc.com/#website"},
           "about": {"@id": "https://www.kasai-solutions-inc.com/#game"},
           "breadcrumb": {"@id": "https://www.kasai-solutions-inc.com/battle-guide.html#breadcrumb"},
@@ -57,19 +57,25 @@
       ]
     }
   </script>
-  <link rel="stylesheet" href="./assets/rf569-ui-refresh.css?v=55.21">
-  <link rel="stylesheet" href="./assets/rf5523/site.css?v=55.23">
-  <link rel="stylesheet" href="./assets/rf5525/site.css?v=55.25">
-  <link rel="stylesheet" href="./assets/rf5526/guide.css?v=55.26">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Shippori+Mincho:wght@500;600;800&amp;display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="./assets/remake/guide.css?v=56.0">
 </head>
-<body class="rf5525 rf25-guide rf5521-guide rf5523-world">
-  <header class="guide-cover">
+<body class="archeia-guide guide-battle-page">
+  <a class="skip-link" href="#guide-content">本文へ移動</a>
+  <header class="archive-header">
+    <a class="archive-brand" href="./" aria-label="双月のアルケイア ホーム"><img class="archive-emblem" src="./assets/remake/emblem.svg" width="40" height="40" alt=""><span>双月のアルケイア<small>ARCHEIA OF THE TWIN MOONS</small></span></a>
+    <nav class="archive-navigation" aria-label="ガイドのページ"><a href="./play-guide.html">遊び方</a><a href="./battle-guide.html" aria-current="page">戦闘モード</a><a href="./world-guide.html">世界と舞台</a><a href="./tenshi.html">人物録</a></nav>
+    <a class="archive-enter" href="./">ゲームへ <span aria-hidden="true">↗</span></a>
+  </header>
+  <header class="guide-cover" aria-label="戦闘モード">
     <picture class="rf25-guide-art">
       <img src="./assets/rf5526/moon-arena-960.webp" srcset="./assets/rf5526/moon-arena-960.webp 960w, ./assets/rf5526/moon-arena.webp 1440w" sizes="100vw" width="1440" height="810" alt="朱塗りの灯籠と紅葉の先に双つの月が浮かぶ闘技場" fetchpriority="high">
     </picture>
     <div>
-      <a href="./" data-rf25-icon="start">双月のアルケイア</a>
-      <h1>戦闘モードガイド</h1>
+      <a href="./" data-rf25-icon="start" class="guide-breadcrumb">双月のアルケイア <span aria-hidden="true"> / </span>戦闘モード</a>
+      <p class="guide-eyebrow">BATTLE GUIDE</p><h1>戦闘モードガイド</h1><p class="guide-subtitle">剣を交える、その前に。</p>
       <p>世界の戦士と一対一で競うか、城を踏破するか。出撃の手順と勝利条件を確認できます。</p>
     </div>
   </header>
@@ -82,7 +88,7 @@
     <a href="#story-ii" data-rf25-icon="duel">ストーリーⅡ</a>
     <a href="#controls" data-rf25-icon="gamepad">操作</a>
   </nav>
-  <main class="guide-main">
+  <main class="guide-main" id="guide-content">
     <section id="ranked">
       <h2>ランクマッチの参加と昇格</h2>
       <ol>
@@ -91,7 +97,7 @@
         <li>相手と合流したら、半径13mの双月の闘技場で一対一の試合が始まります。制限時間は2分30秒です。時間切れでは残りHPが多い側の勝ちで、同じなら引き分けです。</li>
       </ol>
       <p>戦績とポイントは同期したプレイヤーに保存されます。対人戦の勝利で加点、敗北で減点、引き分けでは増減しません。ランクマッチの「世界ランキング」には順位・ランク・ポイントが表示されます。</p>
-      <table class="guide-controls">
+      <div class="guide-table-scroll" role="region" aria-label="操作・ルール一覧" tabindex="0"><table class="guide-controls">
         <caption>ランクごとの到達ポイント</caption>
         <thead><tr><th scope="col">ランク</th><th scope="col">必要ポイント</th></tr></thead>
         <tbody>
@@ -101,7 +107,7 @@
           <tr><th scope="row">プラチナ</th><td>900 pt</td></tr>
           <tr><th scope="row">マスター</th><td>1,400 pt</td></tr>
         </tbody>
-      </table>
+      </table></div>
       <h3>再挑戦・退出・ボット戦</h3>
       <p>対人戦は結果画面で両者が24秒以内に「再挑戦」を選ぶと、同じ相手と次の試合が始まります。どちらかが「退出する」を選ぶか、受付時間が過ぎると終了します。試合中のリタイアは敗北扱いです。</p>
       <p>相手が見つからないときは、検索開始60秒後から30秒ごとに12％の確率で実力に合わせたボット戦が選ばれます。勝利は1日3勝分まで1勝につき8 ptで、ボット戦の敗北ではポイントが減りません。</p>
@@ -144,7 +150,7 @@
     </section>
     <section id="controls">
       <h2>無限天守と物語で視点を回す</h2>
-      <table class="guide-controls">
+      <div class="guide-table-scroll" role="region" aria-label="操作・ルール一覧" tabindex="0"><table class="guide-controls">
         <caption>手動視点への切り替えと自動視点に戻す操作</caption>
         <thead><tr><th scope="col">入力</th><th scope="col">回す</th><th scope="col">自動に戻す</th></tr></thead>
         <tbody>
@@ -152,12 +158,12 @@
           <tr><th scope="row">画面操作</th><td>回転ボタン／視点欄を横にドラッグ</td><td>「自動」ボタン</td></tr>
           <tr><th scope="row">パッド</th><td>右スティックを左右に倒す</td><td>右スティックを押し込む</td></tr>
         </tbody>
-      </table>
+      </table></div>
       <p><a href="./play-guide.html#controls">PC・スマホ・ゲームパッドの戦闘操作一覧</a></p>
     </section>
     <p class="rf5523-related"><a href="./play-guide.html" data-rf25-icon="guide">遊び方と操作</a><a href="./world-guide.html" data-rf25-icon="map">舞台案内</a><a href="./tenshi.html" data-rf25-icon="profile">天子の人物・技ガイド</a></p>
     <a class="guide-play" href="./" data-rf25-icon="start">ゲームを始める</a>
   </main>
-  <footer class="guide-footer">© KASAI SOLUTIONS INC.</footer>
+  <footer class="guide-footer"><a href="./" class="footer-brand">双月のアルケイア<small>ARCHEIA OF THE TWIN MOONS</small></a><p>双つの月の下、灯脈を辿る旅へ。</p><div><a href="#guide-content">ページの先頭へ ↑</a><span>© 2026 KASAI SOLUTIONS INC.</span></div></footer>
 </body>
 </html>
