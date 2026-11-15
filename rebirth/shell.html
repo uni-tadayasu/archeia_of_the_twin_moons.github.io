@@ -1,0 +1,81 @@
+<div class="app-shell">
+  <header class="site-header" id="site-header">
+    <a class="brand" href="./" aria-label="双月のアルケイア ホーム">
+      <svg class="brand-emblem" viewBox="0 0 48 48" fill="none" aria-hidden="true"><circle cx="24" cy="24" r="21" stroke="currentColor" stroke-width=".6"/><path d="M27 8a16 16 0 1 0 13 23A17 17 0 0 1 27 8Z" fill="currentColor"/><circle cx="33" cy="16" r="6" stroke="currentColor"/><path d="M24 1v7m0 32v7M1 24h7m32 0h7" stroke="currentColor"/></svg>
+      <span>双月のアルケイア<small>ARCHEIA OF THE TWIN MOONS</small></span>
+    </a>
+    <nav class="header-nav" aria-label="メインナビゲーション">
+      <button id="roster-button" class="nav-button" type="button">戦士名鑑</button>
+      <button id="records-button" class="nav-button" type="button">旅の記録</button>
+      <a href="classic.html" class="nav-button classic-link">オンライン・運営 <span aria-hidden="true">↗</span></a>
+    </nav>
+    <div class="header-status">
+      <div class="shards" title="新生版で獲得した灯晶"><span class="crystal" aria-hidden="true">◇</span><span id="shard-count">0</span><small>灯晶</small></div>
+      <span class="profile"><i aria-hidden="true"></i><span id="profile-name">旅人</span></span>
+      <button id="settings-button" class="icon-button" type="button" aria-label="設定"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m9 3-1 3-3 1-2 4 2 3v4l4 2 3-1 3 1 4-2v-4l2-3-2-4-3-1-1-3Z" stroke="currentColor" stroke-width="1.2"/><circle cx="12" cy="12" r="3.2" stroke="currentColor" stroke-width="1.2"/></svg></button>
+    </div>
+  </header>
+
+  <main>
+    <section id="home-view" class="view home-view" aria-labelledby="home-title">
+      <div class="hero-background" aria-hidden="true"><img id="hero-art" src="assets/rf5525/moonkeep-wide.webp" alt="" fetchpriority="high"></div>
+      <div class="hero-vignette" aria-hidden="true"></div>
+      <div class="home-orbit" aria-hidden="true"><i></i><span>二つの月が、再び巡る。</span></div>
+      <div class="home-content">
+        <div class="hero-copy">
+          <p class="eyebrow"><span class="gold-line"></span> REBIRTH · 剣と灯の物語</p>
+          <h1 id="home-title"><span class="title-prefix">双月の</span><span class="title-main">アルケイア</span></h1>
+          <p class="title-roman">ARCHEIA OF THE TWIN MOONS</p>
+          <div class="hero-rule"><span></span><i>✦</i><span></span></div>
+          <h2 id="hero-title">消えゆく灯に、<br>もう一度、その剣を。</h2>
+          <p id="hero-description">双つの月が照らす、忘れられた王国。<br>仲間と出会い、技を繋ぎ、物語の先へ。</p>
+          <div class="hero-actions">
+            <button id="start-button" class="primary start-button" type="button"><span class="button-decoration" aria-hidden="true">✦</span><span>旅をはじめる</span><span class="button-arrow" aria-hidden="true">→</span></button>
+            <button id="continue-button" class="text-button" type="button">前回の旅を続ける <span aria-hidden="true">↗</span></button>
+          </div>
+          <p class="start-note">PC・スマホ対応 <span>／</span> ブラウザで、そのまま冒険へ</p>
+        </div>
+        <div class="world-caption"><span class="world-caption-line"></span><span>双月の山城<small>THE MOONLIT KEEP</small><small id="home-progress">まだ見ぬ物語が、あなたを待つ。</small></span><b aria-hidden="true">壱</b></div>
+      </div>
+      <div class="mode-dock">
+        <div class="mode-dock-heading"><p class="eyebrow">YOUR NEXT CHAPTER</p><h2>今宵の旅を選ぶ</h2><span id="mode-label">物語</span></div>
+        <div id="mode-grid" class="mode-grid" role="group" aria-label="ゲームモード"></div>
+        <div class="home-footer"><span><i></i> 剣を振るい、技を繋ぐ。自由なアクションバトル。</span><span>RIFTFALL ARENA <b>／</b> REBIRTH EDITION</span></div>
+      </div>
+    </section>
+
+    <section id="select-view" class="view select-view" aria-labelledby="select-title" hidden>
+      <div class="view-heading"><button id="select-back" class="back-button" type="button"><span aria-hidden="true">←</span> 旅の入口へ</button><p class="eyebrow">PREPARE FOR THE JOURNEY</p><h1 id="select-title">出撃の支度</h1><p id="selection-mode">戦士と舞台を選び、双月の世界へ。</p></div>
+      <div class="selection-layout">
+        <div class="roster-panel"><div class="section-heading"><h2><span>01</span> 共に旅する戦士</h2><label class="search-label"><svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><circle cx="8.5" cy="8.5" r="5.5" stroke="currentColor"/><path d="m13 13 4 4" stroke="currentColor"/></svg><input id="character-search" type="search" placeholder="戦士を探す" aria-label="戦士を探す" autocomplete="off"></label></div><div id="character-grid" class="character-grid" role="group" aria-label="戦士選択"></div></div>
+        <aside id="character-detail" class="character-detail" aria-live="polite"></aside>
+      </div>
+      <div class="departure-layout"><div class="stage-panel"><div class="section-heading"><h2><span>02</span> 戦いの舞台</h2><small id="stage-note">舞台を選択</small></div><div id="stage-grid" class="stage-grid" role="group" aria-label="ステージ選択"></div></div><div class="departure-panel"><label class="difficulty-label" for="difficulty">相手の強さ <output id="difficulty-value">50%</output></label><input id="difficulty" class="range" type="range" min="1" max="100" value="50"><div class="range-labels"><span>物語を楽しむ</span><span>手強い戦い</span></div><button id="launch-button" class="primary" type="button"><span>この戦士で出撃</span><span aria-hidden="true">→</span></button></div></div>
+    </section>
+
+    <section id="play-view" class="view play-view" aria-label="戦闘画面" hidden>
+      <canvas id="world-canvas" tabindex="0" aria-label="3D戦闘画面。WASDで移動、Jで攻撃、Kで技、Lで奥義。"></canvas>
+      <div id="battle-hud" class="battle-hud">
+        <div class="player-hud"><div class="player-hud-top"><span class="eyebrow">PLAYER</span><h2 id="player-name">ロウエン</h2><span id="hp-text">1000 / 1000</span></div><div class="gauge hp-gauge"><i id="hp-fill"></i></div><div class="sub-gauges"><label>灯力<div class="gauge energy-gauge"><i id="energy-fill"></i></div></label><label>奥義<div class="gauge ultimate-gauge"><i id="ultimate-fill"></i></div></label></div></div>
+        <div class="battle-objective"><p id="objective">敵をすべて倒せ</p><div><span id="enemy-count">残り 3体</span><span class="objective-dot">·</span><time id="battle-time">00:00</time></div></div>
+        <button id="pause-button" class="icon-button pause-button" type="button" aria-label="一時停止">Ⅱ</button>
+        <div class="minimap-wrap"><canvas id="minimap" width="144" height="144" aria-label="周辺の地図"></canvas><small>MAP</small></div>
+        <div id="combo-count" class="combo-count" aria-live="off"></div>
+        <div id="battle-message" class="battle-message" role="status"></div>
+        <div id="damage-numbers" class="damage-numbers" aria-hidden="true"></div>
+        <div id="skill-bar" class="skill-bar" aria-label="戦闘スキル"></div>
+        <div class="keyboard-hint"><kbd>W A S D</kbd> 移動 <span>·</span> <kbd>SHIFT</kbd> 防御 <span>·</span> <kbd>SPACE</kbd> 回避 <span>·</span> <kbd>ESC</kbd> 休憩</div>
+      </div>
+      <div id="touch-controls" class="touch-controls" aria-label="タッチ操作"><div id="joystick" class="joystick" aria-label="移動スティック"><div class="joystick-rim"></div><div id="joystick-knob" class="joystick-knob"></div></div><div class="touch-buttons"><button type="button" data-action="heal" class="touch-small" aria-label="回復">癒</button><button type="button" data-action="guard" class="touch-small" aria-label="防御">防</button><button type="button" data-action="over" class="touch-over" aria-label="奥義">奥</button><button type="button" data-action="skill2" aria-label="技B">技B</button><button type="button" data-action="skill" aria-label="技A">技A</button><button type="button" data-action="attack" class="touch-attack" aria-label="通常攻撃">斬</button><button type="button" data-action="dash" class="touch-small touch-dash" aria-label="回避">避</button></div></div>
+    </section>
+
+    <section id="dialogue-view" class="view dialogue-view" aria-labelledby="dialogue-chapter" hidden><div class="dialogue-art" aria-hidden="true"></div><div class="dialogue-top"><p id="dialogue-chapter" class="eyebrow">序章 · 双月の灯</p><button id="dialogue-skip" class="secondary" type="button">語りを飛ばす →</button></div><div class="dialogue-box"><div class="dialogue-ornament" aria-hidden="true">✦</div><h2 id="dialogue-name">語り手</h2><p id="dialogue-text"></p><button id="dialogue-next" class="text-button" type="button">物語を進める <span aria-hidden="true">→</span></button></div></section>
+
+    <section id="result-view" class="view result-view" aria-labelledby="result-title" hidden><div class="result-rays" aria-hidden="true"></div><div class="result-panel"><p class="eyebrow">THE CHRONICLE CONTINUES</p><div class="result-seal" aria-hidden="true">✦</div><h1 id="result-title">勝利</h1><p id="result-subtitle">あなたの剣が、道を切り拓いた。</p><div id="result-stats" class="result-stats"></div><div class="result-actions"><button id="result-next" class="primary" type="button">次の旅路へ →</button><button id="result-retry" class="secondary" type="button">もう一度挑む</button><button id="result-home" class="text-button" type="button">旅の入口へ戻る</button></div></div></section>
+  </main>
+</div>
+
+<dialog id="settings-dialog" class="modal settings-modal" aria-labelledby="settings-title"><div class="modal-heading"><div><p class="eyebrow">PREFERENCES</p><h2 id="settings-title">旅の設定</h2></div><button id="settings-close" class="icon-button" type="button" aria-label="設定を閉じる">×</button></div><div class="settings-fields"><label class="field-label" for="nickname-input">旅人の名前<input id="nickname-input" maxlength="16" autocomplete="off" placeholder="旅人"></label><label class="field-label" for="quality-select">描画品質<select id="quality-select"><option value="low">軽量 — スマートフォン向け</option><option value="balanced" selected>標準 — バランス重視</option><option value="high">高品質 — 光と影を豊かに</option></select></label><label class="field-label volume-field" for="volume-input">音量<input id="volume-input" class="range" type="range" min="0" max="1" step="0.01" value="0.5"></label><label class="check-label"><input id="motion-input" type="checkbox"><span>画面の揺れ・演出の動きを抑える</span></label><div class="save-settings"><h3>旅の記録を持ち運ぶ</h3><p>この新生版の進行状況を保存・読み込みできます。</p><div><button id="export-save" class="secondary" type="button">記録を書き出す</button><label class="secondary file-label">記録を読み込む<input id="import-save" type="file" accept="application/json,.json"></label></div></div><p id="settings-note" class="settings-note" role="status">閉じると設定が保存されます。</p></div></dialog>
+<dialog id="records-dialog" class="modal records-modal" aria-labelledby="records-title"><div class="modal-heading"><div><p class="eyebrow">YOUR CHRONICLE</p><h2 id="records-title">旅の記録</h2></div><button id="records-close" class="icon-button" type="button" aria-label="旅の記録を閉じる">×</button></div><div id="records-content" class="records-content"></div></dialog>
+<dialog id="pause-dialog" class="modal pause-modal" aria-labelledby="pause-title"><p class="eyebrow">A MOMENT OF REST</p><h2 id="pause-title">ひと息、月を仰ぐ。</h2><p>旅は、あなたを待っています。</p><div class="pause-actions"><button id="resume-button" class="primary" type="button">戦いに戻る →</button><button id="quit-button" class="secondary" type="button">旅の入口へ戻る</button></div></dialog>
+<div id="toast" class="toast" role="status" aria-live="polite"></div>
