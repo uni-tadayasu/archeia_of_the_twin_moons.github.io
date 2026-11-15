@@ -13,7 +13,7 @@ import { chromium, expect, request as playwrightRequest } from '@playwright/test
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const output = path.join(root, 'artifacts/classic-smoke');
 const origin = 'http://127.0.0.1:4173';
-const logs = { startedAt: new Date().toISOString(), steps: [], console: [], pageErrors: [], networkErrors: [], blockedNetwork: [], screenshots: [], server: [], inputDiagnostics: [], inputSamples: [], portraits: [], battleLayouts: [], iconCoverage: [], qualitySettings: [], visualDiagnostics: [] };
+const logs = { startedAt: new Date().toISOString(), steps: [], console: [], pageErrors: [], networkErrors: [], blockedNetwork: [], screenshots: [], server: [], inputDiagnostics: [], inputSamples: [], portraits: [], battleLayouts: [], iconCoverage: [], qualitySettings: [], visualDiagnostics: [], navigation: [] };
 const staticHosts = new Set(['esm.sh', 'fonts.googleapis.com', 'fonts.gstatic.com', 'www.gstatic.com', 'storage.googleapis.com']);
 await mkdir(output, { recursive: true });
 let browser, server, currentPage, failure, staticClient;
@@ -89,13 +89,19 @@ async function menuPolish(page, label) {
   await expect(page.locator('#chat-btn')).toHaveAttribute('aria-expanded', 'false');
   await expect(page.locator('#chat-btn')).toBeFocused();
   await page.locator('[data-portal-jump="portal-play"]').click();
-  const navigation = await page.evaluate(() => {
-    const section = document.querySelector('#portal-play').getBoundingClientRect();
-    const header = document.querySelector('#scr-title .portal-header');
-    const pinned = ['sticky', 'fixed'].includes(getComputedStyle(header).position);
-    return { top: section.top, expected: pinned ? header.getBoundingClientRect().height + 10 : 10 };
-  });
-  assert.ok(Math.abs(navigation.top - navigation.expected) < 3, `${label}: menu navigation clears only a pinned header`);
+  let navigation;
+  // With full effects enabled the user's navigation scroll is animated. Assert
+  // the same exact final clearance after it settles, not an intermediate frame.
+  await expect.poll(async () => {
+    navigation = await page.evaluate(() => {
+      const section = document.querySelector('#portal-play').getBoundingClientRect();
+      const header = document.querySelector('#scr-title .portal-header');
+      const pinned = ['sticky', 'fixed'].includes(getComputedStyle(header).position);
+      return { top: section.top, expected: pinned ? header.getBoundingClientRect().height + 10 : 10 };
+    });
+    return Math.abs(navigation.top - navigation.expected);
+  }, { timeout: 10000, message: `${label}: menu navigation clears only a pinned header` }).toBeLessThan(3);
+  logs.navigation.push({ label, ...navigation });
   const search = page.locator('#classic-mode-search');
   await search.fill('天守');
   await expect(page.locator('.portal-modes > button:visible')).toHaveCount(1);
@@ -145,6 +151,15 @@ async function menuVisualQuality(page, label) {
     const image = card.locator('img').first();
     await expect(image).toHaveCount(1);
     await expect.poll(() => image.evaluate(element => element.complete && element.naturalWidth > 0), { timeout: 15000 }).toBe(true);
+    const labels = await card.evaluate(element => {
+      const card = element.getBoundingClientRect();
+      return [...element.querySelectorAll('b,small')].map(label => {
+        const box = label.getBoundingClientRect();
+        return { text: label.textContent.trim(), visible: box.width > 0 && box.height > 0,
+          inside: box.left >= card.left - 1 && box.right <= card.right + 1 && box.top >= card.top - 1 && box.bottom <= card.bottom + 1 };
+      });
+    });
+    assert.ok(labels.length > 0 && labels.every(label => label.visible && label.inside), `${label}: illustrated card text stays visible inside its button: ${JSON.stringify(labels)}`);
   }
   await fits(page, `${label} illustrated menu`);
   await page.locator('#scr-title').evaluate(element => { element.scrollTop = 0; });

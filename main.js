@@ -166,7 +166,6 @@ let currentStage = null;
 function setStage(st) {
   if (currentStage === st) {
     setReflections(st.sky);
-    celestialStage.setStage(st);
     return;
   }
   if (!floorTex) {
