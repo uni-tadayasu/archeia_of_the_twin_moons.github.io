@@ -219,3 +219,7 @@ html body.rf-remake.classic-polish [hidden]{display:none!important}
 @media(prefers-reduced-motion:reduce){
   html body.rf-remake.classic-polish #ui :is(.classic-quick-button,.remake-mode,.mode-art img,.card,.plate,#field-prompt){transition:none!important;animation:none!important;scroll-behavior:auto!important}
 }
+/* CI visual review: preserve notices in menus without covering live combat HUD. */
+html body.rf-remake.classic-polish:has(#hud:not([hidden])) #ticker{display:none!important}
+html body.rf-remake.classic-polish:has(#hud:not([hidden])) #chat-btn{top:max(180px,calc(24dvh + env(safe-area-inset-top)))!important;right:max(12px,env(safe-area-inset-right))!important;bottom:auto!important;min-height:40px!important;height:auto!important;padding:8px 12px!important;border:1px solid #bda66f88!important;border-radius:3px!important;background:#132331e6!important;line-height:1.7!important;box-shadow:0 3px 14px #0003!important}
+html body.rf-remake.classic-polish #ui #scr-select .rift-filter-tools button[aria-pressed="true"]{color:#182127!important;background:linear-gradient(100deg,#c7aa73,#e6d09a)!important;border-color:#e4ca8f!important;font-weight:600!important}

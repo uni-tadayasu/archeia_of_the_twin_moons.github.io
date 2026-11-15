@@ -11,7 +11,12 @@ export function createClassicSurfaceFinish(THREE, renderer, {
     if (disposed) return;
     const selected = quality(), material = record.material;
     const anisotropy = Math.min(supported, selected === 'low' ? 1 : selected === 'high' && !isTouch ? 8 : 4);
-    if (material.map && material.map.anisotropy !== anisotropy) {material.map.anisotropy = anisotropy;material.map.needsUpdate = true;}
+    if (material.map && material.map.anisotropy !== anisotropy) {
+      material.map.anisotropy = anisotropy;
+      // TextureLoader.load() returns before its image is ready. Its completion
+      // callback performs the first upload; only refresh an already loaded map.
+      if (material.map.image) material.map.needsUpdate = true;
+    }
     const enabled = selected !== 'low' && normal;
     if (enabled && !record.detail) {
       record.detail = normal.clone();record.detail.wrapS = record.detail.wrapT = THREE.RepeatWrapping;

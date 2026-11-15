@@ -61,3 +61,12 @@ test('original surface detail follows quality and preserves authored UV repeat',
   finish.dispose();assert.equal(material.normalMap,null);assert.equal(material.normalScale.x,1);
   material.map.dispose();material.dispose();
 });
+
+
+test('quality changes never upload a pending TextureLoader image',()=>{
+  const material=new Three.MeshStandardMaterial();material.map=new Three.Texture();material.map.anisotropy=8;
+  const finish=createClassicSurfaceFinish(Three,{capabilities:{getMaxAnisotropy:()=>8}},{getQuality:()=> 'low'});
+  const version=material.map.version;finish.apply(material);
+  assert.equal(material.map.anisotropy,1);assert.equal(material.map.version,version,'loader must perform the first image upload');
+  finish.dispose();material.map.dispose();material.dispose();
+});

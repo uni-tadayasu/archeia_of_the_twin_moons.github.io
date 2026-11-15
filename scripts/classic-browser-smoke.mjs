@@ -13,7 +13,7 @@ import { chromium, expect } from '@playwright/test';
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const output = path.join(root, 'artifacts/classic-smoke');
 const origin = 'http://127.0.0.1:4173';
-const logs = { startedAt: new Date().toISOString(), steps: [], console: [], pageErrors: [], networkErrors: [], blockedNetwork: [], screenshots: [], server: [] };
+const logs = { startedAt: new Date().toISOString(), steps: [], console: [], pageErrors: [], networkErrors: [], blockedNetwork: [], screenshots: [], server: [], inputDiagnostics: [], inputSamples: [], portraits: [], battleLayouts: [] };
 const staticHosts = new Set(['esm.sh', 'fonts.googleapis.com', 'fonts.gstatic.com', 'www.gstatic.com', 'storage.googleapis.com']);
 await mkdir(output, { recursive: true });
 let browser, server, currentPage, failure;
@@ -98,6 +98,16 @@ async function selectDuel(page, label) {
   await page.locator('#select-search').fill('ロウエン');
   await expect(page.locator('#select-grid [data-special-key="rowen"]')).toBeVisible();
   await expect(page.locator('#select-grid [data-special-key="garou"]')).not.toBeVisible();
+  const portrait = page.locator('#select-grid [data-special-key="rowen"] img.face');
+  await expect.poll(() => portrait.evaluate(image => image.complete && image.naturalWidth > 0 && image.naturalHeight > 0), {
+    timeout: 30000, message: 'Rowen portrait finishes loading before selection capture',
+  }).toBe(true);
+  logs.portraits.push({ label, ...await portrait.evaluate(image => {
+    const card = image.closest('.card'), style = getComputedStyle(image);
+    return { src: image.src.slice(0, 180), currentSrc: image.currentSrc.slice(0, 180), naturalWidth: image.naturalWidth, naturalHeight: image.naturalHeight, complete: image.complete,
+      rf556Portrait: card?.dataset.rf556Portrait || null, cardBounds: card?.getBoundingClientRect().toJSON(),
+      style: { display: style.display, opacity: style.opacity, filter: style.filter, visibility: style.visibility } };
+  }) });
   await fits(page, `${label} fighter selection`);
   await shot(page, `${label}-selection`);
   await page.locator('#select-grid [data-special-key="rowen"]').click();
@@ -121,23 +131,60 @@ async function selectDuel(page, label) {
   });
   assert.ok(graphics && !graphics.lost && graphics.width > 0 && graphics.height > 0, `${label}: live original WebGL context`);
   logs.steps.push({ message: `${label}: real original models loaded, countdown completed, live WebGL`, graphics });
+  await expect(page.locator('#ticker')).toBeHidden();
+  const battleLayout = await page.evaluate(() => {
+    const chat = document.querySelector('#chat-btn');
+    const box = chat?.getBoundingClientRect();
+    const chatVisible = box?.width > 0 && box?.height > 0 && getComputedStyle(chat).visibility !== 'hidden';
+    const hud = ['#hud-left', '#hud-right', '#btn-pause', '#gauges'].map(selector => ({ selector, box: document.querySelector(selector)?.getBoundingClientRect().toJSON() }));
+    return { chat: chatVisible ? box.toJSON() : null, hud, overlaps: chatVisible ? hud.filter(entry => entry.box && box.left < entry.box.right && box.right > entry.box.left && box.top < entry.box.bottom && box.bottom > entry.box.top).map(entry => entry.selector) : [] };
+  });
+  logs.battleLayouts.push({ label, ...battleLayout });
+  assert.deepEqual(battleLayout.overlaps, [], `${label}: chat button must not cover original combat HUD`);
   await shot(page, `${label}-battle`, false);
 }
 const gauge = (page, selector) => page.locator(selector).evaluate(element => parseFloat(element.style.width));
+async function inputDiagnostic(page, label) {
+  const state = await page.evaluate(() => {
+    const active = document.activeElement;
+    const visible = element => !element.hidden && getComputedStyle(element).visibility !== 'hidden' && getComputedStyle(element).display !== 'none' && element.getBoundingClientRect().height > 0;
+    return {
+      hidden: document.hidden,
+      activeElement: active ? { tag: active.tagName, id: active.id, type: active.getAttribute('type'), editable: active.matches('input,textarea,select,[contenteditable=true]') } : null,
+      screens: [...document.querySelectorAll('.screen.on')].map(element => element.id),
+      overlays: [...document.querySelectorAll('#pause,[role=dialog],[aria-modal=true],#rf-loading-screen,#chat-panel,#world-panel')].filter(visible).slice(0, 12).map(element => ({ id: element.id, role: element.getAttribute('role'), text: element.textContent.trim().slice(0, 100) })),
+      gauges: Object.fromEntries(['#flux u', '#hud-left .plate u', '#hud-right .plate u'].map(selector => [selector, document.querySelector(selector)?.style.width])),
+      skill: document.querySelector('#skillname')?.textContent.trim().slice(0, 100),
+    };
+  });
+  logs.inputDiagnostics.push({ label, at: new Date().toISOString(), ...state });
+}
+function inputSample(action, before, after) {
+  logs.inputSamples.push({ action, before, after, at: new Date().toISOString() });
+  if (logs.inputSamples.length > 40) logs.inputSamples.shift();
+}
+async function pressUntilGaugeFalls(page, key, selector, message, timeout = 30000) {
+  const before = await gauge(page, selector);
+  // Classic attacks are keydown edges. A held key only enables a skill's
+  // follow-up; it never retries an initial press rejected during a melee action
+  // or stun. Issue new, real presses, just as a player reattempts an action.
+  await expect.poll(async () => {
+    await page.keyboard.press(key, { delay: 60 });
+    const after = await gauge(page, selector);
+    inputSample(key, before, after);
+    return after;
+  }, { timeout, intervals: [100, 250, 400], message }).toBeLessThan(before - 1);
+}
 async function keyboardCombat(page) {
-  const originalEnergy = await gauge(page, '#flux u');
   // Global game input ignores editable targets; focus the actual play surface.
   await page.locator('#game-container canvas').first().click();
-  await page.keyboard.down('KeyK');
-  try { await expect.poll(() => gauge(page, '#flux u'), { timeout: 15000, message: 'Original keyboard skill spends real energy' }).toBeLessThan(originalEnergy - 1); }
-  finally { await page.keyboard.up('KeyK'); }
+  await inputDiagnostic(page, 'desktop before keyboard skill');
+  await pressUntilGaugeFalls(page, 'KeyK', '#flux u', 'Original keyboard skill spends real energy');
   await page.keyboard.down('KeyW'); await page.keyboard.down('KeyD');
   await page.waitForTimeout(650);
   await page.keyboard.up('KeyW'); await page.keyboard.up('KeyD');
-  const enemyHealth = await gauge(page, '#hud-right .plate u');
-  await page.keyboard.down('KeyJ');
-  try { await expect.poll(() => gauge(page, '#hud-right .plate u'), { timeout: 30000, message: 'Original melee/skill combat damages the actual CPU fighter' }).toBeLessThan(enemyHealth); }
-  finally { await page.keyboard.up('KeyJ'); }
+  await pressUntilGaugeFalls(page, 'KeyJ', '#hud-right .plate u', 'Original melee combat damages the actual CPU fighter', 60000);
+  await inputDiagnostic(page, 'desktop after successful skill and melee');
   await page.keyboard.press('Space');
   await page.keyboard.press('Escape');
   await expect(page.locator('#pause')).toBeVisible();
@@ -169,9 +216,16 @@ async function touchCombat(page, context) {
   const skill = await page.locator('#tbtns [data-act="skill"]').boundingBox();
   assert.ok(skill, 'The actual classic touch skill is reachable');
   const energy = await gauge(page, '#flux u');
-  await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: skill.x + skill.width / 2, y: skill.y + skill.height / 2, id: 1 }] });
-  try { await expect.poll(() => gauge(page, '#flux u'), { timeout: 10000 }).toBeLessThan(energy - 1); }
-  finally { await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] }); }
+  await inputDiagnostic(page, 'mobile before touch skill');
+  await expect.poll(async () => {
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: skill.x + skill.width / 2, y: skill.y + skill.height / 2, id: 1 }] });
+    try { await page.waitForTimeout(80); }
+    finally { await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] }); }
+    const after = await gauge(page, '#flux u');
+    inputSample('touch skill', energy, after);
+    return after;
+  }, { timeout: 30000, intervals: [100, 250, 400], message: 'Original touch skill spends real energy' }).toBeLessThan(energy - 1);
+  await inputDiagnostic(page, 'mobile after successful touch skill');
   const joystick = await page.locator('#joy').boundingBox();
   assert.ok(joystick, 'The original mobile joystick is reachable');
   const center = { x: joystick.x + joystick.width / 2, y: joystick.y + joystick.height / 2 };
@@ -232,7 +286,7 @@ try {
   note(`Classic smoke passed; ${logs.blockedNetwork.length} external API/WebSocket operations safely refused. Online/economy features were not exercised.`);
 } catch (error) {
   failure = error; logs.status = 'failed'; logs.failure = { message: error.message, stack: error.stack };
-  if (currentPage && !currentPage.isClosed()) try { await shot(currentPage, 'failure', false); } catch (captureError) { logs.failure.screenshot = captureError.message; }
+  if (currentPage && !currentPage.isClosed()) try { await inputDiagnostic(currentPage, 'failure'); await shot(currentPage, 'failure', false); } catch (captureError) { logs.failure.screenshot = captureError.message; }
 } finally {
   await browser?.close().catch(() => {});
   if (server && server.exitCode === null) {
