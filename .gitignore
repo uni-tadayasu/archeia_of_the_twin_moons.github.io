@@ -1,0 +1,5 @@
+node_modules/
+artifacts/
+.openai/
+playwright-report/
+test-results/

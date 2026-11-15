@@ -1,0 +1,143 @@
+name: Riftfall Rebirth
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened, ready_for_review]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: riftfall-rebirth-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    name: Validate game
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out the proposed merge
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Check source and asset references
+        run: npm run check
+      - name: Test game systems
+        run: npm test
+      - name: Install locked browser test dependencies
+        run: npm ci --ignore-scripts
+      - name: Install Chromium for browser tests
+        run: npx playwright install --with-deps chromium
+      - name: Test the game in Chromium
+        run: npm run test:browser
+      - name: Upload browser screenshots and diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rebirth-smoke-${{ github.run_id }}-${{ github.run_attempt }}
+          path: artifacts/rebirth-smoke
+          if-no-files-found: warn
+          retention-days: 14
+
+  merge:
+    name: Merge validated Riftfall branch
+    needs: validate
+    if: >-
+      github.event_name == 'pull_request' &&
+      github.event.pull_request.draft == false &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      startsWith(github.event.pull_request.head.ref, 'codex/riftfall-')
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+      pull-requests: write
+    outputs:
+      merged: ${{ steps.merge.outputs.merged }}
+      commit: ${{ steps.merge.outputs.commit }}
+    steps:
+      # This job deliberately does not check out or run pull request code.
+      - name: Merge only the tested revision
+        id: merge
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { owner, repo } = context.repo;
+            const event = context.payload.pull_request;
+            const { data: pr } = await github.rest.pulls.get({
+              owner, repo, pull_number: event.number
+            });
+            const expectedRepository = `${owner}/${repo}`;
+            if (pr.merged) {
+              core.info('This pull request was already merged.');
+              core.setOutput('merged', 'false');
+              return;
+            }
+            if (pr.state !== 'open' || pr.draft || pr.base.ref !== 'main' ||
+                pr.base.repo.full_name !== expectedRepository ||
+                pr.head.repo?.full_name !== expectedRepository ||
+                !pr.head.ref.startsWith('codex/riftfall-')) {
+              throw new Error('This pull request is outside the automatic merge scope.');
+            }
+            if (pr.head.sha !== event.head.sha) {
+              throw new Error('The branch changed after validation. Its latest run must pass.');
+            }
+            const { data: main } = await github.rest.git.getRef({
+              owner, repo, ref: 'heads/main'
+            });
+            if (main.object.sha !== event.base.sha) {
+              throw new Error('main changed after this run started. Update the branch from main and rerun validation.');
+            }
+            const { data: result } = await github.rest.pulls.merge({
+              owner, repo, pull_number: pr.number,
+              sha: event.head.sha, merge_method: 'squash',
+              commit_title: `${pr.title} (#${pr.number})`
+            });
+            if (!result.merged) {
+              throw new Error(result.message || 'GitHub did not merge the pull request.');
+            }
+            core.setOutput('merged', 'true');
+            core.setOutput('commit', result.sha);
+            await core.summary
+              .addHeading('Validated Riftfall changes merged')
+              .addRaw(`Pull request #${pr.number} → main\n\nCommit: ${result.sha}`)
+              .write();
+
+  pages:
+    name: Request Pages rebuild
+    needs: merge
+    if: needs.merge.outputs.merged == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pages: write
+    steps:
+      # GITHUB_TOKEN merges do not trigger branch-based Pages builds by themselves.
+      - name: Request publication of the merged main branch
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { owner, repo } = context.repo;
+            const { data: pages } = await github.request('GET /repos/{owner}/{repo}/pages', { owner, repo });
+            if (pages.build_type === 'workflow') {
+              throw new Error('Pages now uses a custom workflow. Configure that deployment workflow for the automated merge before relying on automatic publication.');
+            }
+            if (pages.source?.branch !== 'main') {
+              throw new Error('Pages does not publish main. Check the Pages source setting.');
+            }
+            const { data: build } = await github.request('POST /repos/{owner}/{repo}/pages/builds', { owner, repo });
+            core.info(`Pages build requested: ${build.status || 'queued'}`);
+            await core.summary
+              .addHeading('Pages build requested')
+              .addRaw(`GitHub Pages accepted the build request. Publication status is available in the repository deployment history.\n\n${pages.html_url || ''}`)
+              .write();
