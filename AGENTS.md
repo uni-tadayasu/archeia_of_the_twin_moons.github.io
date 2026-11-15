@@ -36,3 +36,10 @@ main.js=描画・UI・入力・ストーリー・オンライン処理。game.js
 ## Final validation status
 Static: 0 blocking, 28 advisory; overall clean. Runtime behavior was not checked during generation.
 Finished via the `finish` tool.
+
+
+## Current entry and verification (2026-11-15)
+
+The user's current direction is to improve the ORIGINAL game, retaining its full modes, online behavior, saves and administrative features. `index.html` and `classic.html` launch `main.js`. Do not replace the default entry with the separate Rebirth prototype. It is retained at `rebirth.html` / `rebirth/` only.
+
+Run `npm run check`, `npm test`, and the classic browser smoke `npm run test:browser` for changes to the default game. The browser test must not write to production accounts or economy APIs. The optional archived-engine check is `npm run test:rebirth`. CI uses these checks before automatically merging same-repository `codex/riftfall-*` PRs into main.

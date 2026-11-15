@@ -1,4 +1,4 @@
-name: Riftfall Rebirth
+name: Riftfall Quality
 
 on:
   push:
@@ -12,7 +12,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: riftfall-rebirth-${{ github.event.pull_request.number || github.ref }}
+  group: riftfall-quality-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -43,8 +43,8 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: rebirth-smoke-${{ github.run_id }}-${{ github.run_attempt }}
-          path: artifacts/rebirth-smoke
+          name: classic-smoke-${{ github.run_id }}-${{ github.run_attempt }}
+          path: artifacts/classic-smoke
           if-no-files-found: warn
           retention-days: 14
 

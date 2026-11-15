@@ -1,6 +1,13 @@
 const MAX_DRAW_PIXELS = 3_600_000;
+const finite = (value, fallback) => Number.isFinite(Number(value)) ? Number(value) : fallback;
 
-export function createRenderBudget() {
+export function renderPixelCeiling(width, height, preferred, maxPixels = MAX_DRAW_PIXELS) {
+  const area = Math.max(1, finite(width, 1)) * Math.max(1, finite(height, 1));
+  const request = Math.max(.25, Math.min(3, finite(preferred, 1)));
+  return Math.min(request, Math.sqrt(Math.max(1, finite(maxPixels, MAX_DRAW_PIXELS)) / area));
+}
+
+export function createRenderBudget({ maxPixels = MAX_DRAW_PIXELS } = {}) {
   let ceiling = 1;
   let ratio = 1;
   let renderClock = 0;
@@ -11,7 +18,7 @@ export function createRenderBudget() {
   return {
     get ratio() { return ratio; },
     resize(width, height, preferred, reset = false) {
-      const next = Math.min(preferred, Math.sqrt(MAX_DRAW_PIXELS / (width * height)));
+      const next = renderPixelCeiling(width, height, preferred, maxPixels);
       if (reset) {
         ratio = next;
         sampleClock = 0;
@@ -29,8 +36,8 @@ export function createRenderBudget() {
         fastWindows = 0;
         return false;
       }
-      if (delta <= 0) return false;
-      const interval = 1 / fps;
+      if (!Number.isFinite(delta) || delta <= 0) return false;
+      const interval = 1 / Math.max(1, Math.min(240, finite(fps, 60)));
       if (active && delta < .25) {
         averageDelta = averageDelta ? averageDelta + (delta - averageDelta) * .055 : delta;
         sampleClock += delta;
@@ -59,42 +66,77 @@ export function createRenderBudget() {
   };
 }
 
-export function createStageReflections(THREE, scene, loader) {
+export function createStageReflections(THREE, scene, loader, { maxEntries = 3, textureWidth = 512 } = {}) {
   const cache = new Map();
-  let currentUrl = null;
+  let currentUrl = null, disposed = false;
+  const limit = Math.max(1, Math.floor(finite(maxEntries, 3)));
+  const width = Math.max(64, Math.min(512, finite(textureWidth, 512)));
 
-  return function setReflections(url) {
-    if (currentUrl === url) return;
-    currentUrl = url;
-    if (!url) {
-      scene.environment = null;
+  function evict() {
+    while (cache.size > limit) {
+      const key = [...cache.keys()].find(value => value !== currentUrl);
+      if (!key) break;
+      const entry = cache.get(key);entry.retired = true;entry.texture?.dispose();cache.delete(key);
+    }
+  }
+  function setReflections(url) {
+    if (disposed || currentUrl === url) return;
+    currentUrl = url || null;
+    // Never retain another stage's coloured lighting while a new map loads.
+    scene.environment = null;
+    if (!url) return;
+    let entry = cache.get(url);
+    if (entry) {
+      cache.delete(url);cache.set(url, entry);
+      if (entry.texture) scene.environment = entry.texture;
       return;
     }
-    let entry = cache.get(url);
-    if (!entry) {
-      entry = { texture: null };
-      cache.set(url, entry);
-      loader.loadAsync(url).then((source) => {
-        // Specular lighting needs the low-frequency colors of the panorama.
-        // Downsample before Three.js builds the prefiltered reflection texture.
-        const canvas = document.createElement('canvas');
-        canvas.width = 512;
-        canvas.height = 256;
+    entry = { texture: null, retired: false };cache.set(url, entry);evict();
+    loader.loadAsync(url).then(source => {
+      if (disposed || entry.retired) {source.dispose();return;}
+      let texture = source;
+      try {
+        // A compact panorama supplies soft reflection colours without decoding
+        // another full-resolution image every time a stage card is previewed.
+        const canvas = document.createElement('canvas');canvas.width = width;canvas.height = width / 2;
         const context = canvas.getContext('2d');
-        if (context) context.drawImage(source.image, 0, 0, canvas.width, canvas.height);
-        const texture = context ? new THREE.CanvasTexture(canvas) : source;
-        if (context) source.dispose();
+        if (context) {
+          context.drawImage(source.image, 0, 0, canvas.width, canvas.height);
+          texture = new THREE.CanvasTexture(canvas);source.dispose();
+        }
         texture.mapping = THREE.EquirectangularReflectionMapping;
         texture.colorSpace = THREE.SRGBColorSpace;
         entry.texture = texture;
         if (currentUrl === url) scene.environment = texture;
-      }).catch(() => {
-        cache.delete(url);
-        if (currentUrl === url) currentUrl = null;
-      });
-    }
-    if (entry.texture) scene.environment = entry.texture;
+      } catch (error) {
+        texture.dispose();
+        if (cache.get(url) === entry) cache.delete(url);
+        if (currentUrl === url) {currentUrl = null;scene.environment = null;}
+      }
+    }).catch(() => {
+      if (cache.get(url) === entry) cache.delete(url);
+      if (currentUrl === url && !entry.retired) {currentUrl = null;scene.environment = null;}
+    });
+  }
+  setReflections.dispose = () => {
+    disposed = true;currentUrl = null;scene.environment = null;
+    for (const entry of cache.values()) {entry.retired = true;entry.texture?.dispose();}
+    cache.clear();
   };
+  Object.defineProperty(setReflections, 'cacheSize', {get: () => cache.size});
+  return setReflections;
+}
+
+export function contactShadowMetrics(fighter, arenaRadius, maze = false) {
+  const x = Number(fighter?.pos?.x), z = Number(fighter?.pos?.z);
+  if (fighter?.dead || fighter?.root?.visible === false || !Number.isFinite(x) || !Number.isFinite(z)) return null;
+  const height = Math.max(0, finite(fighter.y, 0));
+  const lift = Math.min(1.5, height);
+  const width = Math.min(3.8, Math.max(.8, finite(fighter.radius, .5) * 3)) * (1 + lift * .24);
+  const edge = maze ? 1 : Math.max(0, Math.min(1, (Math.max(0, finite(arenaRadius, 13)) - Math.hypot(x, z)) / (width * .5)));
+  const opacity = .54 * edge / (1 + height * 1.45);
+  if (opacity <= .025) return null;
+  return { x: x - lift * .11, y: maze ? .062 : .022, z: z - lift * .08, width, opacity };
 }
 
 export function createContactShadows(THREE, scene, arenaRadius) {
@@ -166,16 +208,10 @@ export function createContactShadows(THREE, scene, arenaRadius) {
 
     let count = 0;
     for (const fighter of fighters) {
-      if (fighter.dead || fighter.root?.visible === false) continue;
-      const { x, z } = fighter.pos;
-      const height = Math.max(0, fighter.y);
-      const lift = Math.min(1.5, height);
-      const width = Math.min(3.8, Math.max(.8, fighter.radius * 3)) * (1 + lift * .24);
-      const edge = maze ? 1 : Math.max(0, Math.min(1, (arenaRadius - Math.hypot(x, z)) / (width * .5)));
-      const opacity = .54 * edge / (1 + height * 1.45);
-      if (opacity <= .025) continue;
-
-      position.set(x - lift * .11, maze ? .062 : .022, z - lift * .08);
+      const shadow = contactShadowMetrics(fighter, arenaRadius, maze);
+      if (!shadow) continue;
+      const { width, opacity } = shadow;
+      position.set(shadow.x, shadow.y, shadow.z);
       scale.set(width, 1, width * .80);
       matrix.compose(position, orientation, scale);
       batch.setMatrixAt(count, matrix);

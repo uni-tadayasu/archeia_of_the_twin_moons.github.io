@@ -7,7 +7,7 @@ const root=process.cwd();
 const exists=async p=>{try{await access(path.join(root,p));}catch{throw Error(`Missing local asset: ${p}`);}};
 for(const file of (await readdir('rebirth')).filter(f=>f.endsWith('.mjs'))){const r=spawnSync(process.execPath,['--check',`rebirth/${file}`],{encoding:'utf8'});assert.equal(r.status,0,r.stderr);}
 for(const file of ['index.html','classic.html','rebirth/style.css','assets/vendor/three/three.module.min.js','assets/vendor/three/three.core.min.js','assets/vendor/three/LICENSE','assets/vendor/draco/draco_decoder.wasm','assets/vendor/draco/draco_wasm_wrapper.js','assets/vendor/meshopt_decoder.module.js'])await exists(file);
-const html=await readFile('index.html','utf8');
+const html=await readFile('rebirth.html','utf8');
 assert.match(html,/rebirth\/app\.mjs/,'New entry point must launch the independent engine');
 assert.doesNotMatch(html,/src=["'](?:\.\/)?main\.js/,'Classic engine must not execute in Rebirth');
 const ids=[...html.matchAll(/\bid="([^"]+)"/g)].map(m=>m[1]);assert.equal(new Set(ids).size,ids.length,'Duplicate DOM ids');

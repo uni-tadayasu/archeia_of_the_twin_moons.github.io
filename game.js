@@ -1006,7 +1006,8 @@ export class Fighter {
       action:this.action,guard:this.guard});
     const flashOn = this.hitFlash > 0;
     this.visual.position.x = flashOn ? (Math.random() - 0.5) * 0.12 : 0;
-    this.hitFlash = Math.max(0, (this.hitFlash || 0) - 1 / 60);
+    const flashDt = Number.isFinite(this.motionDt) ? Math.max(0, this.motionDt) : 1 / 60;
+    this.hitFlash = Math.max(0, (this.hitFlash || 0) - flashDt);
   }
 
   // 状態異常の付与（この端末で操作している戦士のみ）
@@ -1817,7 +1818,7 @@ export class Battle {
         t += dt;
         ring.material.opacity = Math.max(0, 0.35 - t * 0.5);
         if (t > 0.7) {
-          this.fx.remove(ring);
+          kill(this.fx, ring);
           return false;
         }
         return true;
@@ -2207,6 +2208,7 @@ export class Battle {
     loadSummonModel(d.model).then((gltf) => {
       if (!gltf || s.dying) return;
       const m = SkeletonUtils.clone(gltf.scene);
+      s.model = m;
       m.updateMatrixWorld(true);
       const box = new THREE.Box3().setFromObject(m);
       const size = box.getSize(new THREE.Vector3());
@@ -2214,6 +2216,10 @@ export class Battle {
       m.scale.setScalar(sc);
       m.position.y = -box.min.y * sc;
       m.traverse((c) => {
+        // SkeletonUtils clones skeletons but shares mesh geometry and textures.
+        // Each clone's GPU bone texture belongs to this summon, including when
+        // multiple skinned meshes reference the same cloned skeleton.
+        if (c.isSkinnedMesh && c.skeleton) s.own.add(c.skeleton);
         if (c.isMesh) {
           c.castShadow = true;
           if (c.material?.emissive) {
@@ -2381,10 +2387,15 @@ export class Battle {
     if (!this.summons.delete(s)) return;
     s.dying = Math.max(s.dying, 1); // 読み込み完了が遅れてもモデルを追加させない
     s.mixer?.stopAllAction();
+    if (s.mixer && s.model) s.mixer.uncacheRoot(s.model);
     this.scene.remove(s.g);
     // GLBキャッシュの共有素材は残し、この召喚獣専用の素材だけを解放する
     for (const resource of s.own) resource.dispose();
     s.own.clear();
+    s.model = null;
+    s.mixer = null;
+    s.acts = {};
+    s.cur = null;
     if (s.f.summon === s) s.f.summon = null;
   }
 
@@ -3014,6 +3025,17 @@ export class Battle {
     }
     // 生存中・消滅演出中のどちらも戦闘終了時に片付ける
     for (const s of this.summons) this.removeSummon(s);
+    // Quitting while a spell is visible skips its normal kill()/expiry path.
+    // Effect materials are instance-owned (as in kill); their maps and the
+    // shared GEO/SG geometries belong to caches and must remain usable.
+    const effectMaterials = new Set();
+    this.fx.traverse(object => {
+      for (const material of Array.isArray(object.material) ? object.material : [object.material]) {
+        if (material) effectMaterials.add(material);
+      }
+    });
+    for (const material of effectMaterials) material.dispose();
+    this.fx.clear();
     this.scene.remove(this.fx);
     this.fighters = [];
     this.effects = [];
