@@ -1487,7 +1487,9 @@ function readInput() {
 
 function setupTouch() {
   if (!isTouch) return;
-  $('#press-hint').textContent = 'タップでメニューへ';
+  $('#press-hint').textContent = document.body.classList.contains('rf-remake')
+    ? 'スマホのタッチ操作に対応 ／ ダウンロード不要'
+    : 'タップでメニューへ';
   const pad = $('#touch');
   pad.hidden = false;
   resetTouch = bindTouchControls(pad, touchState, edges, acceptsCombatInput);
@@ -1817,6 +1819,8 @@ function enterTitle() {
 }
 
 $('#scr-press').addEventListener('pointerup', (event) => {
+  // The editorial opening scrolls; only its start button should launch the menu.
+  if (document.body.classList.contains('rf-remake')) return;
   if (event.button === 0 && !event.target.closest('a, button') && isScreen('scr-press')) {
     $('#press-start').click();
   }

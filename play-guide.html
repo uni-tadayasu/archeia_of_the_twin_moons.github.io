@@ -6,7 +6,7 @@
   <title>PC・スマホの遊び方と操作一覧｜双月のアルケイア Riftfall Arena</title>
   <meta name="description" content="双月のアルケイアの始め方と操作表。PC・スマホ・ゲームパッドの操作、ストーリーⅡの横視点バトル、視点の回転、セーブ同期や画質・音量設定を解説。">
   <meta name="robots" content="index,follow,max-image-preview:large">
-  <meta name="theme-color" content="#111b24">
+  <meta name="theme-color" content="#0b1012">
   <link rel="canonical" href="https://www.kasai-solutions-inc.com/play-guide.html">
   <meta property="og:type" content="website">
   <meta property="og:locale" content="ja_JP">
@@ -34,7 +34,7 @@
           "name": "PC・スマホの遊び方と操作一覧｜双月のアルケイア Riftfall Arena",
           "description": "双月のアルケイアの始め方と操作表。PC・スマホ・ゲームパッドの操作、ストーリーⅡの横視点バトル、視点の回転、セーブ同期や画質・音量設定を解説。",
           "inLanguage": "ja",
-          "dateModified": "2026-11-12",
+          "dateModified": "2026-11-15",
           "isPartOf": {"@id": "https://www.kasai-solutions-inc.com/#website"},
           "about": {"@id": "https://www.kasai-solutions-inc.com/#game"},
           "breadcrumb": {"@id": "https://www.kasai-solutions-inc.com/play-guide.html#breadcrumb"},
@@ -57,24 +57,30 @@
     }
   </script>
   <link rel="icon" href="./favicon.ico">
-  <link rel="stylesheet" href="./assets/rf569-ui-refresh.css?v=55.21">
-  <link rel="stylesheet" href="./assets/rf5523/site.css?v=55.23">
-  <link rel="stylesheet" href="./assets/rf5525/site.css?v=55.25">
-  <link rel="stylesheet" href="./assets/rf5526/guide.css?v=55.26">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Shippori+Mincho:wght@500;600;800&amp;display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="./assets/remake/guide.css?v=56.0">
 </head>
-<body class="rf5525 rf25-guide rf5521-guide">
-  <header class="guide-cover">
+<body class="archeia-guide guide-play-page">
+  <a class="skip-link" href="#guide-content">本文へ移動</a>
+  <header class="archive-header">
+    <a class="archive-brand" href="./" aria-label="双月のアルケイア ホーム"><img class="archive-emblem" src="./assets/remake/emblem.svg" width="40" height="40" alt=""><span>双月のアルケイア<small>ARCHEIA OF THE TWIN MOONS</small></span></a>
+    <nav class="archive-navigation" aria-label="ガイドのページ"><a href="./play-guide.html" aria-current="page">遊び方</a><a href="./battle-guide.html">戦闘モード</a><a href="./world-guide.html">世界と舞台</a><a href="./tenshi.html">人物録</a></nav>
+    <a class="archive-enter" href="./">ゲームへ <span aria-hidden="true">↗</span></a>
+  </header>
+  <header class="guide-cover" aria-label="遊び方">
     <picture class="rf25-guide-art"><source media="(max-width: 700px) and (orientation: portrait)" srcset="./assets/rf5525/moonkeep-portrait.webp" width="640" height="800"><img src="./assets/rf5525/moonkeep-wide.webp" srcset="./assets/rf5525/moonkeep-960.webp 960w, ./assets/rf5525/moonkeep-wide.webp 1672w" sizes="(max-width: 1280px) 100vw, 1280px" width="1672" height="941" alt="双つの月が照らす木造の山城と、渓谷に架かる朱塗りの橋" fetchpriority="high"></picture>
     <div>
-      <a href="./" data-rf25-icon="start">双月のアルケイア</a>
-      <h1>遊び方と操作</h1>
+      <a href="./" data-rf25-icon="start" class="guide-breadcrumb">双月のアルケイア <span aria-hidden="true"> / </span>遊び方</a>
+      <p class="guide-eyebrow">HOW TO PLAY</p><h1>遊び方と操作</h1><p class="guide-subtitle">旅立ちの手引き</p>
       <p>出撃先を選び、戦士を選んで戦いへ。PC・スマホのブラウザから無料で遊べます。</p>
     </div>
   </header>
   <nav class="guide-nav" aria-label="目次">
     <a href="#modes" data-rf25-icon="sword">出撃先</a><a href="#ranked" data-rf25-icon="trophy">ランクマッチ</a><a href="#controls" data-rf25-icon="gamepad">操作一覧</a><a href="#camera" data-rf25-icon="map">視点</a><a href="#save" data-rf25-icon="sync">セーブ・画質・音</a>
   </nav>
-  <main class="guide-main">
+  <main class="guide-main" id="guide-content">
     <section id="modes">
       <h2>出撃先</h2>
       <p>初めてなら「ひとりで対戦」で操作を試せます。ゲームを始め、出撃先から自分の戦士、相手、舞台を順に選んでください。各モードの勝利条件は<a href="./battle-guide.html">戦闘モードガイド</a>で確認できます。</p>
@@ -99,7 +105,7 @@
     </section>
     <section id="controls">
       <h2>基本操作</h2>
-      <table class="guide-controls">
+      <div class="guide-table-scroll" role="region" aria-label="操作・ルール一覧" tabindex="0"><table class="guide-controls">
         <caption>戦闘時の操作</caption>
         <thead><tr><th scope="col">動作</th><th scope="col">PC</th><th scope="col">タッチ</th><th scope="col">パッド</th></tr></thead>
         <tbody>
@@ -111,7 +117,7 @@
           <tr><th scope="row">回復</th><td>H</td><td>癒</td><td>左スティック押し込み</td></tr>
           <tr><th scope="row">一時停止</th><td>Esc</td><td>休む</td><td>START</td></tr>
         </tbody>
-      </table>
+      </table></div>
       <p>移動中の技や、発動後の同じボタンの押し直し・長押しで、戦士ごとの派生技が出ます。覚醒中の奥義は秘奥義に変わります。</p>
     </section>
     <section id="side-controls">
@@ -134,6 +140,6 @@
     <p class="rf5523-related"><a href="./battle-guide.html" data-rf25-icon="duel">戦闘モードガイド</a><a href="./world-guide.html" data-rf25-icon="map">舞台案内</a><a href="./tenshi.html" data-rf25-icon="profile">天子の人物・技ガイド</a></p>
     <a class="guide-play" href="./" data-rf25-icon="start">ゲームを始める</a>
   </main>
-  <footer class="guide-footer">© KASAI SOLUTIONS INC.</footer>
+  <footer class="guide-footer"><a href="./" class="footer-brand">双月のアルケイア<small>ARCHEIA OF THE TWIN MOONS</small></a><p>双つの月の下、灯脈を辿る旅へ。</p><div><a href="#guide-content">ページの先頭へ ↑</a><span>© 2026 KASAI SOLUTIONS INC.</span></div></footer>
 </body>
 </html>

@@ -70,7 +70,7 @@
    requestAnimationFrame(()=>{repaint=false;annotateModes();makeSettings();});
  }
  function setup(){
-   document.body.classList.add('rf556-nextgen');
+   if (!document.body.classList.contains('rf-remake')) document.body.classList.add('rf556-nextgen');
    annotateModes();makeSettings();
    const selected=document.getElementById('scr-title');
    if(selected){new MutationObserver(changes=>{if(changes.some(c=>c.type==='childList'))scan();}).observe(selected,{childList:true,subtree:false});}

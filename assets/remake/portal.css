@@ -1,0 +1,380 @@
+/* Archeia — a moonlit chronicle. One presentation system for the entry and portal. */
+:root {
+  --remake-bg: #0b1012;
+  --remake-surface: #11191b;
+  --remake-ivory: #f0ecdf;
+  --remake-muted: #a6afad;
+  --remake-gold: #c6ab76;
+  --remake-line: rgba(198, 171, 118, .24);
+  --remake-serif: 'Shippori Mincho', 'Yu Mincho', 'Hiragino Mincho ProN', serif;
+  --remake-sans: -apple-system, BlinkMacSystemFont, 'Hiragino Kaku Gothic ProN', 'Yu Gothic', Meiryo, sans-serif;
+}
+html body.rf-remake { background: var(--remake-bg); color: var(--remake-ivory); }
+html body.rf-remake #ui :is(#scr-press, #scr-title) {
+  position: absolute !important; inset: 0 !important; width: 100% !important; height: 100% !important;
+  display: none !important; padding: 0 !important; margin: 0 !important; overflow: auto !important;
+  color: var(--remake-ivory) !important; background: var(--remake-bg) !important;
+  font-family: var(--remake-sans) !important; text-shadow: none !important;
+  scrollbar-width: thin; scrollbar-color: #6b624f var(--remake-bg);
+  scroll-padding-top: 105px; -webkit-user-select: text; user-select: text;
+}
+html body.rf-remake #ui :is(#scr-press.on, #scr-title.on) { display: block !important; }
+html body.rf-remake #ui :is(#scr-press, #scr-title) *,
+html body.rf-remake #ui :is(#scr-press, #scr-title) *::before,
+html body.rf-remake #ui :is(#scr-press, #scr-title) *::after { box-sizing: border-box; }
+html body.rf-remake #ui :is(#scr-press, #scr-title) :is(h1,h2,h3,p) { margin: 0; }
+html body.rf-remake #ui :is(#scr-press, #scr-title) a { color: inherit; text-decoration: none; }
+html body.rf-remake #ui :is(#scr-press, #scr-title) button { font-family: inherit; cursor: pointer; touch-action: manipulation; }
+html body.rf-remake #ui :is(#scr-press, #scr-title) img { display: block; max-width: 100%; }
+html body.rf-remake #ui :is(#scr-press, #scr-title) [hidden] { display: none !important; }
+html body.rf-remake #ui :is(#scr-press, #scr-title) :is(button,a,summary):focus-visible {
+  outline: 2px solid #f1d8a7 !important; outline-offset: 6px !important;
+}
+html body.rf-remake #ui :is(#scr-press, #scr-title) :is(button,a) { -webkit-tap-highlight-color: transparent; }
+.remake-opening,.remake-portal { width: 100%; overflow: clip; }
+html body.rf-remake #ui .remake-contained { width: min(1320px, calc(100% - 112px)); margin-inline: auto; }
+html body.rf-remake #ui .remake-eyebrow {
+  display: flex; align-items: center; gap: 12px; color: var(--remake-gold) !important;
+  font: 500 11px/1.8 var(--remake-sans); letter-spacing: .2em; text-shadow: none;
+}
+html body.rf-remake #ui .remake-eyebrow > span { width: 28px; height: 1px; background: var(--remake-gold); }
+html body.rf-remake #ui .remake-brand {
+  display: inline-flex; align-items: center; gap: 12px; border: 0; padding: 0; background: none;
+  color: var(--remake-ivory); text-align: left; white-space: nowrap; box-shadow: none; flex-shrink: 0;
+}
+html body.rf-remake #ui .remake-brand > img { flex: 0 0 auto; }
+html body.rf-remake #ui .remake-brand > span {
+  font: 600 20px/1.5 var(--remake-serif); letter-spacing: .1em;
+}
+html body.rf-remake #ui .remake-brand small {
+  display: block; margin-top: 3px; color: var(--remake-gold);
+  font: 400 8px/1.4 Georgia,serif; letter-spacing: .18em;
+}
+.remake-skip { position: absolute; top: -100px; left: 20px; z-index: 300; padding: 16px; background: #11191b; }
+.remake-skip:focus { top: 10px; }
+html body.rf-remake #ui .opening-header {
+  min-height: 90px; display: flex; align-items: center; justify-content: space-between; gap: 35px;
+  padding: 16px clamp(24px, 4vw, 70px); border-bottom: 1px solid var(--remake-line);
+  position: relative; z-index: 3; background: #0b1012;
+}
+.opening-header nav { display: flex; gap: clamp(22px, 3vw, 44px); align-items: center; }
+.opening-header nav a { padding: 12px 0; font-size: 12px; letter-spacing: .1em; position: relative; }
+.opening-header nav a::after { content: ''; position: absolute; left: 0; right: 100%; bottom: 2px; height: 1px; background: var(--remake-gold); transition: right .25s; }
+.opening-header nav a:hover::after { right: 0; }
+.opening-header nav a span { color: var(--remake-gold); margin-left: 10px; }
+.opening-edition { font: 9px/1.8 Georgia,serif; letter-spacing: .14em; color: #a7aaa2; display: flex; align-items: center; gap: 12px; }
+.opening-edition i { display: block; width: 3px; height: 3px; border: 1px solid var(--remake-gold); transform: rotate(45deg); }
+html body.rf-remake #ui .opening-hero {
+  position: relative; isolation: isolate; min-height: max(720px, calc(100svh - 90px));
+  display: flex; align-items: center; padding: 70px max(8.7vw, 100px) 130px; background: #10191d;
+}
+.opening-art,.portal-hero-art { display: block; position: absolute; inset: 0; z-index: -3; overflow: hidden; }
+.opening-art img,.portal-hero-art img { width: 100%; height: 100%; object-fit: cover; object-position: 63% center; }
+.opening-hero::before {
+  content: ''; position: absolute; inset: 0; z-index: -2; pointer-events: none;
+  background: linear-gradient(90deg, #080f14e8 0%, #080f14b0 27%, #080f1438 54%, transparent 78%), linear-gradient(0deg,#0b1012 0%,transparent 26%,#080e1414 90%);
+}
+.opening-hero::after { content: ''; position: absolute; inset: 20px; border: 1px solid #c6ab7626; z-index: -1; pointer-events: none; }
+.opening-rail { position: absolute; left: 34px; top: 70px; bottom: 130px; display: flex; align-items: center; gap: 25px; writing-mode: vertical-rl; color: #bbb8a6; }
+.opening-rail span { font: 9px/1 Georgia,serif; letter-spacing: .23em; }
+.opening-rail i { flex: 1; width: 1px; background: #c6ab7645; max-height: 120px; }
+.opening-copy { position: relative; width: min(650px, 65%); animation: remake-arrive .8s ease-out both; }
+html body.rf-remake #ui #scr-press .opening-copy h1 {
+  font: 500 clamp(64px, 7.6vw, 116px)/1.32 var(--remake-serif); letter-spacing: .03em;
+  color: #f5f0e2; margin: 27px 0 12px; text-shadow: 0 4px 24px #03070845; white-space: nowrap;
+}
+.opening-copy h1 > span { display: block; }
+html body.rf-remake #ui #scr-press .opening-copy h1 .opening-title-small { font-size: .54em; letter-spacing: .16em; margin-bottom: 4px; }
+html body.rf-remake #ui .opening-roman { color: #d2ba8c; font: 400 11px/1.6 Georgia,serif; letter-spacing: .32em; }
+html body.rf-remake #ui .opening-tagline { font: 500 clamp(18px, 1.65vw, 25px)/2 var(--remake-serif); letter-spacing: .17em; margin-top: 32px; color: #ede9dc; }
+.opening-start { margin-top: 37px; width: min(370px, 100%); }
+html body.rf-remake #ui :is(.remake-primary,.remake-outline) {
+  display: inline-flex; align-items: center; justify-content: center; gap: 30px; min-height: 61px;
+  border: 1px solid #d2b581; border-radius: 0; padding: 17px 28px;
+  color: #191b17 !important; background: #d4b782; box-shadow: none !important; outline: none;
+  font: 600 15px/1.6 var(--remake-serif); letter-spacing: .09em; text-decoration: none;
+  transition: background .2s, border-color .2s, transform .2s;
+}
+html body.rf-remake #ui .remake-primary:hover:not(:disabled) { background: #efdbb0; border-color: #efdbb0; transform: translateY(-2px); }
+html body.rf-remake #ui .remake-primary:disabled { cursor: wait; background: #b6a17b; color: #292c29 !important; opacity: .75; }
+html body.rf-remake #ui .remake-outline { color: #e5d4b2 !important; background: transparent; border-color: #c6ab7670; }
+html body.rf-remake #ui .remake-outline:hover { background: #c6ab7612; border-color: #c6ab76; }
+html body.rf-remake #ui #press-start { width: 100%; }
+.button-glyph { font-size: 14px; }
+.button-arrow { margin-left: auto; font: 400 23px/1 var(--remake-sans); }
+html body.rf-remake #ui #scr-press .press-hint { font: 400 10px/1.8 var(--remake-sans); letter-spacing: .06em; margin: 13px 0 0; color: #c0bfb1; text-align: center; animation: none; }
+html body.rf-remake #ui #scr-press .boot-status { font: 400 10px/1.7 var(--remake-sans); margin: 5px 0 0; color: #a7ada8; min-height: 18px; text-align: center; }
+.opening-bottom { position: absolute; left: max(8.7vw, 100px); right: 52px; bottom: 37px; display: flex; align-items: end; justify-content: space-between; gap: 20px; }
+.opening-bottom b { font: 500 11px/1.8 var(--remake-serif); letter-spacing: .12em; }
+.opening-bottom small { display: block; font: 400 8px/1.8 Georgia,serif; letter-spacing: .2em; color: #a4ada9; margin-top: 8px; }
+.opening-bottom > a { font-size: 11px; letter-spacing: .15em; display: flex; align-items: center; gap: 17px; }
+.opening-bottom > a i { font-style: normal; border: 1px solid #c6ab7670; width: 35px; height: 44px; display: grid; place-items: center; }
+.opening-scene { font: 500 12px/1.6 var(--remake-serif); letter-spacing: .15em; text-align: right; }
+.opening-story { padding-block: 100px 110px; }
+html body.rf-remake #ui .remake-section-id { display: flex; align-items: center; gap: 18px; font: 400 10px/1.8 Georgia,serif; letter-spacing: .2em; color: #9ca39b; margin-bottom: 38px; }
+.remake-section-id span { color: var(--remake-gold); font-size: 13px; }
+.remake-section-id i { display: block; flex: 1; height: 1px; background: var(--remake-line); margin-left: 8px; }
+.opening-story-layout { display: grid; grid-template-columns: 1fr 1fr; gap: 9%; align-items: start; padding-left: 3%; }
+html body.rf-remake #ui .opening-story h2 { font: 500 clamp(35px,4vw,58px)/1.65 var(--remake-serif); letter-spacing: .12em; margin-top: 18px; }
+.opening-story-text { padding-top: 10px; }
+html body.rf-remake #ui .opening-story-text p { font-size: 13px; line-height: 2.5; letter-spacing: .07em; color: #bfc6bf; margin-bottom: 22px; }
+html body.rf-remake #ui .remake-text-link { display: inline-flex; align-items: center; justify-content: space-between; gap: 32px; padding-block: 12px; border-bottom: 1px solid #c6ab7660; color: #d6c098; font-size: 12px; letter-spacing: .06em; transition: color .2s,border-color .2s; }
+html body.rf-remake #ui .remake-text-link:hover { color: #f4e4c7; border-color: #ecd2a1; }
+.opening-world { padding-bottom: 100px; }
+html body.rf-remake #ui .remake-section-heading { display: flex; justify-content: space-between; align-items: end; gap: 30px; margin-bottom: 32px; }
+html body.rf-remake #ui .remake-section-heading h2 { font: 500 clamp(29px,3vw,43px)/1.7 var(--remake-serif); letter-spacing: .1em; margin-top: 8px; color: #f0ecdf; }
+.remake-section-heading > p { color: #a6afad; font-size: 12px; line-height: 1.8; }
+.opening-world-grid { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 23px; }
+.opening-world-card { overflow: hidden; display: block; position: relative; }
+.opening-world-card > img { width: 100%; height: auto; aspect-ratio: 4/3; object-fit: cover; transition: transform .6s,filter .6s; filter: saturate(.8); }
+.opening-world-card:hover > img { transform: scale(1.025); filter: saturate(1); }
+.opening-world-card > span { display: block; padding: 24px 0 18px; border-bottom: 1px solid var(--remake-line); position: relative; background: var(--remake-bg); }
+.opening-world-card small { display: block; color: var(--remake-gold); font: 9px/1.8 Georgia,serif; letter-spacing: .16em; }
+.opening-world-card b { display: block; font: 500 24px/1.8 var(--remake-serif); letter-spacing: .08em; margin: 6px 0 8px; }
+.opening-world-card em { display: flex; justify-content: space-between; color: #a9b2ae; font: 400 11px/1.7 var(--remake-sans); }
+.opening-world-card i { font: 400 18px/1 var(--remake-sans); color: var(--remake-gold); }
+html body.rf-remake #ui .opening-guide { display: flex; align-items: center; justify-content: space-between; gap: 35px; border-top: 1px solid var(--remake-line); padding-block: 55px 70px; }
+html body.rf-remake #ui .opening-guide h2 { font: 500 clamp(23px,2.5vw,34px)/1.8 var(--remake-serif); letter-spacing: .06em; margin-top: 10px; }
+html body.rf-remake #ui .opening-guide p:last-child { color: var(--remake-muted); font-size: 12px; line-height: 1.9; margin-top: 13px; }
+html body.rf-remake #ui .remake-footer {
+  display: flex; align-items: center; justify-content: space-between; gap: 30px; padding: 36px clamp(24px,4vw,70px) max(36px, env(safe-area-inset-bottom));
+  border-top: 1px solid var(--remake-line); background: #080d0f; margin: 0; width: 100%; color: var(--remake-muted);
+}
+.remake-footer nav { display: flex; flex-wrap: wrap; gap: 25px; }
+.remake-footer nav a { font-size: 11px; line-height: 2; }
+.remake-footer nav a:hover { color: var(--remake-gold); }
+.remake-footer > small { font: 8px/1.8 var(--remake-sans); letter-spacing: .1em; }
+/* The in-game home is a real mode launcher: all buttons retain original game contracts. */
+html body.rf-remake #ui #scr-title .portal-wrap { display: block !important; width: 100% !important; max-width: none !important; margin: 0 !important; padding: 0 !important; background: var(--remake-bg) !important; box-shadow: none !important; }
+html body.rf-remake #ui #scr-title .portal-header {
+  display: flex !important; align-items: center; justify-content: space-between; gap: 25px;
+  position: sticky !important; top: 0 !important; z-index: 180 !important; min-height: 86px;
+  padding: 14px clamp(24px,4vw,70px) !important; margin: 0 !important;
+  background: #0b1012f5 !important; border: 0 !important; border-bottom: 1px solid var(--remake-line) !important;
+  border-radius: 0 !important; box-shadow: none !important; backdrop-filter: blur(16px) !important;
+}
+html body.rf-remake #ui #scr-title .portal-topnav { display: flex; align-items: center; justify-content: center; gap: clamp(12px,2vw,30px); flex: 1; min-width: 0; }
+html body.rf-remake #ui #scr-title .portal-topnav :is(button,a) { padding: 14px 0; border: 0; border-radius: 0; background: none; color: #bbc1b9; box-shadow: none; font: 400 12px/1.5 var(--remake-sans); letter-spacing: .06em; white-space: nowrap; }
+html body.rf-remake #ui #scr-title .portal-topnav :is(button,a):is(:hover,[aria-current]) { color: #ecd8af; }
+html body.rf-remake #ui #scr-title .portal-account { display: flex; flex-wrap: wrap; gap: 6px; justify-content: flex-end; align-items: center; width: auto; max-width: 215px; margin-left: 0; }
+html body.rf-remake #ui #scr-title .portal-account :is(button,.shards) { border: 1px solid var(--remake-line) !important; border-radius: 0 !important; padding: 8px 11px !important; background: transparent !important; color: #d5c29b !important; font: 400 11px/1.7 var(--remake-sans) !important; box-shadow: none !important; min-height: 36px; }
+html body.rf-remake #ui #scr-title .portal-hero {
+  position: relative !important; isolation: isolate; display: flex; align-items: center; justify-content: flex-start;
+  min-height: 510px !important; height: auto !important; margin: 0 !important; padding: 70px max(7vw,40px) 90px !important;
+  background: #0c161c !important; border: 0 !important; border-radius: 0 !important; overflow: hidden; box-shadow: none !important;
+}
+html body.rf-remake #ui #scr-title .portal-hero::before { content: ''; position: absolute; inset: 0; z-index: -1; background: linear-gradient(90deg,#080f14e8,#080f1499 38%,transparent 75%),linear-gradient(0deg,#0b1012,transparent 40%); pointer-events: none; }
+html body.rf-remake #ui #scr-title .portal-hero::after { content: none !important; }
+html body.rf-remake #ui #scr-title .hero-center { position: relative; width: auto !important; max-width: 650px; padding: 0 !important; text-align: left !important; background: none !important; border: 0 !important; box-shadow: none !important; margin: 0 !important; }
+html body.rf-remake #ui #scr-title .hero-center h2 { font: 500 clamp(36px,5.2vw,74px)/1.6 var(--remake-serif); letter-spacing: .13em; margin: 13px 0 8px; text-shadow: none; }
+html body.rf-remake #ui #scr-title .hero-center > p:not(.remake-eyebrow) { font: 400 14px/2.1 var(--remake-serif); letter-spacing: .1em; color: #c9cdc0; }
+.remake-hero-actions { display: flex; align-items: center; gap: 30px; margin-top: 30px; flex-wrap: wrap; }
+html body.rf-remake #ui #scr-title .hero-quick { border: 0; border-bottom: 1px solid #c6ab7670; border-radius: 0; background: none; padding: 12px 0; color: #e7dfcd; font-size: 12px; letter-spacing: .06em; box-shadow: none; }
+.hero-quick > span { margin-left: 25px; color: #d5b883; }
+.portal-hero-caption { position: absolute; right: 55px; bottom: 55px; color: #d9c7a4; font: 9px/1.8 Georgia,var(--remake-serif); letter-spacing: .15em; display: flex; align-items: center; gap: 15px; }
+.portal-hero-caption i { width: 35px; height: 1px; background: #c6ab7660; }
+html body.rf-remake #ui #scr-title .portal-overview { display: grid !important; grid-template-columns: 1fr 1fr .85fr; gap: 0 !important; border: 1px solid var(--remake-line); padding: 0 !important; margin-block: 20px 80px !important; background: #101719; }
+html body.rf-remake #ui #scr-title .overview-panel { position: relative; min-width: 0; min-height: 245px; padding: 30px !important; border: 0 !important; border-right: 1px solid var(--remake-line) !important; border-radius: 0 !important; background: transparent !important; box-shadow: none !important; overflow: hidden; }
+html body.rf-remake #ui #scr-title .overview-panel:last-child { border-right: 0 !important; }
+html body.rf-remake #ui #scr-title .overview-panel h2 { font: 500 24px/1.7 var(--remake-serif); margin-top: 8px; }
+html body.rf-remake #ui #scr-title .overview-panel p { color: #b0bab5; font: 400 12px/2 var(--remake-sans); margin-top: 11px; }
+html body.rf-remake #ui #scr-title .overview-panel > small { display: block; font-size: 10px; color: #8f9e98; margin-top: 14px; }
+html body.rf-remake #ui #scr-title :is(.overview-link,.event-cta) { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 7px 20px; width: 100%; min-height: 42px; margin-top: 19px; padding: 0 0 10px; border: 0; border-bottom: 1px solid #c6ab7655; border-radius: 0; background: none; color: #d3bc91; text-align: left; box-shadow: none; font: 400 12px/1.7 var(--remake-sans); }
+.overview-link strong { font-weight: 400; font-size: 11px; }
+.overview-link > span { font-size: 10px; }
+.overview-link i { font-style: normal; margin-left: 8px; }
+.featured-event::before { content: none !important; }
+.fighter-feature a { display: block; min-height: 185px; position: relative; }
+.fighter-feature img { position: absolute; bottom: -30px; right: -15px; width: 155px; height: 215px; object-fit: contain; object-position: bottom; z-index: 0; }
+.fighter-feature :is(h2,p,.remake-eyebrow,.remake-text-link) { position: relative; z-index: 1; }
+html body.rf-remake #ui #scr-title .fighter-feature .remake-eyebrow { font-size: 9px; }
+html body.rf-remake #ui #scr-title .fighter-feature .remake-text-link { margin-top: 25px; gap: 25px; font-size: 11px; }
+html body.rf-remake #ui #scr-title .fighter-feature p { max-width: 130px; font-size: 10px; }
+html body.rf-remake #ui #scr-title .portal-section { padding-block: 0 85px !important; border: 0 !important; }
+.mode-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 20px; border-bottom: 1px solid var(--remake-line); margin-bottom: 25px; }
+.mode-filters { display: flex; gap: 28px; }
+html body.rf-remake #ui #scr-title .mode-filters button { border: 0; border-bottom: 2px solid transparent; background: none; color: #9fa9a5; border-radius: 0; padding: 15px 0; font-size: 12px; letter-spacing: .05em; }
+html body.rf-remake #ui #scr-title .mode-filters button[aria-pressed="true"] { color: #ead8b4; border-bottom-color: var(--remake-gold); }
+.mode-filters small { margin-left: 6px; color: #bba784; font: 9px/1 Georgia,serif; }
+.mode-toolbar-note { color: #7f8e88; font-size: 10px; }
+html body.rf-remake #ui #scr-title .portal-modes { display: grid !important; grid-template-columns: repeat(2,minmax(0,1fr)) !important; gap: 18px !important; padding: 0 !important; }
+html body.rf-remake #ui #scr-title .remake-mode {
+  position: relative; isolation: isolate; display: flex !important; flex-direction: column; align-items: stretch;
+  min-width: 0 !important; min-height: 233px !important; padding: 24px 28px !important; margin: 0 !important;
+  background: #142024 !important; border: 1px solid #a99b782f !important; border-radius: 0 !important;
+  box-shadow: none !important; text-align: left !important; color: #f0ecdf !important; overflow: hidden !important;
+  transition: border-color .2s,background .2s !important; transform: none !important;
+}
+html body.rf-remake #ui #scr-title .remake-mode::before,
+html body.rf-remake #ui #scr-title .remake-mode::after { content: none !important; }
+html body.rf-remake #ui #scr-title .remake-mode:hover { border-color: #c6ab76aa !important; background: #182529 !important; filter: none !important; }
+html body.rf-remake #ui #scr-title .remake-mode[hidden] { display: none !important; }
+.mode-art { position: absolute; inset: 0; z-index: -2; overflow: hidden; }
+.mode-art img { height: 100%; width: 100%; object-fit: cover; opacity: .46; filter: saturate(.7); transition: transform .6s, opacity .4s; }
+.mode-art::after { content: ''; position: absolute; inset: 0; background: linear-gradient(90deg,#0d171cf0,#101a20a3 50%,#0c15162e),linear-gradient(0deg,#0b1418c9,transparent 80%); }
+.remake-mode:hover .mode-art img { transform: scale(1.035); opacity: .65; }
+.mode-topline { display: flex; align-items: center; justify-content: space-between; gap: 14px; margin-bottom: 26px; }
+.mode-topline > span { color: #d0ba92; font: 9px/1.8 Georgia,serif; letter-spacing: .15em; }
+.mode-topline i { font: 400 9px/1.5 var(--remake-sans); color: #c2cdc6; border: 1px solid #d7d4c13b; padding: 4px 8px; }
+html body.rf-remake #ui #scr-title .mode-main { display: block; min-width: 0; padding: 0; }
+.mode-caption { display: block; color: #c6c8b7; font: 400 10px/1.8 var(--remake-serif); letter-spacing: .08em; }
+html body.rf-remake #ui #scr-title .mode-main b { display: block; color: #f0ecdf !important; font: 500 clamp(22px,2vw,29px)/1.7 var(--remake-serif) !important; letter-spacing: .05em; margin: 4px 0 9px; }
+html body.rf-remake #ui #scr-title .mode-main small { display: block; color: #b2bcb5 !important; font: 400 11px/1.9 var(--remake-sans) !important; max-width: calc(100% - 25px); white-space: normal; }
+html body.rf-remake #ui #scr-title .tile-arrow { position: absolute; right: 27px; bottom: 25px; width: auto; height: auto; border: 0; background: none; color: var(--remake-gold); font: 400 24px/1 var(--remake-sans); }
+html body.rf-remake #ui #scr-title .world-gallery { display: grid !important; grid-template-columns: repeat(3,minmax(0,1fr)) !important; gap: 22px !important; overflow: visible !important; margin: 0 !important; padding: 0 !important; }
+html body.rf-remake #ui #scr-title .world-gallery a { position: relative; display: block; min-width: 0; padding: 0; border: 0; border-radius: 0; background: transparent; box-shadow: none; overflow: hidden; }
+html body.rf-remake #ui #scr-title .world-gallery a > img { width: 100%; height: auto; aspect-ratio: 4/3; object-fit: cover; opacity: .88; transition: opacity .4s,transform .5s; }
+html body.rf-remake #ui #scr-title .world-gallery a:hover > img { opacity: 1; transform: scale(1.025); }
+html body.rf-remake #ui #scr-title .world-gallery a > span { display: block; padding: 24px 0 20px; background: var(--remake-bg); border-bottom: 1px solid var(--remake-line); position: relative; }
+.world-gallery small { color: #bca984; font: 9px/1.8 Georgia,serif; letter-spacing: .15em; display: block; }
+.world-gallery b { font: 500 24px/1.8 var(--remake-serif); display: block; margin: 8px 0 10px; letter-spacing: .06em; }
+.world-gallery em { font: 400 11px/1.8 var(--remake-sans); display: flex; justify-content: space-between; color: #9faa9e; }
+.world-gallery i { font: 400 18px/1 var(--remake-sans); color: var(--remake-gold); }
+html body.rf-remake #ui #scr-title .portal-services { display: grid !important; grid-template-columns: repeat(3,minmax(0,1fr)) !important; gap: 0 !important; border: 1px solid var(--remake-line); }
+html body.rf-remake #ui #scr-title .portal-services > button { display: flex !important; align-items: center; justify-content: flex-start; gap: 18px; text-align: left; padding: 26px 22px !important; min-height: 112px; border: 0 !important; border-right: 1px solid var(--remake-line) !important; border-bottom: 1px solid var(--remake-line) !important; border-radius: 0 !important; background: #101719 !important; box-shadow: none !important; color: #e4e4d6 !important; transform: none; }
+html body.rf-remake #ui #scr-title .portal-services > button[hidden] { display: none !important; }
+html body.rf-remake #ui #scr-title .portal-services > button:hover { background: #192224 !important; }
+.portal-services .service-number { font: 10px/1 Georgia,serif; color: #aa9570; }
+html body.rf-remake #ui #scr-title .portal-services b { display: block; font: 500 17px/1.7 var(--remake-serif); letter-spacing: .04em; }
+html body.rf-remake #ui #scr-title .portal-services small { display: block; color: #a3ada6 !important; font: 400 10px/1.8 var(--remake-sans); margin-top: 5px; }
+.portal-services > button > i { font: 400 17px/1 var(--remake-sans); margin-left: auto; color: #c6ab76; }
+html body.rf-remake #ui #scr-title .portal-controls { border: 0; border-block: 1px solid var(--remake-line); border-radius: 0; background: none; margin-top: 28px; padding: 0 5px; color: #a7b1a9; font: 400 12px/2.2 var(--remake-sans); box-shadow: none; }
+.portal-controls summary { cursor: pointer; padding: 18px 0; list-style: none; color: #dfd8c3; }
+.portal-controls summary::-webkit-details-marker { display: none; }
+.portal-controls summary > span { float: right; font-size: 17px; color: #c6ab76; transition: transform .2s; }
+.portal-controls[open] summary > span { transform: rotate(45deg); }
+html body.rf-remake #ui #scr-title .portal-controls p { padding-bottom: 13px; font-size: 11px; line-height: 2; color: #b1b9af; }
+.portal-controls > a { display: inline-block; color: #d7bf91 !important; margin-bottom: 20px; border-bottom: 1px solid #c6ab7655; font-size: 11px; }
+.remake-sr { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0; }
+@keyframes remake-arrive { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: translateY(0); } }
+@media(min-width:1700px) { .opening-art img { object-position: center 48%; } .opening-copy { margin-left: max(0px,calc((100vw - 1600px)/2)); } }
+@media(max-width:1200px) {
+  .opening-edition { display: none; }
+  html body.rf-remake #ui .remake-contained { width: calc(100% - 72px); }
+  html body.rf-remake #ui #scr-title .portal-header { gap: 18px; padding-inline: 28px !important; }
+  html body.rf-remake #ui #scr-title .portal-topnav { gap: 18px; }
+  html body.rf-remake #ui #scr-title .portal-topnav a { display: none; }
+  html body.rf-remake #ui #scr-title .portal-account { max-width: 170px; }
+  html body.rf-remake #ui #scr-title .overview-panel { padding: 25px !important; }
+  .fighter-feature img { opacity: .8; right: -30px; }
+  .remake-footer { flex-wrap: wrap; }
+}
+@media(max-width:900px) {
+  html body.rf-remake #ui .opening-header { min-height: 80px; padding: 15px 25px; }
+  .opening-header nav { gap: 24px; }
+  .opening-header nav a { font-size: 11px; }
+  html body.rf-remake #ui .opening-hero { padding-left: 90px; min-height: max(720px,calc(100svh - 80px)); }
+  .opening-copy { width: 80%; }
+  html body.rf-remake #ui #scr-press .opening-copy h1 { font-size: clamp(65px,9vw,90px); }
+  .opening-bottom { left: 90px; right: 35px; }
+  .opening-scene { display: none; }
+  .opening-story-layout { gap: 6%; padding: 0; }
+  html body.rf-remake #ui .opening-story-text p { font-size: 12px; letter-spacing: 0; }
+  .opening-world-grid { gap: 17px; }
+  .opening-world-card b { font-size: 20px; }
+  .opening-world-card em { font-size: 10px; }
+  html body.rf-remake #ui #scr-title .portal-header { flex-wrap: wrap; gap: 10px 20px; }
+  html body.rf-remake #ui #scr-title .portal-topnav { order: 3; width: 100%; flex-basis: 100%; justify-content: flex-start; gap: 32px; border-top: 1px solid var(--remake-line); }
+  html body.rf-remake #ui #scr-title .portal-topnav :is(button,a) { padding-block: 13px 3px; }
+  html body.rf-remake #ui #scr-title .portal-account { max-width: 260px; margin-left: auto; }
+  html body.rf-remake #ui #scr-title .portal-overview { grid-template-columns: 1fr 1fr; }
+  html body.rf-remake #ui #scr-title .fighter-feature { display: none; }
+  html body.rf-remake #ui #scr-title .featured-event { border-right: 0 !important; }
+  html body.rf-remake #ui #scr-title .portal-services { grid-template-columns: repeat(2,minmax(0,1fr)) !important; }
+  .portal-hero-caption { display: none; }
+  html body.rf-remake #ui #scr-title .world-gallery { gap: 17px !important; }
+  .world-gallery b { font-size: 20px; }
+  .world-gallery small { font-size: 8px; }
+  .world-gallery em { font-size: 10px; }
+  .mode-toolbar-note { display: none; }
+}
+@media(max-width:600px) {
+  html body.rf-remake #ui .remake-contained { width: calc(100% - 40px); }
+  html body.rf-remake #ui .opening-header { padding: max(15px,env(safe-area-inset-top)) 20px 15px; gap: 14px; min-height: 76px; }
+  html body.rf-remake #ui .remake-brand { gap: 9px; }
+  html body.rf-remake #ui .remake-brand > img { width: 33px; height: 33px; }
+  html body.rf-remake #ui .remake-brand > span { font-size: 16px; letter-spacing: .04em; }
+  html body.rf-remake #ui .remake-brand small { font-size: 6px; letter-spacing: .1em; }
+  .opening-header nav a:not(:last-child) { display: none; }
+  .opening-header nav a { font-size: 10px; white-space: nowrap; }
+  .opening-header nav a span { margin-left: 2px; }
+  html body.rf-remake #ui .opening-hero { min-height: max(740px,calc(100svh - 76px)); align-items: flex-start; padding: 100px 29px 125px; }
+  .opening-art img { object-position: 58% center; }
+  .opening-hero::before { background: linear-gradient(90deg,#080f14b8, #080f1442 75%),linear-gradient(0deg,#0b1012,transparent 32%,#08111a44); }
+  .opening-hero::after { inset: 12px; }
+  .opening-rail { left: auto; right: 26px; top: 40px; bottom: auto; height: 240px; opacity: .7; }
+  .opening-rail span { font-size: 7px; }
+  .opening-rail span:last-child { display: none; }
+  .opening-copy { width: 100%; }
+  html body.rf-remake #ui .opening-copy .remake-eyebrow { font-size: 9px; letter-spacing: .12em; }
+  html body.rf-remake #ui #scr-press .opening-copy h1 { font-size: clamp(49px,12.4vw,74px); margin-top: 25px; letter-spacing: 0; }
+  html body.rf-remake #ui .opening-roman { font-size: 8px; letter-spacing: .19em; }
+  html body.rf-remake #ui .opening-tagline { font-size: 19px; line-height: 2; margin-top: 28px; }
+  .opening-start { margin-top: 30px; max-width: 340px; }
+  html body.rf-remake #ui .remake-primary { font-size: 14px; min-height: 58px; padding: 16px 21px; gap: 20px; }
+  .opening-bottom { left: 29px; right: 29px; bottom: 32px; }
+  .opening-bottom > span:first-child b { display: none; }
+  .opening-bottom small { font-size: 7px; letter-spacing: .1em; }
+  .opening-bottom > a { font-size: 9px; gap: 10px; }
+  .opening-bottom > a i { height: 38px; width: 28px; }
+  .opening-story { padding-block: 65px; }
+  html body.rf-remake #ui .remake-section-id { margin-bottom: 26px; gap: 12px; font-size: 9px; letter-spacing: .12em; }
+  .opening-story-layout { grid-template-columns: 1fr; gap: 30px; }
+  html body.rf-remake #ui .opening-story h2 { font-size: 37px; line-height: 1.6; margin-top: 15px; }
+  html body.rf-remake #ui .opening-story-text p { font-size: 12px; line-height: 2.5; letter-spacing: .02em; }
+  html body.rf-remake #ui .remake-section-heading { flex-wrap: wrap; gap: 14px; margin-bottom: 25px; }
+  html body.rf-remake #ui .remake-section-heading h2 { font-size: 29px; }
+  html body.rf-remake #ui .remake-section-heading .remake-text-link { font-size: 11px; padding-block: 7px; }
+  .opening-world-grid { grid-template-columns: 1fr; gap: 30px; }
+  .opening-world-card > img { aspect-ratio: 16/9; }
+  .opening-world-card > span { padding-block: 18px; }
+  .opening-world-card b { font-size: 24px; }
+  .opening-world-card em { font-size: 11px; }
+  .opening-world { padding-bottom: 60px; }
+  html body.rf-remake #ui .opening-guide { flex-direction: column; align-items: flex-start; gap: 25px; padding-block: 35px 50px; }
+  html body.rf-remake #ui .opening-guide h2 { font-size: 23px; }
+  html body.rf-remake #ui .opening-guide p:last-child { font-size: 11px; }
+  html body.rf-remake #ui .opening-guide .remake-outline { width: 100%; font-size: 13px; }
+  html body.rf-remake #ui .remake-footer { flex-direction: column; align-items: flex-start; gap: 26px; padding: 30px 22px max(30px,env(safe-area-inset-bottom)); }
+  .remake-footer nav { gap: 30px; }
+  html body.rf-remake #ui #scr-title .portal-header { padding: max(12px,env(safe-area-inset-top)) 20px 10px !important; gap: 10px; }
+  html body.rf-remake #ui #scr-title .portal-account { gap: 5px; max-width: 150px; }
+  html body.rf-remake #ui #scr-title .portal-account :is(button,.shards) { font-size: 9px !important; padding: 5px 7px !important; min-height: 29px; }
+  html body.rf-remake #ui #scr-title .portal-topnav { gap: 28px; justify-content: space-between; }
+  html body.rf-remake #ui #scr-title .portal-topnav button { font-size: 11px; letter-spacing: 0; min-height: 39px; }
+  html body.rf-remake #ui #scr-title .portal-hero { min-height: 430px !important; padding: 62px 24px 70px !important; }
+  html body.rf-remake #ui #scr-title .portal-hero::before { background: linear-gradient(90deg,#080f14dc,#080f1470 75%),linear-gradient(0deg,#0b1012,transparent 45%); }
+  html body.rf-remake #ui #scr-title .hero-center h2 { font-size: 39px; letter-spacing: .08em; }
+  html body.rf-remake #ui #scr-title .hero-center > p:not(.remake-eyebrow) { font-size: 12px; letter-spacing: .03em; }
+  .remake-hero-actions { gap: 18px; margin-top: 27px; }
+  html body.rf-remake #ui #scr-title .remake-hero-actions .remake-primary { min-height: 52px; font-size: 13px; gap: 20px; }
+  html body.rf-remake #ui #scr-title .hero-quick { font-size: 10px; }
+  .hero-quick > span { margin-left: 10px; }
+  html body.rf-remake #ui #scr-title .portal-overview { grid-template-columns: 1fr; margin-block: 5px 55px !important; }
+  html body.rf-remake #ui #scr-title .overview-panel { min-height: 0; padding: 25px !important; border-right: 0 !important; border-bottom: 1px solid var(--remake-line) !important; }
+  html body.rf-remake #ui #scr-title .overview-panel h2 { font-size: 22px; }
+  html body.rf-remake #ui #scr-title .featured-event { border-bottom: 0 !important; }
+  html body.rf-remake #ui #scr-title .portal-section { padding-bottom: 55px !important; }
+  .mode-toolbar { margin-bottom: 20px; }
+  .mode-filters { width: 100%; gap: 25px; }
+  html body.rf-remake #ui #scr-title .mode-filters button { font-size: 11px; }
+  html body.rf-remake #ui #scr-title .portal-modes { grid-template-columns: 1fr !important; gap: 14px !important; }
+  html body.rf-remake #ui #scr-title .remake-mode { min-height: 215px !important; padding: 21px 24px !important; }
+  html body.rf-remake #ui #scr-title .mode-main b { font-size: 25px !important; }
+  .mode-topline { margin-bottom: 22px; }
+  html body.rf-remake #ui #scr-title .world-gallery { grid-template-columns: 1fr !important; gap: 28px !important; }
+  html body.rf-remake #ui #scr-title .world-gallery a > img { aspect-ratio: 16/9; }
+  .world-gallery b { font-size: 25px; }
+  .world-gallery em { font-size: 11px; }
+  html body.rf-remake #ui #scr-title .portal-services { grid-template-columns: 1fr !important; }
+  html body.rf-remake #ui #scr-title .portal-services > button { min-height: 100px; padding: 23px 20px !important; border-right: 0 !important; }
+  html body.rf-remake #ui #scr-title .portal-services b { font-size: 18px; }
+}
+@media(max-height:600px) and (min-width:601px) {
+  html body.rf-remake #ui .opening-hero { min-height: 650px; padding-top: 50px; }
+  html body.rf-remake #ui #scr-press .opening-copy h1 { font-size: 70px; }
+  html body.rf-remake #ui .opening-tagline { margin-top: 22px; font-size: 18px; }
+}
+@media(prefers-reduced-motion:reduce) {
+  html body.rf-remake #ui :is(#scr-press,#scr-title) * { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
+}
