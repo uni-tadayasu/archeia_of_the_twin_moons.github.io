@@ -1,0 +1,239 @@
+/* Celestial edition — illustrated moonlit metalwork, scoped to the original game.
+   Existing view visibility, touch geometry, game focus and input remain unchanged. */
+body.celestial-ui{--celestial-midnight:#080f1e;--celestial-navy:#122138;--celestial-paper:#f3ead5;--celestial-gold:#d9bc7e;--celestial-brass:#a88d59;--celestial-line:#c6ab7047;--celestial-muted:#b0bbc9;--classic-brass:var(--celestial-gold);--classic-cream:var(--celestial-paper)}
+.celestial-ui .celestial-icon{display:inline-block!important;width:1.35em;height:1.35em;min-width:1.35em;max-width:none;max-height:none;flex:none;vertical-align:-.25em;margin:0 .55em 0 0;color:inherit;fill:none!important;overflow:visible;pointer-events:none!important;stroke-width:1.35;filter:none!important}
+.celestial-ui .celestial-icon path{pointer-events:none!important;vector-effect:non-scaling-stroke}
+html body.rf-remake.classic-polish.celestial-ui [data-celestial-icon][data-rf25-icon]::before{display:none!important;content:none!important}
+html body.rf-remake.classic-polish.celestial-ui .celestial-has-icon>.rf25-image-icon{display:none!important}
+html body.rf-remake.classic-polish.celestial-ui :is(button,a,summary):focus-visible{outline:2px solid #f5d99d!important;outline-offset:4px!important;box-shadow:0 0 0 6px #091321!important}
+html body.rf-remake.classic-polish.celestial-ui #ui :is(.opening-header,.portal-header){background:linear-gradient(115deg,#0a1323f7,#121e2cf5)!important;border-bottom:1px solid #cbb07750!important}
+html body.rf-remake.classic-polish.celestial-ui #ui :is(.remake-opening,.portal-wrap){background:#080f1b!important}
+html body.rf-remake.classic-polish.celestial-ui #ui .remake-brand{color:#f2e6cc!important}
+html body.rf-remake.classic-polish.celestial-ui #ui .remake-brand>img{filter:drop-shadow(0 0 12px #d0af6233);width:44px;height:44px}
+html body.rf-remake.classic-polish.celestial-ui #ui .remake-brand>.celestial-icon{display:none!important}
+html body.rf-remake.classic-polish.celestial-ui #ui :is(.opening-header nav,.portal-topnav) .celestial-icon{width:17px;height:17px;min-width:17px;color:#cfb480;margin-right:7px}
+html body.rf-remake.classic-polish.celestial-ui #ui #scr-title .portal-account :is(button,.shards){background:#e6c88408!important;border:1px solid #cdb27644!important;min-height:40px!important;border-radius:3px!important}
+html body.rf-remake.classic-polish.celestial-ui #ui :is(.opening-hero,.portal-hero){isolation:isolate}
+html body.rf-remake.classic-polish.celestial-ui #ui #scr-title .portal-hero{min-height:490px!important;padding-top:65px!important;padding-bottom:75px!important}
+html body.rf-remake.classic-polish.celestial-ui #ui #scr-title .portal-hero::before{background:linear-gradient(90deg,#07101dea,#07101dba 31%,#07101d30 67%,#07101d05),linear-gradient(0deg,#080f1b,transparent 28%,#080f1b18)!important}
+html body.rf-remake.classic-polish.celestial-ui #ui #scr-title .hero-center h2{font-size:clamp(40px,4.9vw,70px)!important;letter-spacing:.11em!important;color:#f7efdf!important;text-shadow:0 5px 24px #07101d88!important;margin-bottom:14px}
+html body.rf-remake.classic-polish.celestial-ui #ui .remake-eyebrow{color:#d8bd83!important;letter-spacing:.16em}
+html body.rf-remake.classic-polish.celestial-ui #ui #scr-press .opening-hero::before{background:linear-gradient(90deg,#060e1ae8,#07101d9c 35%,#07101d00 72%),linear-gradient(0deg,#080f1b,transparent 26%)!important}
+html body.rf-remake.classic-polish.celestial-ui #ui .opening-hero::after{border-color:#d9bc7e33!important}
+html body.rf-remake.classic-polish.celestial-ui #ui :is(.opening-art,.portal-hero-art)>img{filter:saturate(1.05) contrast(1.025)!important;object-position:center 52%}
+html body.rf-remake.classic-polish.celestial-ui #ui :is(.remake-primary,.hero-center .remake-primary){position:relative;border:1px solid #f2d798!important;border-radius:2px!important;background:linear-gradient(110deg,#a9884b,#e3cb94 48%,#bfa067)!important;color:#161c29!important;box-shadow:inset 0 0 0 4px #eadab52b,0 8px 28px #0005!important;min-height:60px!important;gap:12px!important;transition:filter .2s,box-shadow .2s!important}
+html body.rf-remake.classic-polish.celestial-ui #ui .remake-primary:hover{filter:brightness(1.09)!important;box-shadow:inset 0 0 0 4px #eadab550,0 10px 36px #0006!important}
+html body.rf-remake.classic-polish.celestial-ui #ui .remake-primary>.celestial-icon{width:23px;height:23px;min-width:23px;margin:0}
+html body.rf-remake.classic-polish.celestial-ui #ui .remake-primary .button-glyph{display:none}
+html body.rf-remake.classic-polish.celestial-ui #ui #scr-title .hero-quick{background:#0b1829aa!important;border:1px solid #bda67566!important;padding:14px 18px!important;min-height:52px;border-radius:2px!important}
+/* Each quick destination is a small illustrated travel seal. */
+html body.rf-remake.classic-polish.celestial-ui #ui #scr-title .classic-quick-access{padding-block:25px 30px;border-top-color:#bca7773d;border-bottom-color:#bca7773d;margin-bottom:0}
+html body.rf-remake.classic-polish.celestial-ui #ui #scr-title .classic-quick-heading h2{font-size:24px!important;letter-spacing:.1em}
+html body.rf-remake.classic-polish.celestial-ui #ui #scr-title .classic-quick-button{position:relative;isolation:isolate;overflow:hidden;min-height:115px!important;padding:20px 13px!important;gap:10px;background:#0e1b2a!important;border-color:#c5ac785c!important;border-radius:3px!important;box-shadow:inset 0 0 0 4px #09142255!important}
+html body.rf-remake.classic-polish.celestial-ui #ui #scr-title .classic-quick-button::after{content:"";position:absolute;inset:0;z-index:-1;background:linear-gradient(100deg,#071221f2,#0b1829b3 62%,#0b182966);pointer-events:none}
+html body.rf-remake.classic-polish.celestial-ui #ui #scr-title .classic-quick-art{position:absolute!important;inset:0!important;z-index:-2!important;width:100%!important;height:100%!important;max-height:none!important;object-fit:cover!important;opacity:.78!important;filter:saturate(.85)!important;border:0!important}
+html body.rf-remake.classic-polish.celestial-ui #ui #scr-title .classic-quick-glyph{width:35px;min-width:35px;height:44px;display:grid;place-items:center;border:1px solid #d6bc805c;border-radius:48% 48% 2px 2px;background:#09142399;color:#e2c68c}
+html body.rf-remake.classic-polish.celestial-ui #ui #scr-title .classic-quick-glyph .celestial-icon{width:24px;height:24px;margin:0}
+html body.rf-remake.classic-polish.celestial-ui #ui #scr-title .classic-quick-button b{font-size:12px;line-height:1.65;color:#f6e9d0;text-shadow:0 2px 9px #000}
+html body.rf-remake.classic-polish.celestial-ui #ui #scr-title .classic-quick-button small{color:#b9c5cc;font-size:9px;line-height:1.7}
+html body.rf-remake.classic-polish.celestial-ui #ui #scr-title .classic-quick-button>i .celestial-icon{width:14px;height:14px;margin:0}
+html body.rf-remake.classic-polish.celestial-ui #ui #scr-title .classic-quick-button:hover{border-color:#ecd29a!important}
+html body.rf-remake.classic-polish.celestial-ui #ui #scr-title .classic-community-bar{background:linear-gradient(90deg,#14223577,#121b2600);padding:10px 15px;border:1px solid #aa956033;margin-top:20px;margin-bottom:30px;border-radius:2px;box-sizing:border-box}
+html body.rf-remake.classic-polish.celestial-ui #ui #scr-title .portal-overview{background:linear-gradient(110deg,#101e31,#121b29)!important;border-color:#b49c684d!important;border-radius:3px;box-shadow:0 16px 48px #0003}
+html body.rf-remake.classic-polish.celestial-ui #ui #scr-title .overview-panel{padding:29px!important;border-right-color:#b49c683d!important}
+html body.rf-remake.classic-polish.celestial-ui #ui #scr-title .overview-panel h2{color:#f0dfbd;letter-spacing:.08em}
+/* Illustrated archive cards: artwork has its own clear area, copy never clips. */
+html body.rf-remake.classic-polish.celestial-ui #ui #scr-title .portal-modes{grid-template-columns:repeat(3,minmax(0,1fr))!important;gap:22px!important}
+html body.rf-remake.classic-polish.celestial-ui #ui #scr-title .remake-mode{position:relative;min-height:370px!important;padding:0!important;display:flex!important;flex-direction:column!important;border:1px solid #c0a36a66!important;border-radius:4px!important;background:linear-gradient(145deg,#17283d,#0d192b)!important;overflow:hidden!important;box-shadow:0 12px 35px #0004!important}
+html body.rf-remake.classic-polish.celestial-ui #ui #scr-title .remake-mode .mode-art{position:relative!important;inset:auto!important;z-index:0!important;width:100%!important;aspect-ratio:16/8.6;flex:none;border-bottom:1px solid #c2a87466;overflow:hidden}
+html body.rf-remake.classic-polish.celestial-ui #ui #scr-title .remake-mode .mode-art img{display:block;width:100%!important;height:100%!important;max-height:none!important;opacity:1!important;object-fit:cover!important;filter:saturate(.97) contrast(1.03)!important;transition:transform .65s!important}
+html body.rf-remake.classic-polish.celestial-ui #ui #scr-title .remake-mode .mode-art::after{background:linear-gradient(0deg,#0c182969,transparent 65%)!important;border:1px solid #d1b47742;inset:8px;pointer-events:none}
+html body.rf-remake.classic-polish.celestial-ui #ui #scr-title .mode-topline{position:relative;z-index:1;margin:0!important;padding:17px 22px 0!important;gap:8px;min-height:45px}
+html body.rf-remake.classic-polish.celestial-ui #ui #scr-title .mode-topline>span{display:flex;align-items:center;font-size:8px;letter-spacing:.12em;color:#dcc08c;gap:7px;min-width:0}
+html body.rf-remake.classic-polish.celestial-ui #ui #scr-title .mode-topline>span .celestial-icon{width:23px;height:23px;min-width:23px;margin:0;color:#e7cd96}
+html body.rf-remake.classic-polish.celestial-ui #ui #scr-title .mode-topline i{font-size:9px;background:#9cb9d00b;border-color:#9ab1bc47;color:#bccad2;white-space:nowrap;padding:4px 7px}
+html body.rf-remake.classic-polish.celestial-ui #ui #scr-title .mode-main{padding:8px 22px 28px!important;min-width:0;flex:1}
+html body.rf-remake.classic-polish.celestial-ui #ui #scr-title .mode-caption{font-size:10px;color:#aebbcb;letter-spacing:.055em}
+html body.rf-remake.classic-polish.celestial-ui #ui #scr-title .mode-main b{font-size:clamp(21px,1.75vw,27px)!important;line-height:1.65!important;margin:4px 0 9px!important;letter-spacing:.045em!important;color:#f5e9d4!important}
+html body.rf-remake.classic-polish.celestial-ui #ui #scr-title .mode-main small{font-size:11px!important;line-height:1.9!important;color:#b9c5d0!important;max-width:100%!important;padding-right:25px;white-space:normal!important;overflow:visible!important}
+html body.rf-remake.classic-polish.celestial-ui #ui #scr-title .tile-arrow{bottom:25px!important;right:18px!important;display:grid;place-items:center;width:23px;height:23px}
+html body.rf-remake.classic-polish.celestial-ui #ui #scr-title .tile-arrow .celestial-icon{margin:0;width:23px;height:23px}
+html body.rf-remake.classic-polish.celestial-ui #ui #scr-title .remake-mode:hover{border-color:#e5c687!important;box-shadow:0 16px 42px #0006!important}
+html body.rf-remake.classic-polish.celestial-ui #ui #scr-title .remake-mode:hover .mode-art img{transform:scale(1.045)}
+html body.rf-remake.classic-polish.celestial-ui #ui #scr-title .mode-filters{gap:10px}
+html body.rf-remake.classic-polish.celestial-ui #ui #scr-title .mode-filters button{border:1px solid transparent!important;min-height:44px;padding:10px 14px!important;border-radius:3px!important}
+html body.rf-remake.classic-polish.celestial-ui #ui #scr-title .mode-filters button[aria-pressed="true"]{background:#d5b97d16!important;border-color:#c2a66e66!important;color:#f0d8aa!important}
+html body.rf-remake.classic-polish.celestial-ui #ui #scr-title .classic-mode-search{padding-block:20px 25px}
+html body.rf-remake.classic-polish.celestial-ui #ui #scr-title .classic-mode-search input{background:#0c192a!important;border-color:#b8a47455!important;box-shadow:inset 0 2px 7px #0004!important}
+/* Every service has a scene and a unique engraved insignia. */
+html body.rf-remake.classic-polish.celestial-ui #ui #scr-title .portal-services{display:grid!important;grid-template-columns:repeat(3,minmax(0,1fr))!important;gap:16px!important;border:0!important;background:transparent!important;overflow:visible!important}
+html body.rf-remake.classic-polish.celestial-ui #ui #scr-title .portal-services>button{position:relative!important;isolation:isolate;display:flex!important;align-items:center;gap:16px!important;min-height:154px!important;padding:26px 22px!important;overflow:hidden!important;border:1px solid #bca06a6b!important;border-radius:4px!important;background:#0f1b2c!important;box-shadow:0 9px 25px #0003!important}
+html body.rf-remake.classic-polish.celestial-ui #ui #scr-title .portal-services>button::after{content:""!important;position:absolute;inset:0;z-index:-1;background:linear-gradient(90deg,#0b1626ed,#0b1626bd 60%,#0b16265c);pointer-events:none}
+html body.rf-remake.classic-polish.celestial-ui #ui #scr-title .celestial-service-art{position:absolute!important;inset:0!important;z-index:-2!important;width:100%!important;height:100%!important;max-height:none!important;object-fit:cover!important;opacity:.95!important;border:0!important;filter:saturate(.86)!important;transition:transform .6s!important}
+html body.rf-remake.classic-polish.celestial-ui #ui #scr-title .portal-services>button:hover{border-color:#ead099!important}
+html body.rf-remake.classic-polish.celestial-ui #ui #scr-title .portal-services>button:hover .celestial-service-art{transform:scale(1.04)}
+html body.rf-remake.classic-polish.celestial-ui #ui #scr-title .service-number{display:grid!important;place-items:center;flex:none;width:51px!important;height:60px!important;border:1px solid #ddbf7d88!important;border-radius:48% 48% 2px 2px;background:#0a162bbd;box-shadow:inset 0 0 0 4px #b69c6220;color:#e1c88e!important}
+html body.rf-remake.classic-polish.celestial-ui #ui #scr-title .service-number .celestial-icon{width:31px;height:31px;margin:0}
+html body.rf-remake.classic-polish.celestial-ui #ui #scr-title .portal-services>button>span:not(.service-number){min-width:0}
+html body.rf-remake.classic-polish.celestial-ui #ui #scr-title .portal-services b{font-size:16px!important;color:#f0dfbe!important;line-height:1.7!important;overflow-wrap:anywhere}
+html body.rf-remake.classic-polish.celestial-ui #ui #scr-title .portal-services small{font-size:10px!important;color:#bcc8d2!important;line-height:1.8!important}
+html body.rf-remake.classic-polish.celestial-ui #ui #scr-title .portal-services>button>i{margin-left:auto;flex:none}
+html body.rf-remake.classic-polish.celestial-ui #ui #scr-title .portal-services>button>i .celestial-icon{width:18px;height:18px;margin:0}
+html body.rf-remake.classic-polish.celestial-ui #ui :is(.world-gallery a,.opening-world-card){border:1px solid #bda56c50!important;border-radius:3px!important;overflow:hidden!important;background:#112037!important;box-shadow:0 12px 35px #0003}
+html body.rf-remake.classic-polish.celestial-ui #ui :is(.world-gallery a,.opening-world-card)>span{padding:21px!important;background:linear-gradient(120deg,#142238,#0d192a)!important;border:0!important}
+html body.rf-remake.classic-polish.celestial-ui #ui :is(.world-gallery a,.opening-world-card)>img{filter:saturate(1.05)!important;opacity:1!important}
+/* Character collection, inventory, selection and party editing. */
+html body.rf-remake.classic-polish.celestial-ui #ui .screen:not(#scr-press):not(#scr-title){background:linear-gradient(100deg,#060e1df5,#0b172be8),url('./celestial/hero.webp') center/cover fixed!important}
+html body.rf-remake.classic-polish.celestial-ui #ui .screen:not(#scr-press):not(#scr-title)>.inner>.label{color:#f0e3c8!important;font-size:clamp(27px,3.2vw,45px)!important;letter-spacing:.1em!important;text-shadow:0 4px 18px #0005}
+html body.rf-remake.classic-polish.celestial-ui #ui .screen .topbar{border-bottom-color:#b6a16e55!important;background:#0b1728eb!important;box-shadow:0 7px 20px #0003!important}
+html body.rf-remake.classic-polish.celestial-ui #ui .screen .topbar .back{border-color:#b6a16e66!important;background:#172538aa!important;color:#e3d4b5!important;min-height:46px}
+html body.rf-remake.classic-polish.celestial-ui #ui #scr-select #select-grid{gap:18px!important}
+html body.rf-remake.classic-polish.celestial-ui #ui #scr-select #select-grid .card{background:linear-gradient(145deg,#182b43,#0d192c)!important;border:1px solid #c0a36d62!important;border-radius:4px!important;box-shadow:0 9px 28px #0004!important;transition:border-color .18s,box-shadow .18s!important}
+html body.rf-remake.classic-polish.celestial-ui #ui #scr-select #select-grid .card img.face{background:radial-gradient(ellipse at 50% 60%,#475970,#15283f 62%,#0b1729)!important;border-bottom:1px solid #ccb07769!important;filter:drop-shadow(0 7px 8px #0004)!important;margin-bottom:14px!important}
+html body.rf-remake.classic-polish.celestial-ui #ui #scr-select #select-grid .card b{font-size:19px!important;color:#f4e7c9!important;letter-spacing:.06em!important}
+html body.rf-remake.classic-polish.celestial-ui #ui #scr-select #select-grid .card b .celestial-icon{width:17px;height:17px;min-width:17px;color:#cdb17a;margin-right:6px;vertical-align:-.1em}
+html body.rf-remake.classic-polish.celestial-ui #ui #scr-select #select-grid .card em{color:#d4ba85!important;font-size:10px!important}
+html body.rf-remake.classic-polish.celestial-ui #ui #scr-select #select-grid .card small{color:#b9c4d1!important;line-height:1.95!important}
+html body.rf-remake.classic-polish.celestial-ui #ui #scr-select #select-grid .card:hover{border-color:#e7c989!important;box-shadow:0 12px 34px #0006!important}
+html body.rf-remake.classic-polish.celestial-ui #ui #scr-select #select-grid .card.picked{border-color:#f4d696!important;outline-color:#d7b674!important;background:#253852!important}
+html body.rf-remake.classic-polish.celestial-ui #ui #scr-select :is(.select-tools,#party-bar){background:linear-gradient(115deg,#14243be8,#0e1c2fe8)!important;border-color:#c0a67055!important;box-shadow:0 8px 24px #0003!important}
+html body.rf-remake.classic-polish.celestial-ui #ui #scr-select .select-search-label>.celestial-icon{display:none!important}
+html body.rf-remake.classic-polish.celestial-ui #ui #scr-select #party-slots .party-slot{background:#122138!important;border-color:#bfa26866!important}
+html body.rf-remake.classic-polish.celestial-ui #ui #scr-select #party-go.btn{background:linear-gradient(110deg,#b18f50,#e6d09b)!important;color:#121a27!important}
+html body.rf-remake.classic-polish.celestial-ui #ui :is(#forge-list .chip,#shop-list>.card,.party-picker-choice){border-color:#c0a36d5c!important;background:linear-gradient(125deg,#172a40,#102035)!important;box-shadow:0 6px 22px #0003!important}
+html body.rf-remake.classic-polish.celestial-ui #ui #scr-forge :is(.fpanel,.frow){border-color:#baa06b55!important}
+html body.rf-remake.classic-polish.celestial-ui #ui #scr-forge .fpanel{background:linear-gradient(130deg,#15253be8,#0b192de8)!important}
+html body.rf-remake.classic-polish.celestial-ui #ui #scr-shop #shop-list .card b{font-size:20px;color:#eddbb6!important}
+/* Settings contents, distinct chapter headers and readable native controls. */
+html body.rf-remake.classic-polish.celestial-ui #ui #scr-options .celestial-settings-nav{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin:0 0 25px}
+html body.rf-remake.classic-polish.celestial-ui #ui #scr-options .celestial-settings-nav button{min-height:54px;padding:12px 16px;border:1px solid #c2a66d66;border-radius:3px;background:#12233a;color:#e3cea4;font:500 12px/1.7 var(--remake-serif);cursor:pointer}
+html body.rf-remake.classic-polish.celestial-ui #ui #scr-options .celestial-settings-nav button:hover{border-color:#e8c987;background:#1d3149}
+html body.rf-remake.classic-polish.celestial-ui #ui #scr-options .celestial-settings-section{scroll-margin-top:25px}
+html body.rf-remake.classic-polish.celestial-ui #ui #scr-options .rf25-settings-group{background:linear-gradient(125deg,#14243bed,#0d1a2ded)!important;border-color:#c0a26c66!important;border-radius:4px!important;padding:26px!important;box-shadow:0 13px 38px #0004!important}
+html body.rf-remake.classic-polish.celestial-ui #ui #scr-options .rf25-settings-group h2{display:flex;align-items:center;gap:12px;color:#f1dfba!important;border-bottom-color:#baa16955!important;min-height:53px;font-size:23px!important;padding-bottom:19px;margin-bottom:20px}
+html body.rf-remake.classic-polish.celestial-ui #ui #scr-options .rf25-settings-group h2 .celestial-icon{margin:0;width:31px;height:31px;min-width:31px;color:#d8bc80}
+html body.rf-remake.classic-polish.celestial-ui #ui #scr-options .audio-volume-control{border-bottom-color:#9eb2c52b!important;padding-block:18px!important}
+html body.rf-remake.classic-polish.celestial-ui #ui #scr-options .audio-volume-control>span{font-size:13px!important;color:#d9e0e5;line-height:1.8}
+html body.rf-remake.classic-polish.celestial-ui #ui #scr-options .audio-volume-control output{font-variant-numeric:tabular-nums;color:#ebcc8a;padding:2px 7px;border:1px solid #bfa36b44;background:#d9b9770d;border-radius:2px}
+html body.rf-remake.classic-polish.celestial-ui #ui #scr-options input[type="range"]{accent-color:#d9bc7e;cursor:pointer;min-height:28px;background:transparent;max-width:100%}
+html body.rf-remake.classic-polish.celestial-ui #ui #scr-options input[type="range"]::-webkit-slider-runnable-track{height:5px;border-radius:2px;border:1px solid #b8a06a44;background:linear-gradient(90deg,#c4a66b var(--celestial-range,50%),#0b172a var(--celestial-range,50%))}
+html body.rf-remake.classic-polish.celestial-ui #ui #scr-options input[type="range"]::-webkit-slider-thumb{margin-top:-6px}
+html body.rf-remake.classic-polish.celestial-ui #ui #scr-options input[type="checkbox"]{accent-color:#d9bc7e;width:20px;height:20px;min-height:20px}
+html body.rf-remake.classic-polish.celestial-ui #ui .screen :is(input:not([type="range"]):not([type="checkbox"]),select,textarea){background-color:#09182a!important;border-color:#a58f655c!important;color:#f1e9d8!important;border-radius:3px!important;max-width:100%;font-family:var(--remake-sans)}
+html body.rf-remake.classic-polish.celestial-ui #ui .screen :is(input,select,textarea):focus-visible{outline:2px solid #d8ba7c!important;outline-offset:3px!important}
+html body.rf-remake.classic-polish.celestial-ui #ui .screen select{min-height:44px}
+html body.rf-remake.classic-polish.celestial-ui #ui .screen :is(.btn,.menu button){border-color:#bda26b66!important;box-shadow:inset 0 1px #e4cd9510!important}
+/* Floating dialogs use the same metalwork, without taking ownership of visibility. */
+html body.rf-remake.classic-polish.celestial-ui :is(.rf51-panel,.rf552-choice-panel,.rf552-board,.rift-gift-panel,#mailbox-dialog,.rf53-modal,.rf53-picker,#chat-panel,#world-panel){color:#e8ddc7!important;background:linear-gradient(135deg,#172b43f7,#0b192cf7)!important;border-color:#cbb17b88!important;border-radius:5px!important;box-shadow:0 24px 100px #000b,inset 0 0 0 4px #bfa56a0b!important}
+html body.rf-remake.classic-polish.celestial-ui :is(dialog,[role="dialog"],[role="alertdialog"]) :is(button,input,select,textarea){max-width:100%;min-width:0}
+html body.rf-remake.classic-polish.celestial-ui :is(#chat-panel,#world-panel) button{border-color:#c2a76d66!important;color:#f0dfbb!important;min-height:40px}
+html body.rf-remake.classic-polish.celestial-ui #rift-utility{border-color:#bfa46d88!important;background:#0b192bf5!important;box-shadow:0 10px 36px #0005}
+html body.rf-remake.classic-polish.celestial-ui #rift-utility button{color:#ddcba5!important;border-color:#a98d5955!important;background:#182b40!important;display:flex;align-items:center;gap:5px}
+html body.rf-remake.classic-polish.celestial-ui #rift-utility button .celestial-icon{margin:0;width:18px;height:18px;min-width:18px}
+/* HUD framing and action engravings retain the exact tested touch hit areas. */
+html body.rf-remake.classic-polish.celestial-ui #ui #hud .hud-side .plate{background:linear-gradient(100deg,#0b1c32e8,#11263ab3)!important;border-color:#c9b07870!important;box-shadow:inset 0 1px #dec38d1c,0 5px 17px #0004!important;border-radius:3px!important}
+html body.rf-remake.classic-polish.celestial-ui #ui #hud #hud-right .plate{background:linear-gradient(260deg,#2c1a2ce8,#191d32b3)!important;border-color:#c9a28c66!important}
+html body.rf-remake.classic-polish.celestial-ui #ui #hud #btn-pause{border-color:#d0b57a99!important;background:#10243be8!important;color:#e8d7b4!important;padding-inline:10px}
+html body.rf-remake.classic-polish.celestial-ui #ui #hud #btn-pause .celestial-icon{width:15px;height:15px;min-width:15px;margin-right:4px}
+html body.rf-remake.classic-polish.celestial-ui #ui #hud #gauges>div{background:#0b1a2ed6!important;border-color:#c3ab754d!important;box-shadow:inset 0 1px #f1d1930a!important}
+html body.rf-remake.classic-polish.celestial-ui #ui #touch #tbtns button{background:radial-gradient(circle at 35% 20%,#2d4561b8,#0b1b30ab)!important;border-color:#d4be8fab!important;color:#f1e5cd!important;box-shadow:inset 0 0 0 3px #0a182b55,0 3px 14px #0004!important}
+html body.rf-remake.classic-polish.celestial-ui #ui #touch #tbtns button .celestial-icon{width:19px;height:19px;min-width:19px;margin:0 3px 0 0;vertical-align:-4px}
+html body.rf-remake.classic-polish.celestial-ui #ui #touch #tbtns button[data-act="attack"]{background:radial-gradient(circle at 35% 20%,#7a4b47aa,#251d30b8)!important;border-color:#efc3a8ba!important}
+html body.rf-remake.classic-polish.celestial-ui #ui #touch #tbtns button[data-act="over"]{background:radial-gradient(circle at 35% 20%,#947343b8,#34273bad)!important;border-color:#f1d598cc!important}
+html body.rf-remake.classic-polish.celestial-ui #ui #touch #tbtns button[data-act="heal"]{background:radial-gradient(circle at 35% 20%,#456b5caa,#152a33bb)!important;border-color:#c5ddc19c!important}
+html body.rf-remake.classic-polish.celestial-ui #ui #touch #tbtns button:is(:active,.rf5521-held){background:#b49357b3!important;box-shadow:inset 0 0 0 3px #ead19b55,0 0 17px #ddbd7326!important}
+html body.rf-remake.classic-polish.celestial-ui #ui #touch #joy{border:1px solid #d3ba8499!important;background:radial-gradient(circle,#263b5645,#0c1b2b66)!important;box-shadow:inset 0 0 0 5px #e5c9890a}
+html body.rf-remake.classic-polish.celestial-ui #ui #touch #knob{background:radial-gradient(circle at 35% 30%,#e0cc9ebf,#918367b8)!important;border-color:#f0dbb1a8!important}
+html body.rf-remake.classic-polish.celestial-ui #ui #pause{background:radial-gradient(ellipse at 50% 30%,#172b45f5,#050e1af5)!important}
+html body.rf-remake.classic-polish.celestial-ui #ui #pause .classic-control-guide{border-color:#cbb17b77!important;background:#10213ad9!important}
+html body.rf-remake.classic-polish.celestial-ui #ui #scr-story #story-box{border-color:#d1b67b88!important;background:linear-gradient(120deg,#102139ee,#0a1426ee)!important;box-shadow:0 15px 65px #0006!important}
+/* Responsive: keep copy, original actions and service labels fully visible. */
+@media(max-width:1100px){
+ html body.rf-remake.classic-polish.celestial-ui #ui #scr-title .portal-modes{grid-template-columns:repeat(2,minmax(0,1fr))!important}
+ html body.rf-remake.classic-polish.celestial-ui #ui #scr-title .portal-services{grid-template-columns:repeat(2,minmax(0,1fr))!important}
+ html body.rf-remake.classic-polish.celestial-ui #ui #scr-title .classic-quick-grid{grid-template-columns:repeat(3,minmax(0,1fr))}
+ html body.rf-remake.classic-polish.celestial-ui #ui #scr-title .classic-quick-button{min-height:100px!important}
+}
+@media(max-width:720px){
+ html body.rf-remake.classic-polish.celestial-ui #ui #scr-title .portal-hero{min-height:450px!important;padding:47px 28px 60px!important}
+ html body.rf-remake.classic-polish.celestial-ui #ui #scr-title .hero-center h2{font-size:clamp(32px,7.5vw,50px)!important;letter-spacing:.07em!important}
+ html body.rf-remake.classic-polish.celestial-ui #ui :is(.opening-header nav,.portal-topnav) .celestial-icon{width:15px;height:15px;min-width:15px;margin-right:5px}
+ html body.rf-remake.classic-polish.celestial-ui #ui #scr-title .portal-topnav{gap:5px!important;flex-wrap:wrap!important}
+ html body.rf-remake.classic-polish.celestial-ui #ui #scr-title .portal-topnav button{white-space:normal;line-height:1.6!important;font-size:11px!important}
+ html body.rf-remake.classic-polish.celestial-ui #ui #scr-title .classic-quick-heading h2{font-size:20px!important}
+ html body.rf-remake.classic-polish.celestial-ui #ui #scr-title .classic-quick-button{padding:16px 10px!important;gap:8px!important;min-height:107px!important;flex-direction:column!important;align-items:flex-start!important}
+ html body.rf-remake.classic-polish.celestial-ui #ui #scr-title .classic-quick-glyph{width:29px;min-width:29px;height:33px;border-radius:45% 45% 2px 2px}
+ html body.rf-remake.classic-polish.celestial-ui #ui #scr-title .classic-quick-glyph .celestial-icon{width:20px;height:20px}
+ html body.rf-remake.classic-polish.celestial-ui #ui #scr-title .classic-quick-button b{font-size:11px!important}
+ html body.rf-remake.classic-polish.celestial-ui #ui #scr-title .classic-quick-button small{font-size:9px!important}
+ html body.rf-remake.classic-polish.celestial-ui #ui #scr-title .classic-quick-button>i{position:absolute;right:9px;top:21px}
+ html body.rf-remake.classic-polish.celestial-ui #ui #scr-title .classic-community-bar{padding:9px 10px;gap:7px}
+ html body.rf-remake.classic-polish.celestial-ui #ui #scr-title .classic-community-label{font-size:9px!important}
+ html body.rf-remake.classic-polish.celestial-ui #ui #scr-title .classic-community-bar #chat-btn{padding-inline:9px!important;font-size:10px!important}
+ html body.rf-remake.classic-polish.celestial-ui #ui #scr-title .classic-community-bar #chat-btn .celestial-icon{width:16px;height:16px;min-width:16px;margin-right:4px}
+ html body.rf-remake.classic-polish.celestial-ui #ui #scr-title .portal-services>button{padding:20px 15px!important;gap:10px!important;min-height:144px!important}
+ html body.rf-remake.classic-polish.celestial-ui #ui #scr-title .service-number{width:37px!important;height:47px!important}
+ html body.rf-remake.classic-polish.celestial-ui #ui #scr-title .service-number .celestial-icon{width:25px;height:25px}
+ html body.rf-remake.classic-polish.celestial-ui #ui #scr-title .portal-services b{font-size:14px!important}
+ html body.rf-remake.classic-polish.celestial-ui #ui #scr-title .portal-services small{font-size:10px!important}
+ html body.rf-remake.classic-polish.celestial-ui #ui #scr-title .portal-services>button>i{display:none}
+ html body.rf-remake.classic-polish.celestial-ui #ui #scr-options .celestial-settings-nav{grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}
+ html body.rf-remake.classic-polish.celestial-ui #ui #scr-options .celestial-settings-nav button{font-size:12px;padding:12px 10px;text-align:left}
+ html body.rf-remake.classic-polish.celestial-ui #ui #scr-options .rf25-settings-group{padding:22px 18px!important}
+ html body.rf-remake.classic-polish.celestial-ui #ui #scr-options .rf25-settings-group h2{font-size:21px!important}
+ html body.rf-remake.classic-polish.celestial-ui #ui #scr-select #select-grid{gap:11px!important}
+ html body.rf-remake.classic-polish.celestial-ui #ui #scr-select #select-grid .card b{font-size:16px!important;letter-spacing:.02em!important}
+ html body.rf-remake.classic-polish.celestial-ui #ui #scr-select #select-grid .card b .celestial-icon{width:14px;height:14px;min-width:14px;margin-right:4px}
+ html body.rf-remake.classic-polish.celestial-ui #ui #scr-select #select-grid .card em{font-size:9px!important}
+ html body.rf-remake.classic-polish.celestial-ui #rift-utility button{justify-content:center;gap:4px}
+ html body.rf-remake.classic-polish.celestial-ui #rift-utility button .celestial-icon{width:15px;height:15px;min-width:15px}
+}
+@media(max-width:600px){
+ html body.rf-remake.classic-polish.celestial-ui #ui #scr-title .portal-modes{grid-template-columns:1fr!important;gap:21px!important}
+ html body.rf-remake.classic-polish.celestial-ui #ui #scr-title .remake-mode{min-height:0!important}
+ html body.rf-remake.classic-polish.celestial-ui #ui #scr-title .remake-mode .mode-art{aspect-ratio:16/8}
+ html body.rf-remake.classic-polish.celestial-ui #ui #scr-title .mode-topline{padding:17px 22px 0!important}
+ html body.rf-remake.classic-polish.celestial-ui #ui #scr-title .mode-main{padding:10px 22px 27px!important}
+ html body.rf-remake.classic-polish.celestial-ui #ui #scr-title .mode-main b{font-size:26px!important;line-height:1.65!important}
+ html body.rf-remake.classic-polish.celestial-ui #ui #scr-title .mode-main small{font-size:12px!important;line-height:1.9!important}
+ html body.rf-remake.classic-polish.celestial-ui #ui #scr-title .mode-topline>span{font-size:9px!important}
+ html body.rf-remake.classic-polish.celestial-ui #ui #scr-title .mode-topline i{font-size:10px!important}
+ html body.rf-remake.classic-polish.celestial-ui #ui #scr-title .portal-services{grid-template-columns:1fr!important;gap:13px!important}
+ html body.rf-remake.classic-polish.celestial-ui #ui #scr-title .portal-services>button{min-height:127px!important;padding:23px!important;gap:17px!important}
+ html body.rf-remake.classic-polish.celestial-ui #ui #scr-title .service-number{width:47px!important;height:57px!important}
+ html body.rf-remake.classic-polish.celestial-ui #ui #scr-title .service-number .celestial-icon{width:29px;height:29px}
+ html body.rf-remake.classic-polish.celestial-ui #ui #scr-title .portal-services b{font-size:18px!important}
+ html body.rf-remake.classic-polish.celestial-ui #ui #scr-title .portal-services small{font-size:11px!important}
+ html body.rf-remake.classic-polish.celestial-ui #ui #scr-title .portal-services>button>i{display:block}
+ html body.rf-remake.classic-polish.celestial-ui #ui #scr-press .opening-hero::before{background:linear-gradient(90deg,#07101de3,#07101d80 70%,#07101d33),linear-gradient(0deg,#080f1b,transparent 38%)!important}
+ html body.rf-remake.classic-polish.celestial-ui #ui :is(.opening-art,.portal-hero-art)>img{object-position:61% center}
+ html body.rf-remake.classic-polish.celestial-ui #ui #scr-title .mode-filters{gap:4px!important}
+ html body.rf-remake.classic-polish.celestial-ui #ui #scr-title .mode-filters button{font-size:11px!important;padding:10px 9px!important}
+ html body.rf-remake.classic-polish.celestial-ui #ui #scr-title .classic-mode-search{grid-template-columns:1fr auto}
+ html body.rf-remake.classic-polish.celestial-ui #ui #scr-title .classic-mode-search label{grid-column:1/-1}
+ html body.rf-remake.classic-polish.celestial-ui #ui .screen:not(#scr-press):not(#scr-title){background-attachment:scroll!important}
+}
+@media(max-width:370px){
+ html body.rf-remake.classic-polish.celestial-ui #ui #scr-title .classic-quick-button{padding:13px 8px!important}
+ html body.rf-remake.classic-polish.celestial-ui #ui #scr-title .classic-quick-button b{font-size:10px!important}
+ html body.rf-remake.classic-polish.celestial-ui #ui #scr-title .classic-quick-button small{font-size:8px!important}
+ html body.rf-remake.classic-polish.celestial-ui #ui #scr-title .mode-main b{font-size:24px!important}
+ html body.rf-remake.classic-polish.celestial-ui #ui #scr-title .classic-community-label{display:none}
+ html body.rf-remake.classic-polish.celestial-ui #ui #scr-title .portal-topnav .celestial-icon{display:none!important}
+ html body.rf-remake.classic-polish.celestial-ui #ui #scr-select #select-grid .card b .celestial-icon{display:none!important}
+ html body.rf-remake.classic-polish.celestial-ui #rift-utility button .celestial-icon{width:13px;height:13px;min-width:13px}
+}
+@media(max-height:520px) and (orientation:landscape){
+ html body.rf-remake.classic-polish.celestial-ui #ui #scr-title .portal-hero{min-height:370px!important;padding-block:40px!important}
+ html body.rf-remake.classic-polish.celestial-ui #ui #touch #tbtns button .celestial-icon{width:16px;height:16px;min-width:16px;margin-right:2px}
+}
+@media(prefers-reduced-motion:reduce){
+ .celestial-ui *,.celestial-ui *::before,.celestial-ui *::after{scroll-behavior:auto!important}
+ html body.rf-remake.classic-polish.celestial-ui #ui :is(.remake-mode .mode-art img,.celestial-service-art,.remake-primary,.classic-quick-button){transition:none!important;transform:none!important}
+}
+/* Filter state and role-restricted actions always outrank decorative layout. */
+html body.rf-remake.classic-polish.celestial-ui #ui #scr-title .remake-mode[hidden],
+html body.rf-remake.classic-polish.celestial-ui #ui #scr-title .portal-services>button[hidden],
+html body.rf-remake.classic-polish.celestial-ui #ui #scr-title .classic-community-bar[hidden],
+html body.rf-remake.classic-polish.celestial-ui #ui #scr-title .classic-recent[hidden]{display:none!important}
+html body.rf-remake.classic-polish.celestial-ui #ui #scr-title .classic-quick-button>span:not(.classic-quick-glyph){min-width:0;max-width:100%}

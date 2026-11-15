@@ -7,7 +7,7 @@ import { createRankedMode } from './assets/ranked-mode.js?v=55.22';
 import {installCharacterLibrary} from './assets/rf-character-library-v53.js?v=55.20';
 // RF53_CHAR_LIBRARY_INSTALLED
 import {initCastleRealm} from './castle-realm-v50.js?v=55.20';
-import {initResponsiveV45} from './assets/rf-responsive-v45.js?v=55.20';
+import {initResponsiveV45} from './assets/rf-responsive-v45.js?v=celestial-56.3';
 import {installFujiwaraChief} from './fujiwara-chief-v39.js?v=rf-fujiwara-v42-tdzfix-20261110';
 import {installFujiwaraCombat} from './fujiwara-nobuyori.js?v=rf-fujiwara-v43-rainbow-totsuka-20261110';
 // RF_CHIEF_CHAR_EDITOR_V28
@@ -50,7 +50,10 @@ import { apiEnabled, api, verifyToken } from './api.js';
 import { createOrbitControls } from './assets/rf-camera-v5520.js?v=55.21';
 import { activeInputModal, activateGamepadControl, adjustGamepadValue, bindTouchControls, EDITABLE_CONTROL, gamepadMenuItems } from './assets/rf5527/controls.js?v=55.28';
 import { createContactShadows, createRenderBudget, createStageReflections } from './assets/rf5526/graphics.js?v=classic-56.1';
-import { createClassicSurfaceFinish } from './assets/classic-graphics.js?v=classic-56.1';
+import { createClassicSurfaceFinish } from './assets/classic-graphics.js?v=celestial-56.3';
+import { setModelQuality, modelQualityReport } from './assets/celestial-model-quality.js';
+import { createCelestialStage, celestialTheme } from './assets/celestial-stage.js';
+import { getCombatFXDiagnostics } from './assets/celestial-combat-fx.js';
 import { installOfflineAutoPause } from './assets/classic-lifecycle.js?v=classic-56.2';
 import { createBattleCountdown } from './assets/rf5528/battle-countdown.js?v=55.28';
 import { STORY_II, readStoryII, configureStoryIIBattle, createStoryIIStage } from './assets/rf5530/story-ii.js?v=55.30';
@@ -68,6 +71,8 @@ const isTouch = matchMedia('(pointer: coarse)').matches || navigator.maxTouchPoi
 document.body.classList.toggle('rf5520-touch',isTouch);
 // V45 quality and touch positioning: initialized after the HTML has been parsed.
 const rf45UI=initResponsiveV45({isTouch});
+setModelQuality(rf45UI.getQuality());
+document.addEventListener('riftfall-quality-change', () => setModelQuality(rf45UI.getQuality()));
 
 // ---------- Renderer / scene ----------
 const container = $('#game-container');
@@ -150,12 +155,18 @@ inlay.rotation.x = -Math.PI / 2;
 inlay.position.y = .009;
 arena.add(floor, rim, foundation, inlay);
 scene.add(arena);
+const celestialStage = createCelestialStage(THREE, {
+  scene, arena, floor, lights: { hemi, moon, edge: edgeLight },
+  getQuality: rf45UI.getQuality, isTouch
+});
+const reducedVisualMotion = matchMedia('(prefers-reduced-motion: reduce)');
 const whiteLight = new THREE.Color(0xfff5e7);
 const shadowColor = new THREE.Color(0x171823);
 let currentStage = null;
 function setStage(st) {
   if (currentStage === st) {
     setReflections(st.sky);
+    celestialStage.setStage(st);
     return;
   }
   if (!floorTex) {
@@ -186,6 +197,7 @@ function setStage(st) {
   moon.color.set(st.sun).lerp(whiteLight, .18);
   edgeLight.color.set(st.crystal).lerp(whiteLight, .48);
   setReflections(st.sky);
+  celestialStage.setStage(st);
 }
 const stageById = (id) => STAGES.find((s) => s.id === id) || STAGES[0];
 // ---------- キャラクター3Dモデル：元のGLB・骨格・衣装を使う（棒状代替は禁止） ----------
@@ -2187,7 +2199,11 @@ function openPartySelect(done) {
 // 自前の背景絵を使用するステージ選択。3Dのポリゴン床はカード表示に使わない。
 function stageIllustration(st, index) {
   const id = st.id || '';
-  if (id === 'moon') return 'assets/rf5526/moon-arena.webp';
+  if (id !== 'random') {
+    const theme = celestialTheme(st);
+    if (theme === 'moon') return 'assets/celestial/hero.webp';
+    if (theme === 'frost') return 'assets/celestial/cavern.webp';
+  }
   let category = 'moon';
   if (['moon', 'desert', 'frost', 'bamboo', 'heaven', 'ember', 'void'].includes(id)) category = id;
   else {
@@ -5001,6 +5017,10 @@ renderer.setAnimationLoop((time) => {
     const sideView = state.battle?.storyII;
     if (sideView && state.paused) sideView.updateCamera(dt);
     updateContactShadows(state.battle, arena.visible || !!sideView);
+    celestialStage.update(dt, {
+      battle: state.battle, field: state.field, active, paused: state.paused,
+      camera: sideView?.camera || camera, reducedMotion: reducedVisualMotion.matches
+    });
     renderer.render(scene, sideView?.camera || camera);
   }
 });
@@ -5013,4 +5033,13 @@ const titleMayAutoplay = navigator.userActivation?.hasBeenActive ||
   navigator.getAutoplayPolicy?.(audio.tracks.title) === 'allowed';
 if (titleMayAutoplay && !navigator.connection?.saveData) unlockAudio();
 window.__arkeiaBootOk = true;
+// A detached support snapshot; no account, save, fighter-control or API handles.
+Object.defineProperty(window, 'RiftfallVisualDiagnostics', { configurable: true, value: () => ({
+  quality: rf45UI.getQuality(), models: modelQualityReport(), stage: celestialStage.stats(),
+  fx: getCombatFXDiagnostics(), render: {
+    calls: renderer.info.render.calls, triangles: renderer.info.render.triangles,
+    geometries: renderer.info.memory.geometries, textures: renderer.info.memory.textures,
+    pixelRatio: renderer.getPixelRatio()
+  }
+}) });
 window.dispatchEvent(new Event('arkeia-boot-ready'));

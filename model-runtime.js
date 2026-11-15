@@ -9,6 +9,7 @@ import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { separateEmbeddedTextures } from './model-image-fix.js?v=model-fetch-v20261107';
 import { getModelBytes, modelURLCandidates } from './model-transport.js?v=rf-mobile-v7-20261109';
+import { trackModelQuality } from './assets/celestial-model-quality.js';
 
 const cache = new Map();
 // Imported GLB geometry bounds are invariant between clones. Compute precisely once per scene.
@@ -291,23 +292,15 @@ export function instantiateModel(gltf, height, tint = null) {
     }
     const materialFor = (source) => {
       if (!source) return source;
-      const standard = source.isMeshStandardMaterial || source.isMeshPhysicalMaterial;
       const tintNeeded = !preserveSourceMaterial && !!tintColor && !!source.color;
       if (!tintNeeded) {
-        // Shared immutable geometry and normal texture references, no per-fighter clone.
-        if (!preserveSourceMaterial && standard) {
-          source.metalness = Math.min(0.18, source.metalness ?? 0);
-          source.roughness = Math.max(0.7, source.roughness ?? 0.8);
-        }
+        // Keep the cached GLB immutable. Its metal/roughness maps distinguish
+        // painted skin, cloth and armor in the same material atlas.
         return source;
       }
       let material = rfLocalMaterialCache.get(source);
       if (material) return material;
       material = source.clone();
-      if (standard) {
-        material.metalness = Math.min(0.18, material.metalness ?? 0);
-        material.roughness = Math.max(0.7, material.roughness ?? 0.8);
-      }
       // Keep the painted skin, face and costume readable. Unique palettes are
       // still indicated by the fighter's ornaments and a very subtle tint.
       // This leaves the source GLB image, UVs and skeleton unchanged.
@@ -324,10 +317,13 @@ export function instantiateModel(gltf, height, tint = null) {
   wrapper.position.set(-(box.min.x + box.max.x) * 0.5 * scale, -box.min.y * scale, -(box.min.z + box.max.z) * 0.5 * scale);
   wrapper.userData.arkeiaModel = true;
   wrapper.userData.arkeiaMaterials = materials;
-  return { wrapper, model, materials, skeletons, runtimeRig:gltf.userData?.arkeiaRig };
+  const instance = { wrapper, model, materials, skeletons, runtimeRig:gltf.userData?.arkeiaRig };
+  instance.releaseQuality = trackModelQuality(instance);
+  return instance;
 }
 export function disposeModel(instance, mixer) {
   if (!instance) return;
+  instance.releaseQuality?.();
   mixer?.stopAllAction();
   if (mixer && instance.model) mixer.uncacheRoot(instance.model);
   for (const material of instance.materials || []) material.dispose();

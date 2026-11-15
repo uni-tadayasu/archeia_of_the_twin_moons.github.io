@@ -6,11 +6,11 @@ export function createClassicSurfaceFinish(THREE, renderer, {
   const records = new Map();
   const supported = Math.max(1, renderer.capabilities?.getMaxAnisotropy?.() || 1);
   let normal = null, pending = null, disposed = false;
-  const quality = () => ['low','standard','high'].includes(getQuality()) ? getQuality() : 'standard';
+  const quality = () => ['low','standard','high','ultra'].includes(getQuality()) ? getQuality() : 'standard';
   function update(record) {
     if (disposed) return;
     const selected = quality(), material = record.material;
-    const anisotropy = Math.min(supported, selected === 'low' ? 1 : selected === 'high' && !isTouch ? 8 : 4);
+    const anisotropy = Math.min(supported, selected === 'low' ? 1 : selected === 'ultra' && !isTouch ? 16 : ['high','ultra'].includes(selected) && !isTouch ? 8 : 4);
     if (material.map && material.map.anisotropy !== anisotropy) {
       material.map.anisotropy = anisotropy;
       // TextureLoader.load() returns before its image is ready. Its completion

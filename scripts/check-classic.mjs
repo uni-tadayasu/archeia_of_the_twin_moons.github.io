@@ -1,6 +1,6 @@
 /** Static contract checks for the original game and its actual local module graph. */
 import assert from 'node:assert/strict';
-import { readFile, stat } from 'node:fs/promises';
+import { readFile, readdir, stat } from 'node:fs/promises';
 import { spawnSync } from 'node:child_process';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -56,7 +56,7 @@ async function moduleSource(source, url) {
   for (const specifier of specs) await moduleFile(resolve(specifier, url.href));
 }
 async function moduleFile(url, recordIdentity = true) {
-  if (recordIdentity && /^\/(?:game|model-runtime)\.js$/.test(url.pathname)) {
+  if (recordIdentity && /^\/(?:(?:game|model-runtime)|assets\/celestial-(?:model-quality|combat-fx|stage))\.js$/.test(url.pathname)) {
     const identities = singletonUrls.get(url.pathname) || new Set();
     identities.add(url.href);
     singletonUrls.set(url.pathname, identities);
@@ -97,4 +97,22 @@ for (const name of ['hero-swordsman', 'brute-axe', 'mage-weaver', 'seraph-boss']
   for (const entry of [...(gltf.buffers || []), ...(gltf.images || [])]) if (entry.uri && !entry.uri.startsWith('data:')) await checkAsset(new URL(entry.uri, url));
 }
 for (const [module, identities] of singletonUrls) assert.equal(identities.size, 1, `Multiple browser module identities for ${module}: ${[...identities].join(', ')}`);
+// The new visual modules use CSS and registry URLs in addition to HTML src.
+// Follow their literal media references so an absent icon/illustration cannot
+// pass merely because the default HTML never names it directly.
+const visualFiles = (await readdir(path.join(root, 'assets'))).filter(name => /^celestial[^/]*\.(?:m?js|css|json)$/.test(name));
+for (const name of visualFiles) {
+  const relative = `assets/${name}`, url = new URL(relative, base);
+  const source = await readFile(await checkAsset(url), 'utf8');
+  if (/\.m?js$/.test(name)) await moduleFile(url);
+  if (/\.json$/.test(name)) JSON.parse(source);
+  const references = new Set([
+    ...[...source.matchAll(/\burl\(\s*['"]?([^'"()\s]+)['"]?\s*\)/g)].map(match => match[1]),
+    ...[...source.matchAll(/['"]((?:\.\.?\/|assets\/)[^'"\n${}]+\.(?:webp|png|jpe?g|svg|glb|mp3|ogg|wav|wasm)(?:\?[^'"\s]*)?)['"]/g)].map(match => match[1]),
+  ]);
+  for (const reference of references) {
+    if (/^(?:data:|blob:|#)/.test(reference)) continue;
+    await checkAsset(new URL(reference, reference.startsWith('assets/') && !/\.css$/.test(name) ? base : url));
+  }
+}
 console.log(`Classic checks passed: ${checked.size} local scripts, ${assets.size} assets, original modes/DOM, versioned imports and GLB dependencies; ${remote.size} external references identified.`);

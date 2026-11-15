@@ -1,5 +1,6 @@
 import { tenshiTexture, divinePalette, tenshiImpact } from './assets/tenshi-effects.js?v=55.23';
-import { presentationFor } from './assets/rf5527/combat-effects.js?v=55.27';
+import { BattlePresentation as BespokeBattlePresentation } from './assets/rf5527/combat-effects.js?v=55.27';
+import { presentationFor } from './assets/celestial-combat-fx.js';
 import { FUJIWARA_KEY, fujiwaraSprite } from './assets/rf5529/fujiwara-cg.js?v=55.29';
 import { collectMotionClips, playMotion, fighterMotion, animateStatic } from './assets/riftfall-motion-v5521.js';
 import { disposeCharacterVariant } from './character-variants.js';
@@ -1334,6 +1335,7 @@ export class Battle {
     this.scene = scene;
     this.camera = camera;
     this.assets = opts.assets;
+    this.createBespokePresentation = () => new BespokeBattlePresentation(this);
     this.ui = opts.ui;
     this.net = opts.net || null;
     this.onHostilesDefeated = opts.onHostilesDefeated;
@@ -1360,6 +1362,7 @@ export class Battle {
 
   // 一瞬の色付き閃光
   flashLight(pos, color, power = 1, life = 0.4) {
+    if (!presentationFor(this).budget.lighting) return;
     const L = this.fxLights[this.lightIdx++ % this.fxLights.length];
     L.position.copy(pos).setY(Math.max(1, pos.y + 0.8));
     L.color.setHex(color);
@@ -1372,7 +1375,6 @@ export class Battle {
   burstFx(pos, color, el) {
     const art = presentationFor(this);
     art.burst(pos, el, color, 1.24, true);
-    art.shards(pos.clone().setY(Math.max(.58, pos.y)), color, 1.45);
     this.shake = Math.max(this.shake || 0, 0.25);
   }
 
@@ -1496,14 +1498,11 @@ export class Battle {
     dmg *= att.atkMul * (att.status.blind ? 0.6 : 1);
     att.over = Math.min(100, att.over + dmg * 0.12 * att.og);
     const fujiwara = att.key === FUJIWARA_KEY;
-    if (!fujiwara) {
-      this.spark(tgt.pos.clone().setY(1.1), spec ? spec.color : att.def.light.color ?? att.def.color, 0.7);
-      this.fxPop(tgt.pos.clone().setY(1.1), elOf(spec, elOf(att.def.skills[0])), 1, 1.4, 0.22, { grow: 1.8, spin: 6 });
-    }
     this.ui.sfx('hit');
     const st = this.rollStatus(att, spec);
     if (tgt.remoteAuth) {
       this.net?.hit({ to: tgt.netId, dmg: Math.round(dmg), stun, kx: dir.x, kz: dir.z, st });
+      this.impactFx(att, tgt, spec, dmg, dir);
       this.ui.popup(tgt.pos, Math.round(dmg), '#ffe9a8');
       if (st) this.ui.popup(tgt.pos, ELEMS[ST_ELEM[st]].sn, '#' + ELEMS[ST_ELEM[st]].c.toString(16).padStart(6, '0'));
       return;
@@ -1516,11 +1515,13 @@ export class Battle {
       const guarded = tgt.guard && tgt.forward().dot(dir) < -.2 * dir.length();
       const ultimate = att.action?.type === 'over' || (spec && (spec === att.def.over || spec === att.def.hi || spec.hi));
       this.siege.contact(att, tgt, ultimate ? 'over' : spec && spec !== att.def.light ? 'skill' : 'attack', guarded);
+      this.impactFx(att, tgt, spec, dmg, dir);
       tgt.hitFlash = .15;
       tgt.inv = .12;
       return;
     }
     const real = tgt.receive(dmg, stun, dir.x, dir.z);
+    if (real > 0) this.impactFx(att, tgt, spec, real, dir);
     if (fujiwara && real > 0) this.fujiwaraPulse('glow', tgt.pos.clone().setY(1.1 + tgt.y), 1.65, .24, .67);
     if (st && real > 0) {
       tgt.applyStatus(st);
@@ -1529,6 +1530,14 @@ export class Battle {
     if (tgt.isPlayer || dmg > 100) {
       this.shake = Math.max(this.shake, Math.min(0.5, dmg / 300));
     }
+  }
+
+  impactFx(attacker, target, spec, damage, direction) {
+    if (attacker.key === FUJIWARA_KEY || !(damage > 0)) return;
+    const guarded = target.guard && target.forward().dot(direction) < -.2 * direction.length();
+    presentationFor(this).impact(target.pos.clone().setY(1.05 + (target.y || 0)),
+      spec?.color ?? attacker.def.light.color ?? attacker.def.color, direction,
+      { power: Math.min(1.8, .8 + damage / 190), guarded });
   }
 
   receiveNetHit(e) {
@@ -1575,6 +1584,7 @@ export class Battle {
       try{real=t.receive(dmg,e.stun,e.kx,e.kz);}
       finally{if(special && !(originalDef>0))t.defMul=originalDef;}
       if (a.key === FUJIWARA_KEY && real > 0) this.fujiwaraPulse('glow', t.pos.clone().setY(1.1 + t.y), 1.65, .24, .67);
+      if (real > 0) this.impactFx(a, t, null, real, new THREE.Vector3(e.kx || 0, 0, e.kz || 0));
       this.ui.popup(t.pos, real, '#ff8f7a');
       if (e.st) t.applyStatus(e.st);
       this.ui.sfx('hit');
@@ -1809,20 +1819,7 @@ export class Battle {
     } else if (spec.kind === 'follow_signature') {
       this.executeSignatureFollow(f,spec,tx,tz);
     } else if (spec.kind === 'heal') {
-      const ring = new THREE.Mesh(GEO.disc, glow(spec.color, 0.35));
-      ring.position.set(f.pos.x, 0.05, f.pos.z);
-      ring.scale.setScalar(spec.radius);
-      this.fx.add(ring);
-      let t = 0;
-      this.addEffect((dt) => {
-        t += dt;
-        ring.material.opacity = Math.max(0, 0.35 - t * 0.5);
-        if (t > 0.7) {
-          kill(this.fx, ring);
-          return false;
-        }
-        return true;
-      });
+      presentationFor(this).heal(f.pos, spec.color, spec.radius);
       for (const a of this.fighters) {
         if (a.team === f.team && !a.dead && !a.remoteAuth && a.pos.distanceTo(f.pos) < spec.radius) {
           const h = Math.round(Math.min(a.maxHp - a.hp, spec.heal));
@@ -1991,35 +1988,7 @@ export class Battle {
 
   // 素材エフェクトを1枚出して、拡大・回転・上昇・フェードさせる
   fxPop(pos, elem, slot, size, life, o = {}) {
-    if (this.fx.children.length >= (window.RF45Performance?.maxPaintedFx() ?? 65)) return null;
-    const obj = o.flat ? fxFlat(elem, slot, size, o.op ?? 1) : fxSprite(elem, slot, size, o.op ?? 1);
-    obj.position.copy(pos);
-    if (o.flat) obj.rotation.y = o.rot ?? Math.random() * Math.PI * 2;
-    this.fx.add(obj);
-    const grow = o.grow ?? 1.6;
-    const spin = o.spin ?? 0;
-    const rise = o.rise ?? 0;
-    const delay = o.delay ?? 0;
-    obj.visible = delay <= 0;
-    let t = -delay;
-    this.addEffect((dt) => {
-      t += dt;
-      if (t < 0) return true;
-      obj.visible = true;
-      const k = t / life;
-      obj.scale.setScalar(size * (1 + (grow - 1) * Math.min(1, k * 1.4)));
-      if (o.flat) obj.rotation.y += spin * dt;
-      else obj.material.rotation += spin * dt;
-      obj.position.y += rise * dt;
-      const fin = o.hold ? Math.max(0, 1 - Math.max(0, k - 0.6) / 0.4) : Math.max(0, 1 - k * k);
-      obj.material.opacity = (obj.material.userData.base ?? 1) * Math.min(1, t * 20) * fin;
-      if (k >= 1) {
-        kill(this.fx, obj);
-        return false;
-      }
-      return true;
-    });
-    return obj;
+    return presentationFor(this).painted(pos, elem, slot, size, life, o);
   }
 
   // 闇の重力球：周囲を引き寄せてから圧壊・爆発
@@ -2140,40 +2109,15 @@ export class Battle {
       this.fujiwaraPulse('glow', f.pos.clone().setY(1 + f.y), 1.8, .30, .52, .6);
       return;
     }
-    const m = new THREE.Mesh(SG.slash, glow(color, 0.6));
-    m.position.set(f.pos.x, 1 + f.y, f.pos.z);
-    m.rotation.y = f.facing - Math.PI / 2;
-    this.fx.add(m);
-    let t = 0;
-    this.addEffect((dt) => {
-      t += dt;
-      m.scale.y = 1 + t * 3;
-      fade(m, Math.max(0, 1 - t / 0.3));
-      if (t > 0.3) {
-        kill(this.fx, m);
-        return false;
-      }
-      return true;
-    });
+    presentationFor(this).afterimage(f, color);
   }
+
   puff(pos, color, size) {
     presentationFor(this).puff(pos, color, size);
   }
 
   burst(pos, color, size, spec) {
-    this.spark(pos, color, size);
-    if (spec && spec.elem != null) {
-      const el = spec.elem;
-      this.fxPop(pos.clone(), el, 8, size * 2.4, 0.45, { grow: 1.6 });
-      this.fxPop(pos.clone(), el, 1, size * 2.2, 0.25, { grow: 2, spin: 5 });
-      this.fxPop(pos.clone(), el, 7, size * 2.6, 0.6, { grow: 2.2, op: 0.9 });
-      this.fxPop(pos.clone().setY(pos.y + 0.3), el, 3, size * 2, 0.8, { rise: 1.6, grow: 1.8, op: 0.55 });
-      this.fxPop(new THREE.Vector3(pos.x, 0.1, pos.z), el, 4, size * 1.2, 0.45, { flat: true, grow: 2.6 });
-      this.fx3d(pos.clone(), el, Math.min(2.2, 0.5 + size * 0.45), color);
-      if (size >= 1.2) this.grandFx(pos, el, color, Math.min(2, size * 0.6));
-      else this.flashLight(pos, color, size * 0.6, 0.25);
-    }
-    presentationFor(this).shards(pos, color, size);
+    presentationFor(this).burst(pos, elOf(spec), color, size, size >= 1.2);
   }
 
   // ---- 召喚獣：HPを持ち、倒されるまで使い手の前方に居続ける。通常攻撃の代わりに攻撃する ----
@@ -2426,8 +2370,9 @@ export class Battle {
       this.fx.add(inner);
     }
     let t = 0;
-    let trail = 0;
+    const trail = fujiwara ? null : presentationFor(this).projectile(p, spec.color, spec.radius);
     const done = () => {
+      trail?.stop();
       if (inner) kill(this.fx, inner);
       return false;
     };
@@ -2443,12 +2388,6 @@ export class Battle {
         if (deco) {
           deco.rotation.z += dt * 7;
           deco.rotation.x += dt * 3;
-        }
-        trail -= dt;
-        if (trail <= 0) {
-          trail = spec.trail ?? 0.04;
-          this.puff(p.clone(), spec.color, 0.22 * Math.max(1, spec.radius * 1.5));
-          this.fxPop(p.clone(), el, Math.random() < 0.5 ? 9 : 3, Math.max(0.8, spec.radius * 2.2), 0.3, { grow: 1.5, op: 0.6 });
         }
         if (spec.visual !== 'laser') core.material.rotation += dt * 6;
       }
@@ -2472,66 +2411,14 @@ export class Battle {
   shockwave(f, spec, delay, cx, cz) {
     const ox = cx ?? f.pos.x;
     const oz = cz ?? f.pos.z;
-    const ring = new THREE.Group();
-    const flat = new THREE.Mesh(GEO.ring, glow(spec.color, 0.9));
-    const wall = new THREE.Mesh(GEO.pillar, glow(spec.color, 0.35));
-    wall.scale.set(1, 0.9, 1);
-    const rune = new THREE.Mesh(runeOf(spec), glow(lite(spec.color), 0.6));
-    rune.scale.setScalar(0.8);
-    ring.add(flat, wall, rune);
-    ring.position.set(ox, 0.08, oz);
-    ring.visible = false;
-    this.fx.add(ring);
-    if (spec.elem != null) {
-      const el = spec.elem;
-      this.fxPop(new THREE.Vector3(ox, 0.12, oz), el, 4, 1, 0.5, { flat: true, grow: spec.radius * 2.3, delay, spin: 1.5 });
-      this.fxPop(new THREE.Vector3(ox, 0.1, oz), el, 5, spec.radius * 1.6, 0.6, { flat: true, grow: 1.2, delay, spin: -2, hold: true, op: 0.8 });
-      this.fx3d(new THREE.Vector3(ox, 0.3, oz), el, Math.min(2.2, spec.radius / 3), spec.color);
-      for (let i = 0; i < 6; i++) {
-        const a = (i / 6) * Math.PI * 2;
-        this.fxPop(new THREE.Vector3(ox + Math.cos(a) * spec.radius * 0.6, 0.6, oz + Math.sin(a) * spec.radius * 0.6), el, i % 2 ? 3 : 8, 1.8, 0.55, { rise: 1.5, grow: 1.8, delay: delay + 0.05, op: 0.7 });
-      }
-    }
-    // 地面から突き出す結晶の棘
-    const spikes = new THREE.Group();
-    const n = Math.round(spec.radius * 3);
-    const v = spec.shape ?? 0;
-    const spikeGeo = v % 2 ? SG.spike : primOf(spec);
-    const lc = lite(spec.color);
-    for (let i = 0; i < n; i++) {
-      const a = (i / n) * Math.PI * 2 + Math.random() * 0.3;
-      const rr = spec.radius * (0.45 + Math.random() * 0.45);
-      const s = new THREE.Mesh(spikeGeo, glow(i % 3 ? spec.color : lc, 0.85));
-      const prim = spikeGeo !== SG.spike;
-      s.position.set(Math.cos(a) * rr, prim ? 0.5 : 0, Math.sin(a) * rr);
-      s.rotation.set((Math.random() - 0.5) * 0.6, Math.random() * 3, (Math.random() - 0.5) * 0.6);
-      s.userData.h = prim ? 0.35 + Math.random() * 0.4 : 0.6 + Math.random() * 0.9;
-      s.scale.set(prim ? 0.35 : 1, 0.01, prim ? 0.35 : 1);
-      spikes.add(s);
-    }
-    spikes.position.set(ox, 0, oz);
-    spikes.visible = false;
-    this.fx.add(spikes);
+    presentationFor(this).shockwave(new THREE.Vector3(ox, .1, oz), spec.color, spec.radius, delay);
     const hit = new Set();
     let t = -delay;
     this.addEffect((dt) => {
       t += dt;
-      if (t < 0) {
-        return true;
-      }
-      ring.visible = true;
-      spikes.visible = true;
+      if (t < 0) return true;
       const r = Math.min(1, t / 0.45) * spec.radius;
-      ring.scale.setScalar(Math.max(0.1, r));
-      fade(ring, Math.max(0, 1 - t / 0.5));
-      fade(spikes, Math.max(0, 1 - t / 0.5));
-      const up = t < 0.12 ? t / 0.12 : Math.max(0, 1 - (t - 0.12) / 0.3);
-      for (const s of spikes.children) {
-        s.scale.y = Math.max(0.01, up * s.userData.h);
-      }
-      if (t < 0.05) {
-        this.shake = Math.max(this.shake, 0.3);
-      }
+      if (t < 0.05) this.shake = Math.max(this.shake, 0.3);
       for (const e of this.enemiesOf(f)) {
         const d = Math.hypot(e.pos.x - ox, e.pos.z - oz);
         if (spec.dmg > 0 && !hit.has(e) && d < r + e.radius && e.y < 0.8) {
@@ -2539,12 +2426,7 @@ export class Battle {
           this.applyHit(f, e, spec.dmg, 0.6, 9, new THREE.Vector3(ox, 0, oz), spec);
         }
       }
-      if (t > 0.5) {
-        kill(this.fx, ring);
-        kill(this.fx, spikes);
-        return false;
-      }
-      return true;
+      return t <= 0.5;
     });
   }
 
@@ -3041,3 +2923,6 @@ export class Battle {
     this.effects = [];
   }
 }
+
+// Compatibility marker: legacy UI may retain bespoke skills, but must not stack its generic FX wrappers.
+Battle.prototype.celestialCombatPresentation = true;

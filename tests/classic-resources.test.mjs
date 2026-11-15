@@ -13,6 +13,7 @@ register('data:text/javascript,' + encodeURIComponent(`
   }
 `), import.meta.url);
 const { Battle, Fighter } = await import('../game.js');
+const { CelestialCombatFX } = await import('../assets/celestial-combat-fx.js');
 const { loadModel } = await import('../model-runtime.js?v=rf-minamoto-v48-20261111');
 
 function battle() {
@@ -44,29 +45,32 @@ test('exiting a battle releases live effect materials once and preserves cached 
   assert.equal(b.effects.length, 0);
 });
 
-test('a healing ring releases its material when its animation expires', () => {
+test('healing artwork expires into its pool and battle exit releases its GPU resources once', () => {
   const b = battle();
-  b.ui = { sfx() {}, callout() {} };
+  const textures = [];
+  b.presentation = new CelestialCombatFX(b, { environment: () => ({ quality: 'low' }), loader: { load() { const texture = new THREE.Texture(); textures.push(texture); return texture; } } });
+  b.ui = { sfx() {}, callout() {}, popup() {} };
   b.castFx = () => {};
   const f = {
     def: { skills: [{ kind: 'heal', name: 'Heal', radius: 3, heal: 100, color: 0x66ff88 }] },
-    team: 0, pos: new THREE.Vector3(), vel: new THREE.Vector3(),
+    team: 0, pos: new THREE.Vector3(), vel: new THREE.Vector3(), hp: 60, maxHp: 200,
     forward: () => new THREE.Vector3(0, 0, 1)
   };
+  const outside = { team: 0, pos: new THREE.Vector3(10, 0, 0), hp: 50, maxHp: 200 };
+  b.fighters.push(f, outside);
   b.executeCast(f, 's0');
-  const ring = b.fx.children.find(child => child.isMesh);
-  assert.ok(ring);
-  const animateRing = b.effects.at(-1);
-  const materialDisposed = disposed(ring.material);
-  const geometryDisposed = disposed(ring.geometry);
-  assert.equal(animateRing(.5), true);
-  assert.equal(materialDisposed(), 0);
-  assert.equal(animateRing(.3), false);
+  assert.equal(f.hp, 160, 'the actual original heal amount is preserved');
+  assert.equal(outside.hp, 50, 'the original healing radius is preserved');
+  const ring = b.presentation.active.find(entry => entry.kind === 'seal').object;
+  const materialDisposed = disposed(ring.material), geometryDisposed = disposed(ring.geometry), textureDisposed = disposed(textures[0]);
+  b.presentation.tick(.5);
+  assert.ok(ring.parent);
+  b.presentation.tick(.5);
   assert.equal(ring.parent, null);
-  assert.equal(materialDisposed(), 1);
-  assert.equal(geometryDisposed(), 0);
-  b.dispose();
-  assert.equal(materialDisposed(), 1);
+  assert.equal(materialDisposed(), 0, 'expired material is retained for reuse in the bounded pool');
+  b.fighters.length = 0; // Lightweight actors above own no model resources.
+  b.dispose(); b.dispose();
+  assert.deepEqual([materialDisposed(), geometryDisposed(), textureDisposed()], [1, 1, 1]);
 });
 
 // A genuine skinned GLB without image dependencies keeps this lifecycle test
@@ -168,4 +172,22 @@ test('hit flash duration follows elapsed motion time at different frame rates', 
   actor.motionDt = NaN;
   Fighter.prototype.sync.call(actor);
   assert.ok(Math.abs(actor.hitFlash - (.1 - 1 / 60)) < 1e-10);
+});
+
+test('accepted hits emit directional contact artwork; invulnerability never reports a false impact', () => {
+  const b = battle(), contacts = [];
+  b.ui = { sfx() {}, popup() {} };
+  b.presentation = { impact(...args) { contacts.push(args); }, dispose() {} };
+  const attacker = { key: 'rowen', pos: new THREE.Vector3(), atkMul: 1, og: 1, over: 0, status: {},
+    def: { color: 0xffaa66, light: { color: 0xffaa66 }, skills: [{}] }, forward: () => new THREE.Vector3(0, 0, 1) };
+  const target = { pos: new THREE.Vector3(0, 0, 2), y: 0, inv: .1, hp: 100, isPlayer: true,
+    receive(damage) { this.hp -= damage; return damage; } };
+  b.applyHit(attacker, target, 30, .25, 2, attacker.pos, null);
+  assert.equal(target.hp, 100); assert.equal(contacts.length, 0);
+  target.inv = 0;
+  b.applyHit(attacker, target, 30, .25, 2, attacker.pos, null);
+  assert.equal(target.hp, 70); assert.equal(contacts.length, 1);
+  assert.equal(contacts[0][2].z, 2, 'the hit direction reaches the CG burst');
+  assert.ok(contacts[0][3].power > 0);
+  b.dispose();
 });

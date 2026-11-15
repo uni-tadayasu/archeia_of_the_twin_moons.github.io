@@ -13,14 +13,16 @@ import { chromium, expect, request as playwrightRequest } from '@playwright/test
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const output = path.join(root, 'artifacts/classic-smoke');
 const origin = 'http://127.0.0.1:4173';
-const logs = { startedAt: new Date().toISOString(), steps: [], console: [], pageErrors: [], networkErrors: [], blockedNetwork: [], screenshots: [], server: [], inputDiagnostics: [], inputSamples: [], portraits: [], battleLayouts: [] };
+const logs = { startedAt: new Date().toISOString(), steps: [], console: [], pageErrors: [], networkErrors: [], blockedNetwork: [], screenshots: [], server: [], inputDiagnostics: [], inputSamples: [], portraits: [], battleLayouts: [], iconCoverage: [], qualitySettings: [], visualDiagnostics: [] };
 const staticHosts = new Set(['esm.sh', 'fonts.googleapis.com', 'fonts.gstatic.com', 'www.gstatic.com', 'storage.googleapis.com']);
 await mkdir(output, { recursive: true });
 let browser, server, currentPage, failure, staticClient;
 const note = message => { logs.steps.push({ at: new Date().toISOString(), message }); console.log(message); };
 
 async function offlineContext(options, name) {
-  const context = await browser.newContext({ ...options, serviceWorkers: 'block', reducedMotion: 'reduce' });
+  // Exercise the real effect layers rather than silently selecting their
+  // reduced-motion fallback. Screenshots still disable CSS-only animations.
+  const context = await browser.newContext({ reducedMotion: 'no-preference', ...options, serviceWorkers: 'block' });
   await context.route('**/*', async route => {
     const request = route.request(), url = new URL(request.url());
     if (url.origin === origin || ['data:', 'blob:'].includes(url.protocol)) return route.continue();
@@ -115,6 +117,40 @@ async function menuPolish(page, label) {
   await shot(page, `${label}-modes`);
   note(`${label}: search, category filters, keyboard reset, community chat and responsive layout verified`);
 }
+async function menuVisualQuality(page, label) {
+  await expect(page.locator('body')).toHaveClass(/\bcelestial-ui\b/);
+  await expect.poll(() => page.evaluate(() => window.ArcheiaCelestialUI?.audit?.().missing?.length ?? -1), {
+    timeout: 15000, message: `${label}: every eligible menu control has an authored icon`,
+  }).toBe(0);
+  const audit = await page.evaluate(() => window.ArcheiaCelestialUI.audit());
+  logs.iconCoverage.push({ label, audit });
+  const cards = page.locator('.portal-modes > button, .portal-services > button, .classic-quick-button');
+  const coverage = await cards.evaluateAll(elements => elements.map(element => ({
+    id: element.id || element.dataset.go || element.textContent.trim().slice(0, 40),
+    icon: element.dataset.celestialIcon || null,
+    art: element.dataset.celestialArt || null,
+    icons: element.querySelectorAll('svg.celestial-icon').length,
+    semanticIcons: [...element.querySelectorAll('svg.celestial-icon')].filter(icon => icon.dataset.celestialIcon === element.dataset.celestialIcon).length,
+    inaccessible: [...element.querySelectorAll('svg.celestial-icon')].some(icon => icon.getAttribute('aria-hidden') !== 'true' || icon.getAttribute('focusable') !== 'false'),
+  })));
+  logs.iconCoverage.push({ label, cards: coverage });
+  assert.ok(coverage.length >= 25, `${label}: the original mode, service and shortcut catalogue is retained`);
+  assert.ok(coverage.every(card => card.icon && card.art && card.semanticIcons === 1 && card.icons <= 2 && !card.inaccessible), `${label}: original menu items each have one semantic icon, at most one arrow and an illustration: ${JSON.stringify(coverage)}`);
+  // Let native lazy loading run by scrolling each visible illustrated card into
+  // view. Hidden administrative controls remain hidden and are never invoked.
+  const visible = page.locator('.portal-modes > button:visible, .portal-services > button:visible, .classic-quick-button:visible');
+  for (let index = 0; index < await visible.count(); index++) {
+    const card = visible.nth(index);
+    await card.scrollIntoViewIfNeeded();
+    const image = card.locator('img').first();
+    await expect(image).toHaveCount(1);
+    await expect.poll(() => image.evaluate(element => element.complete && element.naturalWidth > 0), { timeout: 15000 }).toBe(true);
+  }
+  await fits(page, `${label} illustrated menu`);
+  await page.locator('#scr-title').evaluate(element => { element.scrollTop = 0; });
+  await shot(page, `${label}-celestial-menu`, false);
+  note(`${label}: original icon coverage and loaded menu illustrations verified`);
+}
 async function boot(page, label) {
   await page.goto(origin, { waitUntil: 'domcontentloaded', timeout: 60000 });
   await expect(page.locator('#press-start')).toBeVisible({ timeout: 90000 });
@@ -144,12 +180,22 @@ async function boot(page, label) {
   await fits(page, `${label} original menu`);
   await shot(page, `${label}-menu`);
   await menuPolish(page, label);
+  await menuVisualQuality(page, label);
   note(`${label}: original start confirmation, all 10 modes, and service entries are available`);
 }
-async function configureLocalDisplay(page) {
+async function configureLocalDisplay(page, quality, label) {
   await page.locator('#btn-options').click();
   await expect(page.locator('#scr-options')).toHaveClass(/\bon\b/);
-  await page.locator('#rf45-quality').selectOption('low');
+  const available = await page.locator('#rf45-quality option').evaluateAll(options => options.map(option => ({ value: option.value, label: option.textContent })));
+  assert.deepEqual(available.map(option => option.value), ['low', 'standard', 'high', 'ultra'], `${label}: all four real quality presets are available`);
+  if (quality === 'high') {
+    await page.locator('#rf45-quality').selectOption('ultra');
+    assert.equal(await page.evaluate(() => localStorage.getItem('rf45-quality-v1')), 'ultra');
+    await expect.poll(() => page.evaluate(() => window.RiftfallVisualDiagnostics?.().quality), { timeout: 10000 }).toBe('ultra');
+    await page.locator('#rf45-quality').scrollIntoViewIfNeeded();
+    await shot(page, `${label}-ultra-settings`);
+  }
+  await page.locator('#rf45-quality').selectOption(quality);
   // These are local presentation preferences. Do not touch operator difficulty,
   // synchronization, entitlements, balances, or any server-managed settings.
   await page.locator('#opt-mute').click();
@@ -157,11 +203,60 @@ async function configureLocalDisplay(page) {
     const slider = page.locator(`#${id}`);
     if (await slider.count()) { await slider.focus(); await slider.press('Home'); }
   }
-  assert.equal(await page.evaluate(() => localStorage.getItem('rf45-quality-v1')), 'low');
+  assert.equal(await page.evaluate(() => localStorage.getItem('rf45-quality-v1')), quality);
+  logs.qualitySettings.push({ label, quality, available });
+  await fits(page, `${label} ${quality} quality settings`);
+  await page.locator('#rf45-quality').scrollIntoViewIfNeeded();
+  await shot(page, `${label}-${quality}-settings`);
   await page.locator('#scr-options [data-to="title"]').click();
   await expect(page.locator('#scr-title')).toHaveClass(/\bon\b/);
 }
-async function selectDuel(page, label) {
+async function readVisualDiagnostics(page, label) {
+  const snapshot = await page.evaluate(() => window.RiftfallVisualDiagnostics?.());
+  assert.ok(snapshot && snapshot.models && snapshot.stage && snapshot.fx, `${label}: live renderer diagnostics are available`);
+  logs.visualDiagnostics.push({ label, at: new Date().toISOString(), ...snapshot });
+  for (const instance of snapshot.fx.instances) {
+    assert.ok(instance.emitters <= instance.budget.emitters, `${label}: presentation emitter budget is enforced`);
+    assert.ok(instance.particles <= instance.budget.particles, `${label}: particle budget is enforced`);
+  }
+  return snapshot;
+}
+async function verifyVisualTier(page, label, quality, theme) {
+  await expect.poll(() => page.evaluate(() => {
+    const report = window.RiftfallVisualDiagnostics?.().models;
+    return !!report && report.activeInstances >= 2 && report.instances.every(instance => !instance.pending);
+  }), { timeout: 30000, message: `${label}: live model geometry preparation finishes` }).toBe(true);
+  const snapshot = await readVisualDiagnostics(page, `${label} ${quality} ${theme}`);
+  assert.equal(snapshot.quality, quality);
+  assert.equal(snapshot.models.tier, quality);
+  assert.ok(snapshot.models.baseTriangles > 0 && snapshot.models.renderTriangles > 0, `${label}: diagnostics count actual fighter triangles`);
+  assert.ok(snapshot.models.instances.every(instance => instance.tier === quality), `${label}: every active original model uses the selected tier`);
+  assert.ok(snapshot.models.bytes <= snapshot.models.maxBytes, `${label}: detailed model cache stays inside its memory budget`);
+  if (quality === 'low') {
+    assert.equal(snapshot.models.renderTriangles, snapshot.models.baseTriangles, `${label}: low tier retains exact authored geometry`);
+  } else {
+    assert.ok(snapshot.models.renderTriangles > snapshot.models.baseTriangles, `${label}: high quality actually renders more triangles`);
+    const parts = snapshot.models.instances.flatMap(instance => instance.parts);
+    assert.ok(parts.some(part => part.passes >= 1 && part.triangles >= part.originalTriangles * 4), `${label}: an active fighter uses subdivided geometry`);
+  }
+  assert.equal(snapshot.stage.theme, theme, `${label}: selected stage controls scenery and lighting theme`);
+  assert.equal(snapshot.stage.quality, quality);
+  assert.equal(snapshot.stage.context, 'arena');
+  assert.equal(snapshot.stage.sceneryVisible, true);
+  assert.equal(snapshot.stage.disposed, false);
+  assert.ok(snapshot.stage.ownedResources > 0, `${label}: authored stage detail is present`);
+  assert.ok(snapshot.stage.sceneryTriangles > 0 && snapshot.stage.sceneryDrawCalls > 0, `${label}: stage diagnostics count actual scenery meshes`);
+  if (quality === 'low') assert.equal(snapshot.stage.particleCount, 0, `${label}: low quality disables atmospheric particles`);
+  else assert.ok(snapshot.stage.particleCount > 0, `${label}: high quality includes atmospheric detail`);
+  note(`${label}: actual ${quality} fighter geometry and ${theme} stage verified`);
+}
+async function verifyEmittedEffect(page, kind, previous, label) {
+  await expect.poll(() => page.evaluate(effect => window.RiftfallVisualDiagnostics?.().fx.emitted[effect] ?? 0, kind), {
+    timeout: 30000, message: `${label}: actual gameplay creates a ${kind} effect`,
+  }).toBeGreaterThan(previous);
+  return readVisualDiagnostics(page, label);
+}
+async function selectDuel(page, label, quality, theme = 'moon') {
   await page.locator('.portal-modes [data-go="cpu"]').click();
   await expect(page.locator('#scr-select')).toHaveClass(/\bon\b/);
   await expect(page.locator('#select-label')).toContainText('あなたが握る剣');
@@ -185,7 +280,8 @@ async function selectDuel(page, label) {
   await page.locator('#select-grid [data-special-key="garou"]').click();
   await expect(page.locator('#select-label')).toHaveText('戦いの舞台を選ぶ');
   assert.ok(await page.locator('.stage-tile').count() > 3, 'Original stage catalogue is available');
-  await page.locator('.stage-tile[data-search~="moon"]').click();
+  await shot(page, `${label}-stages`);
+  await page.locator(`.stage-tile[data-search~="${theme}"]`).click();
   await expect(page.locator('#hud')).toBeVisible({ timeout: 120000 });
   await expect(page.locator('body > #chat-btn')).toHaveCount(1);
   await expect(page.locator('#hud-left .plate')).toHaveCount(1);
@@ -212,6 +308,7 @@ async function selectDuel(page, label) {
   });
   logs.battleLayouts.push({ label, ...battleLayout });
   assert.deepEqual(battleLayout.overlaps, [], `${label}: chat button must not cover original combat HUD`);
+  await verifyVisualTier(page, label, quality, theme);
   await shot(page, `${label}-battle`, false);
 }
 const gauge = (page, selector) => page.locator(selector).evaluate(element => parseFloat(element.style.width));
@@ -266,7 +363,10 @@ async function keyboardCombat(page) {
   // Global game input ignores editable targets; focus the actual play surface.
   await page.locator('#game-container canvas').first().click();
   await inputDiagnostic(page, 'desktop before keyboard skill');
+  const beforeSkill = await readVisualDiagnostics(page, 'desktop before real skill');
   await pressUntilGaugeFalls(page, 'KeyK', '#flux u', 'Original keyboard skill spends real energy');
+  await verifyEmittedEffect(page, 'cast', beforeSkill.fx.emitted.cast, 'desktop skill presentation');
+  await shot(page, '01-desktop-skill-effects', false);
   // Spending energy starts a chant. Movement during that action is ignored;
   // wait for its real HUD to finish before approaching the opponent.
   await expect(page.locator('#spell-chant-progress')).toBeHidden({ timeout: 60000 });
@@ -291,7 +391,10 @@ async function keyboardCombat(page) {
   } finally {
     await page.keyboard.up('KeyW'); await page.keyboard.up('KeyD');
   }
+  const beforeStrike = await readVisualDiagnostics(page, 'desktop before real strike');
   await pressUntilGaugeFalls(page, 'KeyJ', '#hud-right .plate u', 'Original melee combat damages the actual CPU fighter', 60000);
+  await verifyEmittedEffect(page, 'swing', beforeStrike.fx.emitted.swing, 'desktop slash presentation');
+  await verifyEmittedEffect(page, 'impact', beforeStrike.fx.emitted.impact, 'desktop hit presentation');
   await inputDiagnostic(page, 'desktop after successful skill and melee');
   await page.keyboard.press('Space');
   await page.keyboard.press('Escape');
@@ -325,6 +428,10 @@ async function leaveBattle(page) {
   await expect(page.locator('#select-label')).toHaveText('戦いの舞台を選ぶ');
   await expect(page.locator('#hud')).toBeHidden();
   await expect(page.locator('#pause')).toBeHidden();
+  const visual = await readVisualDiagnostics(page, 'after returning from battle');
+  assert.equal(visual.fx.activePresentations, 0, 'Leaving battle releases its presentation controller');
+  assert.equal(visual.fx.activeEmitters, 0, 'Leaving battle releases every effect emitter');
+  assert.equal(visual.fx.activeParticles, 0, 'Leaving battle releases every effect particle');
 }
 async function touchCombat(page, context) {
   await expect(page.locator('#touch')).toBeVisible();
@@ -335,6 +442,7 @@ async function touchCombat(page, context) {
   assert.ok(skill, 'The actual classic touch skill is reachable');
   const energy = await gauge(page, '#flux u');
   await inputDiagnostic(page, 'mobile before touch skill');
+  const beforeSkill = await readVisualDiagnostics(page, 'mobile before real touch skill');
   await expect.poll(async () => {
     await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: skill.x + skill.width / 2, y: skill.y + skill.height / 2, id: 1 }] });
     try { await page.waitForTimeout(80); }
@@ -343,6 +451,8 @@ async function touchCombat(page, context) {
     inputSample('touch skill', energy, after);
     return after;
   }, { timeout: 30000, intervals: [100, 250, 400], message: 'Original touch skill spends real energy' }).toBeLessThan(energy - 1);
+  await verifyEmittedEffect(page, 'cast', beforeSkill.fx.emitted.cast, 'mobile touch skill presentation');
+  await shot(page, '02-mobile-skill-effects', false);
   await inputDiagnostic(page, 'mobile after successful touch skill');
   const joystick = await page.locator('#joy').boundingBox();
   assert.ok(joystick, 'The original mobile joystick is reachable');
@@ -379,8 +489,8 @@ try {
   const desktop = await offlineContext({ viewport: { width: 1440, height: 900 }, deviceScaleFactor: 1 }, 'desktop');
   const page = currentPage = await desktop.newPage(); page.setDefaultTimeout(20000); observe(page, 'desktop');
   await boot(page, '01-desktop');
-  await configureLocalDisplay(page);
-  await selectDuel(page, '01-desktop');
+  await configureLocalDisplay(page, 'high', '01-desktop');
+  await selectDuel(page, '01-desktop', 'high', 'moon');
   await keyboardCombat(page);
   await shot(page, '01-desktop-combat', false);
   await leaveBattle(page);
@@ -388,8 +498,8 @@ try {
   const mobile = await offlineContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 1, isMobile: true, hasTouch: true }, 'mobile');
   const phone = currentPage = await mobile.newPage(); phone.setDefaultTimeout(20000); observe(phone, 'mobile');
   await boot(phone, '02-mobile');
-  await configureLocalDisplay(phone);
-  await selectDuel(phone, '02-mobile');
+  await configureLocalDisplay(phone, 'low', '02-mobile');
+  await selectDuel(phone, '02-mobile', 'low', 'frost');
   await touchCombat(phone, mobile);
   await leaveBattle(phone);
   await mobile.close();
