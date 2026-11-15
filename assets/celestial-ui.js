@@ -10,14 +10,15 @@
     event: 'assets/rf555/mode-event.webp', adventure: 'assets/celestial/cavern.webp',
     castle: 'assets/rf555/mode-castle.webp', forge: 'assets/rf562/cave-embers.webp',
     shop: 'assets/rf562/cave-crystals.webp', mail: 'assets/rf562/japanese-corridor.webp',
-    settings: 'assets/rf562/japanese-palace.webp', records: 'assets/rf562/western-throne.webp'
+    settings: 'assets/rf562/japanese-palace.webp', records: 'assets/rf562/western-throne.webp',
+    character: 'assets/face-rowen.webp', library: 'assets/rf555/hero-cg.webp'
   });
   const MODE_ICONS = Object.freeze({ story:'story', story2:'scroll', infinite:'tower', ranked:'crown', cpu:'training', duo:'allies', 'online-vs':'duel', 'online-coop':'coop', event:'event', adventure:'compass' });
   const ID_ICONS = Object.freeze({
     'press-start':'journey', 'btn-ranked':'crown', 'btn-adventure-mode':'compass', 'rf552-infinite-rank':'trophy',
     'btn-castle':'castle', 'btn-forge':'forge', 'btn-shop':'shop', 'btn-mailbox':'mail', 'btn-options':'settings',
-    'btn-chief-mail':'crown', 'btn-evmaker':'event', 'btn-invade':'swords', 'btn-chief-character-editor':'user',
-    'rf53-library-open':'star', 'rf53-favorite-manager':'star', 'rf558-model-refresh':'refresh',
+    'btn-chief-mail':'crown', 'btn-evmaker':'event', 'btn-invade':'swords', 'btn-chief-character-editor':'character',
+    'rf53-library-open':'library', 'rf53-favorite-manager':'star', 'rf558-model-refresh':'refresh',
     'opt-mute':'sound', 'opt-diff':'training', 'rf45-edit-layout':'controls', 'rf45-reset-layout':'refresh',
     'chief-issue':'key', 'chief-mail-center':'mail', 'sync-push':'upload', 'sync-pull':'download',
     'btn-world':'allies', 'chat-btn':'chat', 'btn-join':'flame', 'ranked-choose':'user', 'ranked-join':'search',
@@ -125,12 +126,22 @@
         if (glyph && !glyph.querySelector('.celestial-icon')) { glyph.textContent = ''; decorate(el, MODE_ICONS[key] || key, glyph); }
         artwork(el, key, 'celestial-quick-art');
       } else if (el.matches('.portal-services > button')) {
-        const key = ({'rf552-infinite-rank':'records','btn-castle':'castle','btn-forge':'forge','btn-shop':'shop','btn-mailbox':'mail','btn-options':'settings','btn-chief-mail':'mail','btn-evmaker':'event','btn-invade':'ranked','btn-chief-character-editor':'settings','rf53-library-open':'records'})[el.id]
-          || ({forge:'forge',shop:'shop',crystal:'shop',mail:'mail',gift:'mail',castle:'castle',tower:'infinite',trophy:'records',star:'records',user:'records',event:'event',compass:'adventure'})[iconName(el)]
+        const key = ({'rf552-infinite-rank':'records','btn-castle':'castle','btn-forge':'forge','btn-shop':'shop','btn-mailbox':'mail','btn-options':'settings','btn-chief-mail':'mail','btn-evmaker':'event','btn-invade':'ranked','btn-chief-character-editor':'character','rf53-library-open':'library'})[el.id]
+          || ({forge:'forge',shop:'shop',crystal:'shop',mail:'mail',gift:'mail',castle:'castle',tower:'infinite',trophy:'records',star:'library',user:'character',character:'character',library:'library',event:'event',compass:'adventure'})[iconName(el)]
           || 'settings';
         artwork(el, key);
-        const holder = el.querySelector('.service-number') || el;
-        if (holder !== el && !holder.querySelector('.celestial-icon')) holder.textContent = '';
+        // Older runtime services use direct b/small children instead of the
+        // newer text wrapper. Move those same nodes into a consistent column.
+        const labels = [...el.children].filter(child => child.matches('b,small'));
+        if (labels.length) {
+          const copy = document.createElement('span');
+          copy.className = 'celestial-service-copy';
+          copy.append(...labels);
+          el.append(copy);
+        }
+        let holder = el.querySelector('.service-number');
+        if (!holder) { holder = document.createElement('span'); holder.className = 'service-number'; holder.setAttribute('aria-hidden','true'); el.prepend(holder); }
+        if (!holder.querySelector('.celestial-icon')) holder.textContent = '';
         decorate(el, ID_ICONS[el.id], holder);
       } else if (el.matches('.card,.party-picker-choice,.rf53-card') || el.querySelector(':scope > img.face')) {
         const title = el.querySelector('b,strong');

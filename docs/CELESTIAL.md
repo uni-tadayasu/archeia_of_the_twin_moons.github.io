@@ -25,7 +25,7 @@
 | `assets/celestial/spell-seal.webp` | 詠唱・回復・奥義の透過魔法陣 |
 | `assets/celestial/share.jpg` | OGP共有画像 |
 | `assets/celestial/mark.svg` | オリジナル双月紋章・ファビコン |
-| `assets/celestial-icons.svg` / `.js` | 71種の独自SVGアイコン |
+| `assets/celestial-icons.svg` / `.js` | 73種の独自SVGアイコン |
 
 生成プロンプト：
 

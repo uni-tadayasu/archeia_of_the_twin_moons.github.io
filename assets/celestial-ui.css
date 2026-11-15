@@ -237,3 +237,7 @@ html body.rf-remake.classic-polish.celestial-ui #ui #scr-title .portal-services>
 html body.rf-remake.classic-polish.celestial-ui #ui #scr-title .classic-community-bar[hidden],
 html body.rf-remake.classic-polish.celestial-ui #ui #scr-title .classic-recent[hidden]{display:none!important}
 html body.rf-remake.classic-polish.celestial-ui #ui #scr-title .classic-quick-button>span:not(.classic-quick-glyph){min-width:0;max-width:100%}
+/* Runtime service entries keep their original label nodes in the same card layout. */
+html body.rf-remake.classic-polish.celestial-ui #ui #scr-title .portal-services>button>.service-icon{display:none!important}
+html body.rf-remake.classic-polish.celestial-ui #ui #scr-title .portal-services .celestial-service-copy{display:flex;flex-direction:column;gap:5px;min-width:0;flex:1}
+html body.rf-remake.classic-polish.celestial-ui #ui #scr-title .portal-services>button[data-celestial-art="character"] .celestial-service-art{object-fit:contain!important;object-position:right 25%!important;opacity:.8!important}
