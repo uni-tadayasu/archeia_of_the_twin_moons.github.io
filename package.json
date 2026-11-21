@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "node scripts/serve.mjs",
-    "check": "node scripts/check-classic.mjs && node scripts/check-rebirth.mjs",
+    "check": "node scripts/check-classic.mjs && node scripts/check-rebirth.mjs && node scripts/check-seo.mjs",
+    "check:seo": "node scripts/check-seo.mjs",
     "test": "node --test tests/*.test.mjs",
     "test:browser": "node scripts/classic-browser-smoke.mjs",
     "test:rebirth": "node scripts/browser-smoke.mjs"
